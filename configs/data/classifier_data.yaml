@@ -1,0 +1,5 @@
+_target_: src.data.classification_data.ClassifierDataModule
+data_file: /common/users/shared/double_pendulum/acrobot_u2_gt.txt
+batch_size: ${batch_size}
+num_workers: ${num_workers}
+pin_memory: true

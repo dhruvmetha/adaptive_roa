@@ -1,0 +1,21 @@
+_target_: src.module.flow_matching.FlowMatching
+
+model:
+  _target_: src.model.unet1d.UNet1D
+  input_dim: 4  # 2D current state + 2D condition (start state)
+  output_dim: 2  # 2D velocity prediction
+  hidden_dims: [64, 128, 256]
+  time_emb_dim: 128
+
+optimizer:
+  _target_: torch.optim.AdamW
+  _partial_: true
+  lr: ${base_lr}
+  weight_decay: 0.01
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  _partial_: true
+  factor: 0.5
+  patience: 10
+  min_lr: 0.000001

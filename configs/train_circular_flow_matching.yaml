@@ -1,0 +1,49 @@
+# Configuration for training circular flow matching on pendulum data
+
+# Data configuration
+data:
+  _target_: src.data.circular_endpoint_data.CircularEndpointDataModule
+  data_file: /common/users/dm1487/arcmg_datasets/pendulum_lqr/pendulum_lqr5k/endpoint_dataset/endpoint_dataset.txt
+  batch_size: 128
+  num_workers: 4
+  pin_memory: true
+
+# Model configuration - Circular UNet for S¹ × ℝ manifold
+model:
+  _target_: src.model.circular_unet1d.CircularUNet1D
+  input_dim: 6   # current_state(3) + condition(3)
+  output_dim: 3  # velocity on S¹ × ℝ
+  hidden_dims: [64, 128, 256]
+  time_emb_dim: 128
+
+# Lightning module configuration
+module:
+  _target_: src.module.circular_flow_matching.CircularFlowMatching
+
+# Optimizer configuration
+optimizer:
+  _target_: torch.optim.AdamW
+  _partial_: true
+  lr: 1e-3
+  weight_decay: 1e-4
+
+# Scheduler configuration  
+scheduler:
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  _partial_: true
+  mode: min
+  factor: 0.8
+  patience: 10
+
+# Trainer configuration
+trainer:
+  _target_: lightning.pytorch.Trainer
+  max_epochs: 200
+  accelerator: gpu
+  devices: [0]  # Using GPU 1 (set via CUDA_VISIBLE_DEVICES)
+  precision: 32
+  gradient_clip_val: 1.0
+  val_check_interval: 1.0
+  log_every_n_steps: 10
+  enable_progress_bar: true
+  enable_model_summary: true

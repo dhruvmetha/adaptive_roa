@@ -1,0 +1,18 @@
+defaults:
+    - _self_
+    - data: reachability_data
+    - model: simple_mlp
+    - trainer: gpu
+
+seed: 42
+num_workers: 4
+batch_size: 256
+
+# trainer
+max_epochs: 1000
+check_val_every_n_epoch: 5
+
+base_lr: 0.001
+end_lr: 0.000001
+warmup_steps: 1000
+decay_steps: 300000

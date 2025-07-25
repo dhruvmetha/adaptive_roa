@@ -1,0 +1,6 @@
+_target_: src.data.reachability_data.ReachabilityDataModule
+data_file: /common/users/shared/double_pendulum/reachability_data
+test_data_file: /common/users/shared/double_pendulum/acrobot_u2_gt.txt
+batch_size: ${batch_size}
+num_workers: ${num_workers}
+pin_memory: true

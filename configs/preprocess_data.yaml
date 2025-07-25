@@ -1,0 +1,8 @@
+data_dirs: 
+    - /common/users/shared/double_pendulum/acrobot_real_pid_u2_lqr
+    - /common/users/shared/double_pendulum/acrobot_real_vel20_lqr
+  
+samples_per_traj: 5
+dest_folder: /common/users/shared/double_pendulum/reachability_data
+train_ratio: 0.8
+valid_ratio: 0.2

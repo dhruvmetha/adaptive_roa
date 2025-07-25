@@ -1,0 +1,5 @@
+_target_: src.data.endpoint_data.EndpointDataModule
+data_file: /common/users/dm1487/arcmg_datasets/pendulum_lqr/pendulum_lqr5k/endpoint_dataset/endpoint_dataset.txt
+batch_size: ${batch_size}
+num_workers: ${num_workers}
+pin_memory: true

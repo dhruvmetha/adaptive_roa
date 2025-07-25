@@ -1,0 +1,8 @@
+# the endpoint dataset is a dataset of trajectories that contains the start state and first attractor state the trajectory ends up in the attractor
+system:
+    _target_: src.systems.pendulum.Pendulum
+    name: pendulum
+    attractor_radius: 0.01
+
+data_dirs: /common/users/dm1487/arcmg_datasets/pendulum_lqr/pendulum_lqr5k/pendulum_lqr5k
+dest_dir: /common/users/dm1487/arcmg_datasets/pendulum_lqr/pendulum_lqr5k/endpoint_dataset

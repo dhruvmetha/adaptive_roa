@@ -1,0 +1,19 @@
+IMPROVED ATTRACTOR PREDICTION EVALUATION RESULTS
+==================================================
+Optimal Threshold: 0.0500
+Accuracy:  0.6134
+Precision: 0.0000
+Recall:    0.0000
+TPR:       0.0000
+FPR:       0.0000
+TNR:       1.0000
+FNR:       1.0000
+
+True Positives:  0
+True Negatives:  19400
+False Positives: 0
+False Negatives: 12227
+
+Confusion Matrix:
+[[19400     0]
+ [12227     0]]

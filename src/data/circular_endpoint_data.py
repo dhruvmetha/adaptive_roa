@@ -31,6 +31,7 @@ class CircularEndpointDataset(Dataset):
         
         # Split the data into train/val/test (80/10/10)
         random.shuffle(data)
+        data = data[:1200]
         n = len(data)
         
         if self.split == "train":

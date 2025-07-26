@@ -1,1 +1,0 @@
-ATTRACTOR BASIN ANALYSIS REPORT\n==================================================\nResolution: 0.2\nTotal grid points: 2112\nGrid shape: (64, 33)\n\nBasin Distribution:\n  Center (0,0) Basin: 777 points (36.8%)\n  Right (2.1,0) Basin: 628 points (29.7%)\n  Left (-2.1,0) Basin: 591 points (28.0%)\n  Separatrix: 116 points (5.5%)\n  No Attractor: 0 points (0.0%)\n

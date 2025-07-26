@@ -3,7 +3,7 @@
 # Data configuration
 data:
   _target_: src.data.circular_endpoint_data.CircularEndpointDataModule
-  data_file: /common/users/dm1487/arcmg_datasets/pendulum_lqr/pendulum_lqr5k/endpoint_dataset/endpoint_dataset.txt
+  data_file: /common/users/dm1487/arcmg_datasets/pendulum_lqr/pendulum_lqr50k/endpoint_dataset/endpoint_dataset.txt
   batch_size: 128
   num_workers: 4
   pin_memory: true
@@ -38,7 +38,7 @@ scheduler:
 # Trainer configuration
 trainer:
   _target_: lightning.pytorch.Trainer
-  max_epochs: 200
+  max_epochs: 500
   accelerator: gpu
   devices: [0]  # Using GPU 1 (set via CUDA_VISIBLE_DEVICES)
   precision: 32

@@ -29,13 +29,13 @@ def main(cfg: DictConfig) -> None:
     
     # Setup logging
     logger = TensorBoardLogger(
-        save_dir="outputs",
+        save_dir="outputs/50k_1k",
         name="circular_flow_matching"
     )
     
     # Setup checkpointing  
     checkpoint_callback = ModelCheckpoint(
-        dirpath=f"outputs/circular_flow_matching/checkpoints",
+        dirpath=f"outputs/50k_1k/checkpoints",
         filename="epoch={epoch}-step={step}-val_loss={val_loss:.6f}",
         monitor="val_loss",
         mode="min",

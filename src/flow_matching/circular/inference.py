@@ -77,6 +77,26 @@ class CircularFlowMatchingInference(BaseFlowMatchingInference):
         """Get the input dimension for the circular model"""
         return 6  # Current embedded state (3D) + condition (3D)
     
+    def _project_to_manifold(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Project back to S¹ × ℝ manifold by normalizing circular components
+        
+        Args:
+            x: Current embedded state [batch_size, 3] as (sin θ, cos θ, θ̇)
+            
+        Returns:
+            Projected state with normalized (sin θ, cos θ) on unit circle
+        """
+        sin_theta, cos_theta, theta_dot = x[..., 0], x[..., 1], x[..., 2]
+        
+        # Normalize (sin, cos) to unit circle
+        norm = torch.sqrt(sin_theta**2 + cos_theta**2)
+        sin_theta_proj = sin_theta / (norm + 1e-8)
+        cos_theta_proj = cos_theta / (norm + 1e-8)
+        
+        # θ̇ component stays unchanged (no constraint on ℝ)
+        return torch.stack([sin_theta_proj, cos_theta_proj, theta_dot], dim=-1)
+    
     def visualize_multiple_flow_paths(self,
                                     start_states_list,
                                     save_path=None,

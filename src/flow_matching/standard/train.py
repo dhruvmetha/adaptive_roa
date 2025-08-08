@@ -2,19 +2,22 @@
 Training script for standard flow matching
 """
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-
 import hydra
 import lightning.pytorch as pl
 from omegaconf import DictConfig
 
-from .flow_matcher import StandardFlowMatcher
-from ..base.config import FlowMatchingConfig
+from src.flow_matching.standard.flow_matcher import StandardFlowMatcher
+from src.flow_matching.base.config import FlowMatchingConfig
 
 
 @hydra.main(config_path="../../../configs", config_name="train_flow_matching.yaml")
 def main(cfg: DictConfig):
     """Main training function for standard flow matching"""
+    
+    # Set GPU device from config
+    if cfg.device.get("device_id") is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(cfg.device.device_id)
+        print(f"Set CUDA_VISIBLE_DEVICES={cfg.device.device_id}")
     
     # Set seed for reproducibility
     if cfg.get("seed"):

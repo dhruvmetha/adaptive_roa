@@ -92,8 +92,14 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         """Training step - common across all variants"""
         loss = self.compute_flow_loss(batch)
         
-        # Log metrics
-        self.train_loss(loss)
+        # Log metrics with compatibility for different TorchMetrics versions
+        try:
+            # TorchMetrics >= 1.2 style
+            self.train_loss(loss)
+        except Exception:
+            # Fallback for older TorchMetrics versions
+            self.train_loss.update(loss)
+        
         self.log('train_loss', self.train_loss, on_step=True, on_epoch=True, prog_bar=True)
         
         return loss
@@ -102,28 +108,38 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         """Validation step - common across all variants"""
         loss = self.compute_flow_loss(batch)
         
-        # Log metrics
-        self.val_loss(loss)
+        # Log metrics with compatibility for different TorchMetrics versions
+        try:
+            # TorchMetrics >= 1.2 style
+            self.val_loss(loss)
+        except Exception:
+            # Fallback for older TorchMetrics versions
+            self.val_loss.update(loss)
+        
         self.log('val_loss', self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
         
         return loss
     
     def configure_optimizers(self):
         """Configure optimizers and schedulers"""
+        # Optimizer should be a partial function from Hydra
         optimizer = self.optimizer_partial(params=self.parameters())
         
+        # Handle scheduler if present
         if self.scheduler_partial is not None:
             scheduler = self.scheduler_partial(optimizer=optimizer)
+            
             return {
                 "optimizer": optimizer,
                 "lr_scheduler": {
                     "scheduler": scheduler,
-                    "monitor": "val_loss",
                     "interval": "epoch",
                     "frequency": 1,
+                    "monitor": "val_loss",
                 },
             }
         
+        # Return just the optimizer if no scheduler
         return optimizer
     
     def on_train_epoch_end(self):

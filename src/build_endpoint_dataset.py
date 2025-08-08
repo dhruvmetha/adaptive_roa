@@ -30,17 +30,19 @@ def main(cfg: DictConfig) -> None:
         if len(trajectory) == 0:
             continue
             
-        start_state = np.array(trajectory[0])
-        
         first_attractor_state = None
-        for state_values in trajectory:
+        first_attractor_index = None
+        for i, state_values in enumerate(trajectory):
             state = np.array(state_values)
             if system.is_in_attractor(state):
                 first_attractor_state = state
+                first_attractor_index = i
                 break
-        
+            
         if first_attractor_state is not None:
-            endpoint_data.append([*start_state, *first_attractor_state])
+            for i in range(first_attractor_index):
+                start_state = np.array(trajectory[i])
+                endpoint_data.append([*start_state, *first_attractor_state])
     
     output_file = dest_dir / "endpoint_dataset.txt"
     print(f"Writing {len(endpoint_data)} endpoint pairs to file...")

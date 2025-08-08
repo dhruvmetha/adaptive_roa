@@ -71,7 +71,9 @@ class StandardFlowMatcher(BaseFlowMatcher):
         # Input: current state x_t + time t + start state as condition
         vt = self.forward(x_t, t_sampled, condition=x0)
         
-        # Compute MSE loss between predicted and target velocities
-        loss = torch.mean((vt - ut) ** 2)
+        # Compute MSE loss between predicted and target velocities  
+        # Use F.mse_loss for proper dimensionality handling like old implementation
+        import torch.nn.functional as F
+        loss = F.mse_loss(vt, ut)
         
         return loss

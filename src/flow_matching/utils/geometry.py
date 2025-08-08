@@ -25,10 +25,10 @@ def geodesic_interpolation(x0_embedded: torch.Tensor,
                           x1_embedded: torch.Tensor, 
                           t: torch.Tensor) -> torch.Tensor:
     """
-    Geodesic interpolation on S¹ × ℝ
+    Geodesic interpolation on S¹ × ℝ using simple linear interpolation in angle space
     
-    For the circular component (sin(θ), cos(θ)), we use spherical interpolation.
-    For the velocity component θ̇, we use linear interpolation.
+    This matches the old implementation exactly: extract angles, interpolate linearly,
+    then convert back to embedded form.
     
     Args:
         x0_embedded: Start state (sin(θ₀), cos(θ₀), θ̇₀) [batch_size, 3]
@@ -38,93 +38,88 @@ def geodesic_interpolation(x0_embedded: torch.Tensor,
     Returns:
         interpolated: Interpolated state [batch_size, 3]
     """
+    # Extract angles from embedded representation
+    theta0 = torch.atan2(x0_embedded[..., 0], x0_embedded[..., 1])  # [batch_size]
+    theta1 = torch.atan2(x1_embedded[..., 0], x1_embedded[..., 1])  # [batch_size]
+    
+    # Compute shortest angular path
+    angular_diff = theta1 - theta0
+    # Wrap to [-π, π] for shortest path
+    angular_diff = torch.atan2(torch.sin(angular_diff), torch.cos(angular_diff))
+    
     # Handle scalar t
     if t.dim() == 0:
         t = t.expand(x0_embedded.shape[0])
+        
+    # Ensure t has correct shape for broadcasting (this was causing issues)
+    # The old implementation had this but it's redundant - t should already be [batch_size]
     
-    # Extract components
-    sin_theta0, cos_theta0, theta_dot0 = x0_embedded[..., 0], x0_embedded[..., 1], x0_embedded[..., 2]
-    sin_theta1, cos_theta1, theta_dot1 = x1_embedded[..., 0], x1_embedded[..., 1], x1_embedded[..., 2]
+    # Interpolate angle along geodesic (shortest path on circle)
+    theta_t = theta0 + t * angular_diff  # [batch_size]
     
-    # Spherical interpolation for (sin(θ), cos(θ))
-    # First normalize to ensure unit circle
-    norm0 = torch.sqrt(sin_theta0**2 + cos_theta0**2)
-    norm1 = torch.sqrt(sin_theta1**2 + cos_theta1**2)
+    # Linear interpolation for angular velocity (on ℝ)
+    theta_dot_0 = x0_embedded[..., 2]  # [batch_size]
+    theta_dot_1 = x1_embedded[..., 2]  # [batch_size]
+    theta_dot_t = (1 - t) * theta_dot_0 + t * theta_dot_1  # [batch_size]
     
-    sin_theta0_norm = sin_theta0 / (norm0 + 1e-8)
-    cos_theta0_norm = cos_theta0 / (norm0 + 1e-8)
-    sin_theta1_norm = sin_theta1 / (norm1 + 1e-8)
-    cos_theta1_norm = cos_theta1 / (norm1 + 1e-8)
+    # Convert interpolated state back to embedded form
+    x_t = torch.stack([torch.sin(theta_t), torch.cos(theta_t), theta_dot_t], dim=-1)
     
-    # Compute angle between unit vectors
-    dot_product = sin_theta0_norm * sin_theta1_norm + cos_theta0_norm * cos_theta1_norm
-    dot_product = torch.clamp(dot_product, -1.0, 1.0)  # Numerical stability
-    
-    omega = torch.acos(torch.abs(dot_product))
-    
-    # Handle near-parallel vectors
-    sin_omega = torch.sin(omega)
-    near_parallel = sin_omega < 1e-6
-    
-    # SLERP coefficients
-    where_not_parallel = ~near_parallel
-    coeff0 = torch.zeros_like(t)
-    coeff1 = torch.zeros_like(t)
-    
-    coeff0[where_not_parallel] = torch.sin((1 - t[where_not_parallel]) * omega[where_not_parallel]) / sin_omega[where_not_parallel]
-    coeff1[where_not_parallel] = torch.sin(t[where_not_parallel] * omega[where_not_parallel]) / sin_omega[where_not_parallel]
-    
-    # Linear interpolation for nearly parallel vectors
-    coeff0[near_parallel] = 1 - t[near_parallel]
-    coeff1[near_parallel] = t[near_parallel]
-    
-    # Handle sign for shortest path
-    cross_product = sin_theta0_norm * cos_theta1_norm - cos_theta0_norm * sin_theta1_norm
-    sign = torch.sign(cross_product)
-    coeff1 = coeff1 * sign
-    
-    # Interpolated circular components
-    sin_theta_interp = coeff0 * sin_theta0_norm + coeff1 * sin_theta1_norm
-    cos_theta_interp = coeff0 * cos_theta0_norm + coeff1 * cos_theta1_norm
-    
-    # Renormalize to unit circle
-    norm_interp = torch.sqrt(sin_theta_interp**2 + cos_theta_interp**2)
-    sin_theta_interp = sin_theta_interp / (norm_interp + 1e-8)
-    cos_theta_interp = cos_theta_interp / (norm_interp + 1e-8)
-    
-    # Linear interpolation for angular velocity
-    theta_dot_interp = (1 - t) * theta_dot0 + t * theta_dot1
-    
-    return torch.stack([sin_theta_interp, cos_theta_interp, theta_dot_interp], dim=-1)
+    return x_t
 
 
 def compute_circular_velocity(x0_embedded: torch.Tensor,
                              x1_embedded: torch.Tensor,
                              t: torch.Tensor) -> torch.Tensor:
     """
-    Compute velocity for circular geodesic flow
+    Compute velocity for circular geodesic flow using analytical derivatives
     
-    This computes the time derivative of the geodesic interpolation.
+    This computes the exact time derivative of the geodesic interpolation
+    using chain rule rather than finite differences, matching the old implementation.
     
     Args:
-        x0_embedded: Start state [batch_size, 3]
-        x1_embedded: End state [batch_size, 3]  
+        x0_embedded: Start state [batch_size, 3] as (sin θ₀, cos θ₀, θ̇₀)
+        x1_embedded: End state [batch_size, 3] as (sin θ₁, cos θ₁, θ̇₁)
         t: Current time [batch_size]
         
     Returns:
-        velocity: Velocity on manifold [batch_size, 3]
+        velocity: Analytical velocity on manifold [batch_size, 3]
     """
-    # Use finite differences to approximate derivative
-    dt = 1e-4
+    # Extract angles from embedded representation
+    theta0 = torch.atan2(x0_embedded[..., 0], x0_embedded[..., 1])  # [batch_size]
+    theta1 = torch.atan2(x1_embedded[..., 0], x1_embedded[..., 1])  # [batch_size]
     
-    # Current interpolation
-    xt = geodesic_interpolation(x0_embedded, x1_embedded, t)
+    # Compute shortest angular path using circular_distance function
+    angular_diff = theta1 - theta0
+    # Wrap to [-π, π] for shortest path (same as old circular_distance)
+    angular_diff = torch.atan2(torch.sin(angular_diff), torch.cos(angular_diff))
     
-    # Slightly forward in time
-    t_forward = torch.clamp(t + dt, 0.0, 1.0)
-    xt_forward = geodesic_interpolation(x0_embedded, x1_embedded, t_forward)
+    # Handle scalar t
+    if t.dim() == 0:
+        t = t.expand(x0_embedded.shape[0])
+        
+    # Ensure t has correct shape for broadcasting (this was causing issues)
+    # The old implementation had this but it's redundant - t should already be [batch_size]
     
-    # Compute finite difference
-    velocity = (xt_forward - xt) / dt
+    # Current interpolated angle
+    theta_t = theta0 + t * angular_diff  # [batch_size]
     
-    return velocity
+    # Extract angular velocities
+    theta_dot_0 = x0_embedded[..., 2]  # [batch_size]
+    theta_dot_1 = x1_embedded[..., 2]  # [batch_size]
+    
+    # Compute target velocity using exact analytical derivatives from old implementation
+    # d/dt [sin(θ_t), cos(θ_t), θ̇_t]
+    dtheta_dt = angular_diff  # dθ/dt 
+    dtheta_dot_dt = theta_dot_1 - theta_dot_0  # dθ̇/dt
+    
+    # Chain rule (exact same as old implementation):
+    # d/dt sin(θ_t) = cos(θ_t) * dθ/dt
+    # d/dt cos(θ_t) = -sin(θ_t) * dθ/dt
+    target_velocity = torch.stack([
+        torch.cos(theta_t) * dtheta_dt,    # d/dt sin(θ_t)
+        -torch.sin(theta_t) * dtheta_dt,   # d/dt cos(θ_t)  
+        dtheta_dot_dt                      # d/dt θ̇_t
+    ], dim=-1)
+    
+    return target_velocity

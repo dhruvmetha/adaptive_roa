@@ -2,7 +2,7 @@
 system:
     _target_: src.systems.pendulum.Pendulum
     name: pendulum
-    attractor_radius: 0.01
+    attractor_radius: 0.1
 
-data_dirs: /common/users/dm1487/arcmg_datasets/pendulum_lqr/pendulum_lqr50k/pendulum_lqr50k
-dest_dir: /common/users/dm1487/arcmg_datasets/pendulum_lqr/pendulum_lqr50k/endpoint_dataset
+data_dirs: /common/users/dm1487/arcmg_datasets/pendulum_lqr/pendulum_lqr1k/pendulum_lqr1k
+dest_dir: /common/users/dm1487/arcmg_datasets/pendulum_lqr/pendulum_lqr1k/endpoint_dataset

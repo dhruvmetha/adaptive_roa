@@ -2,19 +2,22 @@
 Training script for circular flow matching
 """
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-
 import hydra
 import lightning.pytorch as pl
 from omegaconf import DictConfig
 
-from .flow_matcher import CircularFlowMatcher
-from ..base.config import FlowMatchingConfig
+from src.flow_matching.circular.flow_matcher import CircularFlowMatcher
+from src.flow_matching.base.config import FlowMatchingConfig
 
 
 @hydra.main(config_path="../../../configs", config_name="train_circular_flow_matching.yaml")
 def main(cfg: DictConfig):
     """Main training function for circular flow matching"""
+    
+    # Set GPU device from config
+    if cfg.device.get("device_id") is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(cfg.device.device_id)
+        print(f"Set CUDA_VISIBLE_DEVICES={cfg.device.device_id}")
     
     # Set seed for reproducibility
     if cfg.get("seed"):
@@ -34,11 +37,15 @@ def main(cfg: DictConfig):
     # Initialize model architecture (CircularUNet1D)
     model_net = hydra.utils.instantiate(cfg.model)
     
+    # Initialize optimizer and scheduler (like old implementation)
+    optimizer = hydra.utils.instantiate(cfg.optimizer) if cfg.get("optimizer") else None
+    scheduler = hydra.utils.instantiate(cfg.get("scheduler")) if cfg.get("scheduler") else None
+    
     # Initialize circular flow matching module
     flow_model = CircularFlowMatcher(
         model=model_net,
-        optimizer=cfg.optimizer,
-        scheduler=cfg.get("scheduler", None),
+        optimizer=optimizer,
+        scheduler=scheduler,
         config=config
     )
     

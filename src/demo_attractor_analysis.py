@@ -2,27 +2,33 @@
 Demo script for the new attractor basin analysis functionality
 """
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-
 import torch
 import numpy as np
+import hydra
 from pathlib import Path
+from omegaconf import DictConfig
 
-from src.inference_circular_flow_matching import CircularFlowMatchingInference
+from src.flow_matching.circular import CircularFlowMatchingInference
 from src.visualization.attractor_analysis import AttractorBasinAnalyzer
 from src.systems.pendulum_config import PendulumConfig
 
 
-def main():
+@hydra.main(config_path="../configs", config_name="demo_attractor_analysis.yaml")
+def main(cfg: DictConfig):
     print("=" * 60)
     print("ATTRACTOR BASIN ANALYSIS DEMO")
     print("=" * 60)
+    
+    # Set GPU device from config
+    if cfg.device.get("device_id") is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(cfg.device.device_id)
+        print(f"Set CUDA_VISIBLE_DEVICES={cfg.device.device_id}")
     
     # Initialize configuration
     config = PendulumConfig()
     
     # Load trained model
-    checkpoint_path = "outputs/circular_flow_matching/checkpoints/epoch=189-step=6650-val_loss=0.000308.ckpt"
+    checkpoint_path = cfg.checkpoint_path
     
     print(f"Loading flow matching model from: {checkpoint_path}")
     try:
@@ -30,25 +36,29 @@ def main():
         print("✓ Model loaded successfully!")
     except Exception as e:
         print(f"✗ Error loading model: {e}")
-        print("Please update the checkpoint_path in this script.")
+        print(f"Please update the checkpoint_path in configs/demo_attractor_analysis.yaml")
         return
     
     # Initialize attractor basin analyzer
     analyzer = AttractorBasinAnalyzer(config)
     
-    # Demo 1: Basic basin analysis with default resolution
+    # Create output directory
+    output_dir = Path(cfg.analysis.output_dir)
+    
+    # Get analysis settings from config
+    resolutions = cfg.analysis.resolutions
+    batch_size = cfg.analysis.batch_size
+    
+    # Demo 1: Basic basin analysis with medium resolution
     print("\\n" + "=" * 50)
-    print("DEMO 1: Basin Analysis with Resolution 0.1")
+    print(f"DEMO 1: Basin Analysis with Resolution {resolutions[1]}")
     print("=" * 50)
     
     results = analyzer.analyze_attractor_basins(
         inferencer, 
-        resolution=0.1,
-        batch_size=500  # Smaller batches for memory efficiency
+        resolution=resolutions[1],
+        batch_size=batch_size
     )
-    
-    # Create output directory
-    output_dir = Path("attractor_analysis_results")
     
     # Save complete analysis
     analyzer.save_analysis_results(output_dir, results)

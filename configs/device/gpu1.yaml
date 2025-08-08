@@ -1,0 +1,4 @@
+# GPU device 1 configuration
+device_id: "1"
+accelerator: gpu
+devices: [0]  # Always use [0] since we set CUDA_VISIBLE_DEVICES

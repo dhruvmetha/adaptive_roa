@@ -1,0 +1,4 @@
+# GPU device 0 configuration
+device_id: "0"
+accelerator: gpu
+devices: [0]

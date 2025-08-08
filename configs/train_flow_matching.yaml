@@ -2,17 +2,16 @@ defaults:
   - _self_
   - data: endpoint_data
   - model: flow_matching_unet
-  - trainer: gpu
+  - module: standard_flow_matching
+  - optimizer: adamw  
+  - scheduler: reduce_lr_on_plateau
+  - trainer: flow_matching
+  - device: gpu1
 
 seed: 42
 num_workers: 4
 batch_size: 256
 
-# trainer
-max_epochs: 200
-check_val_every_n_epoch: 5
-
-base_lr: 0.001
-end_lr: 0.000001
-warmup_steps: 1000
-decay_steps: 100000
+# Override trainer epochs for standard flow matching
+trainer:
+  max_epochs: 200

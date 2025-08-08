@@ -29,19 +29,20 @@ class CircularFlowMatcher(BaseFlowMatcher):
     
     def prepare_states(self, start_states: torch.Tensor, end_states: torch.Tensor) -> tuple:
         """
-        Prepare states for circular flow matching by embedding in S¹ × ℝ
+        Prepare states for circular flow matching
+        
+        Note: Data already comes pre-embedded from CircularEndpointDataset as (sin θ, cos θ, θ̇)
+        so we don't need to embed again to avoid double-embedding bug.
         
         Args:
-            start_states: Initial states [batch_size, 2] as (θ, θ̇)
-            end_states: Target states [batch_size, 2] as (θ, θ̇)
+            start_states: Initial embedded states [batch_size, 3] as (sin θ, cos θ, θ̇)
+            end_states: Target embedded states [batch_size, 3] as (sin θ, cos θ, θ̇)
             
         Returns:
-            Tuple of embedded (start_states, end_states) [batch_size, 3]
+            Tuple of (start_states, end_states) unchanged [batch_size, 3]
         """
-        start_embedded = embed_circular_state(start_states)  # [batch_size, 3]
-        end_embedded = embed_circular_state(end_states)      # [batch_size, 3]
-        
-        return start_embedded, end_embedded
+        # Data already embedded by dataset - return as-is to avoid double-embedding
+        return start_states, end_states
     
     def compute_flow_loss(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """
@@ -75,6 +76,8 @@ class CircularFlowMatcher(BaseFlowMatcher):
         vt = self.forward(x_t, t, condition=x0_embedded)
         
         # Compute MSE loss between predicted and target velocities
-        loss = torch.mean((vt - ut) ** 2)
+        # Use F.mse_loss for proper dimensionality handling like old implementation
+        import torch.nn.functional as F
+        loss = F.mse_loss(vt, ut)
         
         return loss

@@ -3,3 +3,4 @@ outputs/
 logs/
 *.pyc
 *.egg-info/
+attractor_analysis*

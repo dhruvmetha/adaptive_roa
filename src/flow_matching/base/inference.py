@@ -81,6 +81,21 @@ class BaseFlowMatchingInference(ABC):
         """Get the input dimension for the model"""
         pass
     
+    def _project_to_manifold(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Project state back to manifold (optional, no-op by default)
+        
+        Subclasses can override this to enforce manifold constraints
+        during integration (e.g., unit circle for circular flow).
+        
+        Args:
+            x: Current state tensor
+            
+        Returns:
+            Projected state tensor
+        """
+        return x
+    
     def normalize_state(self, state: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
         """Normalize state to [0, 1] range"""
         if isinstance(state, np.ndarray):
@@ -151,6 +166,9 @@ class BaseFlowMatchingInference(ABC):
             
             # Euler step
             x = x + velocity * dt
+            
+            # Project back to manifold (e.g., unit circle for circular flow)
+            x = self._project_to_manifold(x)
             
             if return_path:
                 path.append(self._extract_state_from_integration(x.clone()))

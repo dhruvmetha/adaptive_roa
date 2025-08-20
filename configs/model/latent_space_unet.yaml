@@ -1,0 +1,4 @@
+_target_: src.model.latent_circular_unet1d.LatentCircularUNet1D
+latent_dim: 8
+hidden_dims: [128, 128]
+time_emb_dim: 64

@@ -4,5 +4,6 @@ system:
     name: pendulum
     attractor_radius: 0.01
 
-data_dirs: /common/users/dm1487/arcmg_datasets/pendulum_lqr/pendulum_lqr5k/pendulum_lqr5k
-dest_dir: /common/users/dm1487/arcmg_datasets/pendulum_lqr/pendulum_lqr5k/endpoint_dataset
+data_dirs: /common/users/dm1487/arcmg_datasets/pendulum_lqr/pendulum_lqr50k/pendulum_lqr50k
+dest_dir: /common/users/dm1487/arcmg_datasets/pendulum_lqr/sampled_endpoint_dataset
+sample_points: 50

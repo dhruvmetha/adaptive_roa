@@ -1,0 +1,2 @@
+_target_: src.flow_matching.latent_circular.flow_matcher.LatentCircularFlowMatcher
+# model/optimizer/scheduler are wired in the train file via hydra.utils.instantiate

@@ -1,0 +1,19 @@
+defaults:
+  - _self_
+  - data: circular_endpoint_data
+  - model: latent_circular_mlp
+  - module: simple_latent_circular
+  - optimizer: adamw
+  - scheduler: reduce_lr_on_plateau
+  - trainer: flow_matching
+  - device: gpu1
+
+seed: 42
+batch_size: 256
+num_workers: 4
+
+latent:
+  latent_dim: 8
+
+trainer:
+  max_epochs: 200

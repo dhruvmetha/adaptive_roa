@@ -1,5 +1,4 @@
 _target_: src.data.circular_endpoint_data.CircularEndpointDataModule
-data_file: /common/users/dm1487/arcmg_datasets/pendulum_lqr/pendulum_lqr1k/endpoint_dataset/endpoint_dataset.txt
+data_file: /common/users/dm1487/arcmg_datasets/pendulum_lqr/sampled_endpoint_dataset/5000_endpoint_dataset.txt
 batch_size: ${batch_size}
 num_workers: ${num_workers}
-pin_memory: true

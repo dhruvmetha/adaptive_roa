@@ -1,0 +1,55 @@
+defaults:
+  - _self_
+  - data: circular_endpoint_data
+  - model: conditional_unet
+  - optimizer: adamw
+  - scheduler: reduce_lr_on_plateau
+  - trainer: flow_matching
+  - device: gpu2
+
+seed: 42
+num_workers: 4
+batch_size: 1024
+check_val_every_n_epoch: 1
+name: default
+
+# Flow matching specific config
+flow_matching:
+  # Noise distribution settings
+  noise_distribution: "uniform"  # "uniform" or "gaussian"
+  noise_scale: 1.0  # Scale factor for gaussian (not used for uniform)
+  
+  # Optional custom noise bounds for uniform distribution
+  # If not specified, uses default embedded pendulum bounds
+  # Format: [sin_min, sin_max, cos_min, cos_max, theta_dot_min, theta_dot_max]
+  noise_bounds: null  # Use default bounds
+  
+  # Integration parameters
+  num_integration_steps: 100
+  sigma: 0.0
+
+# Override data settings
+# +data:
+#   data_file: "data/endpoint_data/circular_pendulum_endpoints.txt"
+
+# Override trainer settings for conditional flow matching  
++trainer:
+  logger:
+    name: ${name}
+    save_dir: "${oc.env:PWD}/outputs"  # Use absolute path from current working directory
+  callbacks:
+    - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+      dirpath: "${oc.env:PWD}/outputs/${name}/checkpoints"  # Use absolute path
+      filename: "epoch={epoch:03d}-step={step}-val_loss={val_loss:.6f}"
+      monitor: "val_loss"
+      mode: "min"
+      save_top_k: 3
+      save_last: true
+      every_n_epochs: 1
+      save_on_train_epoch_end: false
+    - _target_: lightning.pytorch.callbacks.EarlyStopping
+      monitor: "val_loss"
+      mode: "min"
+      patience: 50
+      min_delta: 1e-6
+      verbose: true

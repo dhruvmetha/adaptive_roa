@@ -1,0 +1,9 @@
+# Configuration for conditional UNet1D model
+_target_: src.model.conditional_unet1d.ConditionalUNet1D
+
+# Model architecture parameters
+input_dim: 3        # Current state (sin θ, cos θ, θ̇)
+condition_dim: 3    # Start state conditioning (sin θ, cos θ, θ̇) 
+output_dim: 3       # Velocity prediction (sin θ, cos θ, θ̇)
+hidden_dims: [64, 128, 256]
+time_emb_dim: 128

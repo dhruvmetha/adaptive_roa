@@ -26,6 +26,11 @@ class FlowMatchingConfig:
     # Training parameters
     sigma: float = 0.0  # Noise level for flow matching
     
+    # Noise distribution parameters (for conditional flow matching)
+    noise_distribution: str = 'uniform'  # 'uniform' or 'gaussian'
+    noise_scale: float = 1.0  # Scale factor for gaussian noise
+    noise_bounds: Optional[Tuple[float, ...]] = None  # Custom bounds for uniform noise
+    
     @property
     def state_bounds(self) -> Tuple[np.ndarray, np.ndarray]:
         """Get state space bounds as (min_bounds, max_bounds)"""
@@ -42,3 +47,15 @@ class FlowMatchingConfig:
         """Denormalize state from [0, 1] back to original range"""
         min_bounds, max_bounds = self.state_bounds
         return state * (max_bounds - min_bounds) + min_bounds
+    
+    @property
+    def embedded_noise_bounds(self) -> Tuple[float, ...]:
+        """
+        Get default noise bounds for embedded pendulum space (sin θ, cos θ, θ̇)
+        Returns bounds as [sin_min, sin_max, cos_min, cos_max, theta_dot_min, theta_dot_max]
+        """
+        if self.noise_bounds is not None:
+            return self.noise_bounds
+        
+        # Default bounds for embedded space
+        return (-1.0, 1.0, -1.0, 1.0, self.velocity_min, self.velocity_max)

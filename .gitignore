@@ -4,3 +4,6 @@ logs/
 *.pyc
 *.egg-info/
 attractor_analysis*
+*.png
+*.npz
+*.txt

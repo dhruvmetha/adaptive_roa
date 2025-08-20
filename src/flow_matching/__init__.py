@@ -19,6 +19,8 @@ from .standard.flow_matcher import StandardFlowMatcher
 from .standard.inference import StandardFlowMatchingInference
 from .circular.flow_matcher import CircularFlowMatcher
 from .circular.inference import CircularFlowMatchingInference
+from .latent_circular.flow_matcher import LatentCircularFlowMatcher
+from .latent_circular.inference import LatentCircularInference
 
 __all__ = [
     # Base classes
@@ -32,4 +34,8 @@ __all__ = [
     # Circular implementation
     'CircularFlowMatcher',
     'CircularFlowMatchingInference',
+    
+    # Latent circular implementation (VAE-style)
+    'LatentCircularFlowMatcher',
+    'LatentCircularInference',
 ]

@@ -46,9 +46,22 @@ class CircularEndpointDataset(Dataset):
         return len(self.data)
     
     def embed_state(self, state):
-        """Convert (θ, θ̇) → (sin(θ), cos(θ), θ̇)"""
+        """Convert (θ, θ̇) → (sin(θ), cos(θ), θ̇_normalized)"""
         theta, theta_dot = state
-        return [np.sin(theta), np.cos(theta), theta_dot]
+        # Normalize θ̇ to [-1, 1] based on observed data range
+        theta_dot_normalized = self.normalize_theta_dot(theta_dot)
+        return [np.sin(theta), np.cos(theta), theta_dot_normalized]
+    
+    def normalize_theta_dot(self, theta_dot):
+        """Normalize θ̇ to [-1, 1] range"""
+        # Based on actual data analysis: θ̇ range is approximately [-6.28, +6.28]
+        theta_dot_min, theta_dot_max = -6.28, 6.28
+        return 2 * (theta_dot - theta_dot_min) / (theta_dot_max - theta_dot_min) - 1
+    
+    def denormalize_theta_dot(self, theta_dot_normalized):
+        """Convert normalized θ̇ back to original range"""
+        theta_dot_min, theta_dot_max = -6.28, 6.28
+        return (theta_dot_normalized + 1) * (theta_dot_max - theta_dot_min) / 2 + theta_dot_min
     
     def __getitem__(self, idx):
         start_state, end_state = self.data[idx]

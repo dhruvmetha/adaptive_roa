@@ -1,0 +1,45 @@
+defaults:
+  - _self_
+  - data: circular_endpoint_data
+  - trainer: default
+  - optimizer: adamw
+  - scheduler: reduce_lr_on_plateau
+  - device: gpu1
+
+# System configuration
+system:
+  name: "pendulum"  # Can be: pendulum, cartpole
+  params:
+    # System-specific parameters
+    attractor_radius: 0.1  # For pendulum
+    # cart_limit: 2.4      # For cartpole
+    # velocity_limit: 10.0 # For cartpole
+
+
+# Model architecture (universal)
+model:
+  hidden_dims: [64, 128, 256]
+  time_emb_dim: 128
+
+# Training parameters
+num_integration_steps: 100
+sigma: 0.0
+seed: 42
+max_epochs: 100
+check_val_every_n_epoch: 1
+
+# Optimizer settings (referenced from defaults)
+optimizer:
+  lr: 1e-3
+  weight_decay: 1e-4
+
+scheduler:
+  patience: 10
+  factor: 0.5
+  min_lr: 1e-6
+
+# Trainer settings (referenced from defaults)
+trainer:
+  max_epochs: 100
+  check_val_every_n_epoch: 1
+  log_every_n_steps: 50

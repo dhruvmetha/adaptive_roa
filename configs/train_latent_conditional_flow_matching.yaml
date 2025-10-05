@@ -1,0 +1,45 @@
+defaults:
+  - _self_
+  - data: circular_endpoint_data
+  - model: latent_conditional_unet
+  - optimizer: adamw
+  - scheduler: reduce_lr_on_plateau
+  - trainer: flow_matching
+  - device: gpu1
+
+seed: 42
+num_workers: 4
+batch_size: 256
+check_val_every_n_epoch: 1
+name: latent_conditional_fm
+
+# Flow matching specific config
+flow_matching:
+  # Latent variable settings - ENABLE LATENT FUNCTIONALITY
+  latent_dim: 2  # Dimension of Gaussian latent variable (set to null to disable)
+  
+  # Noise distribution settings
+  noise_distribution: "uniform"  # "uniform" or "gaussian"
+  noise_scale: 1.0  # Scale factor for gaussian (not used for uniform)
+  
+  # Optional custom noise bounds for uniform distribution
+  # If not specified, uses default embedded pendulum bounds
+  # Format: [sin_min, sin_max, cos_min, cos_max, theta_dot_min, theta_dot_max]
+  noise_bounds: null  # Use default bounds
+  
+  # Integration parameters
+  num_integration_steps: 100
+  sigma: 0.0
+
+# Override data settings if needed
+# +data:
+#   data_file: "data/endpoint_data/custom_endpoints.txt"
+
+# Configure Hydra output directory with custom naming
+hydra:
+  run:
+    dir: outputs/${name}/${now:%Y-%m-%d_%H-%M-%S}
+
+# Model configuration - NOTE: condition_dim will be automatically expanded if latent_dim > 0
+# Original condition_dim=3 for (sin θ, cos θ, θ̇) 
+# With latent_dim=8, condition_dim becomes 3+8=11 for (sin θ, cos θ, θ̇, latent_0, ..., latent_7)

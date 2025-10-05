@@ -72,10 +72,10 @@ def compute_circular_velocity(x0_embedded: torch.Tensor,
                              x1_embedded: torch.Tensor,
                              t: torch.Tensor) -> torch.Tensor:
     """
-    Compute velocity for circular geodesic flow using analytical derivatives
+    Compute 2D tangent velocity for circular geodesic flow
     
-    This computes the exact time derivative of the geodesic interpolation
-    using chain rule rather than finite differences, matching the old implementation.
+    Returns velocities in intrinsic manifold coordinates (dθ/dt, dθ̇/dt)
+    rather than embedded 3D space derivatives.
     
     Args:
         x0_embedded: Start state [batch_size, 3] as (sin θ₀, cos θ₀, θ̇₀)
@@ -83,7 +83,7 @@ def compute_circular_velocity(x0_embedded: torch.Tensor,
         t: Current time [batch_size]
         
     Returns:
-        velocity: Analytical velocity on manifold [batch_size, 3]
+        velocity: 2D tangent velocity (dθ/dt, dθ̇/dt) [batch_size, 2]
     """
     # Extract angles from embedded representation
     theta0 = torch.atan2(x0_embedded[..., 0], x0_embedded[..., 1])  # [batch_size]
@@ -108,18 +108,11 @@ def compute_circular_velocity(x0_embedded: torch.Tensor,
     theta_dot_0 = x0_embedded[..., 2]  # [batch_size]
     theta_dot_1 = x1_embedded[..., 2]  # [batch_size]
     
-    # Compute target velocity using exact analytical derivatives from old implementation
-    # d/dt [sin(θ_t), cos(θ_t), θ̇_t]
-    dtheta_dt = angular_diff  # dθ/dt 
-    dtheta_dot_dt = theta_dot_1 - theta_dot_0  # dθ̇/dt
+    # Compute 2D tangent velocity in intrinsic coordinates
+    dtheta_dt = angular_diff  # dθ/dt - angular velocity along geodesic
+    dtheta_dot_dt = theta_dot_1 - theta_dot_0  # dθ̇/dt - angular acceleration
     
-    # Chain rule (exact same as old implementation):
-    # d/dt sin(θ_t) = cos(θ_t) * dθ/dt
-    # d/dt cos(θ_t) = -sin(θ_t) * dθ/dt
-    target_velocity = torch.stack([
-        torch.cos(theta_t) * dtheta_dt,    # d/dt sin(θ_t)
-        -torch.sin(theta_t) * dtheta_dt,   # d/dt cos(θ_t)  
-        dtheta_dot_dt                      # d/dt θ̇_t
-    ], dim=-1)
+    # Return 2D tangent velocity (dθ/dt, dθ̇/dt)
+    target_velocity = torch.stack([dtheta_dt, dtheta_dot_dt], dim=-1)
     
     return target_velocity

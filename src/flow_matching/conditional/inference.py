@@ -105,7 +105,8 @@ class ConditionalFlowMatchingInference(BaseFlowMatchingInference):
                         start_state: Union[torch.Tensor, np.ndarray],
                         num_steps: int = 100,
                         method: str = 'rk4',
-                        return_trajectory: bool = False) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+                        return_trajectory: bool = False,
+                        latent: Optional[Union[torch.Tensor, np.ndarray]] = None) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
         Predict endpoint from start state using conditional flow matching
         
@@ -114,6 +115,8 @@ class ConditionalFlowMatchingInference(BaseFlowMatchingInference):
             num_steps: Number of ODE integration steps
             method: Integration method ('euler' or 'rk4')
             return_trajectory: If True, return full trajectory
+            latent: Optional latent variable [latent_dim] or [batch_size, latent_dim]
+                   If None, samples random latent if model uses latent, otherwise no latent
             
         Returns:
             If return_trajectory=False: endpoint [batch_size, 2] in original coordinates
@@ -145,19 +148,29 @@ class ConditionalFlowMatchingInference(BaseFlowMatchingInference):
             theta_dot_normalized
         ], dim=-1)  # [batch_size, 3]
         
+        # Handle latent variable
+        if latent is not None:
+            if isinstance(latent, np.ndarray):
+                latent = torch.tensor(latent, dtype=torch.float32)
+            latent = latent.to(self.device)
+            
+            # Handle single latent input for backward compatibility
+            if latent.dim() == 1 and batch_size > 1:
+                latent = latent.unsqueeze(0).repeat(batch_size, 1)
+        
         # Generate trajectories using batch-capable methods
         self.model.eval()
         with torch.no_grad():
             if return_trajectory:
                 # Batch trajectory generation
                 trajectories_embedded = self.model.sample_trajectory(
-                    start_embedded, num_steps, method
+                    start_embedded, num_steps, method, latent=latent
                 )  # [num_steps+1, batch_size, 3]
                 endpoints_embedded = trajectories_embedded[-1]  # [batch_size, 3]
             else:
                 # Batch endpoint generation
                 endpoints_embedded = self.model.generate_endpoint(
-                    start_embedded, num_steps, method
+                    start_embedded, num_steps, method, latent=latent
                 )  # [batch_size, 3]
         
         # Vectorized conversion back to original coordinates
@@ -221,7 +234,8 @@ class ConditionalFlowMatchingInference(BaseFlowMatchingInference):
                                 start_state: Union[torch.Tensor, np.ndarray],
                                 num_samples: int = 10,
                                 num_steps: int = 100,
-                                method: str = 'rk4') -> torch.Tensor:
+                                method: str = 'rk4',
+                                latent: Optional[Union[torch.Tensor, np.ndarray]] = None) -> torch.Tensor:
         """
         Generate multiple endpoint samples from the same start state
         
@@ -232,6 +246,8 @@ class ConditionalFlowMatchingInference(BaseFlowMatchingInference):
             num_samples: Number of samples to generate
             num_steps: Number of ODE integration steps
             method: Integration method
+            latent: Optional specific latent variable [latent_dim] or [num_samples, latent_dim]
+                   If None, uses random latent sampling for diversity
             
         Returns:
             samples: Multiple endpoint samples [num_samples, 2]
@@ -247,7 +263,7 @@ class ConditionalFlowMatchingInference(BaseFlowMatchingInference):
         start_states = start_state.unsqueeze(0).repeat(num_samples, 1)  # [num_samples, 2]
         
         # Generate samples
-        samples = self.predict_endpoint(start_states, num_steps, method)
+        samples = self.predict_endpoint(start_states, num_steps, method, latent=latent)
         
         return samples
     
@@ -258,6 +274,8 @@ class ConditionalFlowMatchingInference(BaseFlowMatchingInference):
             'variant': 'conditional',
             'state_dim': 3,  # Embedded dimension
             'original_dim': 2,  # Original (θ, θ̇) dimension
+            'latent_dim': getattr(self.model, 'latent_dim', None),
+            'supports_latent': getattr(self.model, 'use_latent', False),
             'device': str(self.device),
             'supports_stochastic_generation': True,
             'flow_direction': 'noise_to_endpoint'

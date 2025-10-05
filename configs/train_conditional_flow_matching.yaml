@@ -15,6 +15,10 @@ name: default
 
 # Flow matching specific config
 flow_matching:
+  # Latent variable settings - NEW BOOLEAN OPTION
+  use_latent: false    # Boolean: enable/disable latent functionality (defaults to 2D if true)
+  # latent_dim: null   # Alternative: specify exact dimension (null=disabled, int=enabled)
+  
   # Noise distribution settings
   noise_distribution: "uniform"  # "uniform" or "gaussian"
   noise_scale: 1.0  # Scale factor for gaussian (not used for uniform)

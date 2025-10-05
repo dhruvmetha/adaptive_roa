@@ -1,0 +1,14 @@
+# Configuration for Latent Conditional UNet1D model
+_target_: src.model.latent_conditional_unet1d.LatentConditionalUNet1D
+
+# Model architecture parameters
+embedded_dim: 3        # (sin θ, cos θ, θ̇)
+latent_dim: 2          # 2D Gaussian latent (will be overridden by flow_matching.latent_dim)
+condition_dim: 3       # Start state conditioning (sin θ_0, cos θ_0, θ̇_0)
+time_emb_dim: 16       # Time embedding dimension
+hidden_dims: [256, 512, 1024, 512, 256]  # Deep architecture for more expressivity
+output_dim: 2          # (dθ/dt, dθ̇/dt) in tangent space
+
+# Enhanced expressivity options
+use_input_embeddings: false  # Disable learned input embeddings
+input_emb_dim: 64           # Dimension for input embeddings (unused when disabled)

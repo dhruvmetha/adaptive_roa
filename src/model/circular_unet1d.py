@@ -31,13 +31,13 @@ class ResidualBlock(nn.Module):
         return self.net(x + time_emb) + x
 
 class CircularUNet1D(nn.Module):
-    def __init__(self, input_dim=6, output_dim=3, hidden_dims=[64, 128, 256], time_emb_dim=128):
+    def __init__(self, input_dim=6, output_dim=2, hidden_dims=[64, 128, 256], time_emb_dim=128):
         """
         Circular-aware UNet for S¹ × ℝ manifold
         
         Args:
             input_dim: 6 = current_state(3) + condition(3) 
-            output_dim: 3 = velocity on S¹ × ℝ
+            output_dim: 2 = tangent velocity (dθ/dt, dθ̇/dt)
             hidden_dims: encoder/decoder dimensions
             time_emb_dim: time embedding dimension
         """
@@ -82,7 +82,7 @@ class CircularUNet1D(nn.Module):
                 ResidualBlock(out_dim, time_emb_dim)
             ))
         
-        # Output projection to tangent space of S¹ × ℝ
+        # Output projection to 2D tangent velocities (dθ/dt, dθ̇/dt)
         self.output_proj = nn.Linear(hidden_dims[0], output_dim)
 
     def forward(self, x, t, condition):
@@ -95,7 +95,7 @@ class CircularUNet1D(nn.Module):
             condition: conditioning state (sin(θ₀), cos(θ₀), θ̇₀) [batch_size, 3]
         
         Returns:
-            velocity in tangent space [batch_size, 3]
+            tangent velocity (dθ/dt, dθ̇/dt) [batch_size, 2]
         """
         # Get time embeddings
         t_emb = self.time_embedding(t)
@@ -131,29 +131,8 @@ class CircularUNet1D(nn.Module):
             h = block[0](h)  # Linear
             h = block[1](h, t_emb)  # ResidualBlock
         
-        # Output projection
-        velocity = self.output_proj(h)
+        # Output projection to 2D tangent velocity
+        tangent_velocity = self.output_proj(h)
         
-        # Project to tangent space of S¹ × ℝ
-        velocity_projected = self.project_to_tangent_space(velocity, x)
-        
-        return velocity_projected
+        return tangent_velocity
     
-    def project_to_tangent_space(self, velocity, x):
-        """
-        Project velocity to tangent space of S¹ × ℝ
-        
-        For S¹ component: velocity must be orthogonal to position vector
-        For ℝ component: no constraint
-        """
-        sin_theta, cos_theta = x[..., 0], x[..., 1]
-        v_sin, v_cos, v_theta_dot = velocity[..., 0], velocity[..., 1], velocity[..., 2]
-        
-        # Project S¹ component to tangent space: v ⟂ position
-        # Remove radial component: v - (v·pos)pos
-        dot_product = v_sin * sin_theta + v_cos * cos_theta
-        v_sin_projected = v_sin - dot_product * sin_theta
-        v_cos_projected = v_cos - dot_product * cos_theta
-        
-        # ℝ component (angular velocity) has no constraint
-        return torch.stack([v_sin_projected, v_cos_projected, v_theta_dot], dim=-1)

@@ -45,17 +45,50 @@ def main(cfg: DictConfig):
     optimizer = hydra.utils.instantiate(cfg.optimizer) if cfg.get("optimizer") else None
     scheduler = hydra.utils.instantiate(cfg.get("scheduler")) if cfg.get("scheduler") else None
     
-    # Initialize conditional flow matching module
+    # Initialize conditional flow matching module with optional latent support
+    # Support both boolean use_latent flag and integer latent_dim
+    use_latent = cfg.flow_matching.get("use_latent", None)
+    latent_dim = cfg.flow_matching.get("latent_dim", None)
+    
+    # Handle boolean use_latent flag
+    if use_latent is not None:
+        if isinstance(use_latent, bool):
+            if use_latent:
+                # Default to 2D latent if enabled but no dimension specified
+                latent_dim = latent_dim if latent_dim is not None else 2
+            else:
+                # Explicitly disable latent
+                latent_dim = None
+        else:
+            raise ValueError(f"use_latent must be boolean, got {type(use_latent)}")
+    # Otherwise use existing latent_dim logic: None = no latent, int = latent dimension
+    
+    # If using latent, need to adjust model condition_dim
+    if latent_dim is not None:
+        print(f"🧬 Using latent conditional flow matching with latent_dim={latent_dim}")
+        # Recreate model with expanded condition dimension
+        original_condition_dim = model_net.condition_dim
+        expanded_condition_dim = original_condition_dim + latent_dim
+        
+        # Create new model with expanded condition dimension
+        model_net = hydra.utils.instantiate(cfg.model, condition_dim=expanded_condition_dim)
+        print(f"📐 Expanded condition dimension: {original_condition_dim} → {expanded_condition_dim}")
+    
     flow_model = ConditionalFlowMatcher(
         model=model_net,
         optimizer=optimizer,
         scheduler=scheduler,
-        config=config
+        config=config,
+        latent_dim=latent_dim  # Pass latent dimension
     )
     
-    print("Conditional Flow Matching Model architecture:")
+    model_type = "Latent Conditional" if latent_dim else "Standard Conditional"
+    print(f"{model_type} Flow Matching Model architecture:")
     print(flow_model)
     print(f"Total parameters: {sum(p.numel() for p in flow_model.parameters()):,}")
+    if latent_dim:
+        print(f"🧬 Latent dimension: {latent_dim}")
+        print(f"🎯 Using Gaussian latent variable sampling for controllable multi-modality")
     
     # Initialize trainer
     trainer: pl.Trainer = hydra.utils.instantiate(cfg.trainer)

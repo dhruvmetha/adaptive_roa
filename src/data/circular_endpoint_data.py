@@ -34,7 +34,7 @@ class CircularEndpointDataset(Dataset):
         n = len(data)
         
         if self.split == "train":
-            self.data = data[:int(0.8 * n)]
+            self.data = data[:int(1 * n)]
         elif self.split == "val":
             self.data = data[int(0.8 * n):int(0.9 * n)]
         elif self.split == "test":

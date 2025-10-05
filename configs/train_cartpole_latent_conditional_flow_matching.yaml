@@ -1,0 +1,46 @@
+defaults:
+  - _self_
+  - data: cartpole_endpoint_data
+  - model: cartpole_latent_conditional_unet
+  - optimizer: adamw
+  - scheduler: reduce_lr_on_plateau
+  - trainer: flow_matching
+  - device: gpu3
+
+seed: 42
+num_workers: 4
+batch_size: 256
+check_val_every_n_epoch: 1
+name: cartpole_latent_conditional_fm
+base_lr: 1e-4
+
+# Flow matching specific config
+flow_matching:
+  # Latent variable settings - ENABLE LATENT FUNCTIONALITY
+  latent_dim: 2  # Dimension of Gaussian latent variable (set to nullx to disable)
+  
+  # Noise distribution settings
+  noise_distribution: "uniform"  # "uniform" or "gaussian"
+  noise_scale: 1.0  # Scale factor for gaussian (not used for uniform)
+  
+  # Optional custom noise bounds for uniform distribution
+  # If not specified, uses default embedded cartpole bounds
+  # Format: [x_min, x_max, theta_min, theta_max, x_dot_min, x_dot_max, theta_dot_min, theta_dot_max] - NEW FORMAT!
+  noise_bounds: null  # Use default bounds from CartPole system
+  
+  # Integration parameters
+  num_integration_steps: 20
+  sigma: 0.0
+
+# Override data settings if needed
+# +data:
+#   data_file: "data/endpoint_data/custom_cartpole_endpoints.txt"
+
+# Configure Hydra output directory with custom naming
+hydra:
+  run:
+    dir: outputs/${name}/${now:%Y-%m-%d_%H-%M-%S}
+
+# Model configuration - NOTE: condition_dim will be automatically expanded if latent_dim > 0
+# Original condition_dim=5 for (x_norm, sin θ, cos θ, x_dot_norm, θ̇_norm) - NEW FORMAT!
+# With latent_dim=2, condition_dim becomes 5+2=7 for embedded state + latent

@@ -1,0 +1,13 @@
+_target_: src.model.cartpole_latent_conditional_unet1d.CartPoleLatentConditionalUNet1D
+
+# CartPole-specific dimensions
+embedded_dim: 5       # [x_norm, x_dot_norm, sin_theta, cos_theta, theta_dot_norm]  
+latent_dim: 2         # Latent variable dimension (will be set by main config)
+condition_dim: 5      # Same as embedded_dim (start state condition)
+time_emb_dim: 32      # Time embedding dimension
+output_dim: 4         # [dx/dt, dx_dot/dt, dtheta/dt, dtheta_dot/dt]
+
+# Architecture
+hidden_dims: [256, 512, 1024, 512, 256]  # Hidden layer sizes
+use_input_embeddings: false        # Use simple concatenation
+input_emb_dim: 64                  # Only used if use_input_embeddings=true

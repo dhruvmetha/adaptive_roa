@@ -18,6 +18,10 @@ from .geometry import (
     compute_circular_velocity
 )
 
+from .scheduler_utils import (
+    create_warmup_cosine_scheduler
+)
+
 __all__ = [
     # State transformations
     'embed_circular_state',
@@ -29,4 +33,7 @@ __all__ = [
     'circular_distance',
     'geodesic_interpolation',
     'compute_circular_velocity',
+    
+    # Schedulers
+    'create_warmup_cosine_scheduler',
 ]

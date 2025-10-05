@@ -23,8 +23,14 @@ class ConditionalFlowMatcher(BaseFlowMatcher):
                  model: nn.Module,
                  optimizer,
                  scheduler,
-                 config: Optional[FlowMatchingConfig] = None):
+                 config: Optional[FlowMatchingConfig] = None,
+                 latent_dim: Optional[int] = None):
         super().__init__(model, optimizer, scheduler, config)
+        
+        # Latent variable configuration
+        self.latent_dim = latent_dim
+        self.use_latent = latent_dim is not None
+        
         # Get noise parameters from config
         if config:
             self.noise_scale = getattr(config, 'noise_scale', 1.0)
@@ -42,6 +48,8 @@ class ConditionalFlowMatcher(BaseFlowMatcher):
             self.noise_bounds = (-1.0, 1.0, -1.0, 1.0, -1.0, 1.0)
         
         print(f"Noise bounds: {self.noise_bounds}")
+        if self.use_latent:
+            print(f"Latent dimension: {self.latent_dim}")
     
     def prepare_states(self, start_states: torch.Tensor, end_states: torch.Tensor) -> tuple:
         """
@@ -58,6 +66,27 @@ class ConditionalFlowMatcher(BaseFlowMatcher):
             Tuple of (start_states, end_states) unchanged [batch_size, 3]
         """
         return start_states, end_states
+    
+    def forward(self, x: torch.Tensor, t: torch.Tensor, condition: torch.Tensor, latent: Optional[torch.Tensor] = None) -> torch.Tensor:
+        """
+        Forward pass through the model with optional latent conditioning
+        
+        Args:
+            x: Current state in flow [batch_size, state_dim]
+            t: Time [batch_size]
+            condition: Start state conditioning [batch_size, condition_dim]
+            latent: Optional latent variable [batch_size, latent_dim]
+            
+        Returns:
+            Predicted velocity [batch_size, state_dim]
+        """
+        if latent is not None:
+            # Concatenate latent with condition for enhanced conditioning
+            combined_condition = torch.cat([condition, latent], dim=-1)
+        else:
+            combined_condition = condition
+        
+        return self.model(x, t, combined_condition)
     
     def sample_noise(self, batch_size: int, state_dim: int, device: torch.device) -> torch.Tensor:
         """
@@ -96,6 +125,22 @@ class ConditionalFlowMatcher(BaseFlowMatcher):
             raise ValueError(f"Unknown noise distribution: {self.noise_distribution}. "
                            f"Supported: 'uniform', 'gaussian'")
     
+    def sample_latent(self, batch_size: int, device: torch.device) -> Optional[torch.Tensor]:
+        """
+        Sample latent variable for conditional flow matching
+        
+        Args:
+            batch_size: Number of samples
+            device: Device to create tensor on
+            
+        Returns:
+            Latent tensor [batch_size, latent_dim] or None if not using latent
+        """
+        if not self.use_latent:
+            return None
+        
+        return torch.randn(batch_size, self.latent_dim, device=device)
+    
     def compute_flow_loss(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """
         Compute conditional flow matching loss using noise-to-endpoint flow
@@ -127,6 +172,9 @@ class ConditionalFlowMatcher(BaseFlowMatcher):
         # Sample gaussian noise as starting point
         x_T = self.sample_noise(batch_size, state_dim, device)
         
+        # Sample latent variable if using latent
+        latent = self.sample_latent(batch_size, device)
+        
         # Sample random times
         t = torch.rand(batch_size, device=device)
         
@@ -139,8 +187,8 @@ class ConditionalFlowMatcher(BaseFlowMatcher):
         u_t = x1_embedded - x_T  # [batch_size, 3]
         
         # Predict velocity using the model
-        # Input: current state x_t + time t + start state as condition
-        v_t = self.forward(x_t, t, condition=x0_embedded)
+        # Input: current state x_t + time t + start state as condition + optional latent
+        v_t = self.forward(x_t, t, condition=x0_embedded, latent=latent)
         
         # Compute MSE loss between predicted and target velocities
         loss = F.mse_loss(v_t, u_t)
@@ -150,7 +198,8 @@ class ConditionalFlowMatcher(BaseFlowMatcher):
     def sample_trajectory(self, 
                          start_state: torch.Tensor, 
                          num_steps: int = 100,
-                         method: str = 'euler') -> torch.Tensor:
+                         method: str = 'euler',
+                         latent: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         Sample a trajectory from noise to endpoint given start state
         
@@ -158,6 +207,8 @@ class ConditionalFlowMatcher(BaseFlowMatcher):
             start_state: Conditioning start state [batch_size, 3] or [3] for single sample
             num_steps: Number of integration steps
             method: Integration method ('euler' or 'rk4')
+            latent: Optional latent variable [batch_size, latent_dim] or [latent_dim] for single sample
+                   If None, samples random latent if using latent, or no latent if not using latent
             
         Returns:
             trajectory: Sampled trajectory [num_steps+1, batch_size, 3]
@@ -172,6 +223,15 @@ class ConditionalFlowMatcher(BaseFlowMatcher):
         device = start_state.device
         batch_size = start_state.shape[0]  # Support actual batch size
         state_dim = start_state.shape[-1]
+        
+        # Handle latent variable
+        if latent is None:
+            # Sample latent if using latent mode, otherwise None
+            latent = self.sample_latent(batch_size, device)
+        else:
+            # Handle single latent input for backward compatibility
+            if latent.dim() == 1 and batch_size > 1:
+                latent = latent.unsqueeze(0).repeat(batch_size, 1)
         
         # Start from noise - sample for full batch
         x = self.sample_noise(batch_size, state_dim, device)  # [batch_size, 3]
@@ -188,18 +248,18 @@ class ConditionalFlowMatcher(BaseFlowMatcher):
                 
                 if method == 'euler':
                     # Euler integration - batched
-                    v = self.forward(x, t, condition=start_state)
+                    v = self.forward(x, t, condition=start_state, latent=latent)
                     x = x + dt * v
                 elif method == 'rk4':
                     # 4th order Runge-Kutta - batched
-                    k1 = self.forward(x, t, condition=start_state)
+                    k1 = self.forward(x, t, condition=start_state, latent=latent)
                     
                     t_half = torch.full((batch_size,), step * dt + dt/2, device=device)
-                    k2 = self.forward(x + dt * k1 / 2, t_half, condition=start_state)
-                    k3 = self.forward(x + dt * k2 / 2, t_half, condition=start_state)
+                    k2 = self.forward(x + dt * k1 / 2, t_half, condition=start_state, latent=latent)
+                    k3 = self.forward(x + dt * k2 / 2, t_half, condition=start_state, latent=latent)
                     
                     t_full = torch.full((batch_size,), step * dt + dt, device=device)
-                    k4 = self.forward(x + dt * k3, t_full, condition=start_state)
+                    k4 = self.forward(x + dt * k3, t_full, condition=start_state, latent=latent)
                     
                     x = x + dt * (k1 + 2*k2 + 2*k3 + k4) / 6
                 else:
@@ -213,7 +273,8 @@ class ConditionalFlowMatcher(BaseFlowMatcher):
     def generate_endpoint(self, 
                          start_state: torch.Tensor,
                          num_steps: int = 100,
-                         method: str = 'euler') -> torch.Tensor:
+                         method: str = 'euler',
+                         latent: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         Generate endpoint from noise conditioned on start state
         
@@ -221,10 +282,11 @@ class ConditionalFlowMatcher(BaseFlowMatcher):
             start_state: Conditioning start state [batch_size, 3] or [3] for single sample
             num_steps: Number of integration steps
             method: Integration method
+            latent: Optional latent variable [batch_size, latent_dim] or [latent_dim] for single sample
             
         Returns:
             endpoint: Generated endpoint [batch_size, 3]
                      For single input [3], returns [1, 3]
         """
-        trajectory = self.sample_trajectory(start_state, num_steps, method)
+        trajectory = self.sample_trajectory(start_state, num_steps, method, latent=latent)
         return trajectory[-1]  # Return final state [batch_size, 3]

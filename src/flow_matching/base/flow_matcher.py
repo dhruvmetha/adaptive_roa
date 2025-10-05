@@ -38,8 +38,8 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         self.train_loss = MeanMetric()
         self.val_loss = MeanMetric()
         
-        # Save hyperparameters (exclude model for checkpoint size)
-        self.save_hyperparameters(ignore=['model'])
+        # Save hyperparameters (exclude model and optimizer/scheduler to avoid pickle issues)
+        self.save_hyperparameters(ignore=['model', 'optimizer', 'scheduler'])
     
     def forward(self, x: torch.Tensor, t: torch.Tensor, condition: torch.Tensor) -> torch.Tensor:
         """
@@ -71,22 +71,6 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         """
         pass
     
-    @abstractmethod
-    def prepare_states(self, start_states: torch.Tensor, end_states: torch.Tensor) -> tuple:
-        """
-        Prepare states for flow matching computation
-        
-        This allows subclasses to transform states (e.g., circular embedding)
-        before flow matching computation.
-        
-        Args:
-            start_states: Initial states [batch_size, state_dim]
-            end_states: Target states [batch_size, state_dim]
-            
-        Returns:
-            Tuple of prepared (start_states, end_states)
-        """
-        pass
     
     def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Training step - common across all variants"""

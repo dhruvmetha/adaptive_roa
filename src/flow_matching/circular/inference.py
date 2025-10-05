@@ -2,7 +2,14 @@
 Circular flow matching inference implementation
 """
 import torch
-from typing import Optional
+from typing import Optional, Union, Tuple
+
+try:
+    import theseus as th
+    THESEUS_AVAILABLE = True
+except ImportError:
+    THESEUS_AVAILABLE = False
+    print("Warning: Theseus not available. Using manual angle wrapping for manifold integration.")
 
 from ..base.inference import BaseFlowMatchingInference
 from ..base.config import FlowMatchingConfig
@@ -34,7 +41,7 @@ class CircularFlowMatchingInference(BaseFlowMatchingInference):
         # Create model architecture matching training setup
         model_net = CircularUNet1D(
             input_dim=6,   # Current embedded state (3D) + condition (3D)
-            output_dim=3,  # Velocity on S¹ × ℝ (3D)
+            output_dim=2,  # 2D tangent velocity (dθ/dt, dθ̇/dt)
             hidden_dims=list(self.config.hidden_dims),
             time_emb_dim=self.config.time_emb_dim
         )
@@ -77,25 +84,143 @@ class CircularFlowMatchingInference(BaseFlowMatchingInference):
         """Get the input dimension for the circular model"""
         return 6  # Current embedded state (3D) + condition (3D)
     
-    def _project_to_manifold(self, x: torch.Tensor) -> torch.Tensor:
+    def _integrate_on_manifold(self, current_2d: torch.Tensor, velocity_2d: torch.Tensor, dt: float) -> torch.Tensor:
         """
-        Project back to S¹ × ℝ manifold by normalizing circular components
+        Integrate on S¹ × ℝ manifold using proper geometric integration
         
         Args:
-            x: Current embedded state [batch_size, 3] as (sin θ, cos θ, θ̇)
+            current_2d: Current state [batch_size, 2] as (θ, θ̇)
+            velocity_2d: Tangent velocity [batch_size, 2] as (dθ/dt, dθ̇/dt)
+            dt: Integration time step
             
         Returns:
-            Projected state with normalized (sin θ, cos θ) on unit circle
+            next_2d: Next state [batch_size, 2] on manifold
         """
-        sin_theta, cos_theta, theta_dot = x[..., 0], x[..., 1], x[..., 2]
+        theta, theta_dot = current_2d[..., 0], current_2d[..., 1] 
+        dtheta_dt, dtheta_dot_dt = velocity_2d[..., 0], velocity_2d[..., 1]
         
-        # Normalize (sin, cos) to unit circle
-        norm = torch.sqrt(sin_theta**2 + cos_theta**2)
-        sin_theta_proj = sin_theta / (norm + 1e-8)
-        cos_theta_proj = cos_theta / (norm + 1e-8)
+        if THESEUS_AVAILABLE:
+            # Use Theseus for proper manifold integration
+            try:
+                batch_size = theta.shape[0] if theta.dim() > 0 else 1
+                
+                # Ensure theta has batch dimension
+                if theta.dim() == 0:
+                    theta = theta.unsqueeze(0)
+                    dtheta_dt = dtheta_dt.unsqueeze(0)
+                
+                # Create SE2 with zero translation to get SO2 behavior
+                zero_xy = torch.zeros(batch_size, 2, device=theta.device, dtype=theta.dtype)
+                current_poses = torch.cat([zero_xy, theta.unsqueeze(-1)], dim=-1)  # [batch, 3]
+                current_se2 = th.SE2(x_y_theta=current_poses)
+                
+                # Create tangent vector for SE2 (only rotation component)
+                zero_vel = torch.zeros_like(dtheta_dt)
+                tangent_vec = torch.stack([zero_vel, zero_vel, dtheta_dt * dt], dim=-1)  # [batch, 3]
+                
+                # Apply exponential map
+                exp_tangent = th.SE2.exp_map(tangent_vec)
+                next_se2 = current_se2.compose(exp_tangent)
+                
+                # Extract angle (automatically wrapped)
+                theta_new = next_se2.theta
+                
+                # Handle single element case
+                if batch_size == 1 and theta.dim() == 1:
+                    theta_new = theta_new.squeeze(0)
+                    
+            except Exception as e:
+                print(f"Warning: Theseus integration failed ({e}), falling back to manual wrapping")
+                # Fallback to manual method
+                theta_new = theta + dtheta_dt * dt
+                theta_new = torch.atan2(torch.sin(theta_new), torch.cos(theta_new))
+            
+        else:
+            # Fallback: Manual angle wrapping
+            theta_new = theta + dtheta_dt * dt
+            theta_new = torch.atan2(torch.sin(theta_new), torch.cos(theta_new))
         
-        # θ̇ component stays unchanged (no constraint on ℝ)
-        return torch.stack([sin_theta_proj, cos_theta_proj, theta_dot], dim=-1)
+        # Standard integration for ℝ component (angular velocity)
+        theta_dot_new = theta_dot + dtheta_dot_dt * dt
+        
+        return torch.stack([theta_new, theta_dot_new], dim=-1)
+    
+    
+    @torch.no_grad()
+    def predict_endpoint(self, 
+                        start_states: torch.Tensor, 
+                        num_steps: Optional[int] = None,
+                        return_path: bool = False) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        """
+        Override to handle 2D velocity conversion during integration
+        """
+        # Handle single state input
+        single_input = start_states.dim() == 1
+        if single_input:
+            start_states = start_states.unsqueeze(0)
+        
+        start_states = start_states.to(self.device)
+        batch_size = start_states.shape[0]
+        
+        # Use config default if num_steps not specified
+        if num_steps is None:
+            num_steps = self.config.num_integration_steps
+        
+        # Normalize input states
+        start_states_norm = self.normalize_state(start_states)
+        
+        # Prepare states for integration (variant-specific)
+        x = self._prepare_state_for_integration(start_states_norm)
+        
+        # Integration setup
+        dt = 1.0 / num_steps
+        
+        # Store path if requested
+        if return_path:
+            path = [self._extract_state_from_integration(x.clone())]
+        
+        # Integrate directly in 2D manifold coordinates
+        for i in range(num_steps):
+            t = torch.ones(batch_size, device=self.device) * i * dt
+            
+            # Predict 2D tangent velocity (dθ/dt, dθ̇/dt)
+            velocity_2d = self.model.model(x, t, condition=self._prepare_state_for_integration(start_states_norm))
+            
+            # Extract current (θ, θ̇) from embedded state
+            current_2d = self._extract_state_from_integration(x)
+            
+            # Integrate on S¹ × ℝ manifold using proper geometry
+            next_2d = self._integrate_on_manifold(current_2d, velocity_2d, dt)
+            
+            # Re-embed back to 3D for next iteration
+            x = self._prepare_state_for_integration(next_2d)
+            
+            if return_path:
+                path.append(next_2d.clone())
+        
+        # Extract final states and denormalize
+        final_states = self._extract_state_from_integration(x)
+        predicted_endpoints = self.denormalize_state(final_states)
+        
+        # Handle single output
+        if single_input:
+            predicted_endpoints = predicted_endpoints.squeeze(0)
+        
+        if return_path:
+            # Process path
+            path_tensor = torch.stack(path, dim=1)  # [batch_size, num_steps+1, state_dim]
+            
+            # Denormalize path
+            path_denorm = torch.stack([
+                self.denormalize_state(step) for step in path_tensor.transpose(0, 1)
+            ], dim=1)
+            
+            if single_input:
+                path_denorm = path_denorm.squeeze(0)
+            
+            return predicted_endpoints, path_denorm
+        
+        return predicted_endpoints
     
     def visualize_multiple_flow_paths(self,
                                     start_states_list,

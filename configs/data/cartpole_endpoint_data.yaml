@@ -1,0 +1,7 @@
+_target_: src.data.cartpole_endpoint_data.CartPoleEndpointDataModule
+data_file: /common/users/dm1487/arcmg_datasets/cartpole/incremental_endpoint_dataset/1000_endpoint_dataset.txt
+validation_file: /common/users/dm1487/arcmg_datasets/cartpole/incremental_endpoint_dataset/val_endpoint_dataset.txt
+test_file: /common/users/dm1487/arcmg_datasets/cartpole/incremental_endpoint_dataset/test_endpoint_dataset.txt
+batch_size: ${batch_size}
+num_workers: 4
+pin_memory: true

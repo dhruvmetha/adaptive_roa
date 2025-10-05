@@ -63,7 +63,7 @@ class ConditionalUNet1D(nn.Module):
     def __init__(
         self,
         input_dim: int = 3,  # Current state (embedded 3D: sin θ, cos θ, θ̇)
-        condition_dim: int = 3,  # Start state (embedded 3D: sin θ, cos θ, θ̇)
+        condition_dim: int = 3,  # Start state (embedded 3D: sin θ, cos θ, θ̇) or expanded with latent
         output_dim: int = 3,  # Velocity prediction (embedded 3D)
         hidden_dims: list = [64, 128, 256],
         time_emb_dim: int = 128
@@ -114,7 +114,7 @@ class ConditionalUNet1D(nn.Module):
         Args:
             x: current state tensor [batch_size, 3] - (sin θ, cos θ, θ̇)
             t: time tensor [batch_size] - flow matching time
-            condition: start state [batch_size, 3] - (sin θ, cos θ, θ̇)
+            condition: conditioning tensor [batch_size, condition_dim] - start state or start state + latent
         """
         # Time embedding
         time_emb = self.time_embedding(t)

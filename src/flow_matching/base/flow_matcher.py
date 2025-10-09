@@ -7,6 +7,7 @@ import lightning.pytorch as pl
 from torchmetrics import MeanMetric
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
+import hydra
 
 from .config import FlowMatchingConfig
 
@@ -19,20 +20,20 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
     while allowing subclasses to implement variant-specific flow dynamics.
     """
     
-    def __init__(self, 
+    def __init__(self,
                  model: nn.Module,
                  optimizer: Any,
                  scheduler: Any,
-                 config: Optional[FlowMatchingConfig] = None):
+                 model_config: Optional[FlowMatchingConfig] = None):
         super().__init__()
-        
+
         # Store model and configuration
         self.model = model
-        self.config = config or FlowMatchingConfig()
-        
-        # Store optimizer and scheduler (partial functions from Hydra)
-        self.optimizer_partial = optimizer
-        self.scheduler_partial = scheduler
+        self.config = model_config or FlowMatchingConfig()
+
+        # Store optimizer and scheduler configs (will be instantiated in configure_optimizers)
+        self.optimizer_config = optimizer
+        self.scheduler_config = scheduler
         
         # Metrics tracking
         self.train_loss = MeanMetric()
@@ -106,13 +107,13 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
     
     def configure_optimizers(self):
         """Configure optimizers and schedulers"""
-        # Optimizer should be a partial function from Hydra
-        optimizer = self.optimizer_partial(params=self.parameters())
-        
+        # Instantiate optimizer from config
+        optimizer = hydra.utils.instantiate(self.optimizer_config, params=self.parameters())
+
         # Handle scheduler if present
-        if self.scheduler_partial is not None:
-            scheduler = self.scheduler_partial(optimizer=optimizer)
-            
+        if self.scheduler_config is not None:
+            scheduler = hydra.utils.instantiate(self.scheduler_config, optimizer=optimizer)
+
             return {
                 "optimizer": optimizer,
                 "lr_scheduler": {
@@ -122,7 +123,7 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
                     "monitor": "val_loss",
                 },
             }
-        
+
         # Return just the optimizer if no scheduler
         return optimizer
     

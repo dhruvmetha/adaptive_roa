@@ -192,7 +192,7 @@ class LatentConditionalFlowMatchingInference:
         if attractor_centers is None:
             # Try to get from system config
             try:
-                from ...systems.pendulum_config import PendulumConfig
+                from src.systems.pendulum_config import PendulumConfig
                 config = PendulumConfig()
                 attractor_centers = torch.tensor(
                     config.ATTRACTORS,

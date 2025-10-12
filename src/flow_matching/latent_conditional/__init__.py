@@ -1,8 +1,11 @@
 """
-Latent Conditional Flow Matching implementation (Facebook FM)
+Pendulum Latent Conditional Flow Matching implementation (Facebook FM)
 """
 
-from .flow_matcher_fb import LatentConditionalFlowMatcher
+from .flow_matcher_fb import PendulumLatentConditionalFlowMatcher
 from .inference import LatentConditionalFlowMatchingInference
 
-__all__ = ["LatentConditionalFlowMatcher", "LatentConditionalFlowMatchingInference"]
+__all__ = [
+    "PendulumLatentConditionalFlowMatcher",
+    "LatentConditionalFlowMatchingInference"
+]

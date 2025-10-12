@@ -1,0 +1,42 @@
+# Pendulum ROA Evaluation Configuration
+# Evaluates trained LCFM model on labeled ROA data
+
+name: pendulum_roa_evaluation
+seed: 42
+
+# System configuration
+system:
+  module: src.flow_matching.latent_conditional.flow_matcher_fb
+  class: PendulumLatentConditionalFlowMatcher
+
+# Checkpoint to evaluate
+checkpoint:
+  path: null  # Auto-find latest if null
+  auto_find: true  # Search for latest checkpoint
+  base_name: pendulum_latent_conditional_fm  # Used for auto-finding
+
+# Data: Labeled ROA data
+data:
+  file: /common/users/shared/pracsys/genMoPlan/data_trajectories/pendulum_lqr_50k/roa_labels_700k_DO_NOT_USE_DEATH_INSIDE.txt
+  format: "θ θ̇ label"  # Space-separated format
+
+# Evaluation settings
+evaluation:
+  batch_size: 10000
+  num_steps: 100  # ODE integration steps
+  attractor_radius: 0.1  # Success threshold
+
+  # Probabilistic mode (uncertainty estimation)
+  probabilistic: true
+  num_samples: 50  # Only used if probabilistic=true
+
+# Output
+output:
+  dir: pendulum_roa_evaluation
+  save_plots: true
+  save_data: true
+
+# Hydra output directory
+hydra:
+  run:
+    dir: outputs/${name}/${now:%Y-%m-%d_%H-%M-%S}

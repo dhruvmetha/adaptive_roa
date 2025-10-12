@@ -74,8 +74,8 @@ class EndpointDataset(Dataset):
         # Return raw (unnormalized) states for flow matching
         # The flow matcher handles normalization internally
         return {
-            "start_state_original": torch.tensor(start_state, dtype=torch.float32),
-            "end_state_original": torch.tensor(end_state, dtype=torch.float32)
+            "start_state": torch.tensor(start_state, dtype=torch.float32),
+            "end_state": torch.tensor(end_state, dtype=torch.float32)
         }
 
 class EndpointDataModule(pl.LightningDataModule):

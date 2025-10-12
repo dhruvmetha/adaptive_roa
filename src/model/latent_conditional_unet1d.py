@@ -116,3 +116,18 @@ class LatentConditionalUNet1D(nn.Module):
         vel = self.vel_head(h)
         
         return vel
+
+    def get_model_info(self) -> dict:
+        """Return architecture metadata used by training logs."""
+        total_params = sum(p.numel() for p in self.parameters())
+        return {
+            "embedded_dim": self.embedded_dim,
+            "latent_dim": self.latent_dim,
+            "condition_dim": self.condition_dim,
+            "time_emb_dim": self.time_emb_dim,
+            "output_dim": self.output_dim,
+            "hidden_dims": self.hidden_dims,
+            "use_input_embeddings": self.use_input_embeddings,
+            "total_parameters": total_params,
+            "model_type": "Pendulum Latent Conditional Flow Matching",
+        }

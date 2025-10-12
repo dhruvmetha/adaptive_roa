@@ -16,15 +16,15 @@ from flow_matching.path.scheduler import CondOTScheduler
 from flow_matching.solver import RiemannianODESolver
 from flow_matching.utils import ModelWrapper
 
-from ..base.flow_matcher import BaseFlowMatcher
-from ...systems.base import DynamicalSystem
-from ...utils.fb_manifolds import PendulumManifold
+from src.flow_matching.base.flow_matcher import BaseFlowMatcher
+from src.systems.base import DynamicalSystem
+from src.utils.fb_manifolds import PendulumManifold
 
 from flow_matching.utils.manifolds import Product, FlatTorus, Euclidean
 
-class LatentConditionalFlowMatcher(BaseFlowMatcher):
+class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
     """
-    Latent Conditional Flow Matching using Facebook FM:
+    Pendulum Latent Conditional Flow Matching using Facebook FM:
     - Uses GeodesicProbPath for geodesic interpolation on S¹×ℝ
     - Uses RiemannianODESolver for manifold-aware ODE integration
     - Neural net takes embedded x_t, time t, latent z, and start state condition
@@ -57,36 +57,42 @@ class LatentConditionalFlowMatcher(BaseFlowMatcher):
             latent_dim: Dimension of latent space
             mae_val_frequency: Compute MAE validation every N epochs
         """
-        self.system = system
-        self.latent_dim = latent_dim
-        self.mae_val_frequency = mae_val_frequency
-        super().__init__(model, optimizer, scheduler, model_config)
+        super().__init__(system, model, optimizer, scheduler, model_config, latent_dim, mae_val_frequency)
 
-        # ===================================================================
-        # NEW: Facebook FM Components
-        # ===================================================================
-
-        # Create manifold for S¹×ℝ (pendulum state space)
-        self.manifold = Product(input_dim=2, manifolds=[(FlatTorus(), 1), (Euclidean(), 1)])
-
-        # Create geodesic path with conditional OT scheduler
-        self.path = GeodesicProbPath(
-            scheduler=CondOTScheduler(),
-            manifold=self.manifold
-        )
-
-        # ===================================================================
-        # Validation endpoint MAE metrics (per dimension)
-        # ===================================================================
-        self.val_endpoint_mae_per_dim = nn.ModuleList([
-            MeanMetric() for _ in range(self.system.state_dim)
-        ])
-
-        print("✅ Initialized with Facebook Flow Matching:")
-        print(f"   - Manifold: PendulumManifold (S¹×ℝ)")
+        print("✅ Initialized Pendulum LCFM with Facebook Flow Matching:")
+        print(f"   - Manifold: S¹×ℝ (FlatTorus × Euclidean)")
         print(f"   - Path: GeodesicProbPath with CondOTScheduler")
         print(f"   - Latent dim: {latent_dim}")
         print(f"   - MAE validation frequency: every {mae_val_frequency} epochs")
+
+    def _create_manifold(self):
+        """Create S¹×ℝ manifold for pendulum"""
+        return Product(input_dim=2, manifolds=[(FlatTorus(), 1), (Euclidean(), 1)])
+
+    def _get_start_states(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+        """Extract start states from batch"""
+        return batch["start_state"]
+
+    def _get_end_states(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+        """Extract end states from batch"""
+        return batch["end_state"]
+
+    def _get_dimension_name(self, dim_idx: int) -> str:
+        """Get human-readable dimension name for pendulum"""
+        names = ["angle", "angular_velocity"]
+        return names[dim_idx] if 0 <= dim_idx < len(names) else f"dim_{dim_idx}"
+
+    def normalize_state(self, state: torch.Tensor) -> torch.Tensor:
+        """Delegate to system for normalization"""
+        return self.system.normalize_state(state)
+
+    def denormalize_state(self, normalized_state: torch.Tensor) -> torch.Tensor:
+        """Delegate to system for denormalization"""
+        return self.system.denormalize_state(normalized_state)
+
+    def embed_state_for_model(self, state: torch.Tensor) -> torch.Tensor:
+        """Delegate to system for embedding"""
+        return self.system.embed_state_for_model(state)
 
     def sample_noisy_input(self, batch_size: int, device: torch.device) -> torch.Tensor:
         """
@@ -100,413 +106,237 @@ class LatentConditionalFlowMatcher(BaseFlowMatcher):
             Noisy states [batch_size, 2] as (θ, θ̇_norm)
         """
         # θ ~ Uniform[-π, π]
-        theta = torch.rand(batch_size, 1, device=device) * 2 * torch.pi - torch.pi
+        theta = torch.clamp(torch.randn(batch_size, 1, device=device) * self.system.state_bounds["angle"][1], self.system.state_bounds["angle"][0], self.system.state_bounds["angle"][1])
 
-        # θ̇ ~ Uniform[-1, 1] (already normalized)
-        theta_dot = torch.rand(batch_size, 1, device=device) * 2 - 1
+        # θ̇ ~ Uniform[-2π, 2π] (already normalized)
+        theta_dot = torch.clamp(torch.randn(batch_size, 1, device=device) * self.system.state_bounds["angular_velocity"][1], self.system.state_bounds["angular_velocity"][0], self.system.state_bounds["angular_velocity"][1])
 
         return torch.cat([theta, theta_dot], dim=1)
 
-    def sample_latent(self, batch_size: int, device: torch.device) -> torch.Tensor:
-        """
-        Sample Gaussian latent vector
-
-        Args:
-            batch_size: Number of samples
-            device: Device to create tensors on
-
-        Returns:
-            Latent vectors [batch_size, latent_dim]
-        """
-        return torch.randn(batch_size, self.latent_dim, device=device)
-
     # ===================================================================
-    # REMOVED METHODS (now handled by Facebook FM):
+    # REMOVED METHODS (now in base class or handled by Facebook FM):
     # ===================================================================
+    # ✅ sample_latent() → moved to BaseFlowMatcher
+    # ✅ forward() → moved to BaseFlowMatcher
+    # ✅ compute_flow_loss() → moved to BaseFlowMatcher (unified implementation)
+    # ✅ compute_endpoint_mae_per_dim() → moved to BaseFlowMatcher
+    # ✅ validation_step() → moved to BaseFlowMatcher
+    # ✅ on_validation_epoch_end() → moved to BaseFlowMatcher
+    # ✅ predict_endpoint() → moved to BaseFlowMatcher (unified implementation)
     # ❌ interpolate_s1_x_r() → replaced by self.path.sample()
     # ❌ compute_target_velocity_s1_x_r() → automatic in path_sample.dx_t
 
-    def compute_flow_loss(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
-        """
-        Compute latent conditional flow matching loss using Facebook FM
+    # ===================================================================
+    # CHECKPOINT LOADING FOR INFERENCE
+    # ===================================================================
 
-        CHANGES FROM ORIGINAL:
-        - Uses GeodesicProbPath for interpolation (automatic geodesics!)
-        - Uses path_sample.dx_t for target velocity (automatic via autodiff!)
-        - No manual Theseus computation needed
+    @classmethod
+    def load_from_checkpoint(cls, checkpoint_path: str, device: Optional[str] = None):
+        """
+        Load a trained Pendulum LCFM model from checkpoint for inference.
 
         Args:
-            batch: Dictionary containing 'start_state_original' and 'end_state_original'
+            checkpoint_path: Path to Lightning checkpoint file (.ckpt) OR training folder
+                           - If .ckpt file: loads that checkpoint directly
+                           - If folder: searches for best checkpoint in folder/version_0/checkpoints/
+            device: Device to load model on ("cuda", "cpu", or None for auto)
 
         Returns:
-            Flow matching loss
+            Loaded model ready for inference
         """
-        # Extract data endpoints and start states (raw S¹ × ℝ format)
-        start_states = batch["start_state_original"]  # [B, 2] (θ, θ̇_norm)
-        data_endpoints = batch["end_state_original"]  # [B, 2] (θ, θ̇_norm)
+        import torch
+        import yaml
+        from pathlib import Path
+        from omegaconf import OmegaConf
+        from src.systems.pendulum_lcfm import PendulumSystemLCFM
+        from src.model.latent_conditional_unet1d import LatentConditionalUNet1D
 
-        batch_size = start_states.shape[0]
-        device = self.device
+        # Determine device
+        if device is None:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        # Sample noisy inputs in S¹ × ℝ
-        x_noise = self.sample_noisy_input(batch_size, device)
+        checkpoint_path = Path(checkpoint_path)
 
-        # Sample random times
-        t = torch.rand(batch_size, device=device)
+        # Check if it's a folder or a .ckpt file
+        if checkpoint_path.is_dir():
+            print(f"📁 Folder provided: {checkpoint_path}")
+            print(f"🔍 Searching for checkpoint in folder...")
 
-        # Sample latent vectors
-        z = self.sample_latent(batch_size, device)
+            # Look for checkpoints in version_0/checkpoints/
+            checkpoint_dir = checkpoint_path / "version_0" / "checkpoints"
 
-        # ===================================================================
-        # NEW: Use Facebook FM GeodesicProbPath
-        # ===================================================================
-        # This replaces:
-        # - interpolate_s1_x_r(x_noise, data_endpoints, t)
-        # - compute_target_velocity_s1_x_r(x_noise, data_endpoints, t)
+            if not checkpoint_dir.exists():
+                raise FileNotFoundError(f"No checkpoints directory found at {checkpoint_dir}")
 
-        path_sample = self.path.sample(
-            x_0=x_noise,           # [B, 2] noise in S¹×ℝ
-            x_1=data_endpoints,    # [B, 2] target endpoints
-            t=t                    # [B] random times
+            # Find all .ckpt files (exclude last.ckpt)
+            checkpoints = [p for p in checkpoint_dir.glob("*.ckpt") if p.name != "last.ckpt"]
+
+            if not checkpoints:
+                raise FileNotFoundError(f"No .ckpt files found in {checkpoint_dir}")
+
+            # Parse validation loss from filename: "epoch{epoch:02d}-val_loss{val_loss:.4f}.ckpt"
+            # Find checkpoint with lowest validation loss (best model)
+            best_checkpoint = None
+            best_val_loss = float('inf')
+
+            for ckpt in checkpoints:
+                # Extract val_loss from filename
+                try:
+                    # Example: "epoch42-val_loss0.4519.ckpt"
+                    if "val_loss" in ckpt.stem:
+                        loss_str = ckpt.stem.split("val_loss")[1]
+                        val_loss = float(loss_str)
+                        if val_loss < best_val_loss:
+                            best_val_loss = val_loss
+                            best_checkpoint = ckpt
+                except (ValueError, IndexError):
+                    continue
+
+            if best_checkpoint is None:
+                # Fallback: use most recent checkpoint
+                checkpoint_path = max(checkpoints, key=lambda p: p.stat().st_mtime)
+                print(f"   ⚠️  Could not parse val_loss, using most recent checkpoint")
+            else:
+                checkpoint_path = best_checkpoint
+                print(f"   ✓ Found best checkpoint (val_loss={best_val_loss:.4f})")
+
+            print(f"   📄 Using: {checkpoint_path.name}")
+
+        print(f"🤖 Loading Pendulum LCFM checkpoint: {checkpoint_path}")
+        print(f"📍 Device: {device}")
+
+        # Verify checkpoint exists
+        if not checkpoint_path.exists():
+            raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+
+        # Find the training directory (Hydra root)
+        if checkpoint_path.parent.name == "checkpoints":
+            # Could be version_0/checkpoints/ or just checkpoints/
+            potential_version_dir = checkpoint_path.parent.parent
+            if potential_version_dir.name.startswith("version_"):
+                # New structure: go up one more level to Hydra root
+                training_dir = potential_version_dir.parent
+            else:
+                # Old structure: already at Hydra root
+                training_dir = potential_version_dir
+        else:
+            training_dir = checkpoint_path.parent
+
+        print(f"🗂️  Training directory: {training_dir}")
+
+        # Load Hydra config
+        hydra_config = None
+        hydra_config_path = training_dir / ".hydra" / "config.yaml"
+
+        if hydra_config_path.exists():
+            try:
+                print(f"📋 Loading Hydra config: {hydra_config_path}")
+                with open(hydra_config_path, 'r') as f:
+                    hydra_config = yaml.safe_load(f)
+                print("✅ Hydra config loaded successfully")
+            except Exception as e:
+                print(f"⚠️  Warning: Could not load Hydra config: {e}")
+                hydra_config = None
+        else:
+            print(f"⚠️  Hydra config not found at: {hydra_config_path}")
+
+        # Load Lightning checkpoint
+        print(f"📦 Loading Lightning checkpoint...")
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        hparams = checkpoint.get("hyper_parameters", {})
+        print("✅ Lightning checkpoint loaded")
+
+        # Extract latent_dim
+        latent_dim = hparams.get("latent_dim")
+        if latent_dim is None and hydra_config:
+            latent_dim = hydra_config.get("flow_matching", {}).get("latent_dim", 2)
+        if latent_dim is None:
+            latent_dim = 2
+            print(f"⚠️  Using default latent_dim: {latent_dim}")
+
+        # Extract model config (try both 'model_config' and 'config' for backward compatibility)
+        config_source = None
+        if "model_config" in hparams:
+            model_config = hparams["model_config"]
+            config_source = "checkpoint (model_config)"
+        elif "config" in hparams:
+            model_config = hparams["config"]
+            config_source = "checkpoint (config)"
+        elif hydra_config:
+            model_config = hydra_config.get("model", {})
+            config_source = "Hydra config"
+        else:
+            model_config = {}
+            config_source = "defaults (empty)"
+
+        # Remove _target_ key if present (not needed for reconstruction)
+        if isinstance(model_config, dict) and "_target_" in model_config:
+            model_config = {k: v for k, v in model_config.items() if k != "_target_"}
+
+        model_config["latent_dim"] = latent_dim
+
+        print(f"📋 Config source: {config_source}")
+        print(f"📋 Final config - latent_dim: {latent_dim}")
+        print(f"📋 Model config keys: {list(model_config.keys())}")
+
+        # Initialize system and model
+        system = hparams.get("system")
+        if system is None:
+            print("🔧 Creating new Pendulum system (not found in hparams)")
+            system = PendulumSystemLCFM()
+        else:
+            print("✅ Restored Pendulum system from checkpoint")
+
+        # Create model architecture
+        model = LatentConditionalUNet1D(
+            embedded_dim=model_config.get('embedded_dim', 3),
+            latent_dim=model_config.get('latent_dim', latent_dim),
+            condition_dim=model_config.get('condition_dim', 3),
+            time_emb_dim=model_config.get('time_emb_dim', 64),
+            hidden_dims=model_config.get('hidden_dims', [256, 512, 256]),
+            output_dim=model_config.get('output_dim', 2),
+            use_input_embeddings=model_config.get('use_input_embeddings', False),
+            input_emb_dim=model_config.get('input_emb_dim', 64)
         )
 
-        # path_sample contains:
-        # - path_sample.x_t: [B, 2] interpolated state (geodesic on S¹×ℝ)
-        # - path_sample.dx_t: [B, 2] target velocity (computed via autodiff!)
-        # - path_sample.x_0, path_sample.x_1, path_sample.t
+        # Create flow matcher instance
+        flow_matcher = cls(
+            system=system,
+            model=model,
+            optimizer=None,
+            scheduler=None,
+            model_config=model_config,
+            latent_dim=latent_dim
+        )
 
-        # ===================================================================
-        # SAME AS BEFORE: Model prediction
-        # ===================================================================
+        # Load model weights
+        print("🔄 Loading model state dict...")
+        state_dict = checkpoint["state_dict"]
+        model_state_dict = {k.replace("model.", ""): v for k, v in state_dict.items() if k.startswith("model.")}
 
-        # Embed interpolated state for neural network input
-        x_t_embedded = self.system.embed_state(path_sample.x_t)  # [B, 2] → [B, 3]
+        if not model_state_dict:
+            raise ValueError("No model weights found in checkpoint! Keys: " + str(list(state_dict.keys())[:10]))
 
-        # Embed start state for conditioning
-        start_embedded = self.system.embed_state(start_states)  # [B, 2] → [B, 3]
+        flow_matcher.model.load_state_dict(model_state_dict)
 
-        # Predict velocity using the model (YOUR architecture - unchanged!)
-        predicted_velocity = self.forward(x_t_embedded, t, z, condition=start_embedded)
+        # Move to device and set eval mode
+        flow_matcher = flow_matcher.to(device)
+        flow_matcher.eval()
 
-        # ===================================================================
-        # NEW: Use automatic target velocity from path.sample()
-        # ===================================================================
-        # This replaces manual Theseus computation!
+        # Success summary
+        print(f"\n✅ Model loaded successfully!")
+        print(f"   Checkpoint: {checkpoint_path.name}")
+        print(f"   Config sources: {'Hydra + Lightning' if hydra_config else 'Lightning only'}")
+        print(f"   System: {type(system).__name__}")
+        print(f"   Latent dim: {latent_dim}")
+        print(f"   Model architecture: {model_config.get('hidden_dims', 'unknown')}")
+        print(f"   Total parameters: {sum(p.numel() for p in model.parameters()):,}")
+        print(f"   Device: {device}")
 
-        target_velocity = path_sample.dx_t  # [B, 2] automatic geodesic velocity!
-
-        # Compute MSE loss between predicted and target velocities
-        loss = nn.functional.mse_loss(predicted_velocity, target_velocity)
-
-        return loss
-
-    def compute_endpoint_mae_per_dim(self,
-                                    predicted_endpoints: torch.Tensor,
-                                    true_endpoints: torch.Tensor) -> torch.Tensor:
-        """
-        Compute MAE per dimension with geodesic distance for angular components
-
-        Args:
-            predicted_endpoints: Predicted endpoints [B, state_dim]
-            true_endpoints: True endpoints [B, state_dim]
-
-        Returns:
-            mae_per_dim: MAE for each dimension [state_dim]
-        """
-        mae_per_dim = []
-        start_idx = 0
-
-        for comp in self.system.manifold_components:
-            end_idx = start_idx + comp.dim
-            pred_comp = predicted_endpoints[:, start_idx:end_idx]
-            true_comp = true_endpoints[:, start_idx:end_idx]
-
-            if comp.manifold_type == "SO2":
-                # Use circular/geodesic distance for angular components
-                # For SO2, we have a single angle
-                pred_angle = pred_comp[:, 0]
-                true_angle = true_comp[:, 0]
-
-                # Compute circular distance: |angle_diff| wrapped to [-π, π]
-                angle_diff = pred_angle - true_angle
-                circular_diff = torch.atan2(torch.sin(angle_diff), torch.cos(angle_diff))
-                mae = torch.abs(circular_diff).mean()
-
-            elif comp.manifold_type == "Real":
-                # Standard absolute difference for real-valued components
-                mae = torch.abs(pred_comp - true_comp).mean(dim=0)
-
-                # If multiple dimensions in this component, append each
-                if mae.numel() > 1:
-                    mae_per_dim.extend(mae.tolist())
-                    start_idx = end_idx
-                    continue
-            else:
-                raise NotImplementedError(f"MAE computation for {comp.manifold_type} not implemented")
-
-            mae_per_dim.append(mae.item() if isinstance(mae, torch.Tensor) else mae)
-            start_idx = end_idx
-
-        return torch.tensor(mae_per_dim, device=predicted_endpoints.device)
-
-    def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
-        """
-        Validation step with endpoint MAE computation
-
-        Computes both:
-        1. Flow matching loss (velocity field)
-        2. Endpoint MAE (post-integration, per dimension with geodesic distance) - every 10 epochs
-        """
-        # Compute standard flow matching loss
-        loss = self.compute_flow_loss(batch)
-
-        # Log velocity field loss
-        try:
-            self.val_loss(loss)
-        except Exception:
-            self.val_loss.update(loss)
-
-        self.log('val_loss', self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
-
-        # ===================================================================
-        # NEW: Compute endpoint MAE via integration (configurable frequency)
-        # ===================================================================
-
-        # Only compute endpoint MAE every N epochs (configurable)
-        if self.current_epoch % self.mae_val_frequency == 0:
-            start_states = batch["start_state_original"]  # [B, state_dim]
-            true_endpoints = batch["end_state_original"]  # [B, state_dim]
-
-            # Predict endpoints by integrating the flow
-            predicted_endpoints = self.predict_endpoint(
-                start_states=start_states,
-                num_steps=100,  # Use 100 steps for validation
-                latent=None     # Sample random latent
-            )
-
-            # Compute MAE per dimension with geodesic distance for angular components
-            mae_per_dim = self.compute_endpoint_mae_per_dim(predicted_endpoints, true_endpoints)
-
-            # Update and log metrics for each dimension
-            for dim_idx in range(self.system.state_dim):
-                metric = self.val_endpoint_mae_per_dim[dim_idx]
-                dim_mae = mae_per_dim[dim_idx]
-
-                try:
-                    metric(dim_mae)
-                except Exception:
-                    metric.update(dim_mae)
-
-                # Get component name for logging
-                comp_name = self._get_dimension_name(dim_idx)
-                self.log(f'val_endpoint_mae_{comp_name}', metric,
-                        on_step=False, on_epoch=True, prog_bar=False)
-
-            # Log average endpoint MAE
-            avg_endpoint_mae = mae_per_dim.mean()
-            self.log('val_endpoint_mae_avg', avg_endpoint_mae,
-                    on_step=False, on_epoch=True, prog_bar=True)
-
-        return loss
-
-    def _get_dimension_name(self, dim_idx: int) -> str:
-        """
-        Get human-readable name for a dimension based on system manifold structure
-
-        Args:
-            dim_idx: Dimension index
-
-        Returns:
-            Human-readable name (e.g., "angle", "angular_velocity", "cart_position")
-        """
-        current_idx = 0
-        for comp in self.system.manifold_components:
-            for local_idx in range(comp.dim):
-                if current_idx == dim_idx:
-                    if comp.dim == 1:
-                        return comp.name
-                    else:
-                        return f"{comp.name}_{local_idx}"
-                current_idx += 1
-        return f"dim_{dim_idx}"
-
-    def on_validation_epoch_end(self):
-        """Called at the end of validation epoch"""
-        # Log and reset velocity field loss
-        val_loss = self.val_loss.compute()
-        self.log('val_loss_epoch', val_loss)
-        self.val_loss.reset()
-
-        # Print per-dimension MAE every N epochs (configurable)
-        if self.current_epoch % self.mae_val_frequency == 0:
-            print(f"\n📊 Epoch {self.current_epoch} - Validation MAE per dimension:")
-            for dim_idx in range(self.system.state_dim):
-                comp_name = self._get_dimension_name(dim_idx)
-                mae_value = self.val_endpoint_mae_per_dim[dim_idx].compute()
-                print(f"   {comp_name:20s}: {mae_value:.6f}")
-            print()
-
-        # Reset endpoint MAE metrics
-        for metric in self.val_endpoint_mae_per_dim:
-            metric.reset()
-
-    def forward(self,
-                x_t: torch.Tensor,
-                t: torch.Tensor,
-                z: torch.Tensor,
-                condition: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass through the model (UNCHANGED)
-
-        Args:
-            x_t: Embedded interpolated state [B, 3] (sin θ, cos θ, θ̇_norm)
-            t: Time parameter [B]
-            z: Latent vector [B, latent_dim]
-            condition: Embedded start state [B, 3]
-
-        Returns:
-            Predicted velocity [B, 2] in tangent space
-        """
-        return self.model(x_t, t, z, condition)
-
-    # ===================================================================
-    # NEW: INFERENCE METHODS using RiemannianODESolver
-    # ===================================================================
-
-    def predict_endpoint(self,
-                        start_states: torch.Tensor,
-                        num_steps: int = 100,
-                        latent: Optional[torch.Tensor] = None,
-                        method: str = "euler") -> torch.Tensor:
-        """
-        Predict endpoints from start states using Facebook FM's RiemannianODESolver
-
-        NEW METHOD - Uses proper ODE integration with manifold projection
-
-        Args:
-            start_states: Start states [B, 2] in raw coordinates (θ, θ̇_norm)
-            num_steps: Number of integration steps for ODE solving
-            latent: Optional latent vectors [B, latent_dim]. If None, will sample.
-            method: Integration method ("euler", "rk4", "midpoint")
-
-        Returns:
-            Predicted endpoints [B, 2] in raw coordinates
-        """
-        batch_size = start_states.shape[0]
-        device = start_states.device
-
-        # Ensure model is in eval mode for inference
-        was_training = self.training
-        self.eval()
-
-        try:
-            with torch.no_grad():
-                # Sample noisy inputs
-                x_noise = self.sample_noisy_input(batch_size, device)
-
-                # Sample or use provided latent vectors
-                if latent is None:
-                    z = torch.randn(batch_size, self.latent_dim, device=device)
-                else:
-                    z = latent
-
-                # Embed start states for conditioning
-                start_embedded = self.system.embed_state(start_states)
-
-                # ===================================================================
-                # NEW: Create model wrapper for RiemannianODESolver
-                # ===================================================================
-
-                velocity_model = _PendulumVelocityModelWrapper(
-                    model=self.model,
-                    latent=z,
-                    condition=start_embedded,
-                    embed_fn=lambda x: self.system.embed_state(x)
-                )
-
-                # ===================================================================
-                # NEW: Use RiemannianODESolver for integration
-                # ===================================================================
-
-                solver = RiemannianODESolver(
-                    manifold=self.manifold,
-                    velocity_model=velocity_model
-                )
-
-                final_states = solver.sample(
-                    x_init=x_noise,
-                    step_size=1.0/num_steps,
-                    method=method,
-                    projx=True,   # Use manifold projection (wraps angles)
-                    proju=True,   # Use tangent projection
-                    time_grid=torch.tensor([0.0, 1.0], device=device)
-                )
-
-                return final_states
-
-        finally:
-            # Restore original training mode
-            if was_training:
-                self.train()
-
-
+        return flow_matcher
 # ============================================================================
-# MODEL WRAPPER for RiemannianODESolver
+# NOTE: VelocityModelWrapper moved to BaseFlowMatcher
+# (LatentConditionalVelocityWrapper)
 # ============================================================================
 
-class _PendulumVelocityModelWrapper(ModelWrapper):
-    """
-    Wrapper to adapt latent conditional model for FB FM's RiemannianODESolver
 
-    FB FM solvers expect: velocity_model(x, t) → velocity
-    Our model needs: model(x_embedded, t, z, condition) → velocity
-
-    This wrapper bridges the gap.
-    """
-
-    def __init__(self, model: nn.Module, latent: torch.Tensor,
-                 condition: torch.Tensor, embed_fn):
-        """
-        Args:
-            model: The neural network (UNet)
-            latent: Latent vectors [B, latent_dim] (fixed for trajectory)
-            condition: Condition (start state embedded) [B, condition_dim]
-            embed_fn: Function to embed state: (θ, θ̇) → (sin θ, cos θ, θ̇)
-        """
-        super().__init__(model)
-        self.latent = latent
-        self.condition = condition
-        self.embed_fn = embed_fn
-
-    def forward(self, x: torch.Tensor, t: torch.Tensor, **extras) -> torch.Tensor:
-        """
-        Forward pass compatible with RiemannianODESolver
-
-        Args:
-            x: Current state [B, 2] raw format (θ, θ̇_norm)
-            t: Time [B] or scalar
-
-        Returns:
-            Velocity [B, 2] in tangent space
-        """
-        # Handle scalar t (expand to batch)
-        if t.dim() == 0:
-            t = t.unsqueeze(0).expand(x.shape[0])
-
-        # Embed state for neural network
-        x_embedded = self.embed_fn(x)  # [B, 2] → [B, 3]
-
-        # Expand latent and condition to match batch size if needed
-        batch_size = x.shape[0]
-        z = self.latent
-        cond = self.condition
-
-        if z.shape[0] == 1 and batch_size > 1:
-            z = z.expand(batch_size, -1)
-        if cond.shape[0] == 1 and batch_size > 1:
-            cond = cond.expand(batch_size, -1)
-
-        # Call the model
-        velocity = self.model(x_embedded, t, z, cond)
-
-        return velocity

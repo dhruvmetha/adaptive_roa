@@ -3,7 +3,7 @@ Centralized evaluation metrics for flow matching models
 """
 import numpy as np
 from typing import Dict, Tuple, Optional, Any
-from ..systems.pendulum_config import PendulumConfig
+from src.systems.pendulum_config import PendulumConfig
 
 
 class FlowMatchingMetrics:

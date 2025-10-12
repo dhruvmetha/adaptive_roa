@@ -2,7 +2,7 @@
 Pendulum system for Latent Conditional Flow Matching
 """
 import torch
-from .base import DynamicalSystem, ManifoldComponent
+from src.systems.base import DynamicalSystem, ManifoldComponent
 from typing import List, Dict, Tuple
 
 
@@ -68,27 +68,56 @@ class PendulumSystemLCFM(DynamicalSystem):
         
         # Check if any attractor is within radius
         return (distances < radius).any(dim=1)  # [B]
-    
-    def get_attractor_labels(self, state: torch.Tensor, radius: float = 0.1) -> torch.Tensor:
+
+    # ===================================================================
+    # NORMALIZATION & EMBEDDING FOR FLOW MATCHING
+    # ===================================================================
+
+    def normalize_state(self, state: torch.Tensor) -> torch.Tensor:
         """
-        Get attractor labels for states
-        
+        No normalization for pendulum - return state as-is
+
+        Pendulum uses raw states directly:
+        - θ ∈ [-π, π] (natural circular range)
+        - θ̇ ∈ [-2π, 2π] (raw velocity range)
+
         Args:
-            state: States [B, 2] as (θ, θ̇)
-            radius: Attractor radius
-            
+            state: [B, 2] raw state (θ, θ̇)
+
         Returns:
-            Integer labels [B]: 0,1,2 for attractors, -1 for separatrix/other
+            [B, 2] unchanged state
         """
-        attractors = torch.tensor(self.attractors(), device=state.device, dtype=state.dtype)
         
-        # Compute distances to all attractors
-        distances = torch.norm(state.unsqueeze(1) - attractors.unsqueeze(0), dim=2)  # [B, 3]
-        
-        # Find closest attractor and check if within radius
-        closest_distances, closest_indices = distances.min(dim=1)  # [B]
-        
-        # Assign labels: attractor index if within radius, -1 otherwise
-        labels = torch.where(closest_distances < radius, closest_indices, -1)
-        
-        return labels
+        state[:, 0] = state[:, 0]
+        state[:, 1] = torch.clamp(state[:, 1] / (self.state_bounds["angular_velocity"][1]), -1, 1)
+        return state
+
+    def denormalize_state(self, normalized_state: torch.Tensor) -> torch.Tensor:
+        """
+        No denormalization for pendulum - return state as-is
+
+        Pendulum doesn't normalize, so denormalization is identity
+
+        Args:
+            normalized_state: [B, 2] state (θ, θ̇)
+
+        Returns:
+            [B, 2] unchanged state
+        """
+        normalized_state[:, 0] = normalized_state[:, 0]
+        normalized_state[:, 1] = normalized_state[:, 1] * (self.state_bounds["angular_velocity"][1])
+        return normalized_state
+
+    def embed_state_for_model(self, state: torch.Tensor) -> torch.Tensor:
+        """
+        Embed pendulum state for model input using base class implementation
+
+        Converts angle to sin/cos representation via ManifoldComponent.
+
+        Args:
+            state: [B, 2] (θ, θ̇)
+
+        Returns:
+            [B, 3] (sin θ, cos θ, θ̇)
+        """
+        return self.embed_state(state)

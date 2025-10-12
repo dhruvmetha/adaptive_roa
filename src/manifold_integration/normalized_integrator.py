@@ -6,7 +6,7 @@ for numerical stability and consistency with training.
 """
 import torch
 from typing import List, Tuple, Callable
-from ..systems.base import DynamicalSystem
+from src.systems.base import DynamicalSystem
 
 
 class NormalizedCartPoleIntegrator:

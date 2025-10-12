@@ -3,7 +3,7 @@
 
 name: pendulum_latent_conditional_fm
 seed: 42
-batch_size: 256
+batch_size: 2048
 base_lr: 1e-4
 num_workers: 4
 
@@ -13,7 +13,7 @@ system:
 
 # Flow Matcher: Facebook FM version with automatic geodesics
 flow_matcher:
-  _target_: src.flow_matching.latent_conditional.flow_matcher_fb.LatentConditionalFlowMatcher
+  _target_: src.flow_matching.latent_conditional.flow_matcher_fb.PendulumLatentConditionalFlowMatcher
   # Note: system, model, optimizer, scheduler, config, latent_dim are passed by training script
 
 # Model: Latent Conditional UNet for Pendulum
@@ -23,7 +23,7 @@ model:
   latent_dim: 2                # Gaussian latent variable
   condition_dim: 3             # Embedded start state
   time_emb_dim: 64             # Time embedding dimension
-  hidden_dims: [256, 512, 256] # UNet hidden layers
+  hidden_dims: [256, 512, 256] # UNet hiddenå layers
   output_dim: 2                # Velocity in tangent space (dθ, dθ̇)
   use_input_embeddings: false
   input_emb_dim: 64
@@ -56,9 +56,9 @@ scheduler:
 # Trainer: PyTorch Lightning
 trainer:
   _target_: lightning.pytorch.Trainer
-  max_epochs: 100
+  max_epochs: 500
   accelerator: gpu
-  devices: [1]
+  devices: [0]
   precision: 32
   gradient_clip_val: 1.0
   log_every_n_steps: 10
@@ -67,21 +67,18 @@ trainer:
   enable_model_summary: true
   logger:
     _target_: lightning.pytorch.loggers.TensorBoardLogger
-    save_dir: outputs/${name}
+    save_dir: "${hydra:runtime.output_dir}"
     name: ""
-    version: ""
+    version: null
   callbacks:
     - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+      dirpath: "${hydra:runtime.output_dir}/version_0/checkpoints"
       monitor: val_loss
       mode: min
       save_top_k: 3
+      save_last: true
       filename: "epoch{epoch:02d}-val_loss{val_loss:.4f}"
       auto_insert_metric_name: false
-    - _target_: lightning.pytorch.callbacks.EarlyStopping
-      monitor: val_loss
-      mode: min
-      patience: 20
-      verbose: true
 
 # Flow matching specific settings
 flow_matching:

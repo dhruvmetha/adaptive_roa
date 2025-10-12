@@ -5,7 +5,7 @@ import torch
 import numpy as np
 import pickle
 from pathlib import Path
-from .base import DynamicalSystem, ManifoldComponent
+from src.systems.base import DynamicalSystem, ManifoldComponent
 from typing import List, Dict, Tuple
 
 
@@ -142,68 +142,81 @@ class CartPoleSystemLCFM(DynamicalSystem):
         if len(result) == 1:
             return result.item()
         return result
-    
-    def get_attractor_labels(self, state, radius: float = 0.1):
+
+    # ===================================================================
+    # NORMALIZATION & EMBEDDING FOR FLOW MATCHING
+    # ===================================================================
+
+    def normalize_state(self, state: torch.Tensor) -> torch.Tensor:
         """
-        Get attractor labels for states
-        
+        Normalize raw state coordinates (x, theta, x_dot, theta_dot) → (x_norm, theta, x_dot_norm, theta_dot_norm)
+
+        Normalizes linear quantities to [-1, 1] using symmetric bounds.
+        Angle remains unchanged (already in natural [-π, π] range).
+
         Args:
-            state: States [B, 4] as (x, θ, ẋ, θ̇) - numpy array or torch tensor
-            radius: Attractor radius
-            
+            state: [B, 4] raw cartpole state (theta already wrapped to [-π, π])
+
         Returns:
-            Integer labels [B]: 0 for upright attractor, -1 for separatrix/other
+            [B, 4] normalized state (theta unchanged)
         """
-        # Convert to torch tensor if needed
-        if isinstance(state, np.ndarray):
-            state = torch.from_numpy(state).float()
-            
-        if state.dim() == 1:
-            state = state.unsqueeze(0)
-            
-        # Check if in any attractor basin
-        in_attractor = self.is_in_attractor(state, radius)
-        
-        # For CartPole, all attractors are essentially the same (upright pole)
-        # So we assign label 0 to all successful states, -1 to failures
-        labels = torch.where(in_attractor, 0, -1)
-        
-        return labels
-    
-    def is_balanced(self, state: torch.Tensor, 
-                   position_threshold: float = 2.0,
-                   angle_threshold: float = 0.2,
-                   velocity_threshold: float = 1.0) -> torch.Tensor:
+        # Extract components
+        x = state[:, 0]
+        theta = state[:, 1]  # Keep as-is (already wrapped)
+        x_dot = state[:, 2]
+        theta_dot = state[:, 3]
+
+        # Normalize linear quantities to [-1, 1] range using symmetric bounds
+        x_norm = x / self.cart_limit
+        x_dot_norm = x_dot / self.velocity_limit
+        theta_dot_norm = theta_dot / self.angular_velocity_limit
+
+        return torch.stack([x_norm, theta, x_dot_norm, theta_dot_norm], dim=1)
+
+    def denormalize_state(self, normalized_state: torch.Tensor) -> torch.Tensor:
         """
-        Check if CartPole is in balanced state (more lenient than attractors)
-        
+        Denormalize state back to raw coordinates.
+
         Args:
-            state: State tensor [B, 4] as (x, θ, ẋ, θ̇)
-            position_threshold: Maximum cart position
-            angle_threshold: Maximum pole angle deviation from vertical
-            velocity_threshold: Maximum velocity magnitudes
-            
+            normalized_state: [B, 4] normalized state (x_norm, theta, x_dot_norm, theta_dot_norm)
+
         Returns:
-            Boolean tensor [B] indicating balanced status
+            [B, 4] raw state (x, theta, x_dot, theta_dot)
         """
-        if state.dim() == 1:
-            state = state.unsqueeze(0)
-            
-        x, theta, x_dot, theta_dot = state[:, 0], state[:, 1], state[:, 2], state[:, 3]
-        
-        # Check individual constraints
-        position_ok = torch.abs(x) < position_threshold
-        velocity_ok = torch.abs(x_dot) < velocity_threshold
-        angular_velocity_ok = torch.abs(theta_dot) < velocity_threshold
-        
-        
-        # Check if pole is upright (within angle threshold of vertical)
-        dist_from_zero = torch.abs(theta)
-        dist_from_pi = torch.abs(torch.abs(theta) - np.pi)
-        min_dist = torch.min(dist_from_zero, dist_from_pi)
-        upright_ok = min_dist < angle_threshold
-        
-        return position_ok & velocity_ok & upright_ok & angular_velocity_ok
-    
+        x_norm = normalized_state[:, 0]
+        theta = normalized_state[:, 1]  # Already in natural coordinates [-π, π]
+        x_dot_norm = normalized_state[:, 2]
+        theta_dot_norm = normalized_state[:, 3]
+
+        # Denormalize using system bounds
+        x = x_norm * self.cart_limit
+        x_dot = x_dot_norm * self.velocity_limit
+        theta_dot = theta_dot_norm * self.angular_velocity_limit
+
+        return torch.stack([x, theta, x_dot, theta_dot], dim=1)
+
+    def embed_state_for_model(self, normalized_state: torch.Tensor) -> torch.Tensor:
+        """
+        Embed normalized state → (x_norm, sin(theta), cos(theta), x_dot_norm, theta_dot_norm)
+
+        Converts circular angle to sin/cos representation for neural network input.
+
+        Args:
+            normalized_state: [B, 4] normalized state
+
+        Returns:
+            [B, 5] embedded state
+        """
+        x_norm = normalized_state[:, 0]
+        theta = normalized_state[:, 1]
+        x_dot_norm = normalized_state[:, 2]
+        theta_dot_norm = normalized_state[:, 3]
+
+        # Embed circular angle as sin/cos
+        sin_theta = torch.sin(theta)
+        cos_theta = torch.cos(theta)
+
+        return torch.stack([x_norm, sin_theta, cos_theta, x_dot_norm, theta_dot_norm], dim=1)
+
     def __repr__(self) -> str:
         return f"CartPoleSystemLCFM(ℝ² × S¹ × ℝ, limits=[{self.cart_limit}, {self.velocity_limit}, π, {self.angular_velocity_limit}])"

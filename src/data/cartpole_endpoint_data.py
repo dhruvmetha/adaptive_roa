@@ -73,17 +73,15 @@ class CartPoleEndpointDataset(Dataset):
     def wrap_angle(self, angle):
         """
         Wrap angle to [-π, π] for proper S¹ manifold representation
-        
+
         Args:
             angle: Angle in radians (can be unwrapped)
-            
+
         Returns:
             Wrapped angle in [-π, π]
         """
-        # we need to wrap the angles in the end states
-        angle = angle % (2 * np.pi)
-        angle =  angle - 2 * np.pi if angle > np.pi else angle
-        return angle
+        # Use atan2 for robust angle wrapping (handles all edge cases)
+        return np.arctan2(np.sin(angle), np.cos(angle))
     
     def __getitem__(self, idx):
         start_state, end_state = self.data[idx]
@@ -102,7 +100,8 @@ class CartPoleEndpointDataset(Dataset):
 
 class CartPoleEndpointDataModule(pl.LightningDataModule):
     def __init__(self, data_file: str, validation_file: str, test_file: str,
-                 batch_size: int = 64, num_workers: int = 4, pin_memory: bool = True,
+                 batch_size: int = 64, val_batch_size: Optional[int] = None,
+                 num_workers: int = 4, pin_memory: bool = True,
                  bounds_file: str = "/common/users/dm1487/arcmg_datasets/cartpole/cartpole_data_bounds.pkl"):
         """
         CartPole Endpoint Data Module with separate train/val/test files
@@ -111,7 +110,8 @@ class CartPoleEndpointDataModule(pl.LightningDataModule):
             data_file: Path to training dataset file
             validation_file: Path to validation dataset file
             test_file: Path to test dataset file
-            batch_size: Batch size for data loaders
+            batch_size: Batch size for training data loader
+            val_batch_size: Batch size for validation/test data loaders (defaults to batch_size if None)
             num_workers: Number of workers for data loading
             pin_memory: Whether to pin memory for data loaders
             bounds_file: Path to pickle file with actual data bounds
@@ -121,6 +121,7 @@ class CartPoleEndpointDataModule(pl.LightningDataModule):
         self.validation_file = validation_file
         self.test_file = test_file
         self.batch_size = batch_size
+        self.val_batch_size = val_batch_size if val_batch_size is not None else batch_size
         self.num_workers = num_workers
         self.pin_memory = pin_memory
         self.bounds_file = bounds_file
@@ -149,16 +150,16 @@ class CartPoleEndpointDataModule(pl.LightningDataModule):
     def val_dataloader(self):
         return DataLoader(
             self.val_dataset,
-            batch_size=self.batch_size,
+            batch_size=self.val_batch_size,
             shuffle=False,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory
         )
-    
+
     def test_dataloader(self):
         return DataLoader(
             self.test_dataset,
-            batch_size=self.batch_size,
+            batch_size=self.val_batch_size,
             shuffle=False,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory

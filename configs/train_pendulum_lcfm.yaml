@@ -3,7 +3,8 @@
 
 name: pendulum_latent_conditional_fm
 seed: 42
-batch_size: 2048
+batch_size: 256
+val_batch_size: 512
 base_lr: 1e-4
 num_workers: 4
 
@@ -33,6 +34,7 @@ data:
   _target_: src.data.endpoint_data.EndpointDataModule
   data_file: /common/users/dm1487/arcmg_datasets/pendulum_lqr/incremental_endpoint_dataset/1000_endpoint_dataset.txt
   batch_size: ${batch_size}
+  val_batch_size: ${val_batch_size}
   num_workers: ${num_workers}
   train_split: 0.8
   val_split: 0.1
@@ -83,10 +85,7 @@ trainer:
 # Flow matching specific settings
 flow_matching:
   latent_dim: 2                    # Dimension of Gaussian latent variable
-  noise_distribution: uniform      # "uniform" or "gaussian"
-  noise_scale: 1.0                 # Scale factor for gaussian
-  num_integration_steps: 100       # For inference
-  sigma: 0.0                       # Noise level
+  num_integration_steps: 100       # Number of ODE integration steps for inference
   mae_val_frequency: 10            # Compute MAE validation every N epochs
 
 # Hydra output directory

@@ -187,6 +187,14 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         """
         Compute MAE per dimension using Facebook Product manifold geodesic distance
 
+        The Product manifold correctly computes:
+        - Geodesic (circular) distance for S¹ components (e.g., angles)
+        - Euclidean distance for ℝ components (e.g., velocities)
+
+        Example for pendulum (S¹×ℝ):
+        - θ=3.1 vs θ=-3.1 → distance ≈ 0.08 (wraps around, not 6.2!)
+        - θ̇=1.0 vs θ̇=2.0 → distance = 1.0 (Euclidean)
+
         Args:
             predicted_endpoints: Predicted endpoints [B, state_dim]
             true_endpoints: True endpoints [B, state_dim]

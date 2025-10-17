@@ -85,7 +85,7 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
 
     def sample_noisy_input(self, batch_size: int, device: torch.device) -> torch.Tensor:
         """
-        Sample noisy input in ℝ²×S¹×ℝ space
+        Sample noisy input uniformly in ℝ²×S¹×ℝ space
 
         Args:
             batch_size: Number of samples
@@ -95,16 +95,16 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
             Noisy states [batch_size, 4] as (x, θ, ẋ, θ̇)
         """
         # x ~ Uniform[-cart_limit, +cart_limit] (symmetric bounds)
-        x = torch.randn(batch_size, 1, device=device) * (self.system.cart_limit) # * 2) - self.system.cart_limit
-
-        # ẋ ~ Uniform[-velocity_limit, +velocity_limit] (symmetric bounds)
-        x_dot = torch.randn(batch_size, 1, device=device) * (self.system.velocity_limit) # * 2) - self.system.velocity_limit
+        x = torch.rand(batch_size, 1, device=device) * (2 * self.system.cart_limit) - self.system.cart_limit
 
         # θ ~ Uniform[-π, π] (wrapped angle)
-        theta = torch.randn(batch_size, 1, device=device) * torch.pi # 2  - torch.pi
+        theta = torch.rand(batch_size, 1, device=device) * (2 * torch.pi) - torch.pi
+
+        # ẋ ~ Uniform[-velocity_limit, +velocity_limit] (symmetric bounds)
+        x_dot = torch.rand(batch_size, 1, device=device) * (2 * self.system.velocity_limit) - self.system.velocity_limit
 
         # θ̇ ~ Uniform[-angular_velocity_limit, +angular_velocity_limit] (symmetric bounds)
-        theta_dot = torch.randn(batch_size, 1, device=device) * (self.system.angular_velocity_limit) # * 2) - self.system.angular_velocity_limit
+        theta_dot = torch.rand(batch_size, 1, device=device) * (2 * self.system.angular_velocity_limit) - self.system.angular_velocity_limit
 
         return torch.cat([x, theta, x_dot, theta_dot], dim=1)
 

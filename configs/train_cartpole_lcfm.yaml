@@ -3,7 +3,8 @@
 
 name: cartpole_latent_conditional_fm
 seed: 42
-batch_size: 2048
+batch_size: 256
+val_batch_size: 2048  # Validation batch size (can be larger than training)
 base_lr: 1e-4
 num_workers: 4
 
@@ -23,7 +24,7 @@ model:
   latent_dim: 2                # Gaussian latent variable
   condition_dim: 5             # Embedded start state
   time_emb_dim: 64             # Time embedding dimension
-  hidden_dims: [256, 512, 256] # UNet hidden layers
+  hidden_dims: [256, 512, 1024, 512, 256] # UNet hidden layers
   output_dim: 4                # Velocity in tangent space (dx, dθ, dẋ, dθ̇)
   use_input_embeddings: false
   input_emb_dim: 64
@@ -31,10 +32,11 @@ model:
 # Data: CartPole endpoint dataset
 data:
   _target_: src.data.cartpole_endpoint_data.CartPoleEndpointDataModule
-  data_file: /common/users/dm1487/arcmg_datasets/cartpole/incremental_endpoint_dataset/1000_endpoint_dataset.txt
-  validation_file: /common/users/dm1487/arcmg_datasets/cartpole/incremental_endpoint_dataset/val_endpoint_dataset.txt
-  test_file: /common/users/dm1487/arcmg_datasets/cartpole/incremental_endpoint_dataset/test_endpoint_dataset.txt
+  data_file: /common/users/dm1487/arcmg_datasets/cartpole/incremental_endpoint_dataset_fixed_attractors/10_endpoint_dataset.txt
+  validation_file: /common/users/dm1487/arcmg_datasets/cartpole/incremental_endpoint_dataset_fixed_attractors/10_endpoint_dataset.txt
+  test_file: /common/users/dm1487/arcmg_datasets/cartpole/incremental_endpoint_dataset_fixed_attractors/10_endpoint_dataset.txt
   batch_size: ${batch_size}
+  val_batch_size: ${val_batch_size}
   num_workers: ${num_workers}
 
 # Optimizer: AdamW

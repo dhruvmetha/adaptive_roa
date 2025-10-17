@@ -11,7 +11,7 @@ system:
 
 # Checkpoint to evaluate
 checkpoint:
-  path: null  # Auto-find latest if null
+  path: /common/home/dm1487/robotics_research/tripods/olympics-classifier/outputs/cartpole_latent_conditional_fm/2025-10-13_02-11-56  # Auto-find latest if null
   auto_find: true  # Search for latest checkpoint
   base_name: cartpole_latent_conditional_fm  # Used for auto-finding
 
@@ -24,7 +24,7 @@ data:
 evaluation:
   batch_size: 500
   num_steps: 100  # ODE integration steps
-  attractor_radius: 0.2  # Success threshold
+  attractor_radius: 0.3  # Success threshold
 
   # Probabilistic mode (uncertainty estimation)
   probabilistic: true

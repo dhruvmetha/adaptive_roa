@@ -96,20 +96,24 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
 
     def sample_noisy_input(self, batch_size: int, device: torch.device) -> torch.Tensor:
         """
-        Sample noisy input in S¹ × ℝ space
+        Sample noisy input uniformly in S¹ × ℝ space
 
         Args:
             batch_size: Number of samples
             device: Device to create tensors on
 
         Returns:
-            Noisy states [batch_size, 2] as (θ, θ̇_norm)
+            Noisy states [batch_size, 2] as (θ, θ̇) in raw coordinates
         """
-        # θ ~ Uniform[-π, π]
-        theta = torch.clamp(torch.randn(batch_size, 1, device=device) * self.system.state_bounds["angle"][1], self.system.state_bounds["angle"][0], self.system.state_bounds["angle"][1])
+        # θ ~ Uniform[-π, π] for circular angle
+        theta_min = self.system.state_bounds["angle"][0]
+        theta_max = self.system.state_bounds["angle"][1]
+        theta = torch.rand(batch_size, 1, device=device) * (theta_max - theta_min) + theta_min
 
-        # θ̇ ~ Uniform[-2π, 2π] (already normalized)
-        theta_dot = torch.clamp(torch.randn(batch_size, 1, device=device) * self.system.state_bounds["angular_velocity"][1], self.system.state_bounds["angular_velocity"][0], self.system.state_bounds["angular_velocity"][1])
+        # θ̇ ~ Uniform[-2π, 2π] for angular velocity
+        vel_min = self.system.state_bounds["angular_velocity"][0]
+        vel_max = self.system.state_bounds["angular_velocity"][1]
+        theta_dot = torch.rand(batch_size, 1, device=device) * (vel_max - vel_min) + vel_min
 
         return torch.cat([theta, theta_dot], dim=1)
 

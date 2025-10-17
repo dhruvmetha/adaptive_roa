@@ -56,10 +56,11 @@ class CartPoleSystemLCFM(DynamicalSystem):
         # Store the actual bounds for reference
         self.actual_bounds = bounds_data
         
-        print(f"  Cart position: [{bounds['x']['min']:.3f}, {bounds['x']['max']:.3f}] -> limit: ±{self.cart_limit:.3f}")
-        print(f"  Cart velocity: [{bounds['x_dot']['min']:.3f}, {bounds['x_dot']['max']:.3f}] -> limit: ±{self.velocity_limit:.3f}")
-        print(f"  Pole angle: [{bounds['theta']['min']:.3f}, {bounds['theta']['max']:.3f}] -> WRAPPED to ±π")
-        print(f"  Angular velocity: [{bounds['theta_dot']['min']:.3f}, {bounds['theta_dot']['max']:.3f}] -> limit: ±{self.angular_velocity_limit:.3f}")
+        # Print in state vector order: [x, θ, ẋ, θ̇]
+        print(f"  [0] Cart position (x): [{bounds['x']['min']:.3f}, {bounds['x']['max']:.3f}] -> limit: ±{self.cart_limit:.3f}")
+        print(f"  [1] Pole angle (θ): [{bounds['theta']['min']:.3f}, {bounds['theta']['max']:.3f}] -> WRAPPED to ±π")
+        print(f"  [2] Cart velocity (ẋ): [{bounds['x_dot']['min']:.3f}, {bounds['x_dot']['max']:.3f}] -> limit: ±{self.velocity_limit:.3f}")
+        print(f"  [3] Angular velocity (θ̇): [{bounds['theta_dot']['min']:.3f}, {bounds['theta_dot']['max']:.3f}] -> limit: ±{self.angular_velocity_limit:.3f}")
     
     def _use_default_bounds(self):
         """Use default fallback bounds"""
@@ -110,38 +111,86 @@ class CartPoleSystemLCFM(DynamicalSystem):
     def is_in_attractor(self, state, radius: float = 1.0):
         """
         Check if states are within attractor basins (balanced CartPole)
-        
+
         Args:
             state: States [B, 4] as (x, θ, ẋ, θ̇) - numpy array or torch tensor
             radius: Attractor radius for position/velocity tolerances
-            
+
         Returns:
             Boolean tensor [B] indicating attractor membership
         """
         # Convert to torch tensor if needed
         if isinstance(state, np.ndarray):
             state = torch.from_numpy(state).float()
-            
+
         if state.dim() == 1:
             state = state.unsqueeze(0)
-            
-        x, theta, x_dot, theta_dot = state[:, 0], state[:, 1], state[:, 2], state[:, 3]
-        
-        # Position and velocity constraints (using radius = 0.1 consistently)
-        position_ok = torch.abs(x) < radius  
-        velocity_ok = torch.abs(x_dot) < radius  
-        angular_velocity_ok = torch.abs(theta_dot) < radius
-        
-        # Angular constraint: check if close to upright (0° ONLY)
-        # Distance from 0° (upright position)
-        dist_from_zero = torch.abs(theta)
-        angle_ok = dist_from_zero < radius
-        
-        result = position_ok & velocity_ok & angle_ok & angular_velocity_ok
-        # Convert back to numpy if input was numpy
+
+        result = torch.norm(state, dim=1) < radius
+
+        # x, theta, x_dot, theta_dot = state[:, 0], state[:, 1], state[:, 2], state[:, 3]
+
+        # # Position and velocity constraints (using radius = 0.1 consistently)
+        # position_ok = torch.abs(x) < radius
+        # velocity_ok = torch.abs(x_dot) < radius
+        # angular_velocity_ok = torch.abs(theta_dot) < radius
+
+        # # Angular constraint: check if close to upright (0° ONLY)
+        # # Distance from 0° (upright position)
+        # dist_from_zero = torch.abs(theta)
+        # angle_ok = dist_from_zero < radius
+
+        # result = position_ok & velocity_ok & angle_ok & angular_velocity_ok
+        # # Convert back to numpy if input was numpy
         if len(result) == 1:
             return result.item()
+        
         return result
+
+    def classify_attractor(self, state: torch.Tensor, radius: float = 0.1) -> torch.Tensor:
+        """
+        Classify which attractor (if any) each state belongs to for CartPole
+
+        CartPole has only 2 categories:
+        - Upright balanced attractor [0, 0, 0, 0] (SUCCESS)
+        - Not in attractor (FAILURE - pole fell)
+
+        Args:
+            state: States [B, 4] as (x, θ, ẋ, θ̇)
+            radius: Attractor radius
+
+        Returns:
+            Integer tensor [B] with:
+                1: State in upright balanced attractor (SUCCESS)
+               -1: State not in attractor (FAILURE - pole fell)
+
+        Note: This always returns binary classification (1 or -1).
+        The separatrix (0) classification happens during probabilistic evaluation
+        when multiple samples have 50-50 split.
+        """
+        # Convert to torch tensor if needed
+        if isinstance(state, np.ndarray):
+            state = torch.from_numpy(state).float()
+
+        if state.dim() == 1:
+            state = state.unsqueeze(0)
+
+        x, theta, x_dot, theta_dot = state[:, 0], state[:, 1], state[:, 2], state[:, 3]
+
+        # Check all constraints for upright balanced attractor
+        position_ok = torch.abs(x) < radius
+        velocity_ok = torch.abs(x_dot) < radius
+        angular_velocity_ok = torch.abs(theta_dot) < radius
+        angle_ok = torch.abs(theta) < radius
+
+        in_attractor = position_ok & velocity_ok & angle_ok & angular_velocity_ok
+
+        # Binary classification: 1 if in attractor (success), -1 if not (failure)
+        labels = torch.where(in_attractor,
+                            torch.ones_like(in_attractor, dtype=torch.long),
+                            -torch.ones_like(in_attractor, dtype=torch.long))
+
+        return labels
 
     # ===================================================================
     # NORMALIZATION & EMBEDDING FOR FLOW MATCHING

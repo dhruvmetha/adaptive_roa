@@ -1,436 +1,298 @@
 """
-Latent Conditional Flow Matching inference module
+Inference wrapper for Latent Conditional Flow Matching (Facebook FM)
+
+This wrapper provides an interface compatible with the AttractorBasinAnalyzer
+and other evaluation tools while leveraging the flow matcher's inference methods.
 """
 import torch
-import torch.nn as nn
-from typing import List, Optional, Tuple
 import numpy as np
-import os
+from typing import Optional, Tuple, Union, List
 from pathlib import Path
-from omegaconf import OmegaConf
-import hydra
-from hydra import compose, initialize_config_dir
-from hydra.core.global_hydra import GlobalHydra
-
-from src.flow_matching.latent_conditional.flow_matcher import LatentConditionalFlowMatcher
-from src.model.latent_conditional_unet1d import LatentConditionalUNet1D
-from src.systems.pendulum_lcfm import PendulumSystemLCFM
-from src.manifold_integration import TheseusIntegrator
-
-
-def find_best_checkpoint(folder_path: str) -> str:
-    """
-    Find the best checkpoint in a timestamped folder.
-    
-    Algorithm:
-    1. Look in folder_path/checkpoints/ for .ckpt files
-    2. Exclude 'last.ckpt' (always use validation-based checkpoints)
-    3. Parse filename format: epoch=027-step=980-val_loss=0.087929.ckpt
-    4. Return the checkpoint with the LOWEST validation loss (best performance)
-    
-    Args:
-        folder_path: Path to timestamped folder (e.g., outputs/name/2024-01-15_14-30-45)
-        
-    Returns:
-        Path to the best checkpoint
-        
-    Raises:
-        FileNotFoundError: If no valid checkpoints found
-        ValueError: If validation loss cannot be parsed from filenames
-    """
-    folder_path = Path(folder_path)
-    checkpoints_dir = folder_path / "checkpoints"
-    
-    if not checkpoints_dir.exists():
-        raise FileNotFoundError(f"Checkpoints directory not found: {checkpoints_dir}")
-    
-    # Look for checkpoint files (excluding last.ckpt)
-    checkpoint_files = list(checkpoints_dir.glob("*.ckpt"))
-    checkpoint_files = [f for f in checkpoint_files if f.name != "last.ckpt"]
-    
-    if not checkpoint_files:
-        raise FileNotFoundError(f"No validation-based checkpoint files found in: {checkpoints_dir}")
-    
-    # Find the checkpoint with the lowest validation loss
-    best_checkpoint = None
-    best_val_loss = float('inf')
-    parse_errors = []
-    
-    print(f"🔍 Parsing {len(checkpoint_files)} checkpoint files...")
-    
-    for ckpt_file in checkpoint_files:
-        # Parse filename to extract val_loss
-        # Expected format: epoch=027-step=980-val_loss=0.087929.ckpt
-        filename = ckpt_file.stem
-        
-        if "val_loss=" not in filename:
-            parse_errors.append(f"No 'val_loss=' in filename: {filename}")
-            continue
-            
-        try:
-            # Handle both single and double equals patterns
-            # e.g., "val_loss=0.006688" or "val_loss=val_loss=0.006688"  
-            parts = filename.split("val_loss=")
-            if len(parts) >= 2:
-                # Take the last part (handles double equals case)
-                val_loss_part = parts[-1].split("-")[0]
-                print(f"  📄 {ckpt_file.name}: val_loss_part='{val_loss_part}'")
-                
-                val_loss = float(val_loss_part)
-                
-                if val_loss < best_val_loss:
-                    best_val_loss = val_loss
-                    best_checkpoint = ckpt_file
-            else:
-                parse_errors.append(f"Unexpected val_loss format in {filename}")
-            
-        except (ValueError, IndexError) as e:
-            parse_errors.append(f"Could not parse val_loss from {filename}: {e}")
-            continue
-    
-    if best_checkpoint is None:
-        error_msg = f"Could not parse validation loss from any checkpoint filenames. Errors:\n"
-        error_msg += "\n".join(f"  - {err}" for err in parse_errors)
-        raise ValueError(error_msg)
-    
-    print(f"🏆 Best checkpoint selected (val_loss={best_val_loss:.6f}): {best_checkpoint.name}")
-    return str(best_checkpoint)
-
-
-def find_hydra_config(folder_path: str) -> str:
-    """
-    Find the hydra config.yaml in a timestamped folder.
-    
-    Algorithm:
-    1. Look for folder_path/.hydra/config.yaml (preferred - contains resolved config)
-    2. If not found, raise error (no fallbacks)
-    
-    Args:
-        folder_path: Path to timestamped folder (e.g., outputs/name/2024-01-15_14-30-45)
-        
-    Returns:
-        Path to .hydra/config.yaml
-        
-    Raises:
-        FileNotFoundError: If .hydra/config.yaml not found
-    """
-    folder_path = Path(folder_path)
-    
-    # Look for .hydra/config.yaml (contains the resolved configuration)
-    hydra_config = folder_path / ".hydra" / "config.yaml"
-    if hydra_config.exists():
-        print(f"📋 Using Hydra config: {hydra_config}")
-        return str(hydra_config)
-    
-    raise FileNotFoundError(f"Hydra config not found at: {hydra_config}")  
-
-
-def load_config_from_hydra(config_path: str) -> dict:
-    """
-    Load configuration from Hydra config file
-    
-    Args:
-        config_path: Path to the config.yaml file
-        
-    Returns:
-        Configuration dictionary
-    """
-    try:
-        # Clear any existing Hydra global state
-        GlobalHydra.instance().clear()
-        
-        # Load the config file directly with OmegaConf
-        config = OmegaConf.load(config_path)
-        
-        print(f"Loaded config from: {config_path}")
-        # Try to resolve, but if it fails, return unresolved config
-        try:
-            return OmegaConf.to_container(config, resolve=True)
-        except Exception as resolve_error:
-            print(f"Warning: Could not resolve interpolations, using unresolved config: {resolve_error}")
-            return OmegaConf.to_container(config, resolve=False)
-        
-    except Exception as e:
-        print(f"Warning: Could not load Hydra config from {config_path}: {e}")
-        return {}
 
 
 class LatentConditionalFlowMatchingInference:
     """
-    Inference module for Latent Conditional Flow Matching
-    
-    Integrates from noisy input to predicted endpoint using learned velocity field
+    Inference wrapper for latent conditional flow matching models
+
+    Provides:
+    - Standard predict_endpoint() interface for RoA analysis
+    - Probabilistic methods for uncertainty estimation
+    - Multi-sample endpoint prediction
+    - Attractor distribution estimation
     """
-    
-    def __init__(self, folder_path: str, device: Optional[str] = None):
+
+    def __init__(self,
+                 checkpoint_path: Optional[str] = None,
+                 flow_matcher = None,
+                 num_integration_steps: int = 100,
+                 integration_method: str = "rk4"):
         """
-        Initialize LCFM inference from timestamped folder
-        
+        Initialize inference wrapper
+
         Args:
-            folder_path: Path to timestamped folder (e.g., outputs/name/2024-01-15_14-30-45)
-            device: Device to run inference on
+            checkpoint_path: Path to trained checkpoint (if loading from file)
+            flow_matcher: Pre-loaded flow matcher (if already in memory)
+            num_integration_steps: Number of ODE integration steps
+            integration_method: Integration method ("euler", "rk4", "midpoint")
         """
-        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        
-        # Validate input is a directory
-        path_obj = Path(folder_path)
-        if not path_obj.is_dir():
-            raise ValueError(f"Path must be a timestamped directory: {folder_path}")
-        
-        print(f"🗂️ Loading from timestamped folder: {folder_path}")
-        
-        # Find best checkpoint in the folder (raises error if not found)
-        checkpoint_path = find_best_checkpoint(folder_path)
-        
-        # Find config in the folder (raises error if not found)
-        config_path = find_hydra_config(folder_path)
-        
-        # Load checkpoint (disable weights_only for Lightning checkpoints)
-        checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
-        
-        # Load full Hydra configuration if available
-        full_config = {}
-        if config_path:
-            full_config = load_config_from_hydra(config_path)
-        
-        # Initialize system (pendulum for S¹ × ℝ)
-        self.system = PendulumSystemLCFM()
-        
-        # Get configuration from checkpoint hyperparameters (most reliable)
-        hparams = checkpoint.get("hyper_parameters", {})
-        self.latent_dim = hparams.get("latent_dim", 2)
-        model_cfg = hparams.get("config", {})
-        print(f"Using latent_dim from checkpoint hparams: {self.latent_dim}")
-        
-        # If model config not in hyperparameters, try full config as fallback
-        if not model_cfg and full_config and "model" in full_config:
-            model_cfg = full_config.get("model", {})
-            flow_matching_cfg = full_config.get("flow_matching", {})
-            self.latent_dim = flow_matching_cfg.get("latent_dim", self.latent_dim)
-            print(f"Fallback to Hydra config for model parameters")
-        
-        # Override latent_dim in model config
-        if isinstance(model_cfg, dict):
-            model_cfg = dict(model_cfg)  # Make a copy
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.num_integration_steps = num_integration_steps
+        self.integration_method = integration_method
+
+        if flow_matcher is not None:
+            # Use provided flow matcher
+            self.model = flow_matcher
+            self.model.eval()
+            self.model = self.model.to(self.device)
+        elif checkpoint_path is not None:
+            # Load from checkpoint
+            self.model = self._load_from_checkpoint(checkpoint_path)
         else:
-            # Convert DictConfig to regular dict
-            model_cfg = OmegaConf.to_container(model_cfg) if hasattr(model_cfg, '_content') else dict(model_cfg)
-        
-        model_cfg["latent_dim"] = self.latent_dim
-        print(f"Loading model with config: {model_cfg}")
-        
-        # Use Hydra to instantiate model from config
-        try:
-            self.model = hydra.utils.instantiate(model_cfg).to(self.device)
-        except Exception as e:
-            print(f"Error instantiating model with Hydra: {e}")
-            print(f"Available model config keys: {list(model_cfg.keys())}")
-            # Fallback: use config values with sensible defaults
-            from src.model.latent_conditional_unet1d import LatentConditionalUNet1D
-            self.model = LatentConditionalUNet1D(
-                embedded_dim=model_cfg.get('embedded_dim', 3),
-                latent_dim=model_cfg.get('latent_dim', self.latent_dim),
-                condition_dim=model_cfg.get('condition_dim', 3),
-                time_emb_dim=model_cfg.get('time_emb_dim', 16),
-                hidden_dims=model_cfg.get('hidden_dims', [128, 128]),
-                output_dim=model_cfg.get('output_dim', 2),
-                use_input_embeddings=model_cfg.get('use_input_embeddings', False),
-                input_emb_dim=model_cfg.get('input_emb_dim', 64)
-            ).to(self.device)
-        
-        # Load model weights
-        state_dict = checkpoint["state_dict"]
-        model_state_dict = {k.replace("model.", ""): v for k, v in state_dict.items() if k.startswith("model.")}
-        self.model.load_state_dict(model_state_dict)
-        self.model.eval()
-        
-        # Initialize integrator for ODE solving
-        self.integrator = TheseusIntegrator(self.system)
-        
-        print(f"✅ Successfully loaded LCFM model!")
-        print(f"   Checkpoint: {checkpoint_path}")
-        print(f"   Config source: {'Hydra config' if config_path else 'Checkpoint hparams'}")
-        print(f"   System: {self.system}")
-        print(f"   Latent dim: {self.latent_dim}")
-    
-    
-    def sample_noisy_input(self, batch_size: int) -> torch.Tensor:
+            raise ValueError("Must provide either checkpoint_path or flow_matcher")
+
+        # Extract configuration
+        self.latent_dim = self.model.latent_dim
+        self.system = self.model.system
+
+    def _load_from_checkpoint(self, checkpoint_path: str):
         """
-        Sample noisy input in S¹ × ℝ space
-        
-        Args:
-            batch_size: Number of samples
-            
-        Returns:
-            Noisy states [batch_size, 2] as (θ, θ̇)
+        Load flow matcher from checkpoint
+
+        Note: This requires knowing the model architecture.
+        For now, raise an error and require passing the flow_matcher directly.
         """
-        # θ ~ Uniform[-π, π] 
-        theta = torch.rand(batch_size, 1, device=self.device) * 2 * torch.pi - torch.pi
-        
-        # θ̇ ~ Uniform[-1, 1] (already normalized)
-        theta_dot = torch.rand(batch_size, 1, device=self.device) * 2 - 1
-        
-        noisy_input = torch.cat([theta, theta_dot], dim=1)
-        
-        # Debug: Print first few values for first call
-        if not hasattr(self, '_noise_sample_count'):
-            self._noise_sample_count = 0
-        self._noise_sample_count += 1
-        
-        if self._noise_sample_count <= 3:
-            print(f"🎯 Noise sample {self._noise_sample_count}: First noise = {noisy_input[0].cpu().numpy()}")
-        
-        return noisy_input
-    
-    def sample_latent(self, batch_size: int) -> torch.Tensor:
-        """
-        Sample Gaussian latent vector
-        
-        Args:
-            batch_size: Number of samples
-            
-        Returns:
-            Latent vectors [batch_size, latent_dim]
-        """
-        # Ensure truly random sampling by resetting generator state occasionally
-        if not hasattr(self, '_sample_count'):
-            self._sample_count = 0
-        self._sample_count += 1
-        
-        latents = torch.randn(batch_size, self.latent_dim, device=self.device)
-        
-        # Debug: Print first few values for first few calls
-        if self._sample_count <= 3:
-            print(f"🎲 Sample {self._sample_count}: First latent = {latents[0].cpu().numpy()}")
-        
-        return latents
-    
-    def velocity_function(self, 
-                         t: float, 
-                         x_t: torch.Tensor,      # [B, 2] in S¹ × ℝ 
-                         z: torch.Tensor,        # [B, 2] latent
-                         condition: torch.Tensor # [B, 3] embedded condition
-                         ) -> torch.Tensor:
-        """
-        Velocity function for ODE integration
-        
-        Args:
-            t: Current time (scalar)
-            x_t: Current state [B, 2] in S¹ × ℝ
-            z: Latent vectors [B, 2]
-            condition: Embedded conditioning [B, 3]
-            
-        Returns:
-            Velocity [B, 2] in tangent space
-        """
-        batch_size = x_t.shape[0]
-        
-        # Embed current state
-        x_t_embedded = self.system.embed_state(x_t)
-        
-        # Create time tensor
-        t_tensor = torch.full((batch_size,), t, device=self.device)
-        
-        # Predict velocity
-        with torch.no_grad():
-            velocity = self.model(x_t_embedded, t_tensor, z, condition)
-        
-        return velocity
-    
-    def integrate_trajectory(self, 
-                           start_state: torch.Tensor,  # [B, 2] in S¹ × ℝ
-                           num_steps: int = 100,
-                           latent: Optional[torch.Tensor] = None
-                           ) -> Tuple[torch.Tensor, List[torch.Tensor]]:
-        """
-        Integrate from noisy input to predicted endpoint
-        
-        Args:
-            start_state: Conditioning start states [B, 2] 
-            num_steps: Number of integration steps
-            latent: Optional latent vectors [B, 2]. If None, will sample.
-            
-        Returns:
-            Tuple of (final_states, trajectory_states)
-        """
-        batch_size = start_state.shape[0]
-        
-        # Sample noisy inputs (initial conditions for integration)
-        x_current = self.sample_noisy_input(batch_size)
-        
-        # Sample or use provided latent vectors
-        if latent is None:
-            z = self.sample_latent(batch_size)
-        else:
-            z = latent
-        
-        # Embed conditioning (start states)
-        condition_embedded = self.system.embed_state(start_state)
-        
-        # Integration using TheseusIntegrator batch method
-        final_states, trajectory = self.integrator.integrate_batch(
-            start_states=x_current,
-            velocity_func=lambda t, x: self.velocity_function(t, x, z, condition_embedded),
-            num_steps=num_steps
+        raise NotImplementedError(
+            "Loading from checkpoint requires knowing the exact model architecture. "
+            "Please instantiate the flow matcher manually and pass it via flow_matcher= parameter."
         )
-        
-        return final_states, trajectory
-    
-    def predict_endpoint(self, 
-                        start_state: torch.Tensor,  # [B, 2] in S¹ × ℝ
-                        num_steps: int = 100,
-                        num_samples: int = 1
-                        ) -> torch.Tensor:
+
+    @torch.no_grad()
+    def predict_endpoint(self,
+                        start_states: Union[torch.Tensor, np.ndarray],
+                        num_steps: Optional[int] = None,
+                        latent: Optional[torch.Tensor] = None,
+                        method: Optional[str] = None) -> torch.Tensor:
         """
-        Predict endpoint given start state
-        
+        Predict endpoint for given start state(s)
+
+        Compatible with AttractorBasinAnalyzer interface.
+
         Args:
-            start_state: Start states [B, 2] in S¹ × ℝ
-            num_steps: Number of integration steps
-            num_samples: Number of samples per start state (due to stochastic latent)
-            
+            start_states: Initial states [batch_size, 2] or [2] for single prediction
+                         Format: [θ, θ̇] in original coordinates
+            num_steps: Number of integration steps (uses default if None)
+            latent: Optional latent vectors [batch_size, latent_dim].
+                    If None, samples random latent.
+            method: Integration method (uses default if None)
+
         Returns:
-            Predicted endpoints [B*num_samples, 2] in S¹ × ℝ
+            predicted_endpoints: Final states [batch_size, 2] or [2]
         """
-        batch_size = start_state.shape[0]
-        
-        if num_samples == 1:
-            # Single sample per start state
-            final_states, _ = self.integrate_trajectory(start_state, num_steps)
-            return final_states
+        # Convert numpy to torch if needed
+        if isinstance(start_states, np.ndarray):
+            start_states = torch.tensor(start_states, dtype=torch.float32)
+
+        # Move to device
+        start_states = start_states.to(self.device)
+
+        # Use defaults if not specified
+        if num_steps is None:
+            num_steps = self.num_integration_steps
+        if method is None:
+            method = self.integration_method
+
+        # Call flow matcher's predict_endpoint
+        predictions = self.model.predict_endpoint(
+            start_states,
+            num_steps=num_steps,
+            latent=latent,
+            method=method
+        )
+
+        return predictions
+
+    @torch.no_grad()
+    def sample_endpoints(self,
+                        start_states: Union[torch.Tensor, np.ndarray],
+                        num_samples: int = 10,
+                        num_steps: Optional[int] = None,
+                        method: Optional[str] = None) -> torch.Tensor:
+        """
+        Sample multiple endpoints per start state (stochastic due to latent)
+
+        Args:
+            start_states: Initial states [batch_size, 2]
+            num_samples: Number of samples per start state
+            num_steps: Number of integration steps
+            method: Integration method
+
+        Returns:
+            samples: Sampled endpoints [batch_size, num_samples, 2]
+        """
+        # Convert numpy to torch if needed
+        if isinstance(start_states, np.ndarray):
+            start_states = torch.tensor(start_states, dtype=torch.float32)
+
+        start_states = start_states.to(self.device)
+        batch_size = start_states.shape[0]
+
+        # Use defaults
+        if num_steps is None:
+            num_steps = self.num_integration_steps
+        if method is None:
+            method = self.integration_method
+
+        # Collect samples
+        samples = []
+        for _ in range(num_samples):
+            # Each call samples a new random latent
+            endpoints = self.model.predict_endpoint(
+                start_states,
+                num_steps=num_steps,
+                latent=None,  # Sample random latent
+                method=method
+            )
+            samples.append(endpoints)
+
+        # Stack: [num_samples, batch_size, 2] -> [batch_size, num_samples, 2]
+        samples = torch.stack(samples, dim=0).transpose(0, 1)
+
+        return samples
+
+    @torch.no_grad()
+    def predict_attractor_distribution(self,
+                                      start_states: Union[torch.Tensor, np.ndarray],
+                                      num_samples: int = 64,
+                                      attractor_centers: Optional[torch.Tensor] = None,
+                                      attractor_radius: float = 0.5) -> torch.Tensor:
+        """
+        Estimate probability distribution over attractors for each start state
+
+        This method enables probabilistic RoA analysis by sampling multiple
+        endpoints and computing which attractors they converge to.
+
+        Args:
+            start_states: Initial states [batch_size, 2]
+            num_samples: Number of samples for Monte Carlo estimation
+            attractor_centers: Attractor positions [num_attractors, 2]
+                              If None, uses system config
+            attractor_radius: Radius for attractor membership
+
+        Returns:
+            probabilities: Probability distribution [batch_size, num_attractors]
+        """
+        # Convert numpy to torch if needed
+        if isinstance(start_states, np.ndarray):
+            start_states = torch.tensor(start_states, dtype=torch.float32)
+
+        start_states = start_states.to(self.device)
+        batch_size = start_states.shape[0]
+
+        # Get attractor centers
+        if attractor_centers is None:
+            # Try to get from system config
+            try:
+                from src.systems.pendulum_config import PendulumConfig
+                config = PendulumConfig()
+                attractor_centers = torch.tensor(
+                    config.ATTRACTORS,
+                    dtype=torch.float32,
+                    device=self.device
+                )
+                attractor_radius = config.ATTRACTOR_RADIUS
+            except:
+                raise ValueError("Must provide attractor_centers or have PendulumConfig available")
         else:
-            # Multiple samples per start state
-            all_endpoints = []
-            
-            for _ in range(num_samples):
-                # Repeat start_state for this sample
-                start_repeated = start_state.repeat(1, 1)  # [B, 2]
-                
-                # Integrate with different latent sample
-                final_states, _ = self.integrate_trajectory(start_repeated, num_steps)
-                all_endpoints.append(final_states)
-            
-            # Concatenate all samples
-            return torch.cat(all_endpoints, dim=0)  # [B*num_samples, 2]
-    
-    def predict_trajectory(self, 
-                          start_state: torch.Tensor,  # [B, 2]
-                          num_steps: int = 100
-                          ) -> List[torch.Tensor]:
+            attractor_centers = attractor_centers.to(self.device)
+
+        num_attractors = attractor_centers.shape[0]
+
+        # Sample endpoints
+        samples = self.sample_endpoints(start_states, num_samples=num_samples)  # [B, N, 2]
+
+        # Count how many samples fall into each attractor
+        attractor_counts = torch.zeros(
+            batch_size, num_attractors,
+            device=self.device, dtype=torch.float32
+        )
+
+        # For each sample, check which attractor it belongs to
+        for sample_idx in range(num_samples):
+            endpoints = samples[:, sample_idx, :]  # [B, 2]
+
+            # Compute distances to each attractor
+            for att_idx in range(num_attractors):
+                center = attractor_centers[att_idx]  # [2]
+
+                # Handle circular angle dimension
+                theta_diff = endpoints[:, 0] - center[0]
+                # Wrap to [-π, π]
+                theta_diff = torch.atan2(torch.sin(theta_diff), torch.cos(theta_diff))
+
+                omega_diff = endpoints[:, 1] - center[1]
+
+                # Euclidean distance (with circular angle)
+                distances = torch.sqrt(theta_diff**2 + omega_diff**2)
+
+                # Count if within radius
+                in_attractor = (distances < attractor_radius).float()
+                attractor_counts[:, att_idx] += in_attractor
+
+        # Normalize to get probabilities
+        probabilities = attractor_counts / num_samples
+
+        return probabilities
+
+    def predict_single(self,
+                      angle: float,
+                      angular_velocity: float,
+                      num_samples: int = 1) -> Union[np.ndarray, List[np.ndarray]]:
         """
-        Predict full trajectory from noisy input to endpoint
-        
+        Convenient method for single prediction
+
         Args:
-            start_state: Conditioning start states [B, 2]
-            num_steps: Number of integration steps
-            
+            angle: Initial angle (float)
+            angular_velocity: Initial angular velocity (float)
+            num_samples: Number of samples (if >1, returns list)
+
         Returns:
-            List of trajectory states [num_steps+1, B, 2]
+            endpoint(s): Predicted endpoint(s) as numpy array(s)
         """
-        _, trajectory = self.integrate_trajectory(start_state, num_steps)
-        return trajectory
-    
-    def __repr__(self) -> str:
-        return (f"LatentConditionalFlowMatchingInference("
-                f"system={type(self.system).__name__}, "
-                f"device={self.device})")
+        start_state = torch.tensor([[angle, angular_velocity]], dtype=torch.float32)
+
+        if num_samples == 1:
+            endpoint = self.predict_endpoint(start_state)
+            return endpoint.cpu().numpy()[0]
+        else:
+            samples = self.sample_endpoints(start_state, num_samples=num_samples)
+            return [samples[0, i].cpu().numpy() for i in range(num_samples)]
+
+    def batch_predict(self,
+                     start_states_list: List[List[float]],
+                     return_std: bool = False,
+                     num_samples: int = 10) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+        """
+        Predict endpoints for a batch of start states with uncertainty
+
+        Args:
+            start_states_list: List of [angle, angular_velocity] pairs
+            return_std: If True, return standard deviations
+            num_samples: Number of samples for uncertainty estimation
+
+        Returns:
+            predictions: Mean predicted endpoints [n_samples, 2]
+            stds (optional): Standard deviations [n_samples, 2]
+        """
+        start_tensor = torch.tensor(start_states_list, dtype=torch.float32)
+
+        if return_std:
+            samples = self.sample_endpoints(start_tensor, num_samples=num_samples)
+            samples_np = samples.cpu().numpy()
+
+            means = samples_np.mean(axis=1)
+            stds = samples_np.std(axis=1)
+
+            return means, stds
+        else:
+            predictions = self.predict_endpoint(start_tensor)
+            return predictions.cpu().numpy()

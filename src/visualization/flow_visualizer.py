@@ -7,7 +7,7 @@ from matplotlib.lines import Line2D
 from typing import Optional, Tuple, List, Union
 from pathlib import Path
 
-from ..systems.pendulum_config import PendulumConfig
+from src.systems.pendulum_config import PendulumConfig
 from .phase_space_plots import PhaseSpacePlotter
 
 

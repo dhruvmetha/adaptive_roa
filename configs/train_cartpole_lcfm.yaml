@@ -1,0 +1,99 @@
+# CartPole Latent Conditional Flow Matching (Facebook FM)
+# Uses: ℝ²×S¹×ℝ manifold, GeodesicProbPath, RiemannianODESolver
+
+name: cartpole_latent_conditional_fm
+seed: 42
+batch_size: 2048
+base_lr: 1e-4
+num_workers: 4
+
+# System: CartPole dynamics with ℝ²×S¹×ℝ state space
+system:
+  _target_: src.systems.cartpole_lcfm.CartPoleSystemLCFM
+
+# Flow Matcher: Facebook FM version with automatic geodesics
+flow_matcher:
+  _target_: src.flow_matching.cartpole_latent_conditional.flow_matcher_fb.CartPoleLatentConditionalFlowMatcher
+  # Note: system, model, optimizer, scheduler, config, latent_dim are passed by training script
+
+# Model: Latent Conditional UNet for CartPole
+model:
+  _target_: src.model.cartpole_latent_conditional_unet1d.CartPoleLatentConditionalUNet1D
+  embedded_dim: 5              # (x_norm, sin θ, cos θ, ẋ_norm, θ̇_norm)
+  latent_dim: 2                # Gaussian latent variable
+  condition_dim: 5             # Embedded start state
+  time_emb_dim: 64             # Time embedding dimension
+  hidden_dims: [256, 512, 256] # UNet hidden layers
+  output_dim: 4                # Velocity in tangent space (dx, dθ, dẋ, dθ̇)
+  use_input_embeddings: false
+  input_emb_dim: 64
+
+# Data: CartPole endpoint dataset
+data:
+  _target_: src.data.cartpole_endpoint_data.CartPoleEndpointDataModule
+  data_file: /common/users/dm1487/arcmg_datasets/cartpole/incremental_endpoint_dataset/1000_endpoint_dataset.txt
+  validation_file: /common/users/dm1487/arcmg_datasets/cartpole/incremental_endpoint_dataset/val_endpoint_dataset.txt
+  test_file: /common/users/dm1487/arcmg_datasets/cartpole/incremental_endpoint_dataset/test_endpoint_dataset.txt
+  batch_size: ${batch_size}
+  num_workers: ${num_workers}
+
+# Optimizer: AdamW
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: ${base_lr}
+  weight_decay: 1e-5
+  betas: [0.9, 0.999]
+
+# Scheduler: Reduce on plateau
+scheduler:
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  mode: min
+  factor: 0.5
+  patience: 10
+  min_lr: 1e-6
+
+# Trainer: PyTorch Lightning
+trainer:
+  _target_: lightning.pytorch.Trainer
+  max_epochs: 500
+  accelerator: gpu
+  devices: [0]
+  precision: 32
+  gradient_clip_val: 1.0
+  log_every_n_steps: 10
+  check_val_every_n_epoch: 1
+  enable_progress_bar: true
+  enable_model_summary: true
+  logger:
+    _target_: lightning.pytorch.loggers.TensorBoardLogger
+    save_dir: "${hydra:runtime.output_dir}"
+    name: ""
+    version: null
+  callbacks:
+    - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+      dirpath: "${hydra:runtime.output_dir}/version_0/checkpoints"
+      monitor: val_loss
+      mode: min
+      save_top_k: 3
+      save_last: true
+      filename: "epoch{epoch:02d}-val_loss{val_loss:.4f}"
+      auto_insert_metric_name: false
+    - _target_: lightning.pytorch.callbacks.EarlyStopping
+      monitor: val_loss
+      mode: min
+      patience: 20
+      verbose: true
+
+# Flow matching specific settings
+flow_matching:
+  latent_dim: 2                    # Dimension of Gaussian latent variable
+  noise_distribution: uniform      # "uniform" or "gaussian"
+  noise_scale: 1.0                 # Scale factor for gaussian
+  num_integration_steps: 100       # For inference
+  sigma: 0.0                       # Noise level
+  mae_val_frequency: 10            # Compute MAE validation every N epochs
+
+# Hydra output directory
+hydra:
+  run:
+    dir: outputs/${name}/${now:%Y-%m-%d_%H-%M-%S}

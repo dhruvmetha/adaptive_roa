@@ -3,7 +3,7 @@ Universal manifold integrator using Theseus Lie groups
 """
 import torch
 from typing import List, Dict, Any, Optional, Tuple
-from ..systems.base import DynamicalSystem, ManifoldComponent
+from src.systems.base import DynamicalSystem, ManifoldComponent
 
 try:
     import theseus as th

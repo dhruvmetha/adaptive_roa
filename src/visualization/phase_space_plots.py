@@ -7,7 +7,7 @@ from matplotlib.patches import Circle
 from typing import Optional, Tuple, List, Union
 from pathlib import Path
 
-from ..systems.pendulum_config import PendulumConfig
+from src.systems.pendulum_config import PendulumConfig
 
 
 class PhaseSpacePlotter:

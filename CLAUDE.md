@@ -34,22 +34,20 @@ This is a robotics research project for training neural network classifiers, rea
   - `flow_matching.py`: **[DEPRECATED]** Legacy flow matching module
   - `circular_flow_matching.py`: **[DEPRECATED]** Legacy circular flow matching module
 
-- **Unified Flow Matching Framework**: Located in `src/flow_matching/`
+- **Flow Matching Framework**: Located in `src/flow_matching/`
   - `base/`: Abstract base classes and common functionality
-    - `flow_matcher.py`: Base Lightning module for all flow matching variants
-    - `inference.py`: Base inference class with shared prediction logic
+    - `flow_matcher.py`: Base Lightning module for all flow matching variants (~220 lines of shared code)
     - `config.py`: Common configuration and state handling
-  - `standard/`: Standard flow matching implementation
-    - `flow_matcher.py`: Standard flow matching using torchcfm
-    - `inference.py`: Standard flow matching inference
-    - `train.py`: Standard training script
-  - `circular/`: Circular-aware flow matching implementation  
-    - `flow_matcher.py`: Circular flow matching with geodesic interpolation
-    - `inference.py`: Circular flow matching inference
-    - `train.py`: Circular training script
-  - `utils/`: Shared utilities
-    - `state_transformations.py`: State embedding/extraction utilities
-    - `geometry.py`: Circular distance and interpolation utilities
+  - `latent_conditional/`: Pendulum Latent Conditional FM (S¹×ℝ manifold)
+    - `flow_matcher_fb.py`: Flow matching with Facebook FM library
+    - `train.py`: Training script for pendulum
+  - `cartpole_latent_conditional/`: CartPole Latent Conditional FM (ℝ²×S¹×ℝ manifold)
+    - `flow_matcher_fb.py`: CartPole flow matching with latent variables & conditioning
+    - `train.py`: Training script for CartPole
+  - `cartpole_gaussian_perturbed/`: CartPole Gaussian Perturbed FM (simplified variant)
+    - `flow_matcher.py`: Simplified FM without latent variables or conditioning
+    - `inference.py`: Inference class
+    - `train.py`: Training script (25% faster than latent conditional)
 
 - **Legacy Inference**: Located in `src/` directory **[DEPRECATED]**
   - `inference_flow_matching.py`: **[DEPRECATED]** Use `flow_matching.standard.inference` instead
@@ -94,6 +92,34 @@ Uses Hydra for configuration management with YAML files in `configs/`:
 - **Classification Data**: 4D inputs normalized to [0,1] range with bounds [-0.5, 0.5, -10, 10]
 - **Reachability Data**: 8D inputs normalized to [0,1] range with bounds [-4π, 4π, -20, 20] repeated twice
 
+## Quick Start
+
+**For complete training and evaluation instructions, see [TRAINING_GUIDE.md](TRAINING_GUIDE.md).**
+
+### Training Commands
+```bash
+# Pendulum (Latent Conditional)
+python src/flow_matching/latent_conditional/train.py
+
+# CartPole (Latent Conditional - richer model)
+python src/flow_matching/cartpole_latent_conditional/train.py
+
+# CartPole (Gaussian Perturbed - faster, simpler)
+python src/flow_matching/cartpole_gaussian_perturbed/train.py
+```
+
+### Evaluation Commands
+```bash
+# ROA evaluation (deterministic)
+python src/flow_matching/evaluate_roa.py --config-name=evaluate_cartpole_roa
+
+# ROA evaluation (probabilistic with uncertainty)
+python src/flow_matching/evaluate_roa.py \
+    --config-name=evaluate_cartpole_roa \
+    evaluation.probabilistic=true \
+    evaluation.num_samples=20
+```
+
 ## Development Commands
 
 ### Setup
@@ -107,57 +133,63 @@ pip install -e .
 
 ### Training
 ```bash
-# Train classifier (currently incomplete - model/trainer instantiation commented out)
-python src/train_classifier.py
+# Pendulum (Latent Conditional)
+python src/flow_matching/latent_conditional/train.py
 
-# Train reachability model  
-python src/train_reachability.py
+# CartPole (Latent Conditional - richer model)
+python src/flow_matching/cartpole_latent_conditional/train.py
 
-# Train flow matching models using unified framework
-python src/flow_matching/standard/train.py      # Standard flow matching
-python src/flow_matching/circular/train.py     # Circular flow matching
+# CartPole (Gaussian Perturbed - faster, simpler)
+python src/flow_matching/cartpole_gaussian_perturbed/train.py
 
-# Legacy training scripts (deprecated but still functional)
-python src/train_flow_matching.py              # [DEPRECATED] Use standard/train.py
-python src/train_circular_flow_matching.py     # [DEPRECATED] Use circular/train.py
-
-# Evaluate reachability model
-python src/evaluate_reachability.py
-
-# Evaluate flow matching model with unified pipeline
-python src/evaluate_flow_matching_refactored.py
+# Customize training parameters
+python src/flow_matching/latent_conditional/train.py \
+    flow_matching.latent_dim=4 \
+    base_lr=5e-4 \
+    batch_size=512
 ```
 
 ### Evaluation & Analysis
 ```bash
-# Run comprehensive flow matching evaluation (unified pipeline)
-python src/evaluate_flow_matching_refactored.py
+# ROA evaluation (deterministic)
+python src/flow_matching/evaluate_roa.py --config-name=evaluate_cartpole_roa
 
-# Demonstrate unified flow matching framework
-python src/demo_unified_flow_matching.py        # NEW: Works with both variants
-
-# Demonstrate attractor basin analysis
-python src/demo_attractor_analysis.py
-
-# Legacy demos (deprecated but still functional)
-python src/demo_flow_matching.py               # [DEPRECATED] Use unified demo
-python src/demo_circular_flow_matching.py      # [DEPRECATED] Use unified demo
+# ROA evaluation (probabilistic with uncertainty quantification)
+python src/flow_matching/evaluate_roa.py \
+    --config-name=evaluate_cartpole_roa \
+    evaluation.probabilistic=true \
+    evaluation.num_samples=20
 ```
 
-### Unified Flow Matching Usage
+### Flow Matching Inference Usage
 ```python
-# NEW: Unified framework usage
-from src.flow_matching.standard import StandardFlowMatchingInference
-from src.flow_matching.circular import CircularFlowMatchingInference
-from src.evaluation.evaluator import FlowMatchingEvaluator
+# Load trained models
+from src.flow_matching.latent_conditional.flow_matcher_fb import PendulumLatentConditionalFlowMatcher
+from src.flow_matching.cartpole_latent_conditional.flow_matcher_fb import CartPoleLatentConditionalFlowMatcher
+from src.flow_matching.cartpole_gaussian_perturbed.inference import CartPoleGaussianPerturbedInference
+import torch
 
-# Load any variant - automatic detection
-standard_inferencer = StandardFlowMatchingInference("checkpoint.ckpt")
-circular_inferencer = CircularFlowMatchingInference("checkpoint.ckpt")
+# Pendulum
+pendulum_model = PendulumLatentConditionalFlowMatcher.load_from_checkpoint(
+    "outputs/pendulum_latent_conditional_fm/2025-10-13_18-45-32"
+)
 
-# Unified evaluation with automatic variant detection
-evaluator = FlowMatchingEvaluator(auto_detect_variant=True)
-results = evaluator.evaluate_on_dataloader(inferencer, test_loader, data_module)
+# CartPole (Latent Conditional)
+cartpole_model = CartPoleLatentConditionalFlowMatcher.load_from_checkpoint(
+    "outputs/cartpole_latent_conditional_fm/2025-10-13_18-45-32"
+)
+
+# CartPole (Gaussian Perturbed)
+cartpole_gaussian = CartPoleGaussianPerturbedInference(
+    "outputs/cartpole_gaussian_perturbed_fm/2025-10-17_14-15-30"
+)
+
+# Predict endpoints
+start_states = torch.tensor([[0.5, 0.1, 2.0, 1.0]])  # (x, θ, ẋ, θ̇)
+endpoints = cartpole_model.predict_endpoint(start_states, num_steps=100)
+
+# Multiple samples for uncertainty
+endpoints_batch = cartpole_model.predict_endpoints_batch(start_states, num_samples=20)
 ```
 
 ### Attractor Basin Analysis Usage
@@ -181,23 +213,15 @@ results = analyzer.analyze_attractor_basins(
 analyzer.save_analysis_results("output_dir", results)
 ```
 
-### Migration Guide
-```python
-# OLD (deprecated):
-from src.inference_flow_matching import FlowMatchingInference
-from src.inference_circular_flow_matching import CircularFlowMatchingInference
+### Model Variants Comparison
 
-# NEW (recommended):
-from src.flow_matching.standard import StandardFlowMatchingInference  
-from src.flow_matching.circular import CircularFlowMatchingInference
+| Variant | Systems | Latent | Conditioning | Params | Speed |
+|---------|---------|--------|--------------|--------|-------|
+| **Latent Conditional** | Pendulum, CartPole | ✅ z ~ N(0,I) | ✅ On start state | ~2M | Baseline |
+| **Gaussian Perturbed** | CartPole only | ❌ None | ❌ None | ~1.5M | 25% faster |
 
-# Benefits of new architecture:
-# • Automatic variant detection
-# • Shared base functionality  
-# • Reduced code duplication (~230 lines eliminated)
-# • Consistent APIs across variants
-# • Easy to extend with new variants
-```
+**Use Latent Conditional when**: Richer multimodal predictions, explicit conditioning needed
+**Use Gaussian Perturbed when**: Simpler/faster training, explicit Gaussian noise preferred
 
 ### GPU Configuration
 The scripts are configured to use GPU 1 via `os.environ["CUDA_VISIBLE_DEVICES"] = "1"` in each training script.

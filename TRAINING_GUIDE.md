@@ -31,19 +31,19 @@ cd /common/home/dm1487/robotics_research/tripods/olympics-classifier
 ### **Train Pendulum (Latent Conditional)**
 
 ```bash
-python src/flow_matching/latent_conditional/train.py
+python src/flow_matching/pendulum/latent_conditional/train.py
 ```
 
 ### **Train CartPole (Latent Conditional)**
 
 ```bash
-python src/flow_matching/cartpole_latent_conditional/train.py
+python src/flow_matching/cartpole/latent_conditional/train.py
 ```
 
-### **Train CartPole (Gaussian Perturbed - Simpler/Faster)**
+### **Train CartPole (Gaussian Noise - Simpler/Faster)**
 
 ```bash
-python src/flow_matching/cartpole_gaussian_perturbed/train.py
+python src/flow_matching/cartpole/gaussian_noise/train.py
 ```
 
 ---
@@ -54,9 +54,9 @@ python src/flow_matching/cartpole_gaussian_perturbed/train.py
 
 | System | Manifold | State | Config |
 |--------|----------|-------|--------|
-| **Pendulum** | S¹×ℝ | (θ, θ̇) | `train_pendulum_lcfm.yaml` |
-| **CartPole** | ℝ²×S¹×ℝ | (x, θ, ẋ, θ̇) | `train_cartpole_lcfm.yaml` |
-| **CartPole (Gaussian)** | ℝ²×S¹×ℝ | (x, θ, ẋ, θ̇) | `train_cartpole_gaussian_perturbed.yaml` |
+| **Pendulum** | S¹×ℝ | (θ, θ̇) | `train_pendulum.yaml` |
+| **CartPole** | ℝ²×S¹×ℝ | (x, θ, ẋ, θ̇) | `train_cartpole.yaml` |
+| **CartPole (Gaussian)** | ℝ²×S¹×ℝ | (x, θ, ẋ, θ̇) | `train_cartpole_gaussian_noise.yaml` |
 
 ### **Key Insight: Circular Coordinates**
 
@@ -74,17 +74,17 @@ This is why both use geodesic interpolation on the circular components!
 
 #### **Location**
 ```
-src/flow_matching/latent_conditional/train.py
+src/flow_matching/pendulum/latent_conditional/train.py
 ```
 
 #### **Configuration**
 ```
-configs/train_pendulum_lcfm.yaml
+configs/train_pendulum.yaml
 ```
 
 #### **Command**
 ```bash
-python src/flow_matching/latent_conditional/train.py
+python src/flow_matching/pendulum/latent_conditional/train.py
 ```
 
 #### **Key Config Parameters**
@@ -96,7 +96,7 @@ flow_matching:
 
 # Model architecture
 model:
-  _target_: src.model.latent_conditional_unet1d.LatentConditionalUNet1D
+  _target_: src.model.pendulum_unet.PendulumUNet
   embedded_dim: 3            # (sin θ, cos θ, θ̇_norm)
   output_dim: 2              # (dθ, dθ̇)
   latent_dim: 2
@@ -113,19 +113,19 @@ trainer:
 #### **Customize Training**
 ```bash
 # Change latent dimension
-python src/flow_matching/latent_conditional/train.py \
+python src/flow_matching/pendulum/latent_conditional/train.py \
     flow_matching.latent_dim=4
 
 # Change learning rate
-python src/flow_matching/latent_conditional/train.py \
+python src/flow_matching/pendulum/latent_conditional/train.py \
     base_lr=5e-4
 
 # Change model architecture
-python src/flow_matching/latent_conditional/train.py \
+python src/flow_matching/pendulum/latent_conditional/train.py \
     model.hidden_dims=[512,1024,512]
 
 # Use different GPU
-python src/flow_matching/latent_conditional/train.py \
+python src/flow_matching/pendulum/latent_conditional/train.py \
     device=gpu2
 ```
 
@@ -135,17 +135,17 @@ python src/flow_matching/latent_conditional/train.py \
 
 #### **Location**
 ```
-src/flow_matching/cartpole_latent_conditional/train.py
+src/flow_matching/cartpole/latent_conditional/train.py
 ```
 
 #### **Configuration**
 ```
-configs/train_cartpole_lcfm.yaml
+configs/train_cartpole.yaml
 ```
 
 #### **Command**
 ```bash
-python src/flow_matching/cartpole_latent_conditional/train.py
+python src/flow_matching/cartpole/latent_conditional/train.py
 ```
 
 #### **Key Config Parameters**
@@ -157,7 +157,7 @@ flow_matching:
 
 # Model architecture
 model:
-  _target_: src.model.cartpole_latent_conditional_unet1d.CartPoleLatentConditionalUNet1D
+  _target_: src.model.cartpole_unet.CartPoleUNet
   embedded_dim: 5            # (x_norm, sin θ, cos θ, ẋ_norm, θ̇_norm)
   output_dim: 4              # (dx, dθ, dẋ, dθ̇)
   latent_dim: 2
@@ -186,21 +186,21 @@ data:
 
 ---
 
-### **3. CartPole Training (Gaussian Perturbed - Simpler Variant)**
+### **3. CartPole Training (Gaussian Noise - Simpler Variant)**
 
 #### **Location**
 ```
-src/flow_matching/cartpole_gaussian_perturbed/train.py
+src/flow_matching/cartpole/gaussian_noise/train.py
 ```
 
 #### **Configuration**
 ```
-configs/train_cartpole_gaussian_perturbed.yaml
+configs/train_cartpole_gaussian_noise.yaml
 ```
 
 #### **Command**
 ```bash
-python src/flow_matching/cartpole_gaussian_perturbed/train.py
+python src/flow_matching/cartpole/gaussian_noise/train.py
 ```
 
 #### **Key Differences from Latent Conditional**
@@ -230,11 +230,11 @@ model:
 #### **Customize Gaussian Noise**
 ```bash
 # Tighter noise (closer to start state)
-python src/flow_matching/cartpole_gaussian_perturbed/train.py \
+python src/flow_matching/cartpole/gaussian_noise/train.py \
     flow_matching.noise_std=0.05
 
 # More exploration
-python src/flow_matching/cartpole_gaussian_perturbed/train.py \
+python src/flow_matching/cartpole/gaussian_noise/train.py \
     flow_matching.noise_std=0.2
 ```
 
@@ -354,19 +354,19 @@ model = PendulumLatentConditionalFlowMatcher.load_from_checkpoint(
 
 **CartPole (Latent Conditional):**
 ```python
-from src.flow_matching.cartpole_latent_conditional.flow_matcher_fb import CartPoleLatentConditionalFlowMatcher
+from src.flow_matching.cartpole.latent_conditional.flow_matcher import CartPoleLatentConditionalFlowMatcher
 
 model = CartPoleLatentConditionalFlowMatcher.load_from_checkpoint(
     "outputs/cartpole_latent_conditional_fm/2025-10-13_18-45-32"
 )
 ```
 
-**CartPole (Gaussian Perturbed):**
+**CartPole (Gaussian Noise):**
 ```python
-from src.flow_matching.cartpole_gaussian_perturbed.inference import CartPoleGaussianPerturbedInference
+from src.flow_matching.cartpole.gaussian_noise.inference import CartPoleGaussianNoiseInference
 
-inferencer = CartPoleGaussianPerturbedInference(
-    "outputs/cartpole_gaussian_perturbed_fm/2025-10-17_14-15-30"
+inferencer = CartPoleGaussianNoiseInference(
+    "outputs/cartpole_gaussian_noise_fm/2025-10-17_14-15-30"
 )
 ```
 
@@ -422,8 +422,8 @@ for i, state in enumerate(trajectory[::10]):  # Every 10th step
 
 ## 🎨 Model Variants Comparison
 
-| Aspect | Latent Conditional | Gaussian Perturbed |
-|--------|-------------------|-------------------|
+| Aspect | Latent Conditional | Gaussian Noise |
+|--------|-------------------|----------------|
 | **Systems** | Pendulum, CartPole | CartPole only |
 | **Latent Variables** | ✅ z ~ N(0,I) | ❌ None |
 | **Conditioning** | ✅ On start state | ❌ None |
@@ -443,7 +443,7 @@ for i, state in enumerate(trajectory[::10]):  # Every 10th step
 - You have sufficient computational resources
 - You want to model complex, multi-path dynamics
 
-**Use Gaussian Perturbed when:**
+**Use Gaussian Noise when:**
 - You want simpler, faster training/inference
 - You prefer explicit initial distribution (interpretable)
 - You have limited computational resources
@@ -460,7 +460,7 @@ All config files are in `configs/`:
 ```yaml
 # System definition
 system:
-  _target_: src.systems.cartpole_lcfm.CartPoleSystemLCFM
+  _target_: src.systems.cartpole.CartPoleSystem
   bounds_file: /path/to/bounds.pkl
 
 # Data loading
@@ -472,7 +472,7 @@ data:
 
 # Model architecture
 model:
-  _target_: src.model.cartpole_latent_conditional_unet1d.CartPoleLatentConditionalUNet1D
+  _target_: src.model.cartpole_unet.CartPoleUNet
   embedded_dim: 5
   output_dim: 4
   hidden_dims: [256, 512, 1024, 512, 256]
@@ -480,7 +480,7 @@ model:
 # Flow matching
 flow_matching:
   latent_dim: 2              # Only for latent conditional
-  noise_std: 0.1             # Only for Gaussian perturbed
+  noise_std: 0.1             # Only for Gaussian noise
   mae_val_frequency: 10
 
 # Optimizer
@@ -696,11 +696,11 @@ python train.py trainer.accumulate_grad_batches=2
 
 ```bash
 # Pendulum
-python src/flow_matching/latent_conditional/train.py
+python src/flow_matching/pendulum/latent_conditional/train.py
 
 # CartPole (rich model)
-python src/flow_matching/cartpole_latent_conditional/train.py
+python src/flow_matching/cartpole/latent_conditional/train.py
 
 # CartPole (fast model)
-python src/flow_matching/cartpole_gaussian_perturbed/train.py
+python src/flow_matching/cartpole/gaussian_noise/train.py
 ```

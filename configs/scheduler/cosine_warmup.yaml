@@ -1,7 +1,0 @@
-# Custom function to create warmup + cosine scheduler
-_target_: src.flow_matching.utils.create_warmup_cosine_scheduler
-_partial_: true
-warmup_epochs: 20
-total_epochs: 500
-eta_min: 1e-6
-warmup_start_factor: 0.1

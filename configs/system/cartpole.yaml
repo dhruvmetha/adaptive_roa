@@ -1,0 +1,15 @@
+# @package _global_.system
+# =====================================================================
+# CartPole System Configuration
+# =====================================================================
+# CartPole dynamics with ℝ²×S¹×ℝ manifold structure
+# State: (x, θ, ẋ, θ̇) where:
+#   - x ∈ ℝ (cart position)
+#   - θ ∈ S¹ (pole angle)
+#   - ẋ ∈ ℝ (cart velocity)
+#   - θ̇ ∈ ℝ (pole angular velocity)
+# =====================================================================
+
+_target_: src.systems.cartpole.CartPoleSystem
+name: cartpole
+attractor_radius: 0.01  # Radius for attractor detection

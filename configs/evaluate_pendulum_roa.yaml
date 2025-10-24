@@ -6,7 +6,7 @@ seed: 42
 
 # System configuration
 system:
-  module: src.flow_matching.latent_conditional.flow_matcher_fb
+  module: src.flow_matching.pendulum.latent_conditional.flow_matcher
   class: PendulumLatentConditionalFlowMatcher
 
 # Checkpoint to evaluate

@@ -1,8 +1,28 @@
-# the endpoint dataset is a dataset of trajectories that contains the start state and first attractor state the trajectory ends up in the attractor
-system:
-    _target_: src.systems.pendulum.Pendulum
-    name: pendulum
-    attractor_radius: 0.01
+# =====================================================================
+# Endpoint Dataset Builder Configuration
+# =====================================================================
+# This config builds endpoint datasets from trajectory files.
+#
+# An endpoint dataset contains pairs of (start_state, attractor_state)
+# where the attractor_state is the first state in the trajectory that
+# reaches an attractor basin.
+#
+# Usage:
+#   python src/build_endpoint_dataset.py                    # Use defaults
+#   python src/build_endpoint_dataset.py system=cartpole    # Change system
+#   python src/build_endpoint_dataset.py dataset=pendulum_lqr_50k  # Change dataset
+#   python src/build_endpoint_dataset.py system=pendulum dataset=pendulum_lqr_5k
+# =====================================================================
 
-data_dirs: /common/users/dm1487/arcmg_datasets/pendulum_lqr/pendulum_lqr5k/pendulum_lqr5k
-dest_dir: /common/users/dm1487/arcmg_datasets/pendulum_lqr/pendulum_lqr5k/endpoint_dataset
+defaults:
+  - system: pendulum              # System dynamics (pendulum, cartpole)
+  - dataset: pendulum_lqr_5k      # Dataset paths (pendulum_lqr_5k, pendulum_lqr_50k, cartpole_lqr)
+  - _self_                        # Config overrides (this file has lowest priority)
+
+# =====================================================================
+# Output Configuration
+# =====================================================================
+# Output file will be: ${dest_dir}/endpoint_dataset.txt
+# Format: space-separated values per line
+#   - Pendulum: theta_start theta_dot_start theta_end theta_dot_end
+#   - CartPole: x_start theta_start x_dot_start theta_dot_start x_end theta_end x_dot_end theta_dot_end

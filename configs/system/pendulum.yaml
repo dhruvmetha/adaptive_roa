@@ -1,0 +1,16 @@
+# @package _global_.system
+# =====================================================================
+# Pendulum System Configuration
+# =====================================================================
+# Pendulum dynamics with S¹×ℝ manifold structure
+# State: (θ, θ̇) where θ ∈ S¹ (angle), θ̇ ∈ ℝ (angular velocity)
+#
+# Attractors:
+#   - [0.0, 0.0]: Bottom equilibrium (stable)
+#   - [2.1, 0.0]: Top-right equilibrium
+#   - [-2.1, 0.0]: Top-left equilibrium
+# =====================================================================
+
+_target_: src.systems.pendulum.PendulumSystem
+name: pendulum
+attractor_radius: 0.01  # Radius for attractor detection

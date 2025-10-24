@@ -51,13 +51,13 @@ cd /common/home/dm1487/robotics_research/tripods/olympics-classifier
 
 ```bash
 # Pendulum (Latent Conditional)
-python src/flow_matching/latent_conditional/train.py
+python src/flow_matching/pendulum/latent_conditional/train.py
 
 # CartPole (Latent Conditional - richer model)
-python src/flow_matching/cartpole_latent_conditional/train.py
+python src/flow_matching/cartpole/latent_conditional/train.py
 
-# CartPole (Gaussian Perturbed - faster, simpler)
-python src/flow_matching/cartpole_gaussian_perturbed/train.py
+# CartPole (Gaussian Noise - faster, simpler)
+python src/flow_matching/cartpole/gaussian_noise/train.py
 ```
 
 ### **Evaluation**
@@ -76,7 +76,7 @@ python src/flow_matching/evaluate_roa.py \
 ### **Inference**
 
 ```python
-from src.flow_matching.cartpole_latent_conditional.flow_matcher_fb import CartPoleLatentConditionalFlowMatcher
+from src.flow_matching.cartpole.latent_conditional.flow_matcher import CartPoleLatentConditionalFlowMatcher
 import torch
 
 # Load trained model
@@ -108,20 +108,23 @@ src/
 │   ├── base/                  # Base classes (shared)
 │   │   ├── flow_matcher.py   # BaseFlowMatcher (220+ lines of shared code)
 │   │   └── config.py         # Configuration
-│   ├── latent_conditional/   # Pendulum Latent Conditional FM
-│   │   ├── flow_matcher_fb.py
-│   │   └── train.py
-│   ├── cartpole_latent_conditional/  # CartPole Latent Conditional FM
-│   │   ├── flow_matcher_fb.py
-│   │   └── train.py
-│   └── cartpole_gaussian_perturbed/  # CartPole Gaussian Perturbed FM
-│       ├── flow_matcher.py
-│       ├── inference.py
-│       └── train.py
+│   ├── pendulum/             # Pendulum flow matching
+│   │   └── latent_conditional/
+│   │       ├── flow_matcher.py
+│   │       ├── inference.py
+│   │       └── train.py
+│   └── cartpole/             # CartPole flow matching
+│       ├── latent_conditional/
+│       │   ├── flow_matcher.py
+│       │   └── train.py
+│       └── gaussian_noise/   # Simplified variant
+│           ├── flow_matcher.py
+│           ├── inference.py
+│           └── train.py
 │
 ├── model/                     # Neural network architectures
-│   ├── latent_conditional_unet1d.py        # Pendulum UNet
-│   ├── cartpole_latent_conditional_unet1d.py  # CartPole UNet (latent)
+│   ├── pendulum_unet.py      # Pendulum UNet
+│   ├── cartpole_unet.py      # CartPole UNet (latent)
 │   └── cartpole_gaussian_perturbed_unet1d.py  # CartPole UNet (simple)
 │
 ├── data/                      # Data loading
@@ -132,9 +135,9 @@ src/
     └── ...
 
 configs/                       # Hydra configuration files
-├── train_pendulum_lcfm.yaml
-├── train_cartpole_lcfm.yaml
-├── train_cartpole_gaussian_perturbed.yaml
+├── train_pendulum.yaml
+├── train_cartpole.yaml
+├── train_cartpole_gaussian_noise.yaml
 ├── evaluate_pendulum_roa.yaml
 └── evaluate_cartpole_roa.yaml
 ```
@@ -144,10 +147,10 @@ configs/                       # Hydra configuration files
 | Variant | Systems | Latent | Conditioning | Params | Speed |
 |---------|---------|--------|--------------|--------|-------|
 | **Latent Conditional** | Pendulum, CartPole | ✅ z ~ N(0,I) | ✅ On start state | ~2M | Baseline |
-| **Gaussian Perturbed** | CartPole only | ❌ None | ❌ None | ~1.5M | 25% faster |
+| **Gaussian Noise** | CartPole only | ❌ None | ❌ None | ~1.5M | 25% faster |
 
 **Latent Conditional**: Richer multimodal predictions, explicit conditioning
-**Gaussian Perturbed**: Simpler architecture, explicit Gaussian noise, faster training
+**Gaussian Noise**: Simpler architecture, explicit Gaussian noise, faster training
 
 ---
 
@@ -252,20 +255,20 @@ conda activate /common/users/dm1487/envs/arcmg
 
 ```bash
 # Change latent dimension
-python src/flow_matching/latent_conditional/train.py \
+python src/flow_matching/pendulum/latent_conditional/train.py \
     flow_matching.latent_dim=4
 
 # Change learning rate and batch size
-python src/flow_matching/cartpole_latent_conditional/train.py \
+python src/flow_matching/cartpole/latent_conditional/train.py \
     base_lr=5e-4 \
     batch_size=512
 
 # Use different GPU
-python src/flow_matching/cartpole_latent_conditional/train.py \
+python src/flow_matching/cartpole/latent_conditional/train.py \
     device=gpu2
 
 # Adjust model architecture
-python src/flow_matching/latent_conditional/train.py \
+python src/flow_matching/pendulum/latent_conditional/train.py \
     model.hidden_dims=[512,1024,2048,1024,512]
 ```
 
@@ -324,9 +327,9 @@ Research code for AI Olympics project.
 
 ```bash
 # Train
-python src/flow_matching/latent_conditional/train.py                    # Pendulum
-python src/flow_matching/cartpole_latent_conditional/train.py          # CartPole (rich)
-python src/flow_matching/cartpole_gaussian_perturbed/train.py          # CartPole (fast)
+python src/flow_matching/pendulum/latent_conditional/train.py          # Pendulum
+python src/flow_matching/cartpole/latent_conditional/train.py          # CartPole (rich)
+python src/flow_matching/cartpole/gaussian_noise/train.py              # CartPole (fast)
 
 # Evaluate
 python src/flow_matching/evaluate_roa.py --config-name=evaluate_cartpole_roa

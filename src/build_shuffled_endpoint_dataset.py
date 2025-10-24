@@ -23,9 +23,19 @@ def main(cfg: DictConfig) -> None:
     attractor_radius = cfg.get('attractor_radius', 0.1)  # Default radius for classification
     balance_dataset = cfg.get('balance_dataset', False)  # Balance success/failure for train/val
 
-    # Fixed attractor endpoints for success/failure
-    success_attractor = np.array([0.0, 0.0, 0.0, 0.0])  # Upright balanced
-    failure_attractor = np.array([2.0, np.pi, 8.6, 18.5])  # Inverted balanced
+    # Fixed attractor endpoints for success/failure (system-dependent)
+    system_name = system.name if hasattr(system, 'name') else 'unknown'
+
+    if system_name == 'pendulum':
+        # Pendulum: 2D state [θ, θ̇]
+        success_attractor = np.array([0.0, 0.0])  # Bottom equilibrium (stable)
+        failure_attractor = np.array([2.1, 0.0])  # Top equilibrium (unstable)
+    elif system_name == 'cartpole':
+        # CartPole: 4D state [x, θ, ẋ, θ̇]
+        success_attractor = np.array([0.0, 0.0, 0.0, 0.0])  # Upright balanced
+        failure_attractor = np.array([2.0, np.pi, 8.6, 18.5])  # Inverted balanced
+    else:
+        raise ValueError(f"Unknown system: {system_name}. Cannot determine fixed attractors.")
 
     with open(shuffled_idxs_file, 'r') as f:
         shuffled_idxs = [os.path.join(data_dirs, line.strip()) for line in f.readlines()][start:end]

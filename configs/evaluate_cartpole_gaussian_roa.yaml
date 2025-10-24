@@ -1,19 +1,19 @@
-# CartPole ROA Evaluation Configuration
-# Evaluates trained LCFM model on labeled ROA data
+# CartPole Gaussian Noise ROA Evaluation Configuration
+# Evaluates trained Gaussian Noise FM model on labeled ROA data
 
-name: cartpole_roa_evaluation
+name: cartpole_gaussian_roa_evaluation
 seed: 42
 
-# System configuration
+# System configuration - Gaussian Noise variant
 system:
-  module: src.flow_matching.cartpole.latent_conditional.flow_matcher
-  class: CartPoleLatentConditionalFlowMatcher
+  module: src.flow_matching.cartpole.gaussian_noise.flow_matcher
+  class: CartPoleGaussianNoiseFlowMatcher
 
 # Checkpoint to evaluate
 checkpoint:
-  path: /common/home/dm1487/robotics_research/tripods/olympics-classifier/outputs/cartpole_latent_conditional_fm/2025-10-13_02-11-56  # Auto-find latest if null
+  path: null  # Auto-find latest if null
   auto_find: true  # Search for latest checkpoint
-  base_name: cartpole_latent_conditional_fm  # Used for auto-finding
+  base_name: cartpole_gaussian_noise_fm  # Used for auto-finding
 
 # Data: Labeled ROA data
 data:
@@ -32,7 +32,7 @@ evaluation:
 
 # Output
 output:
-  dir: cartpole_roa_evaluation
+  dir: cartpole_gaussian_roa_evaluation
   save_plots: true
   save_data: true
 

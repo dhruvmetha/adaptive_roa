@@ -1,0 +1,110 @@
+# CartPole Gaussian Noise Flow Matching
+#
+# SIMPLIFIED VARIANT:
+# - NO latent variables (removed z ~ N(0,I))
+# - NO conditioning on start state
+# - Initial states sampled from Gaussian: x₀ ~ N(start_state, σ²I)
+# - Model signature: f(x_t, t) instead of f(x_t, t, z, condition)
+
+defaults:
+  - system: cartpole
+  - _self_
+
+name: cartpole_gaussian_noise_fm
+seed: 42
+batch_size: 256
+val_batch_size: 2048  # Validation batch size (can be larger than training)
+base_lr: 1e-4
+num_workers: 4
+
+# Flow Matcher: Gaussian Noise variant
+flow_matcher:
+  _target_: src.flow_matching.cartpole.gaussian_noise.flow_matcher.CartPoleGaussianNoiseFlowMatcher
+  # Note: system, model, optimizer, scheduler, config, noise_std are passed by training script
+
+# Model: SIMPLIFIED UNet (NO latent, NO conditioning)
+model:
+  _target_: src.model.cartpole_gaussian_perturbed_unet1d.CartPoleGaussianPerturbedUNet1D
+  embedded_dim: 5              # (x_norm, sin θ, cos θ, ẋ_norm, θ̇_norm)
+  time_emb_dim: 64             # Time embedding dimension
+  hidden_dims: [256, 512, 1024, 512, 256]  # UNet hidden layers
+  output_dim: 4                # Velocity in tangent space (dx, dθ, dẋ, dθ̇)
+  use_input_embeddings: false  # Use simple concatenation
+  input_emb_dim: 64            # Only used if use_input_embeddings=true
+
+# Data: CartPole endpoint dataset (same as latent conditional)
+data:
+  _target_: src.data.cartpole_endpoint_data.CartPoleEndpointDataModule
+  data_file: /common/users/dm1487/arcmg_datasets/cartpole/incremental_endpoint_dataset_fixed_attractors/10_endpoint_dataset.txt
+  validation_file: /common/users/dm1487/arcmg_datasets/cartpole/incremental_endpoint_dataset_fixed_attractors/10_endpoint_dataset.txt
+  test_file: /common/users/dm1487/arcmg_datasets/cartpole/incremental_endpoint_dataset_fixed_attractors/10_endpoint_dataset.txt
+  batch_size: ${batch_size}
+  val_batch_size: ${val_batch_size}
+  num_workers: ${num_workers}
+
+# Optimizer: AdamW
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: ${base_lr}
+  weight_decay: 1e-5
+  betas: [0.9, 0.999]
+
+# Scheduler: Reduce on plateau
+scheduler:
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  mode: min
+  factor: 0.5
+  patience: 10
+  min_lr: 1e-6
+
+# Trainer: PyTorch Lightning
+trainer:
+  _target_: lightning.pytorch.Trainer
+  max_epochs: 500
+  accelerator: gpu
+  devices: [0]
+  precision: 32
+  gradient_clip_val: 1.0
+  log_every_n_steps: 10
+  check_val_every_n_epoch: 1
+  enable_progress_bar: true
+  enable_model_summary: true
+  logger:
+    _target_: lightning.pytorch.loggers.TensorBoardLogger
+    save_dir: "${hydra:runtime.output_dir}"
+    name: ""
+    version: null
+  callbacks:
+    - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+      dirpath: "${hydra:runtime.output_dir}/version_0/checkpoints"
+      monitor: val_loss
+      mode: min
+      save_top_k: 3
+      save_last: true
+      filename: "epoch{epoch:02d}-val_loss{val_loss:.4f}"
+      auto_insert_metric_name: false
+    - _target_: lightning.pytorch.callbacks.EarlyStopping
+      monitor: val_loss
+      mode: min
+      patience: 20
+      verbose: true
+
+# Flow matching specific settings (SIMPLIFIED!)
+flow_matching:
+  noise_std: 0.1               # NEW PARAMETER: Gaussian noise std around start state
+                               # Controls how much we perturb the initial state
+                               # Smaller = closer to start state, larger = more exploration
+  num_integration_steps: 100   # For inference
+  mae_val_frequency: 10        # Compute MAE validation every N epochs
+
+# Hydra output directory
+hydra:
+  run:
+    dir: outputs/${name}/${now:%Y-%m-%d_%H-%M-%S}
+
+# Key differences from latent conditional config:
+# ✅ Model: NO latent_dim, NO condition_dim parameters
+# ✅ Flow matching: noise_std instead of latent_dim
+# ✅ Simpler architecture: fewer model parameters
+# ✅ Same data pipeline: uses same endpoint datasets
+# ✅ Same training setup: optimizer, scheduler, callbacks

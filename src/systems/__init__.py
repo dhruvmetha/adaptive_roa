@@ -1,17 +1,19 @@
 """
-Universal dynamical systems framework with Theseus Lie group support
+Universal dynamical systems framework
 """
 from .base import DynamicalSystem, ManifoldComponent
-from .pendulum_universal import PendulumSystem
+from .pendulum import PendulumSystem  # NEW: from refactored file
 from .cartpole import CartPoleSystem
 
 # Legacy imports for backward compatibility
-from .pendulum import Pendulum
+try:
+    from .pendulum_universal import PendulumSystem as PendulumSystemUniversal
+except ImportError:
+    pass
 
 __all__ = [
-    "DynamicalSystem", 
+    "DynamicalSystem",
     "ManifoldComponent",
-    "PendulumSystem", 
+    "PendulumSystem",
     "CartPoleSystem",
-    "Pendulum"  # Legacy
 ]

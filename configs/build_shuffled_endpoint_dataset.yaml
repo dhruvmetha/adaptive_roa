@@ -32,13 +32,18 @@ type: train
 # =====================================================================
 # Fixed Attractor Mode (Optional)
 # =====================================================================
-# When enabled, classifies trajectories as success/failure and maps
-# all states to one of two fixed attractor endpoints
+# When enabled, replaces endpoint with a SCALAR attractor value
 #
-# Fixed attractors are system-dependent:
-#   Pendulum:  success=[0.0, 0.0]              failure=[2.1, 0.0]
-#   CartPole:  success=[0.0, 0.0, 0.0, 0.0]    failure=[2.0, π, 8.6, 18.5]
+# Scalar attractor values:
+#   1  = success (trajectory reaches attractor)
+#   -1 = failure (trajectory doesn't reach attractor)
+#
+# Output format with fixed attractors:
+#   Pendulum:  θ_start θ̇_start attractor (3 columns)
+#   CartPole:  x_s θ_s ẋ_s θ̇_s attractor (5 columns)
+#
+# Model learns to regress from start_state → scalar (1 or -1)
 # =====================================================================
-use_fixed_attractors: false  # true = use fixed attractors, false = use actual final states
+use_fixed_attractors: false  # true = use scalar attractor (1/-1), false = use actual final states
 attractor_radius: 0.1        # Radius for success/failure classification
 balance_dataset: false       # true = balance success/failure counts (train/val only)

@@ -23,19 +23,8 @@ def main(cfg: DictConfig) -> None:
     attractor_radius = cfg.get('attractor_radius', 0.1)  # Default radius for classification
     balance_dataset = cfg.get('balance_dataset', False)  # Balance success/failure for train/val
 
-    # Fixed attractor endpoints for success/failure (system-dependent)
+    # Get system name
     system_name = system.name if hasattr(system, 'name') else 'unknown'
-
-    if system_name == 'pendulum':
-        # Pendulum: 2D state [θ, θ̇]
-        success_attractor = np.array([0.0, 0.0])  # Bottom equilibrium (stable)
-        failure_attractor = np.array([2.1, 0.0])  # Top equilibrium (unstable)
-    elif system_name == 'cartpole':
-        # CartPole: 4D state [x, θ, ẋ, θ̇]
-        success_attractor = np.array([0.0, 0.0, 0.0, 0.0])  # Upright balanced
-        failure_attractor = np.array([2.0, np.pi, 8.6, 18.5])  # Inverted balanced
-    else:
-        raise ValueError(f"Unknown system: {system_name}. Cannot determine fixed attractors.")
 
     with open(shuffled_idxs_file, 'r') as f:
         shuffled_idxs = [os.path.join(data_dirs, line.strip()) for line in f.readlines()][start:end]
@@ -44,9 +33,8 @@ def main(cfg: DictConfig) -> None:
     print(shuffled_idxs)
 
     if use_fixed_attractors:
-        print(f"Using fixed attractor endpoints:")
-        print(f"  Success: {success_attractor}")
-        print(f"  Failure: {failure_attractor}")
+        print(f"Using fixed attractor mode:")
+        print(f"  Target attractor: 1 (success), -1 (failure)")
         print(f"  Attractor radius: {attractor_radius}")
 
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -80,21 +68,28 @@ def main(cfg: DictConfig) -> None:
             # Use system.is_in_attractor() logic with configurable radius
             is_success = system.is_in_attractor(final_state, radius=attractor_radius)
 
+            # Scalar attractor: 1 for success, -1 for failure
+            attractor = 1 if is_success else -1
+
             if is_success:
-                endpoint = success_attractor
                 success_count += 1
             else:
-                endpoint = failure_attractor
                 failure_count += 1
         else:
             # Use the final point of the trajectory as the endpoint
             endpoint = np.array(trajectory[-1])
+            attractor = None
 
-        # Create endpoint pairs for all points in trajectory pointing to final state
+        # Create endpoint pairs for all points in trajectory
         trajectory_endpoints = []
         for i in range(len(trajectory) - 1):  # Exclude final point as start
             start_state = np.array(trajectory[i])
-            trajectory_endpoints.append([*start_state, *endpoint])
+            if use_fixed_attractors:
+                # Format: [start_state, attractor] where attractor is 1 or -1
+                trajectory_endpoints.append([*start_state, attractor])
+            else:
+                # Format: [start_state, endpoint] (multi-dimensional endpoint)
+                trajectory_endpoints.append([*start_state, *endpoint])
             if type == "test":
                 break
 
@@ -128,7 +123,14 @@ def main(cfg: DictConfig) -> None:
     print(f"Writing {len(endpoint_data)} endpoint pairs to file...")
     with open(output_file, 'w') as f:
         for endpoint in tqdm(endpoint_data, desc="Writing endpoints"):
-            f.write(' '.join(map(str, endpoint)) + '\n')
+            if use_fixed_attractors:
+                # Format: start_state + attractor (scalar: 1 or -1)
+                values = endpoint[:-1]  # All except attractor
+                attractor = int(endpoint[-1])  # Attractor as int (1 or -1)
+                f.write(' '.join(map(str, values)) + f' {attractor}\n')
+            else:
+                # Format: start_state + endpoint (multi-dimensional)
+                f.write(' '.join(map(str, endpoint)) + '\n')
 
     print(f"\nBuilt endpoint dataset with {len(endpoint_data)} endpoint pairs")
     print(f"Saved to: {output_file}")

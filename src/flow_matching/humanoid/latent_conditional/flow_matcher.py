@@ -1,41 +1,37 @@
 """
-CartPole Latent Conditional Flow Matching implementation using Facebook Flow Matching library
+Humanoid Latent Conditional Flow Matching implementation using Facebook Flow Matching library
 
-REFACTORED VERSION - Uses GeodesicProbPath and RiemannianODESolver
+Manifold: ℝ³⁴ × S² × ℝ³⁰ (67-dimensional state)
+- Uses GeodesicProbPath for geodesic interpolation
+- Uses RiemannianODESolver for manifold-aware ODE integration
+- Neural net takes embedded x_t, time t, latent z, and start state condition
+- Predicts velocity in tangent space
 """
 import torch
 import torch.nn as nn
-from typing import Dict, Optional, Tuple
-import lightning.pytorch as pl
-from torchmetrics import MeanMetric
+from typing import Dict, Optional
 import sys
 sys.path.append('/common/home/dm1487/robotics_research/tripods/olympics-classifier/flow_matching')
 
-from flow_matching.path import GeodesicProbPath
-from flow_matching.path.scheduler import CondOTScheduler
-from flow_matching.solver import RiemannianODESolver
-from flow_matching.utils import ModelWrapper
+from flow_matching.utils.manifolds import Product, Euclidean, Sphere
 
 from src.flow_matching.base.flow_matcher import BaseFlowMatcher
 from src.systems.base import DynamicalSystem
-from src.utils.fb_manifolds import CartPoleManifold
-
-from flow_matching.utils.manifolds import Product, FlatTorus, Euclidean
 
 
-class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
+class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
     """
-    CartPole Latent Conditional Flow Matching using Facebook FM:
-    - Uses GeodesicProbPath for geodesic interpolation on ℝ²×S¹×ℝ
+    Humanoid Latent Conditional Flow Matching using Facebook FM:
+    - Manifold: ℝ³⁴ × S² × ℝ³⁰ (67-dimensional state)
+    - Uses GeodesicProbPath for geodesic interpolation
     - Uses RiemannianODESolver for manifold-aware ODE integration
     - Neural net takes embedded x_t, time t, latent z, and start state condition
-    - Predicts velocity in ℝ²×S¹×ℝ tangent space (x, θ, ẋ, θ̇)
+    - Predicts velocity in ℝ³⁴ × S² × ℝ³⁰ tangent space
 
-    KEY CHANGES FROM ORIGINAL:
-    - ✅ Removed: manual interpolate_r2_s1_r() → uses GeodesicProbPath
-    - ✅ Removed: manual compute_target_velocity_r2_s1_r() → automatic via path.sample()
-    - ✅ Added: RiemannianODESolver for inference
-    - ✅ Kept: latent variable z, conditioning on start state, all model logic
+    Key manifold components:
+    - Euclidean(34): First 34 dimensions (indices 0-33)
+    - Sphere(3): Next 3 dimensions (indices 34-36) - 3D unit vector
+    - Euclidean(30): Last 30 dimensions (indices 37-66)
     """
 
     def __init__(self,
@@ -44,31 +40,45 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
                  optimizer,
                  scheduler,
                  model_config: Optional[dict] = None,
-                 latent_dim: int = 2,
+                 latent_dim: int = 8,
                  mae_val_frequency: int = 10):
         """
-        Initialize CartPole latent conditional flow matcher with FB FM integration
+        Initialize Humanoid latent conditional flow matcher with FB FM integration
 
         Args:
-            system: DynamicalSystem (CartPole with ℝ²×S¹×ℝ structure)
-            model: CartPoleLatentConditionalUNet1D model
+            system: DynamicalSystem (Humanoid with ℝ³⁴ × S² × ℝ³⁰ structure)
+            model: HumanoidLatentConditionalUNet model
             optimizer: Optimizer instance
             scheduler: Learning rate scheduler
             model_config: Configuration dict
-            latent_dim: Dimension of latent space
+            latent_dim: Dimension of latent space (default: 8)
             mae_val_frequency: Compute MAE validation every N epochs
         """
         super().__init__(system, model, optimizer, scheduler, model_config, latent_dim, mae_val_frequency)
 
-        print("✅ Initialized CartPole LCFM with Facebook Flow Matching:")
-        print(f"   - Manifold: ℝ²×S¹×ℝ (Euclidean × FlatTorus × Euclidean)")
+        print("✅ Initialized Humanoid LCFM with Facebook Flow Matching:")
+        print(f"   - Manifold: ℝ³⁴ × S² × ℝ³⁰ (Euclidean × Sphere × Euclidean)")
         print(f"   - Path: GeodesicProbPath with CondOTScheduler")
         print(f"   - Latent dim: {latent_dim}")
         print(f"   - MAE validation frequency: every {mae_val_frequency} epochs")
 
     def _create_manifold(self):
-        """Create ℝ²×S¹×ℝ manifold for CartPole"""
-        return Product(input_dim=4, manifolds=[(Euclidean(), 1), (FlatTorus(), 1), (Euclidean(), 2)])
+        """
+        Create ℝ³⁴ × S² × ℝ³⁰ manifold for Humanoid
+
+        Manifold structure:
+        - Euclidean(34): Dims 0-33
+        - Sphere(3): Dims 34-36 (3D unit vector on S²)
+        - Euclidean(30): Dims 37-66
+        """
+        return Product(
+            input_dim=67,
+            manifolds=[
+                (Euclidean(), 34),  # First Euclidean block
+                (Sphere(), 3),      # Sphere manifold (3D unit vector)
+                (Euclidean(), 30)   # Second Euclidean block
+            ]
+        )
 
     def _get_start_states(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """Extract start states from batch"""
@@ -79,44 +89,51 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         return batch["end_state"]
 
     def _get_dimension_name(self, dim_idx: int) -> str:
-        """Get human-readable dimension name for CartPole"""
-        names = ["cart_position", "pole_angle", "cart_velocity", "angular_velocity"]
-        return names[dim_idx] if 0 <= dim_idx < len(names) else f"dim_{dim_idx}"
+        """
+        Get human-readable dimension name for Humanoid
+
+        Args:
+            dim_idx: Dimension index (0-66)
+
+        Returns:
+            Human-readable name
+        """
+        if 0 <= dim_idx < 34:
+            return f"euclidean1_{dim_idx}"
+        elif 34 <= dim_idx < 37:
+            comp_names = ["sphere_x", "sphere_y", "sphere_z"]
+            return comp_names[dim_idx - 34]
+        elif 37 <= dim_idx < 67:
+            return f"euclidean2_{dim_idx - 37}"
+        else:
+            return f"dim_{dim_idx}"
 
     def sample_noisy_input(self, batch_size: int, device: torch.device) -> torch.Tensor:
         """
-        Sample noisy input uniformly in ℝ²×S¹×ℝ space
+        Sample noisy input uniformly in ℝ³⁴ × S² × ℝ³⁰ space
+
+        For Euclidean components: sample uniformly within bounds
+        For Sphere component: sample uniformly on unit sphere
 
         Args:
             batch_size: Number of samples
             device: Device to create tensors on
 
         Returns:
-            Noisy states [batch_size, 4] as (x, θ, ẋ, θ̇)
+            Noisy states [batch_size, 67]
         """
-        # x ~ Uniform[-cart_limit, +cart_limit] (symmetric bounds)
-        x = torch.rand(batch_size, 1, device=device) * (2 * self.system.cart_limit) - self.system.cart_limit
+        # First Euclidean block (dims 0-33): uniform in [-limit, +limit]
+        euclidean1 = torch.rand(batch_size, 34, device=device) * (2 * self.system.euclidean_limit) - self.system.euclidean_limit
 
-        # θ ~ Uniform[-π, π] (wrapped angle)
-        theta = torch.rand(batch_size, 1, device=device) * (2 * torch.pi) - torch.pi
+        # Sphere block (dims 34-36): uniform sampling on S² (unit sphere in ℝ³)
+        # Use normal distribution and normalize to get uniform distribution on sphere
+        sphere = torch.randn(batch_size, 3, device=device)
+        sphere = sphere / torch.norm(sphere, dim=1, keepdim=True)  # Normalize to unit vector
 
-        # ẋ ~ Uniform[-velocity_limit, +velocity_limit] (symmetric bounds)
-        x_dot = torch.rand(batch_size, 1, device=device) * (2 * self.system.velocity_limit) - self.system.velocity_limit
+        # Second Euclidean block (dims 37-66): uniform in [-limit, +limit]
+        euclidean2 = torch.rand(batch_size, 30, device=device) * (2 * self.system.euclidean_limit) - self.system.euclidean_limit
 
-        # θ̇ ~ Uniform[-angular_velocity_limit, +angular_velocity_limit] (symmetric bounds)
-        theta_dot = torch.rand(batch_size, 1, device=device) * (2 * self.system.angular_velocity_limit) - self.system.angular_velocity_limit
-
-        return torch.cat([x, theta, x_dot, theta_dot], dim=1)
-
-    # ===================================================================
-    # REMOVED METHODS (now in base class or handled by Facebook FM):
-    # ===================================================================
-    # ✅ sample_latent() → moved to BaseFlowMatcher
-    # ✅ forward() → moved to BaseFlowMatcher
-    # ✅ compute_flow_loss() → moved to BaseFlowMatcher (unified implementation)
-    # ✅ compute_endpoint_mae_per_dim() → moved to BaseFlowMatcher
-    # ✅ validation_step() → moved to BaseFlowMatcher
-    # ✅ on_validation_epoch_end() → moved to BaseFlowMatcher
+        return torch.cat([euclidean1, sphere, euclidean2], dim=1)
 
     def normalize_state(self, state: torch.Tensor) -> torch.Tensor:
         """Delegate to system for normalization"""
@@ -130,10 +147,6 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         """Delegate to system for embedding"""
         return self.system.embed_state_for_model(normalized_state)
 
-    # ===================================================================
-    # NOTE: predict_endpoint() moved to BaseFlowMatcher (unified implementation)
-    # ===================================================================
-
     def predict_endpoints_batch(self,
                                start_states: torch.Tensor,
                                num_steps: int = 100,
@@ -142,12 +155,12 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         Predict multiple endpoint samples per start state (for stochastic models).
 
         Args:
-            start_states: Start states [B, 4] in raw coordinates
+            start_states: Start states [B, 67] in raw coordinates
             num_steps: Number of integration steps
             num_samples: Number of samples per start state
 
         Returns:
-            Predicted endpoints [B*num_samples, 4] in raw coordinates
+            Predicted endpoints [B*num_samples, 67] in raw coordinates
         """
         if num_samples == 1:
             raw_endpoints = self.predict_endpoint(start_states, num_steps)
@@ -161,7 +174,7 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
             endpoints_raw = self.predict_endpoint(start_states, num_steps, latent=None)
             all_endpoints.append(endpoints_raw)
 
-        # Concatenate all samples: [B*num_samples, 4]
+        # Concatenate all samples: [B*num_samples, 67]
         return torch.cat(all_endpoints, dim=0)
 
     # ===================================================================
@@ -171,7 +184,7 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
     @classmethod
     def load_from_checkpoint(cls, checkpoint_path: str, device: Optional[str] = None):
         """
-        Load a trained CartPole LCFM model from checkpoint for inference.
+        Load a trained Humanoid LCFM model from checkpoint for inference.
 
         Args:
             checkpoint_path: Path to Lightning checkpoint file (.ckpt) OR training folder
@@ -185,9 +198,8 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         import torch
         import yaml
         from pathlib import Path
-        from omegaconf import OmegaConf
-        from src.systems.cartpole import CartPoleSystem
-        from src.model.cartpole_unet import CartPoleUNet
+        from src.systems.humanoid import HumanoidSystem
+        from src.model.universal_unet import UniversalUNet
 
         # Determine device
         if device is None:
@@ -240,7 +252,7 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
 
             print(f"   📄 Using: {checkpoint_path.name}")
 
-        print(f"🤖 Loading CartPole LCFM checkpoint: {checkpoint_path}")
+        print(f"🤖 Loading Humanoid LCFM checkpoint: {checkpoint_path}")
         print(f"📍 Device: {device}")
 
         # Verify checkpoint exists
@@ -248,16 +260,11 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
             raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
         # Find the training directory (Hydra root)
-        # New structure: outputs/{name}/{timestamp}/version_0/checkpoints/{checkpoint}.ckpt
-        # Old structure: outputs/{name}/{timestamp}/checkpoints/{checkpoint}.ckpt
         if checkpoint_path.parent.name == "checkpoints":
-            # Could be version_0/checkpoints/ or just checkpoints/
             potential_version_dir = checkpoint_path.parent.parent
             if potential_version_dir.name.startswith("version_"):
-                # New structure: go up one more level to Hydra root
                 training_dir = potential_version_dir.parent
             else:
-                # Old structure: already at Hydra root
                 training_dir = potential_version_dir
         else:
             training_dir = checkpoint_path.parent
@@ -289,12 +296,12 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         # Extract latent_dim
         latent_dim = hparams.get("latent_dim")
         if latent_dim is None and hydra_config:
-            latent_dim = hydra_config.get("flow_matching", {}).get("latent_dim", 2)
+            latent_dim = hydra_config.get("flow_matching", {}).get("latent_dim", 8)
         if latent_dim is None:
-            latent_dim = 2
+            latent_dim = 8
             print(f"⚠️  Using default latent_dim: {latent_dim}")
 
-        # Extract model config (try both 'model_config' and 'config' for backward compatibility)
+        # Extract model config
         config_source = None
         if "model_config" in hparams:
             model_config = hparams["model_config"]
@@ -309,7 +316,7 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
             model_config = {}
             config_source = "defaults (empty)"
 
-        # Remove _target_ key if present (not needed for reconstruction)
+        # Remove _target_ key if present
         if isinstance(model_config, dict) and "_target_" in model_config:
             model_config = {k: v for k, v in model_config.items() if k != "_target_"}
 
@@ -322,33 +329,30 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         # Initialize system and model
         system = hparams.get("system")
         if system is None:
-            print("🔧 Creating new CartPole system (not found in hparams)")
+            print("🔧 Creating new Humanoid system (not found in hparams)")
             # Use system config from Hydra if available
             if hydra_config and "system" in hydra_config:
                 system_config = hydra_config["system"]
                 print(f"   Using system config from Hydra config")
-                # Extract bounds configuration
-                bounds_file = system_config.get("bounds_file", "/common/users/dm1487/arcmg_datasets/cartpole/cartpole_data_bounds.pkl")
-                use_dynamic_bounds = system_config.get("use_dynamic_bounds", True)
+                bounds_file = system_config.get("bounds_file", None)
+                use_dynamic_bounds = system_config.get("use_dynamic_bounds", False)
                 print(f"   bounds_file: {bounds_file}")
                 print(f"   use_dynamic_bounds: {use_dynamic_bounds}")
-                system = CartPoleSystem(bounds_file=bounds_file, use_dynamic_bounds=use_dynamic_bounds)
+                system = HumanoidSystem(bounds_file=bounds_file, use_dynamic_bounds=use_dynamic_bounds)
             else:
                 print("   No Hydra system config found, using defaults")
-                system = CartPoleSystem()
+                system = HumanoidSystem()
         else:
-            print("✅ Restored CartPole system from checkpoint")
+            print("✅ Restored Humanoid system from checkpoint")
 
         # Create model architecture
-        model = CartPoleUNet(
-            embedded_dim=model_config.get('embedded_dim', 5),
-            latent_dim=model_config.get('latent_dim', latent_dim),
-            condition_dim=model_config.get('condition_dim', 5),
-            time_emb_dim=model_config.get('time_emb_dim', 64),
-            hidden_dims=model_config.get('hidden_dims', [256, 512, 256]),
-            output_dim=model_config.get('output_dim', 4),
-            use_input_embeddings=model_config.get('use_input_embeddings', False),
-            input_emb_dim=model_config.get('input_emb_dim', 64)
+        model = UniversalUNet(
+            input_dim=model_config.get('input_dim', 142),  # 67 + 67 + 8
+            output_dim=model_config.get('output_dim', 67),
+            time_embed_dim=model_config.get('time_embed_dim', 128),
+            hidden_dims=model_config.get('hidden_dims', [256, 512, 512, 256]),
+            dropout=model_config.get('dropout', 0.1),
+            activation=model_config.get('activation', 'silu')
         )
 
         # Create flow matcher instance
@@ -380,14 +384,10 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         print(f"   Checkpoint: {checkpoint_path.name}")
         print(f"   Config sources: {'Hydra + Lightning' if hydra_config else 'Lightning only'}")
         print(f"   System: {type(system).__name__}")
-        print(f"   System bounds: cart±{system.cart_limit:.1f}, vel±{system.velocity_limit:.1f}")
+        print(f"   System bounds: Euclidean ±{system.euclidean_limit:.1f}, Sphere (unit norm)")
         print(f"   Latent dim: {latent_dim}")
         print(f"   Model architecture: {model_config.get('hidden_dims', 'unknown')}")
         print(f"   Total parameters: {sum(p.numel() for p in model.parameters()):,}")
         print(f"   Device: {device}")
 
         return flow_matcher
-# ============================================================================
-# NOTE: VelocityModelWrapper moved to BaseFlowMatcher
-# (LatentConditionalVelocityWrapper)
-# ============================================================================

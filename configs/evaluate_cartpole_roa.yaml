@@ -11,28 +11,30 @@ system:
 
 # Checkpoint to evaluate
 checkpoint:
-  path: /common/home/dm1487/robotics_research/tripods/olympics-classifier/outputs/cartpole_latent_conditional_fm/2025-10-13_02-11-56  # Auto-find latest if null
+  # path: /common/home/dm1487/robotics_research/tripods/olympics-classifier/outputs/cartpole_latent_conditional_fm/2025-10-27_08-30-03  # Auto-find latest if null
+  path: /common/home/dm1487/robotics_research/tripods/olympics-classifier/outputs/cartpole_latent_conditional_fm/2025-10-27_10-13-42  # Auto-find latest if null
   auto_find: true  # Search for latest checkpoint
   base_name: cartpole_latent_conditional_fm  # Used for auto-finding
 
 # Data: Labeled ROA data
 data:
-  file: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole/roa_labels.txt
-  format: "x θ ẋ θ̇ label"  # Space-separated format
+  file: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/roa_labels.txt
+  format: "x,θ,ẋ,θ̇,label"  # Comma-separated format
 
 # Evaluation settings
 evaluation:
-  batch_size: 500
+  batch_size: 2048
   num_steps: 100  # ODE integration steps
-  attractor_radius: 0.3  # Success threshold
+  attractor_radius: 0.1  # Success threshold
 
   # Probabilistic mode (uncertainty estimation)
   probabilistic: true
   num_samples: 20  # Only used if probabilistic=true
+  confidence_threshold: 0.6  # Minimum proportion for confident classification (0.6 = 60%)
 
 # Output
 output:
-  dir: cartpole_roa_evaluation
+  dir: cartpole_roa_evaluation_1027_5000
   save_plots: true
   save_data: true
 

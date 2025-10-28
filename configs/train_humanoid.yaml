@@ -1,40 +1,40 @@
-# CartPole Latent Conditional Flow Matching (Facebook FM)
-# Uses: ℝ²×S¹×ℝ manifold, GeodesicProbPath, RiemannianODESolver
+# Humanoid Latent Conditional Flow Matching (Facebook FM)
+# Uses: ℝ³⁴ × S² × ℝ³⁰ manifold, GeodesicProbPath, RiemannianODESolver
+# 67-dimensional state space for humanoid get-up task
 
 defaults:
-  - system: cartpole
+  - system: humanoid
   - _self_
 
-name: cartpole_latent_conditional_fm
+name: humanoid_latent_conditional_fm
 seed: 42
 batch_size: 256
-val_batch_size: 2048  # Validation batch size (can be larger than training)
+val_batch_size: 1024  # Validation batch size (can be larger than training)
 base_lr: 1e-4
 num_workers: 4
 
 # Flow Matcher: Facebook FM version with automatic geodesics
 flow_matcher:
-  _target_: src.flow_matching.cartpole.latent_conditional.flow_matcher.CartPoleLatentConditionalFlowMatcher
+  _target_: src.flow_matching.humanoid.latent_conditional.flow_matcher.HumanoidLatentConditionalFlowMatcher
   # Note: system, model, optimizer, scheduler, config, latent_dim are passed by training script
 
-# Model: Latent Conditional UNet for CartPole
+# Model: Latent Conditional UNet for Humanoid
 model:
-  _target_: src.model.cartpole_unet.CartPoleUNet
-  embedded_dim: 5              # (x_norm, sin θ, cos θ, ẋ_norm, θ̇_norm)
-  latent_dim: 2                # Gaussian latent variable
-  condition_dim: 5             # Embedded start state
-  time_emb_dim: 64             # Time embedding dimension
-  hidden_dims: [256, 512, 1024, 512, 256] # UNet hidden layers
-  output_dim: 4                # Velocity in tangent space (dx, dθ, dẋ, dθ̇)
-  use_input_embeddings: false
-  input_emb_dim: 64
+  _target_: src.model.universal_unet.UniversalUNet
+  input_dim: 142               # embedded(67) + condition(67) + latent(8)
+  output_dim: 67               # Velocity in tangent space (67-dim)
+  time_embed_dim: 128          # Time embedding dimension
+  hidden_dims: [256, 512, 512, 256]  # UNet hidden layers
+  dropout: 0.1
+  activation: silu             # SiLU/Swish activation
 
-# Data: CartPole endpoint dataset
+# Data: Humanoid endpoint dataset
 data:
-  _target_: src.data.cartpole_endpoint_data.CartPoleEndpointDataModule
-  data_file: /common/users/dm1487/arcmg_datasets/cartpole_pybullet/incremental_endpoint_dataset/train_5000_endpoint_dataset.txt
-  validation_file: /common/users/dm1487/arcmg_datasets/cartpole_pybullet/incremental_endpoint_dataset/val_endpoint_dataset.txt
-  test_file: /common/users/dm1487/arcmg_datasets/cartpole_pybullet/incremental_endpoint_dataset/test_endpoint_dataset.txt
+  _target_: src.data.humanoid_endpoint_data.HumanoidEndpointDataModule
+  data_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/incremental_endpoint_dataset/train.txt
+  validation_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/incremental_endpoint_dataset/validation.txt
+  test_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/incremental_endpoint_dataset/test.txt
+  bounds_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/humanoid_data_bounds.pkl
   batch_size: ${batch_size}
   val_batch_size: ${val_batch_size}
   num_workers: ${num_workers}
@@ -88,7 +88,7 @@ trainer:
 
 # Flow matching specific settings
 flow_matching:
-  latent_dim: 2                    # Dimension of Gaussian latent variable
+  latent_dim: 8                    # Dimension of Gaussian latent variable (higher for 67D state)
   num_integration_steps: 100       # ODE solver steps for inference
   mae_val_frequency: 10            # Compute MAE validation every N epochs
 

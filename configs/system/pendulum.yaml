@@ -12,5 +12,4 @@
 # =====================================================================
 
 _target_: src.systems.pendulum.PendulumSystem
-name: pendulum
-attractor_radius: 0.01  # Radius for attractor detection
+# Note: name and attractor_radius are configured in the main config file

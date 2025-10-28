@@ -1,0 +1,16 @@
+# Humanoid Endpoint Data Configuration
+_target_: src.data.humanoid_endpoint_data.HumanoidEndpointDataModule
+
+# Dataset paths (will be populated after building shuffled dataset)
+data_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/incremental_endpoint_dataset/train.txt
+validation_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/incremental_endpoint_dataset/validation.txt
+test_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/incremental_endpoint_dataset/test.txt
+
+# Bounds file for normalization
+bounds_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/humanoid_data_bounds.pkl
+
+# DataLoader settings
+batch_size: ${batch_size}
+val_batch_size: ${batch_size}
+num_workers: 4
+pin_memory: true

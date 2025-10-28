@@ -39,7 +39,7 @@ def load_roa_data(data_file: str) -> Tuple[np.ndarray, np.ndarray]:
     3. CartPole: "index x θ ẋ θ̇ label" (6 columns) or "x θ ẋ θ̇ label" (5 columns)
     """
     print(f"📂 Loading data from: {data_file}")
-    data = np.loadtxt(data_file)
+    data = np.loadtxt(data_file, delimiter=',')
 
     num_cols = data.shape[1]
     print(f"   Detected {num_cols} columns")
@@ -257,19 +257,26 @@ def evaluate_probabilistic(flow_matcher,
                           batch_size: int,
                           num_samples: int,
                           num_steps: int,
-                          attractor_radius: float) -> Dict[str, Any]:
+                          attractor_radius: float,
+                          confidence_threshold: float = 0.6) -> Dict[str, Any]:
     """
     Probabilistic evaluation with three-way classification
 
-    Per-sample classification:
-        1: Endpoint in stable bottom attractor [0, 0] (success)
-       -1: Endpoint in unstable top attractors (failure)
-        0: Endpoint in separatrix (not in any attractor)
+    Per-sample classification (system-specific):
+        Pendulum:
+            1: Endpoint in stable bottom attractor [0, 0] (success)
+           -1: Endpoint in unstable top attractors (failure)
+            0: Endpoint in separatrix (not in any attractor)
+
+        CartPole:
+            1: Endpoint in balanced attractor [0, 0, 0, 0] (success)
+           -1: Endpoint exceeded termination thresholds (failure - crashed)
+            0: Endpoint between attractor and failure (separatrix - uncertain)
 
     Per-state aggregation (over num_samples):
-        Success (1): ≥60% of samples land in success attractor
-        Failure (0): ≥60% of samples land in failure attractor
-        Separatrix (-1): < 60% for both (uncertain/mixed) → EXCLUDED from metrics
+        Success (1): ≥confidence_threshold of samples land in success attractor
+        Failure (0): ≥confidence_threshold of samples land in failure attractor
+        Separatrix (-1): < confidence_threshold for both (uncertain/mixed) → EXCLUDED from metrics
     """
     print(f"🔬 Running probabilistic evaluation ({num_samples} samples/state)...")
 
@@ -327,21 +334,21 @@ def evaluate_probabilistic(flow_matcher,
     p_unstable = class_counts[:, 1] / num_samples    # Proportion landing in unstable/failure
     p_separatrix = class_counts[:, 2] / num_samples  # Proportion landing in separatrix (pendulum only)
 
-    # Classify each state based on 60% threshold
+    # Classify each state based on confidence threshold
     # Strategy:
-    # - If ≥60% of samples land in success attractor → label as success
-    # - If ≥60% of samples land in failure attractor → label as failure
-    # - Otherwise (< 60% for both) → label as separatrix (uncertain)
+    # - If ≥threshold of samples land in success attractor → label as success
+    # - If ≥threshold of samples land in failure attractor → label as failure
+    # - Otherwise (< threshold for both) → label as separatrix (uncertain)
 
     predictions = np.full(len(states), -1, dtype=int)  # Initialize all as separatrix
 
-    # Assign success/failure based on 60% threshold
-    # Only label if we're confident (≥60% agreement)
-    predictions[p_stable >= 0.6] = 1      # Success: ≥60% landed in stable/success attractor
-    predictions[p_unstable >= 0.6] = 0    # Failure: ≥60% landed in unstable/failure attractor
+    # Assign success/failure based on confidence threshold
+    # Only label if we're confident (≥threshold agreement)
+    predictions[p_stable >= confidence_threshold] = 1      # Success: ≥threshold landed in stable/success attractor
+    predictions[p_unstable >= confidence_threshold] = 0    # Failure: ≥threshold landed in unstable/failure attractor
 
     # States that remain -1 (separatrix):
-    # - p_stable < 0.6 AND p_unstable < 0.6
+    # - p_stable < threshold AND p_unstable < threshold
     # - These are uncertain states where predictions are split
 
     # Mark for exclusion
@@ -729,7 +736,8 @@ def main(cfg: DictConfig):
             cfg.evaluation.batch_size,
             cfg.evaluation.num_samples,
             cfg.evaluation.num_steps,
-            cfg.evaluation.attractor_radius
+            cfg.evaluation.attractor_radius,
+            cfg.evaluation.get('confidence_threshold', 0.6)
         )
     else:
         results = evaluate_deterministic(

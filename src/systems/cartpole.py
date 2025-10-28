@@ -149,24 +149,28 @@ class CartPoleSystem(DynamicalSystem):
 
     def classify_attractor(self, state: torch.Tensor, radius: float = 0.1) -> torch.Tensor:
         """
-        Classify which attractor (if any) each state belongs to for CartPole
+        Classify CartPole states into three categories based on termination conditions
 
-        CartPole has only 2 categories:
-        - Upright balanced attractor [0, 0, 0, 0] (SUCCESS)
-        - Not in attractor (FAILURE - pole fell)
+        Three-way classification:
+        1. SUCCESS (label=1): In upright balanced attractor [0,0,0,0]
+        2. FAILURE (label=-1): Exceeded termination thresholds (system failed)
+        3. SEPARATRIX (label=0): Between attractor and failure (uncertain region)
+
+        Termination thresholds from PyBullet dataset:
+        - |x| > 6.0 m (cart position)
+        - |ẋ| > 5.0 m/s (cart velocity)
+        - |θ̇| > 5.0 rad/s (angular velocity)
+        - θ: no termination threshold (can flip fully)
 
         Args:
             state: States [B, 4] as (x, θ, ẋ, θ̇)
-            radius: Attractor radius
+            radius: Attractor radius (default 0.1)
 
         Returns:
             Integer tensor [B] with:
-                1: State in upright balanced attractor (SUCCESS)
-               -1: State not in attractor (FAILURE - pole fell)
-
-        Note: This always returns binary classification (1 or -1).
-        The separatrix (0) classification happens during probabilistic evaluation
-        when multiple samples have 50-50 split.
+                 1: State in upright balanced attractor (SUCCESS)
+                -1: State exceeded termination thresholds (FAILURE)
+                 0: State between attractor and failure (SEPARATRIX)
         """
         # Convert to torch tensor if needed
         if isinstance(state, np.ndarray):
@@ -177,7 +181,7 @@ class CartPoleSystem(DynamicalSystem):
 
         x, theta, x_dot, theta_dot = state[:, 0], state[:, 1], state[:, 2], state[:, 3]
 
-        # Check all constraints for upright balanced attractor
+        # SUCCESS: Check all constraints for upright balanced attractor
         position_ok = torch.abs(x) < radius
         velocity_ok = torch.abs(x_dot) < radius
         angular_velocity_ok = torch.abs(theta_dot) < radius
@@ -185,10 +189,22 @@ class CartPoleSystem(DynamicalSystem):
 
         in_attractor = position_ok & velocity_ok & angle_ok & angular_velocity_ok
 
-        # Binary classification: 1 if in attractor (success), -1 if not (failure)
-        labels = torch.where(in_attractor,
-                            torch.ones_like(in_attractor, dtype=torch.long),
-                            -torch.ones_like(in_attractor, dtype=torch.long))
+        # FAILURE: Check if exceeded termination thresholds
+        # From dataset_description.json termination thresholds
+        x_failed = torch.abs(x) > 6.0           # Cart hit boundary
+        x_dot_failed = torch.abs(x_dot) > 5.0  # Cart velocity too high
+        theta_dot_failed = torch.abs(theta_dot) > 5.0  # Angular velocity too high
+        # Note: theta has no termination threshold (inf)
+
+        exceeded_thresholds = x_failed | x_dot_failed | theta_dot_failed
+
+        # Three-way classification:
+        # - If in attractor → SUCCESS (1)
+        # - Else if exceeded thresholds → FAILURE (-1)
+        # - Else → SEPARATRIX (0) - between attractor and failure
+        labels = torch.zeros_like(in_attractor, dtype=torch.long)  # Initialize as separatrix (0)
+        labels[in_attractor] = 1                                   # Mark successes
+        labels[exceeded_thresholds] = -1                          # Mark failures
 
         return labels
 

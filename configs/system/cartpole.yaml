@@ -11,5 +11,7 @@
 # =====================================================================
 
 _target_: src.systems.cartpole.CartPoleSystem
-name: cartpole
-attractor_radius: 0.01  # Radius for attractor detection
+
+# Data bounds configuration
+bounds_file: /common/users/dm1487/arcmg_datasets/cartpole/new_cartpole_data_bounds.pkl
+use_dynamic_bounds: true  # If false, uses default fallback bounds

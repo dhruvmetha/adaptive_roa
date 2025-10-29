@@ -33,10 +33,11 @@ def load_roa_data(data_file: str) -> Tuple[np.ndarray, np.ndarray]:
     """
     Load ROA labeled data with automatic format detection
 
-    Handles two formats:
-    1. With index: "index θ θ̇ label" (4 columns for pendulum)
-    2. Without index: "θ θ̇ label" (3 columns for pendulum)
-    3. CartPole: "index x θ ẋ θ̇ label" (6 columns) or "x θ ẋ θ̇ label" (5 columns)
+    Handles formats:
+    1. Pendulum: "θ θ̇ label" (3 cols) or "index θ θ̇ label" (4 cols)
+    2. CartPole: "x θ ẋ θ̇ label" (5 cols) or "index x θ ẋ θ̇ label" (6 cols)
+    3. Humanoid: "state[67] label" (68 cols) - get-up task with head_height criterion
+    4. Fallback: "state[N] label" - last column is label, rest are states
     """
     print(f"📂 Loading data from: {data_file}")
     data = np.loadtxt(data_file, delimiter=',')
@@ -66,6 +67,12 @@ def load_roa_data(data_file: str) -> Tuple[np.ndarray, np.ndarray]:
         states = data[:, 1:5]  # Skip first column (index), take state variables
         states[:, 1] = np.arctan2(np.sin(states[:, 1]), np.cos(states[:, 1]))
         system_name = "CartPole (4D)"
+    elif num_cols == 68:
+        # Format: state[67] label (humanoid get-up task)
+        states = data[:, :-1]
+        system_name = "Humanoid (67D)"
+        print(f"   📋 Humanoid Get-Up Task")
+        print(f"   📏 Success criterion: head_height[21] >= 1.3m")
     else:
         # Fallback: assume last column is label, rest are states (no index)
         states = data[:, :-1]

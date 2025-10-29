@@ -21,8 +21,8 @@ dest_dir: /common/users/dm1487/arcmg_datasets/humanoid_get_up/incremental_endpoi
 
 # Processing range (slicing shuffled_indices.txt)
 start: 0       # Start index
-end: 1000       # End index (exclusive)
-increment: train_1000 # Number used in output filename (e.g., "100_endpoint_dataset.txt")
+end: 5000       # End index (exclusive)
+increment: train_5000_balanced # Number used in output filename (e.g., "100_endpoint_dataset.txt")
 
 # Dataset type: "train", "val", or "test"
 # - train/val: Creates endpoint pairs for ALL states in trajectory → final state
@@ -47,4 +47,4 @@ type: train
 # =====================================================================
 use_fixed_attractors: false  # true = use scalar attractor (1/-1), false = use actual final states
 attractor_radius: 0.1        # Radius for success/failure classification
-balance_dataset: false       # true = balance success/failure counts (train/val only)
+balance_dataset: true       # true = balance success/failure counts (train/val only)

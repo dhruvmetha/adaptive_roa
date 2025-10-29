@@ -43,14 +43,13 @@ def compute_bounds(data_dir: str, num_files: int = None, output_file: str = None
         trajectory_files = trajectory_files[:num_files]
         print(f"   Processing first {num_files} files")
 
-    # Initialize bounds for Euclidean dimensions
-    euclidean1_bounds = {i: {'min': float('inf'), 'max': float('-inf')} for i in range(34)}
-    euclidean2_bounds = {i: {'min': float('inf'), 'max': float('-inf')} for i in range(37, 67)}
-
-    # Sphere dimensions (3D unit vector - track range for reference only)
-    sphere_bounds = {34: {'min': float('inf'), 'max': float('-inf')},
-                     35: {'min': float('inf'), 'max': float('-inf')},
-                     36: {'min': float('inf'), 'max': float('-inf')}}
+    # Initialize bounds for Euclidean dimensions only (skip sphere dims 34-36)
+    # Sphere dimensions are always unit norm, no normalization needed
+    dimension_bounds = {}
+    for i in range(67):
+        if 34 <= i <= 36:
+            continue  # Skip sphere dimensions
+        dimension_bounds[i] = {'min': float('inf'), 'max': float('-inf')}
 
     total_states = 0
 
@@ -63,20 +62,12 @@ def compute_bounds(data_dir: str, num_files: int = None, output_file: str = None
             if data.ndim == 1:
                 data = data.reshape(1, -1)
 
-            # Update Euclidean bounds (dims 0-33)
-            for i in range(34):
-                euclidean1_bounds[i]['min'] = min(euclidean1_bounds[i]['min'], data[:, i].min())
-                euclidean1_bounds[i]['max'] = max(euclidean1_bounds[i]['max'], data[:, i].max())
-
-            # Update sphere bounds (dims 34-36) - for reference only
-            for i in range(34, 37):
-                sphere_bounds[i]['min'] = min(sphere_bounds[i]['min'], data[:, i].min())
-                sphere_bounds[i]['max'] = max(sphere_bounds[i]['max'], data[:, i].max())
-
-            # Update Euclidean bounds (dims 37-66)
-            for i in range(37, 67):
-                euclidean2_bounds[i]['min'] = min(euclidean2_bounds[i]['min'], data[:, i].min())
-                euclidean2_bounds[i]['max'] = max(euclidean2_bounds[i]['max'], data[:, i].max())
+            # Update bounds for Euclidean dimensions only (skip sphere 34-36)
+            for i in range(67):
+                if 34 <= i <= 36:
+                    continue  # Skip sphere dimensions
+                dimension_bounds[i]['min'] = min(dimension_bounds[i]['min'], data[:, i].min())
+                dimension_bounds[i]['max'] = max(dimension_bounds[i]['max'], data[:, i].max())
 
             total_states += len(data)
 
@@ -84,64 +75,62 @@ def compute_bounds(data_dir: str, num_files: int = None, output_file: str = None
             print(f"⚠️  Error processing {file_path}: {e}")
             continue
 
-    # Compute global Euclidean limits
-    all_euclidean_mins = [euclidean1_bounds[i]['min'] for i in range(34)] + \
-                         [euclidean2_bounds[i]['min'] for i in range(37, 67)]
-    all_euclidean_maxs = [euclidean1_bounds[i]['max'] for i in range(34)] + \
-                         [euclidean2_bounds[i]['max'] for i in range(37, 67)]
-
-    global_euclidean_min = min(all_euclidean_mins)
-    global_euclidean_max = max(all_euclidean_maxs)
-    euclidean_limit = max(abs(global_euclidean_min), abs(global_euclidean_max))
-
-    # Package results
+    # Package results (per-dimension like CartPole, only Euclidean dims)
     bounds_data = {
-        'bounds': {
-            'euclidean1': euclidean1_bounds,  # Dims 0-33
-            'sphere': sphere_bounds,          # Dims 34-36 (unit vector)
-            'euclidean2': euclidean2_bounds,  # Dims 37-66
-        },
-        'limits': {
-            'euclidean_limit': float(euclidean_limit),  # Symmetric limit for all Euclidean dims
-        },
+        'bounds': dimension_bounds,  # Only Euclidean dimensions (no sphere 34-36)
         'statistics': {
             'total_files_processed': len(trajectory_files),
             'total_states_analyzed': total_states,
             'files_requested': num_files,
             'data_directory': str(data_dir),
-            'state_dimension': 67
+            'state_dimension': 67,
+            'euclidean_dimensions': 64,  # 34 + 30
+            'sphere_dimensions': 3       # dims 34-36 (no bounds stored)
         },
-        'summary': {
-            'euclidean_global_min': float(global_euclidean_min),
-            'euclidean_global_max': float(global_euclidean_max),
-            'euclidean_range': float(global_euclidean_max - global_euclidean_min),
+        'ranges': {
+            i: float(dimension_bounds[i]['max'] - dimension_bounds[i]['min'])
+            for i in dimension_bounds.keys()
         }
     }
 
     # Print results
     print("\n" + "="*80)
-    print("📊 Computed Bounds")
+    print("📊 Computed Bounds (Per-Dimension)")
     print("="*80)
     print(f"Files processed: {len(trajectory_files)}")
     print(f"Total states: {total_states:,}")
     print()
-    print("Manifold Structure: ℝ³⁴ × S² × ℝ³⁰")
+    print("Manifold Structure: ℝ³⁴ × S² × ℝ³⁰ (67-dimensional state)")
     print()
-    print("Euclidean Dimensions (0-33, 37-66):")
-    print(f"  Global min: {global_euclidean_min:.6f}")
-    print(f"  Global max: {global_euclidean_max:.6f}")
-    print(f"  Range: {global_euclidean_max - global_euclidean_min:.6f}")
-    print(f"  Symmetric limit: ±{euclidean_limit:.6f}")
+
+    # Print Euclidean dimensions (0-33)
+    print("Euclidean Block 1 (dims 0-33):")
+    for i in range(min(5, 34)):  # Show first 5 dimensions
+        min_val = dimension_bounds[i]['min']
+        max_val = dimension_bounds[i]['max']
+        print(f"  [{i:2d}] euclidean1_{i:2d}: [{min_val:8.3f}, {max_val:8.3f}]  range={max_val-min_val:8.3f}")
+    if 34 > 5:
+        print(f"  ... ({34-5} more dimensions)")
     print()
-    print("Sphere Dimensions (34-36) - 3D unit vector:")
-    for i in range(34, 37):
-        min_val = sphere_bounds[i]['min']
-        max_val = sphere_bounds[i]['max']
-        print(f"  [{i}] component_{i-34}: [{min_val:.6f}, {max_val:.6f}]  range={max_val-min_val:.6f}")
+
+    # Print Sphere dimensions (34-36) - no bounds computed
+    print("Sphere (dims 34-36) - 3D unit vector:")
+    print("  NO BOUNDS COMPUTED (always unit norm, no normalization needed)")
     print()
-    print("Normalization Strategy:")
-    print(f"  Euclidean dims: normalize by ±{euclidean_limit:.6f}")
-    print(f"  Sphere dims: keep as-is (already unit norm)")
+
+    # Print Euclidean dimensions (37-66)
+    print("Euclidean Block 2 (dims 37-66):")
+    for i in range(37, min(42, 67)):  # Show first 5 dimensions
+        min_val = dimension_bounds[i]['min']
+        max_val = dimension_bounds[i]['max']
+        print(f"  [{i:2d}] euclidean2_{i-37:2d}: [{min_val:8.3f}, {max_val:8.3f}]  range={max_val-min_val:8.3f}")
+    if 67 > 42:
+        print(f"  ... ({67-42} more dimensions)")
+    print()
+
+    print("Per-dimension bounds stored for Euclidean dims only")
+    print("  64 Euclidean dimensions: keys [0-33, 37-66]")
+    print("  3 Sphere dimensions [34-36]: NO bounds (always unit norm)")
     print()
 
     # Save to file

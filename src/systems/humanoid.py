@@ -45,28 +45,66 @@ class HumanoidSystem(DynamicalSystem):
         self.name = "humanoid"
 
     def _load_bounds_from_file(self, bounds_file: str):
-        """Load actual data bounds from pickle file"""
+        """Load actual data bounds from pickle file (per-dimension like CartPole)"""
         with open(bounds_file, 'rb') as f:
             bounds_data = pickle.load(f)
 
-        # Store bounds for Euclidean dimensions (sphere dims have unit norm)
-        limits = bounds_data.get('limits', {})
-        self.euclidean_limit = limits.get('euclidean_limit', 20.0)
+        # Store per-dimension bounds
         self.dimension_bounds = bounds_data.get('bounds', {})
 
-        print(f"Loaded Humanoid bounds")
-        print(f"  Euclidean dimensions limit: ±{self.euclidean_limit:.3f}")
-        print(f"  Sphere dimensions: unit norm (no normalization)")
+        # Compute symmetric limits for Euclidean dimensions only
+        # Sphere dimensions (34-36) have no bounds and no normalization
+        self.dimension_limits = {}
+        for i in range(67):
+            if 34 <= i <= 36:
+                # Sphere dimensions: no limit needed (no normalization)
+                self.dimension_limits[i] = 1.0  # Placeholder, not used
+            elif i in self.dimension_bounds:
+                # Euclidean dimensions: compute symmetric limit
+                min_val = self.dimension_bounds[i]['min']
+                max_val = self.dimension_bounds[i]['max']
+                self.dimension_limits[i] = max(abs(min_val), abs(max_val))
+            else:
+                # Default fallback for missing Euclidean dims
+                self.dimension_limits[i] = 20.0
+
+        print(f"✅ Loaded Humanoid bounds from: {bounds_file}")
+        print(f"📊 Per-Dimension Normalization Limits:")
+        print(f"")
+        print(f"   Euclidean Block 1 (dims 0-33):")
+        for i in range(min(5, 34)):
+            if i in self.dimension_limits and i not in [34, 35, 36]:
+                print(f"     [{i:2d}]: ±{self.dimension_limits[i]:7.3f}")
+        if 34 > 5:
+            print(f"     ... ({34-5} more dimensions)")
+        print(f"")
+        print(f"   Sphere (dims 34-36): NO NORMALIZATION (unit norm)")
+        print(f"")
+        print(f"   Euclidean Block 2 (dims 37-66):")
+        for i in range(37, min(42, 67)):
+            if i in self.dimension_limits:
+                print(f"     [{i:2d}]: ±{self.dimension_limits[i]:7.3f}")
+        if 67 > 42:
+            print(f"     ... ({67-42} more dimensions)")
+        print(f"")
 
     def _use_default_bounds(self):
-        """Use default fallback bounds"""
-        # Conservative default for Euclidean dimensions
+        """Use default fallback bounds (per-dimension)"""
+        # Conservative default for all dimensions
         # Based on sampling: actual range is ~[-17, 20], so use 20 as limit
-        self.euclidean_limit = 20.0
+        default_limit = 20.0
+
         self.dimension_bounds = None
-        print(f"Using default Humanoid bounds:")
-        print(f"  Euclidean (64 dims): ±{self.euclidean_limit}")
-        print(f"  Sphere (3 dims): unit norm")
+        self.dimension_limits = {}
+        for i in range(67):
+            if 34 <= i <= 36:
+                self.dimension_limits[i] = 1.0  # Placeholder for sphere (not used)
+            else:
+                self.dimension_limits[i] = default_limit
+
+        print(f"Using default Humanoid bounds (per-dimension):")
+        print(f"  Euclidean dimensions: ±{default_limit}")
+        print(f"  Sphere (34-36): NO normalization (always unit norm)")
 
     def define_manifold_structure(self) -> List[ManifoldComponent]:
         """
@@ -98,23 +136,25 @@ class HumanoidSystem(DynamicalSystem):
 
     def define_state_bounds(self) -> Dict[str, Tuple[float, float]]:
         """
-        Define state bounds for normalization
+        Define state bounds for normalization (per-dimension)
 
         Returns:
             Dictionary mapping component names to (min, max) bounds
         """
         bounds = {}
 
-        # First Euclidean block (34 dims)
+        # First Euclidean block (34 dims) - per-dimension bounds
         for i in range(34):
-            bounds[f"euclidean1_{i}"] = (-self.euclidean_limit, self.euclidean_limit)
+            limit = self.dimension_limits[i]
+            bounds[f"euclidean1_{i}"] = (-limit, limit)
 
         # Sphere block (3 dims) - unit norm, nominal range for each component
         bounds["orientation"] = (-1.0, 1.0)
 
-        # Second Euclidean block (30 dims)
+        # Second Euclidean block (30 dims) - per-dimension bounds
         for i in range(30):
-            bounds[f"euclidean2_{i}"] = (-self.euclidean_limit, self.euclidean_limit)
+            limit = self.dimension_limits[37 + i]  # Dimensions 37-66
+            bounds[f"euclidean2_{i}"] = (-limit, limit)
 
         return bounds
 
@@ -122,15 +162,19 @@ class HumanoidSystem(DynamicalSystem):
         """
         Humanoid attractor positions (successful get-up pose)
 
-        For the get-up task, the attractor is the standing upright position.
-        Using origin as placeholder - should be replaced with actual target pose.
+        For the get-up task, success is defined by head_height >= 1.3m (dimension 21).
+        The attractor represents a standing pose with head at target height.
+
+        Note: Success is determined by head_height threshold, not distance to this pose.
 
         Returns:
             List of [state_0, ..., state_66] attractor positions
         """
-        # Placeholder attractor: mostly zeros, with unit orientation
+        # Standing attractor: mostly zeros with successful head height
         attractor = [0.0] * 67
-        # Set orientation to default unit vector pointing up [0, 0, 1]
+        # Set head height to success threshold (dimension 21)
+        attractor[21] = 1.3  # Success threshold: head_height >= 1.3m
+        # Set orientation to upward unit vector [0, 0, 1] (dimensions 34-36)
         attractor[34] = 0.0
         attractor[35] = 0.0
         attractor[36] = 1.0
@@ -139,17 +183,18 @@ class HumanoidSystem(DynamicalSystem):
 
     def is_in_attractor(self, state, radius: float = 1.0):
         """
-        Check if states are in attractor basin (successfully stood up)
+        Check if humanoid successfully stood up (head_height >= 1.3m)
 
-        Uses Euclidean distance for Euclidean components and angular distance
-        for Sphere components.
+        Success criterion from genMoPlan dataset:
+        - x[21] >= 1.3m: SUCCESS (humanoid standing)
+        - x[21] < 1.3m:  FAILURE (humanoid lying/falling)
 
         Args:
             state: States [B, 67] or [67] - numpy array or torch tensor
-            radius: Attractor radius threshold (default: 1.0)
+            radius: NOT USED - kept for API compatibility (success is threshold-based)
 
         Returns:
-            Boolean tensor [B] or scalar indicating attractor membership
+            Boolean tensor [B] or scalar indicating success (head_height >= 1.3)
         """
         # Convert to torch tensor if needed
         if isinstance(state, np.ndarray):
@@ -157,18 +202,19 @@ class HumanoidSystem(DynamicalSystem):
 
         if state.dim() == 1:
             state = state.unsqueeze(0)
+            single_state = True
+        else:
+            single_state = False
 
-        # Get attractor
-        attractor_state = torch.tensor(self.attractors()[0], dtype=state.dtype, device=state.device)
+        # Extract head height (dimension 21)
+        head_height = state[:, 21]
 
-        # Compute distance considering manifold structure
-        # For simplicity, use Euclidean distance across all dimensions
-        # (Sphere components are already constrained to unit norm)
-        distance = torch.norm(state - attractor_state, dim=1)
-        result = distance < radius
+        # Success threshold: head_height >= 1.3m
+        SUCCESS_THRESHOLD = 1.3
+        result = head_height >= SUCCESS_THRESHOLD
 
         # Return scalar if single state
-        if len(result) == 1:
+        if single_state:
             return result.item()
 
         return result
@@ -177,18 +223,18 @@ class HumanoidSystem(DynamicalSystem):
         """
         Classify humanoid states into success/failure categories
 
-        Binary classification:
-        1. SUCCESS (label=1): In standing attractor (successfully stood up)
-        2. FAILURE (label=-1): Not in standing attractor
+        Binary classification based on head height:
+        1. SUCCESS (label=1):  head_height >= 1.3m (humanoid standing)
+        2. FAILURE (label=-1): head_height < 1.3m  (humanoid lying/falling)
 
         Args:
             state: States [B, 67] as full humanoid state
-            radius: Attractor radius (default: 1.0)
+            radius: NOT USED - kept for API compatibility (success is threshold-based)
 
         Returns:
             Integer tensor [B] with:
-                 1: State in standing attractor (SUCCESS)
-                -1: State not in attractor (FAILURE)
+                 1: State is success (head_height >= 1.3m)
+                -1: State is failure (head_height < 1.3m)
         """
         # Convert to torch tensor if needed
         if isinstance(state, np.ndarray):
@@ -197,15 +243,17 @@ class HumanoidSystem(DynamicalSystem):
         if state.dim() == 1:
             state = state.unsqueeze(0)
 
-        # Check if in attractor
-        in_attractor = self.is_in_attractor(state, radius=radius)
-        if isinstance(in_attractor, bool):
-            in_attractor = torch.tensor([in_attractor])
+        # Check if standing (head_height >= 1.3m)
+        is_standing = self.is_in_attractor(state, radius=radius)
+        if isinstance(is_standing, bool):
+            is_standing = torch.tensor([is_standing])
+        elif not isinstance(is_standing, torch.Tensor):
+            is_standing = torch.tensor(is_standing)
 
         # Binary classification: 1 for success, -1 for failure
-        labels = torch.where(in_attractor,
-                           torch.ones_like(in_attractor, dtype=torch.long),
-                           -torch.ones_like(in_attractor, dtype=torch.long))
+        labels = torch.where(is_standing,
+                           torch.ones_like(is_standing, dtype=torch.long),
+                           -torch.ones_like(is_standing, dtype=torch.long))
 
         return labels
 
@@ -215,9 +263,9 @@ class HumanoidSystem(DynamicalSystem):
 
     def normalize_state(self, state: torch.Tensor) -> torch.Tensor:
         """
-        Normalize raw state coordinates
+        Normalize raw state coordinates (per-dimension like CartPole)
 
-        - Euclidean dimensions: normalize to [-1, 1] using bounds
+        - Euclidean dimensions: normalize using per-dimension limits
         - Sphere dimensions: keep as-is (already unit norm)
 
         Args:
@@ -228,20 +276,20 @@ class HumanoidSystem(DynamicalSystem):
         """
         normalized = state.clone()
 
-        # Normalize first Euclidean block (dims 0-33)
-        normalized[:, :34] = state[:, :34] / self.euclidean_limit
-
-        # Sphere block (dims 34-36): keep as-is (already unit norm)
-        # normalized[:, 34:37] = state[:, 34:37]  # No change
-
-        # Normalize second Euclidean block (dims 37-66)
-        normalized[:, 37:] = state[:, 37:] / self.euclidean_limit
+        # Normalize each dimension individually
+        for i in range(67):
+            if 34 <= i <= 36:
+                # Sphere dimensions: no normalization (already unit norm)
+                continue
+            else:
+                # Euclidean dimensions: normalize by per-dimension limit
+                normalized[:, i] = state[:, i] / self.dimension_limits[i]
 
         return normalized
 
     def denormalize_state(self, normalized_state: torch.Tensor) -> torch.Tensor:
         """
-        Denormalize state back to raw coordinates
+        Denormalize state back to raw coordinates (per-dimension)
 
         Args:
             normalized_state: [B, 67] normalized state
@@ -251,14 +299,14 @@ class HumanoidSystem(DynamicalSystem):
         """
         denormalized = normalized_state.clone()
 
-        # Denormalize first Euclidean block (dims 0-33)
-        denormalized[:, :34] = normalized_state[:, :34] * self.euclidean_limit
-
-        # Sphere block (dims 34-36): keep as-is (already unit norm)
-        # No denormalization needed
-
-        # Denormalize second Euclidean block (dims 37-66)
-        denormalized[:, 37:] = normalized_state[:, 37:] * self.euclidean_limit
+        # Denormalize each dimension individually
+        for i in range(67):
+            if 34 <= i <= 36:
+                # Sphere dimensions: no denormalization (already unit norm)
+                continue
+            else:
+                # Euclidean dimensions: denormalize by per-dimension limit
+                denormalized[:, i] = normalized_state[:, i] * self.dimension_limits[i]
 
         return denormalized
 
@@ -283,4 +331,4 @@ class HumanoidSystem(DynamicalSystem):
         return normalized_state
 
     def __repr__(self) -> str:
-        return f"HumanoidSystem(ℝ³⁴ × S² × ℝ³⁰, euclidean_limit=±{self.euclidean_limit})"
+        return f"HumanoidSystem(ℝ³⁴ × S² × ℝ³⁰, per-dimension bounds, 67D state)"

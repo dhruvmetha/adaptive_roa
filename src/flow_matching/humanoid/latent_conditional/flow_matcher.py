@@ -90,7 +90,12 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
 
     def _get_dimension_name(self, dim_idx: int) -> str:
         """
-        Get human-readable dimension name for Humanoid
+        Get human-readable name for dimension
+
+        After expansion in compute_endpoint_mae_per_dim(), we have 67 dimensions:
+        - 34 for Euclidean block 1 (dims 0-33)
+        - 3 for Sphere (dims 34-36, all with same distance value)
+        - 30 for Euclidean block 2 (dims 37-66)
 
         Args:
             dim_idx: Dimension index (0-66)
@@ -101,18 +106,20 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
         if 0 <= dim_idx < 34:
             return f"euclidean1_{dim_idx}"
         elif 34 <= dim_idx < 37:
-            comp_names = ["sphere_x", "sphere_y", "sphere_z"]
-            return comp_names[dim_idx - 34]
+            # Sphere dimensions (all share same geodesic distance)
+            sphere_names = ["sphere_x", "sphere_y", "sphere_z"]
+            return sphere_names[dim_idx - 34]
         elif 37 <= dim_idx < 67:
+            # Euclidean block 2: dims 37-66
             return f"euclidean2_{dim_idx - 37}"
         else:
             return f"dim_{dim_idx}"
 
     def sample_noisy_input(self, batch_size: int, device: torch.device) -> torch.Tensor:
         """
-        Sample noisy input uniformly in ℝ³⁴ × S² × ℝ³⁰ space
+        Sample noisy input uniformly in ℝ³⁴ × S² × ℝ³⁰ space (per-dimension)
 
-        For Euclidean components: sample uniformly within bounds
+        For Euclidean components: sample uniformly within per-dimension bounds
         For Sphere component: sample uniformly on unit sphere
 
         Args:
@@ -122,16 +129,27 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
         Returns:
             Noisy states [batch_size, 67]
         """
-        # First Euclidean block (dims 0-33): uniform in [-limit, +limit]
-        euclidean1 = torch.rand(batch_size, 34, device=device) * (2 * self.system.euclidean_limit) - self.system.euclidean_limit
+        samples = []
+
+        # Sample each dimension individually
+        for i in range(67):
+            if 34 <= i <= 36:
+                # Sphere dimension: will be sampled as a group after loop
+                continue
+            else:
+                # Euclidean dimension: sample uniformly in [-limit, +limit]
+                limit = self.system.dimension_limits[i]
+                sample = torch.rand(batch_size, 1, device=device) * (2 * limit) - limit
+                samples.append(sample)
+
+        # Combine Euclidean samples
+        euclidean1 = torch.cat(samples[:34], dim=1)  # dims 0-33
+        euclidean2 = torch.cat(samples[34:], dim=1)  # dims 37-66 (shifted by 3 for sphere)
 
         # Sphere block (dims 34-36): uniform sampling on S² (unit sphere in ℝ³)
         # Use normal distribution and normalize to get uniform distribution on sphere
         sphere = torch.randn(batch_size, 3, device=device)
         sphere = sphere / torch.norm(sphere, dim=1, keepdim=True)  # Normalize to unit vector
-
-        # Second Euclidean block (dims 37-66): uniform in [-limit, +limit]
-        euclidean2 = torch.rand(batch_size, 30, device=device) * (2 * self.system.euclidean_limit) - self.system.euclidean_limit
 
         return torch.cat([euclidean1, sphere, euclidean2], dim=1)
 
@@ -177,6 +195,47 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
         # Concatenate all samples: [B*num_samples, 67]
         return torch.cat(all_endpoints, dim=0)
 
+    def compute_endpoint_mae_per_dim(self,
+                                    predicted_endpoints: torch.Tensor,
+                                    true_endpoints: torch.Tensor) -> torch.Tensor:
+        """
+        Compute MAE per dimension, expanding Sphere component for better logging
+
+        The Product manifold returns 65 distances:
+        - 34 for Euclidean block 1 (dims 0-33)
+        - 1 for Sphere component (dims 34-36 as a group)
+        - 30 for Euclidean block 2 (dims 37-66)
+
+        For logging purposes, we expand this to 67 by replicating the single
+        sphere distance across all 3 sphere dimensions.
+
+        Args:
+            predicted_endpoints: Predicted endpoints [B, 67]
+            true_endpoints: True endpoints [B, 67]
+
+        Returns:
+            mae_per_dim: MAE for each dimension [67] (expanded from 65 components)
+        """
+        # Get distances from manifold (returns 65 components)
+        mae_components = self.manifold.dist(predicted_endpoints, true_endpoints)  # [B, 65]
+        mae_components = mae_components.mean(dim=0)  # [65]
+
+        # Expand to 67 dimensions by replicating sphere distance
+        # Components: [0-33: Euclidean1, 34: Sphere, 35-64: Euclidean2]
+        # Expand to: [0-33: Euclidean1, 34-36: Sphere×3, 37-66: Euclidean2]
+
+        euclidean1 = mae_components[:34]           # [34]
+        sphere_dist = mae_components[34]           # scalar
+        euclidean2 = mae_components[35:]           # [30]
+
+        # Replicate sphere distance 3 times
+        sphere_expanded = sphere_dist.repeat(3)    # [3]
+
+        # Concatenate: [34] + [3] + [30] = [67]
+        mae_per_dim = torch.cat([euclidean1, sphere_expanded, euclidean2])
+
+        return mae_per_dim
+
     # ===================================================================
     # CHECKPOINT LOADING FOR INFERENCE
     # ===================================================================
@@ -199,7 +258,7 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
         import yaml
         from pathlib import Path
         from src.systems.humanoid import HumanoidSystem
-        from src.model.universal_unet import UniversalUNet
+        from src.model.humanoid_unet import HumanoidUNet
 
         # Determine device
         if device is None:
@@ -346,13 +405,15 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
             print("✅ Restored Humanoid system from checkpoint")
 
         # Create model architecture
-        model = UniversalUNet(
-            input_dim=model_config.get('input_dim', 142),  # 67 + 67 + 8
-            output_dim=model_config.get('output_dim', 67),
-            time_embed_dim=model_config.get('time_embed_dim', 128),
+        model = HumanoidUNet(
+            embedded_dim=model_config.get('embedded_dim', 67),
+            latent_dim=model_config.get('latent_dim', 8),
+            condition_dim=model_config.get('condition_dim', 67),
+            time_emb_dim=model_config.get('time_emb_dim', 128),
             hidden_dims=model_config.get('hidden_dims', [256, 512, 512, 256]),
-            dropout=model_config.get('dropout', 0.1),
-            activation=model_config.get('activation', 'silu')
+            output_dim=model_config.get('output_dim', 67),
+            use_input_embeddings=model_config.get('use_input_embeddings', False),
+            input_emb_dim=model_config.get('input_emb_dim', 128)
         )
 
         # Create flow matcher instance
@@ -384,7 +445,7 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
         print(f"   Checkpoint: {checkpoint_path.name}")
         print(f"   Config sources: {'Hydra + Lightning' if hydra_config else 'Lightning only'}")
         print(f"   System: {type(system).__name__}")
-        print(f"   System bounds: Euclidean ±{system.euclidean_limit:.1f}, Sphere (unit norm)")
+        print(f"   System bounds: Per-dimension (ℝ³⁴ × S² × ℝ³⁰)")
         print(f"   Latent dim: {latent_dim}")
         print(f"   Model architecture: {model_config.get('hidden_dims', 'unknown')}")
         print(f"   Total parameters: {sum(p.numel() for p in model.parameters()):,}")

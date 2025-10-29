@@ -294,7 +294,7 @@ class HumanoidLatentConditionalInference:
             "name": self.system.name,
             "state_dim": self.system.state_dim,
             "embedded_dim": self.system.embedded_dim,
-            "euclidean_limit": self.system.euclidean_limit,
+            "dimension_limits": self.system.dimension_limits,  # Per-dimension bounds
             "attractors": self.system.attractors(),
             "manifold_structure": "ℝ³⁴ × S² × ℝ³⁰"
         }

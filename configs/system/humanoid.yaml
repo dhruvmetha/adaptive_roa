@@ -13,6 +13,6 @@
 
 _target_: src.systems.humanoid.HumanoidSystem
 
-# Data bounds configuration (optional)
-bounds_file: null  # Set to path if you have precomputed bounds
-use_dynamic_bounds: false  # If false, uses default fallback bounds
+# Data bounds configuration (per-dimension bounds from actual trajectory data)
+bounds_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/humanoid_data_bounds.pkl
+use_dynamic_bounds: true  # Use actual computed bounds (per-dimension)

@@ -178,7 +178,7 @@ class HumanoidGaussianNoiseFlowMatcher(BaseGaussianNoiseFlowMatcher):
         import yaml
         from pathlib import Path
         from src.systems.humanoid import HumanoidSystem
-        from src.model.universal_unet import UniversalUNet
+        from src.model.humanoid_unet import HumanoidUNet
 
         # Determine device
         if device is None:
@@ -344,7 +344,7 @@ class HumanoidGaussianNoiseFlowMatcher(BaseGaussianNoiseFlowMatcher):
         print(f"\n✅ Model loaded successfully!")
         print(f"   Checkpoint: {checkpoint_path.name}")
         print(f"   System: {type(system).__name__}")
-        print(f"   System bounds: Euclidean ±{system.euclidean_limit:.1f}, Sphere (unit norm)")
+        print(f"   System bounds: Per-dimension (ℝ³⁴ × S² × ℝ³⁰)")
         print(f"   Noise std: {noise_std}")
         print(f"   Total parameters: {sum(p.numel() for p in model.parameters()):,}")
         print(f"   Device: {device}")

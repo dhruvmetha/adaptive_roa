@@ -45,24 +45,25 @@ class HumanoidEndpointDataset(Dataset):
         self.data = data
 
     def _load_bounds(self):
-        """Load data bounds from pickle file and compute symmetric limits"""
+        """Load data bounds from pickle file (just for verification/logging)
+
+        Note: Actual normalization is done by the HumanoidSystem class,
+        which loads per-dimension bounds. This method just prints summary info.
+        """
         if Path(self.bounds_file).exists():
             with open(self.bounds_file, 'rb') as f:
                 bounds_data = pickle.load(f)
 
-            limits = bounds_data.get('limits', {})
-            self.euclidean_limit = limits.get('euclidean_limit', 20.0)
+            bounds = bounds_data.get('bounds', {})
+            statistics = bounds_data.get('statistics', {})
 
-            summary = bounds_data.get('summary', {})
-            print(f"Using bounds from {self.bounds_file}")
-            print(f"  Euclidean (dims 0-33, 37-66): [{summary.get('euclidean_global_min', -20):.3f}, {summary.get('euclidean_global_max', 20):.3f}] -> symmetric: ±{self.euclidean_limit:.3f}")
-            print(f"  Sphere (dims 34-36): unit norm (no normalization)")
+            print(f"✅ Bounds file found: {self.bounds_file}")
+            print(f"   {statistics.get('euclidean_dimensions', 64)} Euclidean dims with PER-DIMENSION bounds")
+            print(f"   {statistics.get('sphere_dimensions', 3)} Sphere dims (34-36): NO normalization")
+            print(f"   (Normalization handled by HumanoidSystem with per-dimension limits)")
         else:
-            # Fallback to default bounds
-            self.euclidean_limit = 20.0
-            print(f"Warning: Bounds file not found, using default bounds")
-            print(f"  Euclidean: ±{self.euclidean_limit}")
-            print(f"  Sphere: unit norm (no normalization)")
+            print(f"⚠️  Bounds file not found: {self.bounds_file}")
+            print(f"   HumanoidSystem will use default bounds (±20.0)")
 
     def __len__(self):
         return len(self.data)

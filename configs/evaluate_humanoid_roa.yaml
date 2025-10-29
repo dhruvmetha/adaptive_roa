@@ -12,7 +12,7 @@ system:
 
 # Checkpoint to evaluate
 checkpoint:
-  path: null  # Set to specific checkpoint path, or leave null to auto-find latest
+  path: /common/home/dm1487/robotics_research/tripods/olympics-classifier/outputs/humanoid_latent_conditional_fm/2025-10-29_04-41-01  # Set to specific checkpoint path, or leave null to auto-find latest
   auto_find: true  # Search for latest checkpoint in base_name directory
   base_name: humanoid_latent_conditional_fm  # Used for auto-finding
 

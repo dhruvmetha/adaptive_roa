@@ -532,11 +532,14 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
                     latent=None
                 )
 
-            # Compute MAE per dimension
+            # Compute MAE per dimension/component
+            # Note: For Product manifolds, this returns per-component distances
+            # (e.g., 65 for Humanoid: 34 Euclidean + 1 Sphere + 30 Euclidean)
             mae_per_dim = self.compute_endpoint_mae_per_dim(predicted_endpoints, true_endpoints)
 
-            # Update metrics
-            for dim_idx in range(self.system.state_dim):
+            # Update metrics - iterate over actual number of distance components
+            num_components = len(mae_per_dim)
+            for dim_idx in range(num_components):
                 try:
                     self.val_endpoint_mae_per_dim[dim_idx](mae_per_dim[dim_idx])
                 except Exception:

@@ -20,20 +20,22 @@ flow_matcher:
 
 # Model: Latent Conditional UNet for Humanoid
 model:
-  _target_: src.model.universal_unet.UniversalUNet
-  input_dim: 142               # embedded(67) + condition(67) + latent(8)
-  output_dim: 67               # Velocity in tangent space (67-dim)
-  time_embed_dim: 128          # Time embedding dimension
+  _target_: src.model.humanoid_unet.HumanoidUNet
+  embedded_dim: 67             # Humanoid embedded state dimension
+  latent_dim: 8                # Latent variable dimension (set by flow_matching config)
+  condition_dim: 67            # Embedded start state
+  time_emb_dim: 128            # Time embedding dimension
   hidden_dims: [256, 512, 512, 256]  # UNet hidden layers
-  dropout: 0.1
-  activation: silu             # SiLU/Swish activation
+  output_dim: 67               # Velocity in tangent space (67-dim)
+  use_input_embeddings: false
+  input_emb_dim: 128
 
 # Data: Humanoid endpoint dataset
 data:
   _target_: src.data.humanoid_endpoint_data.HumanoidEndpointDataModule
-  data_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/incremental_endpoint_dataset/train.txt
-  validation_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/incremental_endpoint_dataset/validation.txt
-  test_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/incremental_endpoint_dataset/test.txt
+  data_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/incremental_endpoint_dataset/train_5000_balanced_endpoint_dataset.txt
+  validation_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/incremental_endpoint_dataset/val_balanced_endpoint_dataset.txt
+  test_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/incremental_endpoint_dataset/test_balanced_endpoint_dataset.txt
   bounds_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/humanoid_data_bounds.pkl
   batch_size: ${batch_size}
   val_batch_size: ${val_batch_size}

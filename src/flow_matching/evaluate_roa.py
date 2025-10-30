@@ -244,6 +244,11 @@ def evaluate_deterministic(flow_matcher,
     tn, fp, fn, tp = conf_matrix.ravel()
     specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
 
+    # Dataset statistics
+    n_true_success = (labels == 1).sum()
+    n_true_failure = (labels == 0).sum()
+    pct_true_success = n_true_success / len(labels) * 100
+
     return {
         'predictions': predictions,
         'endpoints': endpoints,
@@ -254,7 +259,10 @@ def evaluate_deterministic(flow_matcher,
         'sensitivity': recall,
         'specificity': specificity,
         'confusion_matrix': conf_matrix,
-        'tp': int(tp), 'tn': int(tn), 'fp': int(fp), 'fn': int(fn)
+        'tp': int(tp), 'tn': int(tn), 'fp': int(fp), 'fn': int(fn),
+        'dataset_true_success': int(n_true_success),
+        'dataset_true_failure': int(n_true_failure),
+        'dataset_success_rate': pct_true_success
     }
 
 
@@ -265,7 +273,8 @@ def evaluate_probabilistic(flow_matcher,
                           num_samples: int,
                           num_steps: int,
                           attractor_radius: float,
-                          confidence_threshold: float = 0.6) -> Dict[str, Any]:
+                          success_threshold: float = 0.9,
+                          failure_threshold: float = 0.5) -> Dict[str, Any]:
     """
     Probabilistic evaluation with three-way classification
 
@@ -280,10 +289,10 @@ def evaluate_probabilistic(flow_matcher,
            -1: Endpoint exceeded termination thresholds (failure - crashed)
             0: Endpoint between attractor and failure (separatrix - uncertain)
 
-    Per-state aggregation (over num_samples):
-        Success (1): ≥confidence_threshold of samples land in success attractor
-        Failure (0): ≥confidence_threshold of samples land in failure attractor
-        Separatrix (-1): < confidence_threshold for both (uncertain/mixed) → EXCLUDED from metrics
+    Per-state aggregation (over num_samples) using two thresholds:
+        Success (1): p_stable > success_threshold (e.g., >90% samples land in success attractor)
+        Failure (0): p_stable < failure_threshold (e.g., <50% samples land in success attractor)
+        Separatrix (-1): failure_threshold ≤ p_stable ≤ success_threshold (uncertain/mixed) → EXCLUDED from metrics
     """
     print(f"🔬 Running probabilistic evaluation ({num_samples} samples/state)...")
 
@@ -341,22 +350,21 @@ def evaluate_probabilistic(flow_matcher,
     p_unstable = class_counts[:, 1] / num_samples    # Proportion landing in unstable/failure
     p_separatrix = class_counts[:, 2] / num_samples  # Proportion landing in separatrix (pendulum only)
 
-    # Classify each state based on confidence threshold
+    # Classify each state based on two thresholds
     # Strategy:
-    # - If ≥threshold of samples land in success attractor → label as success
-    # - If ≥threshold of samples land in failure attractor → label as failure
-    # - Otherwise (< threshold for both) → label as separatrix (uncertain)
+    # - If p_stable > success_threshold → label as success (high confidence success)
+    # - If p_stable < failure_threshold → label as failure (high confidence failure)
+    # - Otherwise (failure_threshold ≤ p_stable ≤ success_threshold) → label as separatrix (uncertain)
 
     predictions = np.full(len(states), -1, dtype=int)  # Initialize all as separatrix
 
-    # Assign success/failure based on confidence threshold
-    # Only label if we're confident (≥threshold agreement)
-    predictions[p_stable >= confidence_threshold] = 1      # Success: ≥threshold landed in stable/success attractor
-    predictions[p_unstable >= confidence_threshold] = 0    # Failure: ≥threshold landed in unstable/failure attractor
+    # Assign success/failure based on two thresholds
+    predictions[p_stable > success_threshold] = 1      # Success: >success_threshold landed in stable/success attractor
+    predictions[p_stable < failure_threshold] = 0      # Failure: <failure_threshold landed in stable/success attractor
 
     # States that remain -1 (separatrix):
-    # - p_stable < threshold AND p_unstable < threshold
-    # - These are uncertain states where predictions are split
+    # - failure_threshold ≤ p_stable ≤ success_threshold
+    # - These are uncertain states where predictions are in the middle range
 
     # Mark for exclusion
     is_separatrix = (predictions == -1)
@@ -412,6 +420,11 @@ def evaluate_probabilistic(flow_matcher,
     entropy = -(p_stable_clipped * np.log(p_stable_clipped) +
                 (1 - p_stable_clipped) * np.log(1 - p_stable_clipped))
 
+    # Dataset statistics (computed on valid points only)
+    n_true_success = (valid_labels == 1).sum()
+    n_true_failure = (valid_labels == 0).sum()
+    pct_true_success = n_true_success / len(valid_labels) * 100 if len(valid_labels) > 0 else 0
+
     return {
         'predictions': predictions,
         'endpoints': first_endpoints,  # First sampled endpoint for each state
@@ -432,7 +445,10 @@ def evaluate_probabilistic(flow_matcher,
         'auc': auc,
         'confusion_matrix': conf_matrix,
         'tp': int(tp), 'tn': int(tn), 'fp': int(fp), 'fn': int(fn),
-        'roc_curve': (fpr, tpr, thresholds)
+        'roc_curve': (fpr, tpr, thresholds),
+        'dataset_true_success': int(n_true_success),
+        'dataset_true_failure': int(n_true_failure),
+        'dataset_success_rate': pct_true_success
     }
 
 
@@ -441,6 +457,13 @@ def print_results(results: Dict[str, Any], probabilistic: bool):
     print("\n" + "="*80)
     print("📊 Evaluation Results")
     print("="*80)
+
+    # Show dataset ground truth distribution
+    if 'dataset_true_success' in results:
+        print(f"\n📋 Dataset Ground Truth Distribution:")
+        print(f"   True Success (label=1): {results['dataset_true_success']:5d} ({results['dataset_success_rate']:.2f}%)")
+        print(f"   True Failure (label=0): {results['dataset_true_failure']:5d} ({100 - results['dataset_success_rate']:.2f}%)")
+        print(f"   Total:                  {results['dataset_true_success'] + results['dataset_true_failure']:5d}")
 
     # Show separatrix statistics if available
     if 'separatrix_percentage' in results:
@@ -744,7 +767,8 @@ def main(cfg: DictConfig):
             cfg.evaluation.num_samples,
             cfg.evaluation.num_steps,
             cfg.evaluation.attractor_radius,
-            cfg.evaluation.get('confidence_threshold', 0.6)
+            cfg.evaluation.get('success_threshold', 0.9),
+            cfg.evaluation.get('failure_threshold', 0.5)
         )
     else:
         results = evaluate_deterministic(

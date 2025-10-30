@@ -30,6 +30,13 @@ evaluation:
   probabilistic: true
   num_samples: 50  # Only used if probabilistic=true
 
+  # Two-threshold classification strategy:
+  # - Success: p_stable > success_threshold (confident success)
+  # - Failure: p_stable < failure_threshold (confident failure)
+  # - Separatrix: failure_threshold <= p_stable <= success_threshold (uncertain)
+  success_threshold: 0.9  # Minimum proportion for declaring success (>90%)
+  failure_threshold: 0.5  # Maximum proportion for declaring failure (<50%)
+
 # Output
 output:
   dir: pendulum_roa_evaluation

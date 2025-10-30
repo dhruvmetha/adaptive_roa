@@ -1,5 +1,0 @@
-_target_: src.model.circular_unet1d.CircularUNet1D
-input_dim: 6   # current_state(3) + condition(3) in S¹ × ℝ embedding
-output_dim: 3  # velocity on S¹ × ℝ manifold
-hidden_dims: [64, 128, 256]
-time_emb_dim: 128

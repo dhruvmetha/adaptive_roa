@@ -1,34 +1,34 @@
-# Pendulum ROA Evaluation Configuration
-# Evaluates trained LCFM model on labeled ROA data
+# CartPole Gaussian Noise ROA Evaluation Configuration
+# Evaluates trained Gaussian Noise FM model on labeled ROA data
 
-name: pendulum_roa_evaluation
+name: cartpole_gaussian_roa_evaluation
 seed: 42
 
-# System configuration
+# System configuration - Gaussian Noise variant
 system:
-  module: src.flow_matching.pendulum.latent_conditional.flow_matcher
-  class: PendulumLatentConditionalFlowMatcher
+  module: src.flow_matching.cartpole.gaussian_noise.flow_matcher
+  class: CartPoleGaussianNoiseFlowMatcher
 
 # Checkpoint to evaluate
 checkpoint:
   path: null  # Auto-find latest if null
   auto_find: true  # Search for latest checkpoint
-  base_name: pendulum_latent_conditional_fm  # Used for auto-finding
+  base_name: cartpole_gaussian_noise_fm  # Used for auto-finding
 
 # Data: Labeled ROA data
 data:
-  file: /common/users/shared/pracsys/genMoPlan/data_trajectories/pendulum_lqr_50k/roa_labels_700k_DO_NOT_USE_DEATH_INSIDE.txt
-  format: "θ θ̇ label"  # Space-separated format
+  file: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole/roa_labels.txt
+  format: "x θ ẋ θ̇ label"  # Space-separated format
 
 # Evaluation settings
 evaluation:
-  batch_size: 10000
+  batch_size: 500
   num_steps: 100  # ODE integration steps
-  attractor_radius: 0.1  # Success threshold
+  attractor_radius: 0.3  # Success threshold
 
   # Probabilistic mode (uncertainty estimation)
   probabilistic: true
-  num_samples: 50  # Only used if probabilistic=true
+  num_samples: 20  # Only used if probabilistic=true
 
   # Two-threshold classification strategy:
   # - Success: p_stable > success_threshold (confident success)
@@ -39,7 +39,7 @@ evaluation:
 
 # Output
 output:
-  dir: pendulum_roa_evaluation
+  dir: cartpole_gaussian_roa_evaluation
   save_plots: true
   save_data: true
 

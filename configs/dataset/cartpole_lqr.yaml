@@ -1,0 +1,5 @@
+# @package _global_
+# CartPole LQR dataset paths
+
+data_dirs: /common/users/dm1487/arcmg_datasets/cartpole/cartpole_lqr
+dest_dir: /common/users/dm1487/arcmg_datasets/cartpole/cartpole_lqr/endpoint_dataset

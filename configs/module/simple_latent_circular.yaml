@@ -1,2 +1,0 @@
-_target_: src.flow_matching.latent_circular.simple_flow_matcher.SimpleLatentCircularFlowMatcher
-latent_dim: ${latent.latent_dim}

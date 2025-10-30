@@ -1,0 +1,19 @@
+# Configuration for Humanoid Latent Conditional UNet model
+_target_: src.model.humanoid_unet.HumanoidUNet
+
+# Humanoid-specific dimensions
+# Manifold: ℝ³⁴ × S² × ℝ³⁰ (67-dimensional state)
+# - Dims 0-33: Euclidean (34 dims)
+# - Dims 34-36: Sphere (3 dims) - 3D unit vector
+# - Dims 37-66: Euclidean (30 dims)
+
+embedded_dim: 67       # Humanoid embedded state dimension
+latent_dim: 8          # Latent variable dimension
+condition_dim: 67      # Embedded start state
+time_emb_dim: 128      # Time embedding dimension
+output_dim: 67         # 67-dimensional velocity in tangent space
+
+# Architecture - matches CartPole for consistency (~1.33M params, 2.2x increase from 612K)
+hidden_dims: [256, 512, 1024, 512, 256]
+use_input_embeddings: false
+input_emb_dim: 128

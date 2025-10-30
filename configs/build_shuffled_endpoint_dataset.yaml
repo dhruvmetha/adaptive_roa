@@ -1,10 +1,50 @@
-# the endpoint dataset is a dataset of trajectories that contains the start state and first attractor state the trajectory ends up in the attractor
-system:
-    _target_: src.systems.pendulum.Pendulum
-    name: pendulum
-    attractor_radius: 0.01
+# =====================================================================
+# Shuffled Endpoint Dataset Builder Configuration
+# =====================================================================
+# Builds endpoint dataset using pre-shuffled trajectory indices
+# Useful for incremental dataset construction with consistent ordering
+#
+# Usage:
+#   python src/build_shuffled_endpoint_dataset.py
+#   python src/build_shuffled_endpoint_dataset.py system=humanoid
+#   python src/build_shuffled_endpoint_dataset.py increment=200 start=0 end=100
+#   python src/build_shuffled_endpoint_dataset.py type=test
+# =====================================================================
 
-data_dirs: /common/users/shared/pracsys/genMoPlan/data_trajectories/pendulum_lqr_50k/trajectories
-shuffled_idxs_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/pendulum_lqr_50k/shuffled_indices.txt
-dest_dir: /common/users/dm1487/arcmg_datasets/pendulum_lqr/incremental_endpoint_dataset
-increment: 100
+defaults:
+  - system: humanoid
+
+# Trajectory data paths
+data_dirs: /common/users/shared/pracsys/genMoPlan/data_trajectories/humanoid_get_up/trajectories
+shuffled_idxs_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/humanoid_get_up/shuffled_indices.txt
+dest_dir: /common/users/dm1487/arcmg_datasets/humanoid_get_up/incremental_endpoint_dataset
+
+# Processing range (slicing shuffled_indices.txt)
+start: 0       # Start index
+end: 5000       # End index (exclusive)
+increment: train_5000_balanced # Number used in output filename (e.g., "100_endpoint_dataset.txt")
+
+# Dataset type: "train", "val", or "test"
+# - train/val: Creates endpoint pairs for ALL states in trajectory → final state
+# - test: Creates only FIRST state → final state (one pair per trajectory)
+type: train
+
+# =====================================================================
+# Fixed Attractor Mode (Optional)
+# =====================================================================
+# When enabled, replaces endpoint with a SCALAR attractor value
+#
+# Scalar attractor values:
+#   1  = success (trajectory reaches attractor)
+#   -1 = failure (trajectory doesn't reach attractor)
+#
+# Output format with fixed attractors:
+#   Pendulum:  θ_start θ̇_start attractor (3 columns)
+#   CartPole:  x_s θ_s ẋ_s θ̇_s attractor (5 columns)
+#   Humanoid:  state_0 ... state_66 attractor (68 columns)
+#
+# Model learns to regress from start_state → scalar (1 or -1)
+# =====================================================================
+use_fixed_attractors: false  # true = use scalar attractor (1/-1), false = use actual final states
+attractor_radius: 0.1        # Radius for success/failure classification
+balance_dataset: true       # true = balance success/failure counts (train/val only)

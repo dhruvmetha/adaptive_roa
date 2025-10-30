@@ -1,0 +1,17 @@
+# @package _global_.system
+# =====================================================================
+# CartPole System Configuration
+# =====================================================================
+# CartPole dynamics with ℝ²×S¹×ℝ manifold structure
+# State: (x, θ, ẋ, θ̇) where:
+#   - x ∈ ℝ (cart position)
+#   - θ ∈ S¹ (pole angle)
+#   - ẋ ∈ ℝ (cart velocity)
+#   - θ̇ ∈ ℝ (pole angular velocity)
+# =====================================================================
+
+_target_: src.systems.cartpole.CartPoleSystem
+
+# Data bounds configuration
+bounds_file: /common/users/dm1487/arcmg_datasets/cartpole/new_cartpole_data_bounds.pkl
+use_dynamic_bounds: true  # If false, uses default fallback bounds

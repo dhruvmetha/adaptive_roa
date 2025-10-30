@@ -10,66 +10,74 @@ This is a robotics research project for training neural network classifiers, rea
 
 ### Core Components
 
-- **Training Scripts**: Located in `src/` directory
-  - `train_classifier.py`: Trains binary classifiers on 4D input data
-  - `train_reachability.py`: Trains reachability models on 8D state data  
-  - `train_flow_matching.py`: Trains flow matching models for pendulum dynamics
-  - `train_circular_flow_matching.py`: Trains circular-aware flow matching models
-  - `evaluate_reachability.py`: Evaluates trained reachability models
-  - `evaluate_flow_matching_refactored.py`: Unified evaluation pipeline for flow matching models
+- **Training Scripts**: Training is now modular and organized by system and variant
+  - Pendulum training: `src/flow_matching/pendulum/{variant}/train.py`
+  - CartPole training: `src/flow_matching/cartpole/{variant}/train.py`
+  - Evaluation: `src/flow_matching/evaluate_roa.py` (unified ROA evaluation)
+  - Dataset builders: `src/build_endpoint_dataset.py`, `src/generate_cartpole_endpoints.py`
 
 - **Data Modules**: Located in `src/data/`
+  - `endpoint_data.py`: Handles pendulum endpoint prediction data
+  - `cartpole_endpoint_data.py`: Handles CartPole endpoint prediction data with 4D states
+  - `circular_endpoint_data.py`: Circular-aware endpoint data handling
   - `classification_data.py`: Handles 4D classification data with 80/10/10 train/val/test splits
   - `reachability_data.py`: Manages 8D reachability data from separate train/valid/test files
-  - `endpoint_data.py`: Handles endpoint prediction data for flow matching
-  - `circular_endpoint_data.py`: Circular-aware endpoint data handling
 
 - **Models**: Located in `src/model/`
-  - `simple_mlp.py`: Multi-layer perceptron with configurable hidden layers
-  - `unet1d.py`: 1D U-Net architecture for flow matching
-  - `circular_unet1d.py`: Circular-aware U-Net for pendulum dynamics
+  - **Pendulum Models**:
+    - `pendulum_unet.py`: Latent conditional UNet for S¹×ℝ manifold
+    - `pendulum_gaussian_noise_unet.py`: Gaussian noise UNet (simplified, no latent/conditioning)
+  - **CartPole Models**:
+    - `cartpole_unet.py`: Latent conditional UNet for ℝ²×S¹×ℝ manifold
+    - `cartpole_gaussian_perturbed_unet1d.py`: Gaussian noise UNet (simplified)
+  - **Generic/Legacy Models**:
+    - `simple_mlp.py`: Multi-layer perceptron with configurable hidden layers
+    - `unet1d.py`: Generic 1D U-Net architecture
+    - `circular_unet1d.py`: Circular-aware U-Net for pendulum dynamics
+    - `conditional_unet1d.py`: Conditional U-Net with latent variables
+    - `universal_unet.py`: Universal U-Net for multiple systems
 
-- **Lightning Modules**: Located in `src/module/`
-  - `simple_mlp.py`: Lightning wrapper for MLP models
-  - `flow_matching.py`: **[DEPRECATED]** Legacy flow matching module
-  - `circular_flow_matching.py`: **[DEPRECATED]** Legacy circular flow matching module
-
-- **Unified Flow Matching Framework**: Located in `src/flow_matching/`
+- **Flow Matching Framework**: Located in `src/flow_matching/`
   - `base/`: Abstract base classes and common functionality
-    - `flow_matcher.py`: Base Lightning module for all flow matching variants
-    - `inference.py`: Base inference class with shared prediction logic
+    - `flow_matcher.py`: Base Lightning module for latent conditional FM (~500 lines of shared code)
+    - `gaussian_noise_flow_matcher.py`: Base Lightning module for Gaussian noise FM (~500 lines)
     - `config.py`: Common configuration and state handling
-  - `standard/`: Standard flow matching implementation
-    - `flow_matcher.py`: Standard flow matching using torchcfm
-    - `inference.py`: Standard flow matching inference
-    - `train.py`: Standard training script
-  - `circular/`: Circular-aware flow matching implementation  
-    - `flow_matcher.py`: Circular flow matching with geodesic interpolation
-    - `inference.py`: Circular flow matching inference
-    - `train.py`: Circular training script
-  - `utils/`: Shared utilities
-    - `state_transformations.py`: State embedding/extraction utilities
-    - `geometry.py`: Circular distance and interpolation utilities
-
-- **Legacy Inference**: Located in `src/` directory **[DEPRECATED]**
-  - `inference_flow_matching.py`: **[DEPRECATED]** Use `flow_matching.standard.inference` instead
-  - `inference_circular_flow_matching.py`: **[DEPRECATED]** Use `flow_matching.circular.inference` instead
+    - `inference.py`: Generic inference utilities
+  - `pendulum/`: Pendulum flow matching variants
+    - `latent_conditional/`: Latent Conditional FM (S¹×ℝ manifold)
+      - `flow_matcher.py`: Flow matching with Facebook FM library
+      - `inference.py`: Inference wrapper
+      - `train.py`: Training script for pendulum
+    - `gaussian_noise/`: Gaussian Noise FM (simplified variant)
+      - `flow_matcher.py`: Simplified FM without latent variables or conditioning
+      - `inference.py`: Inference class
+      - `train.py`: Training script (25% faster than latent conditional)
+  - `cartpole/`: CartPole flow matching variants
+    - `latent_conditional/`: Latent Conditional FM (ℝ²×S¹×ℝ manifold)
+      - `flow_matcher.py`: Flow matching with latent variables & conditioning
+      - `train.py`: Training script for CartPole
+    - `gaussian_noise/`: Gaussian Noise FM (simplified variant)
+      - `flow_matcher.py`: Simplified FM without latent variables or conditioning
+      - `inference.py`: Inference class
+      - `train.py`: Training script (25% faster than latent conditional)
+  - `evaluate_roa.py`: Unified ROA evaluation for all flow matching variants
 
 ### Unified Evaluation & Visualization System
 
 - **Systems Configuration**: Located in `src/systems/`
-  - `pendulum_config.py`: Centralized pendulum system parameters (attractors, bounds, normalization)
-  - `base.py`: Base system interface
-  - `pendulum.py`: Pendulum dynamics implementation
+  - `base.py`: Base system interface (DynamicalSystem abstract class)
+  - `pendulum.py`: Pendulum dynamics implementation (S¹×ℝ manifold)
+  - `cartpole.py`: CartPole dynamics implementation (ℝ²×S¹×ℝ manifold)
+  - `pendulum_config.py`: Legacy pendulum system parameters
+  - `pendulum_universal.py`: Universal pendulum variant
 
 - **Evaluation Framework**: Located in `src/evaluation/`
   - `metrics.py`: Centralized metrics computation (MSE, MAE, attractor accuracy, circular distances)
-  - `evaluator.py`: Unified evaluation pipeline for all model types
 
 - **Visualization Framework**: Located in `src/visualization/`
   - `phase_space_plots.py`: Standard phase space plotting with consistent styling
   - `flow_visualizer.py`: Flow path and trajectory visualization
-  - `attractor_analysis.py`: **Advanced basin analysis and separatrix detection**
+  - `attractor_analysis.py`: Advanced basin analysis and separatrix detection
 
 ### Attractor Basin Analysis (NEW FEATURE)
 
@@ -84,15 +92,64 @@ The `AttractorBasinAnalyzer` provides state space discretization and basin mappi
 ### Configuration System
 
 Uses Hydra for configuration management with YAML files in `configs/`:
-- Main configs: `train_classifier.yaml`, `train_reachability.yaml`, `evaluate_reachability.yaml`
-- Data configs: `configs/data/classifier_data.yaml`, `configs/data/reachability_data.yaml`  
-- Model configs: `configs/model/simple_mlp.yaml`
-- Trainer configs: `configs/trainer/default.yaml`, `configs/trainer/gpu.yaml`
+- **Main Training Configs**:
+  - `train_pendulum.yaml`: Pendulum latent conditional FM
+  - `train_pendulum_gaussian_noise.yaml`: Pendulum Gaussian noise FM
+  - `train_cartpole.yaml`: CartPole latent conditional FM
+  - `train_cartpole_gaussian_noise.yaml`: CartPole Gaussian noise FM
+- **Evaluation Configs**:
+  - `evaluate_pendulum_roa.yaml`: Pendulum ROA evaluation (latent conditional)
+  - `evaluate_pendulum_gaussian_roa.yaml`: Pendulum ROA evaluation (Gaussian noise)
+  - `evaluate_cartpole_roa.yaml`: CartPole ROA evaluation (latent conditional)
+  - `evaluate_cartpole_gaussian_roa.yaml`: CartPole ROA evaluation (Gaussian noise)
+- **Data Configs**: `configs/data/`
+  - `endpoint_data.yaml`: Pendulum endpoint data
+  - `cartpole_endpoint_data.yaml`: CartPole endpoint data
+  - `circular_endpoint_data.yaml`: Circular endpoint data
+  - `classification_data.yaml`, `reachability_data.yaml`: Legacy classifiers
+- **Model Configs**: `configs/model/`
+  - `latent_conditional_unet.yaml`, `cartpole_latent_conditional_unet.yaml`
+  - `simple_mlp.yaml`, `conditional_unet.yaml`
+- **Trainer Configs**: `configs/trainer/`
+  - `default.yaml`, `gpu.yaml`, `flow_matching.yaml`
+- **Device Configs**: `configs/device/` (gpu0-gpu5, cpu)
+- **Optimizer/Scheduler**: `configs/optimizer/`, `configs/scheduler/`
 
 ### Data Processing
 
 - **Classification Data**: 4D inputs normalized to [0,1] range with bounds [-0.5, 0.5, -10, 10]
 - **Reachability Data**: 8D inputs normalized to [0,1] range with bounds [-4π, 4π, -20, 20] repeated twice
+
+## Quick Start
+
+**For complete training and evaluation instructions, see [TRAINING_GUIDE.md](TRAINING_GUIDE.md).**
+
+### Training Commands
+```bash
+# Pendulum (Latent Conditional)
+python src/flow_matching/pendulum/latent_conditional/train.py
+
+# Pendulum (Gaussian Noise - faster, simpler)
+python src/flow_matching/pendulum/gaussian_noise/train.py
+
+# CartPole (Latent Conditional - richer model)
+python src/flow_matching/cartpole/latent_conditional/train.py
+
+# CartPole (Gaussian Noise - faster, simpler)
+python src/flow_matching/cartpole/gaussian_noise/train.py
+```
+
+### Evaluation Commands
+```bash
+# ROA evaluation (deterministic)
+python src/flow_matching/evaluate_roa.py --config-name=evaluate_cartpole_roa
+
+# ROA evaluation (probabilistic with uncertainty)
+python src/flow_matching/evaluate_roa.py \
+    --config-name=evaluate_cartpole_roa \
+    evaluation.probabilistic=true \
+    evaluation.num_samples=20
+```
 
 ## Development Commands
 
@@ -107,57 +164,81 @@ pip install -e .
 
 ### Training
 ```bash
-# Train classifier (currently incomplete - model/trainer instantiation commented out)
-python src/train_classifier.py
+# Pendulum (Latent Conditional)
+python src/flow_matching/pendulum/latent_conditional/train.py
 
-# Train reachability model  
-python src/train_reachability.py
+# Pendulum (Gaussian Noise - faster, simpler)
+python src/flow_matching/pendulum/gaussian_noise/train.py
 
-# Train flow matching models using unified framework
-python src/flow_matching/standard/train.py      # Standard flow matching
-python src/flow_matching/circular/train.py     # Circular flow matching
+# CartPole (Latent Conditional - richer model)
+python src/flow_matching/cartpole/latent_conditional/train.py
 
-# Legacy training scripts (deprecated but still functional)
-python src/train_flow_matching.py              # [DEPRECATED] Use standard/train.py
-python src/train_circular_flow_matching.py     # [DEPRECATED] Use circular/train.py
+# CartPole (Gaussian Noise - faster, simpler)
+python src/flow_matching/cartpole/gaussian_noise/train.py
 
-# Evaluate reachability model
-python src/evaluate_reachability.py
+# Customize training parameters (Latent Conditional)
+python src/flow_matching/pendulum/latent_conditional/train.py \
+    flow_matching.latent_dim=4 \
+    base_lr=5e-4 \
+    batch_size=512
 
-# Evaluate flow matching model with unified pipeline
-python src/evaluate_flow_matching_refactored.py
+# Customize training parameters (Gaussian Noise)
+python src/flow_matching/pendulum/gaussian_noise/train.py \
+    flow_matching.noise_std=0.2 \
+    batch_size=512
 ```
 
 ### Evaluation & Analysis
 ```bash
-# Run comprehensive flow matching evaluation (unified pipeline)
-python src/evaluate_flow_matching_refactored.py
+# ROA evaluation (deterministic)
+python src/flow_matching/evaluate_roa.py --config-name=evaluate_cartpole_roa
 
-# Demonstrate unified flow matching framework
-python src/demo_unified_flow_matching.py        # NEW: Works with both variants
-
-# Demonstrate attractor basin analysis
-python src/demo_attractor_analysis.py
-
-# Legacy demos (deprecated but still functional)
-python src/demo_flow_matching.py               # [DEPRECATED] Use unified demo
-python src/demo_circular_flow_matching.py      # [DEPRECATED] Use unified demo
+# ROA evaluation (probabilistic with uncertainty quantification)
+python src/flow_matching/evaluate_roa.py \
+    --config-name=evaluate_cartpole_roa \
+    evaluation.probabilistic=true \
+    evaluation.num_samples=20
 ```
 
-### Unified Flow Matching Usage
+### Flow Matching Inference Usage
 ```python
-# NEW: Unified framework usage
-from src.flow_matching.standard import StandardFlowMatchingInference
-from src.flow_matching.circular import CircularFlowMatchingInference
-from src.evaluation.evaluator import FlowMatchingEvaluator
+# Load trained models
+from src.flow_matching.pendulum.latent_conditional.flow_matcher import PendulumLatentConditionalFlowMatcher
+from src.flow_matching.pendulum.gaussian_noise.inference import PendulumGaussianNoiseInference
+from src.flow_matching.cartpole.latent_conditional.flow_matcher import CartPoleLatentConditionalFlowMatcher
+from src.flow_matching.cartpole.gaussian_noise.inference import CartPoleGaussianNoiseInference
+import torch
 
-# Load any variant - automatic detection
-standard_inferencer = StandardFlowMatchingInference("checkpoint.ckpt")
-circular_inferencer = CircularFlowMatchingInference("checkpoint.ckpt")
+# Pendulum (Latent Conditional)
+pendulum_model = PendulumLatentConditionalFlowMatcher.load_from_checkpoint(
+    "outputs/pendulum_latent_conditional_fm/2025-10-13_18-45-32"
+)
 
-# Unified evaluation with automatic variant detection
-evaluator = FlowMatchingEvaluator(auto_detect_variant=True)
-results = evaluator.evaluate_on_dataloader(inferencer, test_loader, data_module)
+# Pendulum (Gaussian Noise)
+pendulum_gaussian = PendulumGaussianNoiseInference(
+    "outputs/pendulum_gaussian_noise_fm/2025-10-21_12-30-45"
+)
+
+# CartPole (Latent Conditional)
+cartpole_model = CartPoleLatentConditionalFlowMatcher.load_from_checkpoint(
+    "outputs/cartpole_latent_conditional_fm/2025-10-13_18-45-32"
+)
+
+# CartPole (Gaussian Noise)
+cartpole_gaussian = CartPoleGaussianNoiseInference(
+    "outputs/cartpole_gaussian_noise_fm/2025-10-17_14-15-30"
+)
+
+# Predict endpoints (Pendulum)
+start_states_pendulum = torch.tensor([[0.5, 1.0]])  # (θ, θ̇)
+endpoints = pendulum_gaussian.predict_endpoint(start_states_pendulum, num_steps=100)
+
+# Predict endpoints (CartPole)
+start_states_cartpole = torch.tensor([[0.5, 0.1, 2.0, 1.0]])  # (x, θ, ẋ, θ̇)
+endpoints = cartpole_model.predict_endpoint(start_states_cartpole, num_steps=100)
+
+# Multiple samples for uncertainty
+endpoints_batch = cartpole_model.predict_endpoints_batch(start_states_cartpole, num_samples=20)
 ```
 
 ### Attractor Basin Analysis Usage
@@ -181,56 +262,52 @@ results = analyzer.analyze_attractor_basins(
 analyzer.save_analysis_results("output_dir", results)
 ```
 
-### Migration Guide
-```python
-# OLD (deprecated):
-from src.inference_flow_matching import FlowMatchingInference
-from src.inference_circular_flow_matching import CircularFlowMatchingInference
+### Model Variants Comparison
 
-# NEW (recommended):
-from src.flow_matching.standard import StandardFlowMatchingInference  
-from src.flow_matching.circular import CircularFlowMatchingInference
+| Variant | Systems | Latent | Conditioning | Params | Speed |
+|---------|---------|--------|--------------|--------|-------|
+| **Latent Conditional** | Pendulum, CartPole | ✅ z ~ N(0,I) | ✅ On start state | ~2M | Baseline |
+| **Gaussian Noise** | Pendulum, CartPole | ❌ None | ❌ None | ~1.5M | 25% faster |
 
-# Benefits of new architecture:
-# • Automatic variant detection
-# • Shared base functionality  
-# • Reduced code duplication (~230 lines eliminated)
-# • Consistent APIs across variants
-# • Easy to extend with new variants
-```
+**Use Latent Conditional when**: Richer multimodal predictions, explicit conditioning needed
+**Use Gaussian Noise when**: Simpler/faster training, explicit Gaussian noise preferred
 
 ### GPU Configuration
-The scripts are configured to use GPU 1 via `os.environ["CUDA_VISIBLE_DEVICES"] = "1"` in each training script.
+GPU selection is configured via Hydra config files in `configs/device/`:
+- `gpu0.yaml` through `gpu5.yaml`: Configure specific GPU device
+- `cpu.yaml`: CPU-only training
+- Training scripts use `cfg.trainer.devices` from Hydra configs
 
 ### Outputs
-Training outputs are saved to `outputs/` directory with timestamped subdirectories containing:
-- Training logs
-- Model checkpoints (in `logs/vae_training/version_X/checkpoints/`)
-- TensorBoard event files
+Training outputs are saved to `outputs/` directory with timestamped subdirectories:
+- `outputs/{experiment_name}/{timestamp}/`: Training run directory
+  - `version_0/checkpoints/`: Model checkpoints
+  - TensorBoard logs
+  - Hydra configuration snapshots (.hydra/)
 
 ## Data Requirements
 
+- **Flow Matching Endpoint Data**:
+  - Pendulum: 4-column text files (θ_start, θ̇_start, θ_end, θ̇_end)
+  - CartPole: 8-column text files (x_s, θ_s, ẋ_s, θ̇_s, x_e, θ_e, ẋ_e, θ̇_e)
+  - Format: Space-separated values, one trajectory per line
 - **Classification data**: Text files with space-separated values (4 inputs + 1 label per line)
-- **Reachability training data**: Directory containing `train.txt` and `valid.txt`  
-- **Reachability test data**: Single test file specified separately
-- **Flow matching data**: Endpoint prediction datasets with start and end state pairs
-- **Circular flow matching data**: Endpoint data with circular angle handling for pendulum dynamics
+- **Reachability data**: 8D state data in separate train/valid/test files
 
 ## Model Features
 
-### SimpleMLP Models
-- Configurable hidden layer architecture
-- Binary classification with BCEWithLogitsLoss
-- Comprehensive metrics: accuracy, precision, recall, F1, confusion matrix
-- Detailed test metrics including TPR, FPR, TNR, FNR
-- Lightning integration with automatic logging
-
 ### Flow Matching Models
-- **1D U-Net Architecture**: Efficient neural ODE for continuous dynamics
-- **Circular Flow Matching**: Specialized for pendulum dynamics with proper angle handling
+- **Two Variants**:
+  - **Latent Conditional**: Uses latent variables z ~ N(0,I) and conditioning on start states
+  - **Gaussian Noise**: Simplified variant with Gaussian-perturbed initial states (25% faster)
+- **Manifold-Aware**:
+  - Pendulum: S¹×ℝ manifold with circular angle handling
+  - CartPole: ℝ²×S¹×ℝ manifold with mixed Euclidean/circular structure
+- **Facebook Flow Matching Library**: Uses geodesic probability paths and Riemannian ODE solvers
 - **Endpoint Prediction**: Predict final states from initial conditions
 - **Flow Path Generation**: Generate complete trajectories through phase space
 - **Attractor Convergence**: Models trained to predict convergence to system attractors
+- **Uncertainty Quantification**: Probabilistic predictions with multiple samples
 
 ### Evaluation Capabilities
 - **Unified Metrics**: MSE, MAE, attractor accuracy across all model types

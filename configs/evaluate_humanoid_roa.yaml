@@ -1,0 +1,51 @@
+# Humanoid ROA Evaluation Configuration
+# Evaluates trained Humanoid LCFM model on labeled ROA data (if available)
+# Or performs general endpoint prediction evaluation
+
+name: humanoid_roa_evaluation
+seed: 42
+
+# System configuration
+system:
+  module: src.flow_matching.humanoid.latent_conditional.flow_matcher
+  class: HumanoidLatentConditionalFlowMatcher
+
+# Checkpoint to evaluate
+checkpoint:
+  path: /common/home/dm1487/robotics_research/tripods/olympics-classifier/outputs/humanoid_latent_conditional_fm/2025-10-29_04-41-01  # Set to specific checkpoint path, or leave null to auto-find latest
+  auto_find: true  # Search for latest checkpoint in base_name directory
+  base_name: humanoid_latent_conditional_fm  # Used for auto-finding
+
+# Data: Labeled ROA data (adjust path when available)
+# Note: This path is a placeholder - update with actual ROA labeled data
+data:
+  file: /common/users/shared/pracsys/genMoPlan/data_trajectories/humanoid_get_up/roa_labels.txt
+  format: "67D state,label"  # 67-dimensional state + label
+
+# Evaluation settings
+evaluation:
+  batch_size: 512  # Lower batch size due to high dimensionality
+  num_steps: 100  # ODE integration steps
+  attractor_radius: 1.0  # Success threshold (adjust based on humanoid scale)
+
+  # Probabilistic mode (uncertainty estimation)
+  probabilistic: true
+  num_samples: 20  # Number of samples for Monte Carlo estimation
+
+  # Two-threshold classification strategy:
+  # - Success: p_stable > success_threshold (confident success)
+  # - Failure: p_stable < failure_threshold (confident failure)
+  # - Separatrix: failure_threshold <= p_stable <= success_threshold (uncertain)
+  success_threshold: 0.9  # Minimum proportion for declaring success (>90%)
+  failure_threshold: 0.1  # Maximum proportion for declaring failure (<50%)
+
+# Output
+output:
+  dir: humanoid_roa_evaluation
+  save_plots: true
+  save_data: true
+
+# Hydra output directory
+hydra:
+  run:
+    dir: outputs/${name}/${now:%Y-%m-%d_%H-%M-%S}

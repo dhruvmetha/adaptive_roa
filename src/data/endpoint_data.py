@@ -48,31 +48,15 @@ class EndpointDataset(Dataset):
 
         print(f"Loaded {len(self.data)} samples for pendulum endpoint data ({split} split)")
         print(f"  Total data: {n}, Train: {train_end}, Val: {val_end - train_end}, Test: {n - val_end}")
-        
-        # Normalization bounds for pendulum data
-        # Angle: [-π, π], Angular velocity: approximately [-2π, 2π]
-        self.min_bounds = np.array([-np.pi, -2*np.pi])
-        self.max_bounds = np.array([np.pi, 2*np.pi])
-            
+
     def __len__(self):
         return len(self.data)
-    
-    def normalize_state(self, state):
-        """Normalize state to [0, 1] range"""
-        state = np.array(state)
-        return (state - self.min_bounds) / (self.max_bounds - self.min_bounds)
-    
-    def denormalize_state(self, state):
-        """Denormalize state from [0, 1] back to original range"""
-        if torch.is_tensor(state):
-            state = state.cpu().numpy()
-        return state * (self.max_bounds - self.min_bounds) + self.min_bounds
-    
+
     def __getitem__(self, idx):
         start_state, end_state = self.data[idx]
 
-        # Return raw (unnormalized) states for flow matching
-        # The flow matcher handles normalization internally
+        # Return raw states in original coordinates (θ ∈ [-π, π], θ̇ ∈ [-2π, 2π])
+        # Normalization is handled by the flow matcher's system.normalize_state()
         return {
             "start_state": torch.tensor(start_state, dtype=torch.float32),
             "end_state": torch.tensor(end_state, dtype=torch.float32)
@@ -83,6 +67,7 @@ class EndpointDataModule(pl.LightningDataModule):
         self,
         data_file: str,
         batch_size: int = 32,
+        val_batch_size: Optional[int] = None,
         num_workers: int = 4,
         train_split: float = 0.8,
         val_split: float = 0.1,
@@ -93,6 +78,7 @@ class EndpointDataModule(pl.LightningDataModule):
 
         self.data_file = data_file
         self.batch_size = batch_size
+        self.val_batch_size = val_batch_size if val_batch_size is not None else batch_size
         self.num_workers = num_workers
         self.train_split = train_split
         self.val_split = val_split
@@ -139,16 +125,16 @@ class EndpointDataModule(pl.LightningDataModule):
     def val_dataloader(self):
         return DataLoader(
             self.val_dataset,
-            batch_size=self.batch_size,
+            batch_size=self.val_batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
             shuffle=False,
         )
-    
+
     def test_dataloader(self):
         return DataLoader(
             self.test_dataset,
-            batch_size=self.batch_size,
+            batch_size=self.val_batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
             shuffle=False,

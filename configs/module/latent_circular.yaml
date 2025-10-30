@@ -1,5 +1,0 @@
-_target_: src.flow_matching.latent_circular.flow_matcher.LatentCircularFlowMatcher
-latent_dim: ${latent.latent_dim}
-kl_weight: ${latent.kl_weight}
-endpoint_weight: 0.0
-posterior_std_min: 1e-5

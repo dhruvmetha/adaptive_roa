@@ -1,5 +1,0 @@
-_target_: src.model.unet1d.UNet1D
-input_dim: 4  # 2D current state + 2D condition (start state)
-output_dim: 2  # 2D velocity prediction
-hidden_dims: [64, 128, 256]
-time_emb_dim: 128

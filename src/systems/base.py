@@ -79,38 +79,62 @@ class DynamicalSystem(ABC):
         """Get state bounds"""
         return self._state_bounds
     
+    def get_circular_indices(self) -> List[int]:
+        """
+        Get indices of SO2 (circular) components in state vector
+
+        This is useful for operations that need to treat circular coordinates
+        specially (e.g., angle wrapping during perturbation).
+
+        Returns:
+            List of integer indices where SO2 components appear in the state vector
+
+        Example:
+            CartPole state: [x, θ, ẋ, θ̇] → returns [1] (θ at index 1)
+            Pendulum state: [θ, θ̇] → returns [0] (θ at index 0)
+        """
+        indices = []
+        idx = 0
+
+        for comp in self._manifold_components:
+            if comp.manifold_type == "SO2":
+                indices.append(idx)
+            idx += comp.dim
+
+        return indices
+
     def embed_state(self, state: torch.Tensor) -> torch.Tensor:
         """
         Embed raw state into neural network input space
-        
+
         Args:
             state: Raw state tensor [..., state_dim]
-            
+
         Returns:
             embedded: Embedded state tensor [..., embedding_dim]
         """
         embedded_components = []
         start_idx = 0
-        
+
         for comp in self._manifold_components:
             end_idx = start_idx + comp.dim
             component_state = state[..., start_idx:end_idx]
-            
+
             if comp.manifold_type == "SO2":
                 # θ → (sin θ, cos θ)
                 theta = component_state[..., 0]
                 embedded = torch.stack([torch.sin(theta), torch.cos(theta)], dim=-1)
-                
+
             elif comp.manifold_type == "Real":
                 # Pass through unchanged
                 embedded = component_state
-                
+
             else:
                 raise NotImplementedError(f"Embedding for {comp.manifold_type} not implemented yet")
-            
+
             embedded_components.append(embedded)
             start_idx = end_idx
-            
+
         return torch.cat(embedded_components, dim=-1)
 
     def __repr__(self) -> str:

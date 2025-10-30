@@ -1,0 +1,18 @@
+# @package _global_.system
+# =====================================================================
+# Humanoid System Configuration
+# =====================================================================
+# Humanoid dynamics with ℝ³⁴ × S² × ℝ³⁰ manifold structure
+# State: 67-dimensional vector where:
+#   - dims 0-33: Euclidean (positions, velocities, joint angles)
+#   - dims 34-36: Sphere (orientation as 3D unit vector, norm=1)
+#   - dims 37-66: Euclidean (additional joint states)
+#
+# Task: Get-up (humanoid standing from prone/supine position)
+# =====================================================================
+
+_target_: src.systems.humanoid.HumanoidSystem
+
+# Data bounds configuration (per-dimension bounds from actual trajectory data)
+bounds_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/humanoid_data_bounds.pkl
+use_dynamic_bounds: true  # Use actual computed bounds (per-dimension)

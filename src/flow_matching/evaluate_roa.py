@@ -30,18 +30,56 @@ import importlib
 
 
 def load_roa_data(data_file: str) -> Tuple[np.ndarray, np.ndarray]:
-    """Load ROA labeled data (auto-detects CartPole 4D or Pendulum 2D)"""
+    """
+    Load ROA labeled data with automatic format detection
+
+    Handles formats:
+    1. Pendulum: "θ θ̇ label" (3 cols) or "index θ θ̇ label" (4 cols)
+    2. CartPole: "x θ ẋ θ̇ label" (5 cols) or "index x θ ẋ θ̇ label" (6 cols)
+    3. Humanoid: "state[67] label" (68 cols) - get-up task with head_height criterion
+    4. Fallback: "state[N] label" - last column is label, rest are states
+    """
     print(f"📂 Loading data from: {data_file}")
-    data = np.loadtxt(data_file)
+    data = np.loadtxt(data_file, delimiter=',')
 
-    # Auto-detect format: last column is label, rest are states
-    states = data[:, :-1]  # All columns except last
-    labels = data[:, -1].astype(int)  # Last column is label
+    num_cols = data.shape[1]
+    print(f"   Detected {num_cols} columns")
 
-    state_dim = states.shape[1]
-    system_name = "CartPole (4D)" if state_dim == 4 else f"Pendulum (2D)" if state_dim == 2 else f"Unknown ({state_dim}D)"
+    # Last column is always the label
+    labels = data[:, -1].astype(int)
+
+    # Detect format based on number of columns
+    if num_cols == 3:
+        # Format: θ θ̇ label (no index)
+        states = data[:, :-1]
+        system_name = "Pendulum (2D)"
+    elif num_cols == 4:
+        # Format: index θ θ̇ label (with index)
+        states = data[:, 1:3]  # Skip first column (index), take θ and θ̇
+        system_name = "Pendulum (2D)"
+    elif num_cols == 5:
+        # Format: x θ ẋ θ̇ label (no index)
+        states = data[:, :-1]
+        states[:, 1] = np.arctan2(np.sin(states[:, 1]), np.cos(states[:, 1]))
+        system_name = "CartPole (4D)"
+    elif num_cols == 6:
+        # Format: index x θ ẋ θ̇ label (with index)
+        states = data[:, 1:5]  # Skip first column (index), take state variables
+        states[:, 1] = np.arctan2(np.sin(states[:, 1]), np.cos(states[:, 1]))
+        system_name = "CartPole (4D)"
+    elif num_cols == 68:
+        # Format: state[67] label (humanoid get-up task)
+        states = data[:, :-1]
+        system_name = "Humanoid (67D)"
+        print(f"   📋 Humanoid Get-Up Task")
+        print(f"   📏 Success criterion: head_height[21] >= 1.3m")
+    else:
+        # Fallback: assume last column is label, rest are states (no index)
+        states = data[:, :-1]
+        system_name = f"Unknown ({states.shape[1]}D)"
 
     print(f"   System: {system_name}")
+    print(f"   State shape: {states.shape}")
     print(f"   Loaded {len(states)} samples")
     print(f"   Success (label=1): {(labels == 1).sum()} ({(labels == 1).mean():.1%})")
     print(f"   Failure (label=0): {(labels == 0).sum()} ({(labels == 0).mean():.1%})")
@@ -52,13 +90,13 @@ def load_roa_data(data_file: str) -> Tuple[np.ndarray, np.ndarray]:
 
 def find_checkpoint_in_folder(folder_path: str) -> str:
     """
-    Find the best checkpoint in a given folder
+    Find the best checkpoint in a given folder based on validation loss
 
     Args:
         folder_path: Path to training run folder (e.g., outputs/.../2025-10-10_12-30-26)
 
     Returns:
-        Path to best checkpoint file
+        Path to best checkpoint file (lowest validation loss)
     """
     folder = Path(folder_path)
 
@@ -77,7 +115,44 @@ def find_checkpoint_in_folder(folder_path: str) -> str:
     if not checkpoints:
         raise FileNotFoundError(f"No .ckpt files found in {checkpoint_dir}")
 
-    # Prefer 'last.ckpt' if it exists
+    # Parse validation loss from checkpoint filenames (format: epoch42-val_loss0.1234.ckpt)
+    import re
+    best_ckpt = None
+    best_loss = float('inf')
+    checkpoints_with_loss = []
+
+    for ckpt in checkpoints:
+        # Skip last.ckpt for now
+        if ckpt.name == "last.ckpt":
+            continue
+
+        # Try to extract val_loss from filename (format: val_loss0.1234.ckpt or val_loss0.1234)
+        match = re.search(r'val_loss(\d+\.\d+)', ckpt.name)
+        if match:
+            val_loss = float(match.group(1))
+            checkpoints_with_loss.append((ckpt, val_loss))
+            if val_loss < best_loss:
+                best_loss = val_loss
+                best_ckpt = ckpt
+
+    # Print checkpoint statistics
+    if checkpoints_with_loss:
+        print(f"   Found {len(checkpoints_with_loss)} checkpoints with validation loss:")
+        # Sort by loss for display
+        sorted_ckpts = sorted(checkpoints_with_loss, key=lambda x: x[1])
+        for i, (ckpt, loss) in enumerate(sorted_ckpts[:5]):  # Show top 5
+            marker = " ← SELECTED" if ckpt == best_ckpt else ""
+            print(f"     {i+1}. {ckpt.name} (val_loss={loss:.4f}){marker}")
+        if len(sorted_ckpts) > 5:
+            print(f"     ... and {len(sorted_ckpts) - 5} more")
+    else:
+        print(f"   Found {len(checkpoints)} checkpoints (no validation loss in filenames)")
+
+    # If we found a checkpoint with validation loss, use it
+    if best_ckpt is not None:
+        return str(best_ckpt)
+
+    # Fallback: prefer 'last.ckpt' if it exists
     last_ckpt = checkpoint_dir / "last.ckpt"
     if last_ckpt.exists():
         return str(last_ckpt)
@@ -135,22 +210,24 @@ def evaluate_deterministic(flow_matcher,
         batch = states_tensor[start_idx:end_idx]
 
         with torch.no_grad():
-            result = flow_matcher.predict_endpoint(
+            endpoints = flow_matcher.predict_endpoint(
                 start_states=batch,
                 num_steps=num_steps,
                 latent=None
             )
-            # Handle both return formats: tuple (paths, endpoints) or just endpoints
-            if isinstance(result, tuple):
-                _, endpoints = result
-            else:
-                endpoints = result
 
         all_endpoints.append(endpoints.cpu())
 
     endpoints = torch.cat(all_endpoints, dim=0)
 
-    # Check attractor membership
+    # Wrap angles to [-π, π] before checking attractor membership
+    # For CartPole: state is [x, θ, ẋ, θ̇], wrap θ at index 1
+    if endpoints.shape[1] == 4:  # CartPole
+        endpoints[:, 1] = torch.atan2(torch.sin(endpoints[:, 1]), torch.cos(endpoints[:, 1]))
+    elif endpoints.shape[1] == 2:  # Pendulum
+        endpoints[:, 0] = torch.atan2(torch.sin(endpoints[:, 0]), torch.cos(endpoints[:, 0]))
+
+    # Check attractor membership (on wrapped angles)
     in_attractor = flow_matcher.system.is_in_attractor(endpoints, radius=attractor_radius)
     # Convert to numpy if needed (is_in_attractor might return tensor or numpy)
     if isinstance(in_attractor, torch.Tensor):
@@ -167,6 +244,11 @@ def evaluate_deterministic(flow_matcher,
     tn, fp, fn, tp = conf_matrix.ravel()
     specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
 
+    # Dataset statistics
+    n_true_success = (labels == 1).sum()
+    n_true_failure = (labels == 0).sum()
+    pct_true_success = n_true_success / len(labels) * 100
+
     return {
         'predictions': predictions,
         'endpoints': endpoints,
@@ -177,7 +259,10 @@ def evaluate_deterministic(flow_matcher,
         'sensitivity': recall,
         'specificity': specificity,
         'confusion_matrix': conf_matrix,
-        'tp': int(tp), 'tn': int(tn), 'fp': int(fp), 'fn': int(fn)
+        'tp': int(tp), 'tn': int(tn), 'fp': int(fp), 'fn': int(fn),
+        'dataset_true_success': int(n_true_success),
+        'dataset_true_failure': int(n_true_failure),
+        'dataset_success_rate': pct_true_success
     }
 
 
@@ -187,14 +272,36 @@ def evaluate_probabilistic(flow_matcher,
                           batch_size: int,
                           num_samples: int,
                           num_steps: int,
-                          attractor_radius: float) -> Dict[str, Any]:
-    """Probabilistic evaluation with uncertainty"""
+                          attractor_radius: float,
+                          success_threshold: float = 0.9,
+                          failure_threshold: float = 0.5) -> Dict[str, Any]:
+    """
+    Probabilistic evaluation with three-way classification
+
+    Per-sample classification (system-specific):
+        Pendulum:
+            1: Endpoint in stable bottom attractor [0, 0] (success)
+           -1: Endpoint in unstable top attractors (failure)
+            0: Endpoint in separatrix (not in any attractor)
+
+        CartPole:
+            1: Endpoint in balanced attractor [0, 0, 0, 0] (success)
+           -1: Endpoint exceeded termination thresholds (failure - crashed)
+            0: Endpoint between attractor and failure (separatrix - uncertain)
+
+    Per-state aggregation (over num_samples) using two thresholds:
+        Success (1): p_stable > success_threshold (e.g., >90% samples land in success attractor)
+        Failure (0): p_stable < failure_threshold (e.g., <50% samples land in success attractor)
+        Separatrix (-1): failure_threshold ≤ p_stable ≤ success_threshold (uncertain/mixed) → EXCLUDED from metrics
+    """
     print(f"🔬 Running probabilistic evaluation ({num_samples} samples/state)...")
 
     device = next(flow_matcher.parameters()).device
     states_tensor = torch.from_numpy(states).float().to(device)
 
-    all_attractor_counts = []
+    # Track counts for each class: [stable(1), unstable(-1), separatrix(0)]
+    all_class_counts = []
+    all_first_endpoints = []  # Store first sampled endpoint for each state
     num_batches = int(np.ceil(len(states) / batch_size))
 
     for i in tqdm(range(num_batches), desc="Sampling predictions"):
@@ -202,52 +309,132 @@ def evaluate_probabilistic(flow_matcher,
         end_idx = min((i + 1) * batch_size, len(states))
         batch = states_tensor[start_idx:end_idx]
 
-        attractor_hits = torch.zeros(len(batch), device=device)
+        # Count for each class: [stable_count, unstable_count, separatrix_count]
+        class_counts = torch.zeros((len(batch), 3), device=device)
+        first_endpoints_batch = None
 
-        for _ in range(num_samples):
+        for sample_idx in range(num_samples):
             with torch.no_grad():
-                result = flow_matcher.predict_endpoint(
+                endpoints = flow_matcher.predict_endpoint(
                     start_states=batch,
                     num_steps=num_steps,
                     latent=None
                 )
-                # Handle both return formats: tuple (paths, endpoints) or just endpoints
-                if isinstance(result, tuple):
-                    _, endpoints = result
-                else:
-                    endpoints = result
 
-            in_attractor = flow_matcher.system.is_in_attractor(endpoints, radius=attractor_radius)
-            # Convert to tensor if needed (is_in_attractor might return tensor or numpy)
-            if not isinstance(in_attractor, torch.Tensor):
-                in_attractor = torch.from_numpy(in_attractor)
-            in_attractor = in_attractor.to(device)
-            attractor_hits += in_attractor.float()
+            # Wrap angles to [-π, π] before classification
+            if endpoints.shape[1] == 4:  # CartPole
+                endpoints[:, 1] = torch.atan2(torch.sin(endpoints[:, 1]), torch.cos(endpoints[:, 1]))
+            elif endpoints.shape[1] == 2:  # Pendulum
+                endpoints[:, 0] = torch.atan2(torch.sin(endpoints[:, 0]), torch.cos(endpoints[:, 0]))
 
-        all_attractor_counts.append(attractor_hits.cpu())
+            # Save first endpoint sample (after wrapping)
+            if sample_idx == 0:
+                first_endpoints_batch = endpoints.cpu()
 
-    attractor_counts = torch.cat(all_attractor_counts, dim=0).numpy()
-    p_success = attractor_counts / num_samples
-    predictions = (p_success >= 0.5).astype(int)
+            # Get three-way classification: 1 (stable), -1 (unstable), 0 (separatrix)
+            attractor_labels = flow_matcher.system.classify_attractor(endpoints, radius=attractor_radius)
 
-    # Metrics
-    accuracy = accuracy_score(labels, predictions)
+            # Count each class
+            class_counts[:, 0] += (attractor_labels == 1).float()   # Stable
+            class_counts[:, 1] += (attractor_labels == -1).float()  # Unstable
+            class_counts[:, 2] += (attractor_labels == 0).float()   # Separatrix
+
+        all_class_counts.append(class_counts.cpu())
+        all_first_endpoints.append(first_endpoints_batch)
+
+    class_counts = torch.cat(all_class_counts, dim=0).numpy()  # [N, 3]
+    first_endpoints = torch.cat(all_first_endpoints, dim=0)  # [N, state_dim]
+
+    # Compute proportions
+    p_stable = class_counts[:, 0] / num_samples      # Proportion landing in stable/success
+    p_unstable = class_counts[:, 1] / num_samples    # Proportion landing in unstable/failure
+    p_separatrix = class_counts[:, 2] / num_samples  # Proportion landing in separatrix (pendulum only)
+
+    # Classify each state based on two thresholds
+    # Strategy:
+    # - If p_stable > success_threshold → label as success (high confidence success)
+    # - If p_stable < failure_threshold → label as failure (high confidence failure)
+    # - Otherwise (failure_threshold ≤ p_stable ≤ success_threshold) → label as separatrix (uncertain)
+
+    predictions = np.full(len(states), -1, dtype=int)  # Initialize all as separatrix
+
+    # Assign success/failure based on two thresholds
+    predictions[p_stable > success_threshold] = 1      # Success: >success_threshold landed in stable/success attractor
+    predictions[p_stable < failure_threshold] = 0      # Failure: <failure_threshold landed in stable/success attractor
+
+    # States that remain -1 (separatrix):
+    # - failure_threshold ≤ p_stable ≤ success_threshold
+    # - These are uncertain states where predictions are in the middle range
+
+    # Mark for exclusion
+    is_separatrix = (predictions == -1)
+
+    # Filter out separatrix points
+    valid_mask = ~is_separatrix
+    valid_states = states[valid_mask]
+    valid_labels = labels[valid_mask]
+    valid_predictions = predictions[valid_mask]
+
+    # Report statistics
+    n_total = len(states)
+    n_separatrix = is_separatrix.sum()
+    n_valid = valid_mask.sum()
+    pct_separatrix = 100.0 * n_separatrix / n_total
+
+    print(f"\n📊 Classification Summary:")
+    print(f"   Total states: {n_total}")
+    print(f"   Separatrix (excluded): {n_separatrix} ({pct_separatrix:.1f}%)")
+    print(f"   Valid for evaluation: {n_valid} ({100.0 * n_valid / n_total:.1f}%)")
+
+    # Compute metrics only on valid (non-separatrix) states
+    if n_valid == 0:
+        print("\n⚠️  WARNING: All states classified as separatrix! Cannot compute metrics.")
+        return {
+            'predictions': predictions,
+            'p_stable': p_stable,
+            'p_unstable': p_unstable,
+            'p_separatrix': p_separatrix,
+            'separatrix_count': int(n_separatrix),
+            'separatrix_percentage': pct_separatrix,
+            'valid_count': 0,
+            'accuracy': 0.0,
+            'precision': 0.0,
+            'recall': 0.0,
+            'f1': 0.0
+        }
+
+    accuracy = accuracy_score(valid_labels, valid_predictions)
     precision, recall, f1, _ = precision_recall_fscore_support(
-        labels, predictions, average='binary', zero_division=0
+        valid_labels, valid_predictions, average='binary', zero_division=0
     )
-    conf_matrix = confusion_matrix(labels, predictions)
+    conf_matrix = confusion_matrix(valid_labels, valid_predictions)
     tn, fp, fn, tp = conf_matrix.ravel()
 
-    # AUC and entropy
-    auc = roc_auc_score(labels, p_success) if len(np.unique(labels)) > 1 else None
-    fpr, tpr, thresholds = roc_curve(labels, p_success) if len(np.unique(labels)) > 1 else (None, None, None)
+    # AUC using probability of stable attractor
+    auc = roc_auc_score(valid_labels, p_stable[valid_mask]) if len(np.unique(valid_labels)) > 1 else None
+    fpr, tpr, thresholds = roc_curve(valid_labels, p_stable[valid_mask]) if len(np.unique(valid_labels)) > 1 else (None, None, None)
 
-    p_safe = np.clip(p_success, 1e-7, 1 - 1e-7)
-    entropy = -(p_safe * np.log(p_safe) + (1 - p_safe) * np.log(1 - p_safe))
+    # Entropy based on stable vs unstable (excluding separatrix)
+    p_stable_normalized = p_stable[valid_mask] / (p_stable[valid_mask] + p_unstable[valid_mask] + 1e-9)
+    p_stable_clipped = np.clip(p_stable_normalized, 1e-7, 1 - 1e-7)
+    entropy = -(p_stable_clipped * np.log(p_stable_clipped) +
+                (1 - p_stable_clipped) * np.log(1 - p_stable_clipped))
+
+    # Dataset statistics (computed on valid points only)
+    n_true_success = (valid_labels == 1).sum()
+    n_true_failure = (valid_labels == 0).sum()
+    pct_true_success = n_true_success / len(valid_labels) * 100 if len(valid_labels) > 0 else 0
 
     return {
         'predictions': predictions,
-        'p_success': p_success,
+        'endpoints': first_endpoints,  # First sampled endpoint for each state
+        'valid_mask': valid_mask,
+        'p_stable': p_stable,
+        'p_unstable': p_unstable,
+        'p_separatrix': p_separatrix,
+        'separatrix_count': int(n_separatrix),
+        'separatrix_percentage': pct_separatrix,
+        'valid_count': int(n_valid),
         'entropy': entropy,
         'accuracy': accuracy,
         'precision': precision,
@@ -258,7 +445,10 @@ def evaluate_probabilistic(flow_matcher,
         'auc': auc,
         'confusion_matrix': conf_matrix,
         'tp': int(tp), 'tn': int(tn), 'fp': int(fp), 'fn': int(fn),
-        'roc_curve': (fpr, tpr, thresholds)
+        'roc_curve': (fpr, tpr, thresholds),
+        'dataset_true_success': int(n_true_success),
+        'dataset_true_failure': int(n_true_failure),
+        'dataset_success_rate': pct_true_success
     }
 
 
@@ -267,25 +457,62 @@ def print_results(results: Dict[str, Any], probabilistic: bool):
     print("\n" + "="*80)
     print("📊 Evaluation Results")
     print("="*80)
-    print(f"Accuracy:    {results['accuracy']:.4f}")
-    print(f"Precision:   {results['precision']:.4f}")
-    print(f"Recall:      {results['recall']:.4f}")
-    print(f"F1 Score:    {results['f1']:.4f}")
-    print(f"Sensitivity: {results['sensitivity']:.4f}")
-    print(f"Specificity: {results['specificity']:.4f}")
-    if probabilistic and results.get('auc'):
-        print(f"AUC:         {results['auc']:.4f}")
 
-    print("\nConfusion Matrix:")
+    # Show dataset ground truth distribution
+    if 'dataset_true_success' in results:
+        print(f"\n📋 Dataset Ground Truth Distribution:")
+        print(f"   True Success (label=1): {results['dataset_true_success']:5d} ({results['dataset_success_rate']:.2f}%)")
+        print(f"   True Failure (label=0): {results['dataset_true_failure']:5d} ({100 - results['dataset_success_rate']:.2f}%)")
+        print(f"   Total:                  {results['dataset_true_success'] + results['dataset_true_failure']:5d}")
+
+    # Show separatrix statistics if available
+    if 'separatrix_percentage' in results:
+        print(f"\n🔀 Separatrix Analysis:")
+        print(f"   States on separatrix: {results['separatrix_count']} ({results['separatrix_percentage']:.1f}%)")
+        print(f"   Valid for evaluation: {results['valid_count']}")
+
+    print(f"\n📈 Performance Metrics (on valid states only):")
+    print(f"   Accuracy:    {results['accuracy']:.4f} ({results['accuracy']*100:.2f}%)")
+    print(f"   Precision:   {results['precision']:.4f} ({results['precision']*100:.2f}%)")
+    print(f"   Recall:      {results['recall']:.4f} ({results['recall']*100:.2f}%)")
+    print(f"   F1 Score:    {results['f1']:.4f}")
+    print(f"   Sensitivity: {results['sensitivity']:.4f} (same as Recall)")
+    print(f"   Specificity: {results['specificity']:.4f} ({results['specificity']*100:.2f}%)")
+    if probabilistic and results.get('auc'):
+        print(f"   AUC:         {results['auc']:.4f}")
+
+    print("\n📊 Confusion Matrix:")
     print(f"                Predicted")
-    print(f"                 0      1")
-    print(f"Actual  0    {results['tn']:5d}  {results['fp']:5d}")
-    print(f"        1    {results['fn']:5d}  {results['tp']:5d}")
+    print(f"              Fail    Success")
+    print(f"   Actual Fail   {results['tn']:5d}  {results['fp']:5d}  (Total: {results['tn'] + results['fp']})")
+    print(f"        Success  {results['fn']:5d}  {results['tp']:5d}  (Total: {results['fn'] + results['tp']})")
+    print(f"   Total:        {results['tn'] + results['fn']:5d}  {results['fp'] + results['tp']:5d}  (Total: {results['tn'] + results['fp'] + results['fn'] + results['tp']})")
+
+    # Detailed error analysis
+    print("\n🔍 Detailed Error Analysis:")
+    total = results['tp'] + results['tn'] + results['fp'] + results['fn']
+    print(f"   True Positives (TP):   {results['tp']:4d} ({results['tp']/total*100:5.2f}%) - Correctly predicted Success")
+    print(f"   True Negatives (TN):   {results['tn']:4d} ({results['tn']/total*100:5.2f}%) - Correctly predicted Failure")
+    print(f"   False Positives (FP):  {results['fp']:4d} ({results['fp']/total*100:5.2f}%) - Predicted Success, Actually Failure")
+    print(f"   False Negatives (FN):  {results['fn']:4d} ({results['fn']/total*100:5.2f}%) - Predicted Failure, Actually Success")
+    print(f"   Total Correct:         {results['tp'] + results['tn']:4d} ({(results['tp'] + results['tn'])/total*100:5.2f}%)")
+    print(f"   Total Incorrect:       {results['fp'] + results['fn']:4d} ({(results['fp'] + results['fn'])/total*100:5.2f}%)")
+
+    # Error rates
+    print("\n📉 Error Rates:")
+    print(f"   False Positive Rate:   {results['fp']/(results['fp'] + results['tn'])*100:5.2f}% (FP / All Actual Failures)")
+    print(f"   False Negative Rate:   {results['fn']/(results['fn'] + results['tp'])*100:5.2f}% (FN / All Actual Successes)")
+    if results['tp'] + results['fp'] > 0:
+        print(f"   False Discovery Rate:  {results['fp']/(results['fp'] + results['tp'])*100:5.2f}% (FP / All Predicted Successes)")
+    if results['tn'] + results['fn'] > 0:
+        print(f"   False Omission Rate:   {results['fn']/(results['fn'] + results['tn'])*100:5.2f}% (FN / All Predicted Failures)")
 
     if probabilistic:
-        print("\nUncertainty:")
-        print(f"  Mean entropy: {results['entropy'].mean():.4f}")
-        print(f"  Max entropy:  {results['entropy'].max():.4f}")
+        print("\n🎲 Uncertainty Analysis:")
+        print(f"   Mean entropy: {results['entropy'].mean():.4f}")
+        print(f"   Std entropy:  {results['entropy'].std():.4f}")
+        print(f"   Max entropy:  {results['entropy'].max():.4f}")
+        print(f"   Min entropy:  {results['entropy'].min():.4f}")
     print()
 
 
@@ -316,13 +543,22 @@ def save_plots(results: Dict[str, Any], states: np.ndarray, labels: np.ndarray,
 
     # Probabilistic plots
     if probabilistic:
+        # Use valid_mask if available, otherwise use all points
+        if 'valid_mask' in results:
+            valid_mask = results['valid_mask']
+            valid_labels = labels[valid_mask]
+            p_stable = results['p_stable'][valid_mask]
+        else:
+            valid_labels = labels
+            p_stable = results.get('p_stable', results.get('p_success'))
+
         fig, axes = plt.subplots(1, 2, figsize=(12, 4))
 
-        # P(success) distribution
-        axes[0].hist(results['p_success'][labels == 0], bins=50, alpha=0.5, label='Failure', color='red')
-        axes[0].hist(results['p_success'][labels == 1], bins=50, alpha=0.5, label='Success', color='green')
+        # P(success) distribution - using p_stable
+        axes[0].hist(p_stable[valid_labels == 0], bins=50, alpha=0.5, label='Failure', color='red')
+        axes[0].hist(p_stable[valid_labels == 1], bins=50, alpha=0.5, label='Success', color='green')
         axes[0].axvline(0.5, color='black', linestyle='--')
-        axes[0].set_xlabel('P(Success)')
+        axes[0].set_xlabel('P(Stable Attractor)')
         axes[0].set_ylabel('Count')
         axes[0].set_title('Probability Distribution')
         axes[0].legend()
@@ -398,6 +634,79 @@ def save_plots(results: Dict[str, Any], states: np.ndarray, labels: np.ndarray,
     plt.close()
     print(f"   Saved: error_analysis.png")
 
+    # Three-way classification plot (success/failure/separatrix)
+    # In deterministic mode: only success/failure (no separatrix)
+    # In probabilistic mode: success/failure/separatrix (uncertain states)
+    preds = results['predictions']
+
+    if state_dim == 2:
+        # Pendulum 2D
+        fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+
+        # Plot each category with different color
+        success_mask = preds == 1
+        failure_mask = preds == 0
+        separatrix_mask = preds == -1
+
+        if success_mask.sum() > 0:
+            ax.scatter(states[success_mask, 0], states[success_mask, 1],
+                      c='green', alpha=0.5, s=15, label=f'Success ({success_mask.sum()})')
+        if failure_mask.sum() > 0:
+            ax.scatter(states[failure_mask, 0], states[failure_mask, 1],
+                      c='red', alpha=0.5, s=15, label=f'Failure ({failure_mask.sum()})')
+        if separatrix_mask.sum() > 0:
+            ax.scatter(states[separatrix_mask, 0], states[separatrix_mask, 1],
+                      c='orange', alpha=0.7, s=20, marker='^', label=f'Separatrix ({separatrix_mask.sum()})')
+
+        ax.set_xlabel('Angle (rad)')
+        ax.set_ylabel('Angular Velocity (rad/s)')
+        ax.set_title('State Space Classification (Success/Failure/Separatrix)')
+        ax.legend()
+        ax.grid(alpha=0.3)
+
+        plt.tight_layout()
+        plt.savefig(output_dir / 'state_space_classification.png', dpi=150)
+        plt.close()
+        print(f"   Saved: state_space_classification.png")
+
+    elif state_dim == 4:
+        # CartPole 4D - show multiple 2D projections
+        dim_names = ['Cart Position', 'Pole Angle', 'Cart Velocity', 'Angular Velocity']
+        dim_pairs = [(0, 1), (0, 2), (1, 3), (2, 3)]
+
+        fig, axes = plt.subplots(2, 2, figsize=(14, 12))
+        axes_flat = axes.flatten()
+
+        success_mask = preds == 1
+        failure_mask = preds == 0
+        separatrix_mask = preds == -1
+
+        for idx, (i, j) in enumerate(dim_pairs):
+            ax = axes_flat[idx]
+
+            if success_mask.sum() > 0:
+                ax.scatter(states[success_mask, i], states[success_mask, j],
+                          c='green', alpha=0.4, s=10, label=f'Success ({success_mask.sum()})')
+            if failure_mask.sum() > 0:
+                ax.scatter(states[failure_mask, i], states[failure_mask, j],
+                          c='red', alpha=0.4, s=10, label=f'Failure ({failure_mask.sum()})')
+            if separatrix_mask.sum() > 0:
+                ax.scatter(states[separatrix_mask, i], states[separatrix_mask, j],
+                          c='orange', alpha=0.7, s=15, marker='^', label=f'Separatrix ({separatrix_mask.sum()})')
+
+            ax.set_xlabel(dim_names[i])
+            ax.set_ylabel(dim_names[j])
+            ax.set_title(f'{dim_names[i]} vs {dim_names[j]}')
+            if idx == 0:
+                ax.legend()
+            ax.grid(alpha=0.3)
+
+        plt.suptitle('State Space Classification (Success/Failure/Separatrix)', fontsize=14)
+        plt.tight_layout()
+        plt.savefig(output_dir / 'state_space_classification.png', dpi=150)
+        plt.close()
+        print(f"   Saved: state_space_classification.png")
+
 
 @hydra.main(version_base=None, config_path="../../configs", config_name="evaluate_cartpole_roa")
 def main(cfg: DictConfig):
@@ -457,7 +766,9 @@ def main(cfg: DictConfig):
             cfg.evaluation.batch_size,
             cfg.evaluation.num_samples,
             cfg.evaluation.num_steps,
-            cfg.evaluation.attractor_radius
+            cfg.evaluation.attractor_radius,
+            cfg.evaluation.get('success_threshold', 0.9),
+            cfg.evaluation.get('failure_threshold', 0.5)
         )
     else:
         results = evaluate_deterministic(
@@ -485,6 +796,35 @@ def main(cfg: DictConfig):
             del save_dict['roc_curve']
         np.savez(output_dir / 'results.npz', **save_dict)
         print(f"💾 Saved: {output_dir / 'results.npz'}")
+
+        # Save predicted endpoints to text file (space-separated)
+        if 'endpoints' in results:
+            endpoints_file = output_dir / 'predicted_endpoints.txt'
+            endpoints = results['endpoints']
+
+            # Convert to numpy if needed
+            if hasattr(endpoints, 'cpu'):
+                endpoints = endpoints.cpu().numpy()
+
+            # Note: Angles already wrapped during evaluation before attractor checking
+
+            # Save: start_state (space-separated) -> predicted_endpoint (space-separated)
+            with open(endpoints_file, 'w') as f:
+                for i in range(len(states)):
+                    # Start state
+                    start_str = ' '.join(f'{x:.6f}' for x in states[i])
+                    # Predicted endpoint (with wrapped angles)
+                    end_str = ' '.join(f'{x:.6f}' for x in endpoints[i])
+                    # Write: start_x start_theta start_xdot start_thetadot end_x end_theta end_xdot end_thetadot
+                    f.write(f'{start_str} {end_str}\n')
+
+            print(f"💾 Saved: {endpoints_file}")
+            if cfg.evaluation.probabilistic:
+                print(f"   Format: start_state (space-separated) first_sampled_endpoint (space-separated)")
+                print(f"   Note: In probabilistic mode, only the first of {cfg.evaluation.num_samples} samples is saved")
+            else:
+                print(f"   Format: start_state (space-separated) predicted_endpoint (space-separated)")
+            print(f"   Note: Angles wrapped to [-π, π]")
 
     print("\n" + "="*80)
     print("✅ Evaluation Complete!")

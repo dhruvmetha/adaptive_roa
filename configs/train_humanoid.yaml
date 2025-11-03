@@ -16,17 +16,15 @@ num_workers: 4
 # Flow Matcher: Facebook FM version with automatic geodesics
 flow_matcher:
   _target_: src.flow_matching.humanoid.latent_conditional.flow_matcher.HumanoidLatentConditionalFlowMatcher
-  use_latent_noisy_input: false  # Toggle to use latent z to generate x0 (default: false)
-  # Note: system, model, optimizer, scheduler, config, latent_dim are passed by training script
+  # Note: system, model, optimizer, scheduler, config are passed by training script
 
-# Model: Latent Conditional UNet for Humanoid
+# Model: Conditional UNet for Humanoid
 model:
   _target_: src.model.humanoid_unet.HumanoidUNet
   embedded_dim: 67             # Humanoid embedded state dimension
-  latent_dim: 8                # Latent variable dimension (set by flow_matching config)
   condition_dim: 67            # Embedded start state
   time_emb_dim: 128            # Time embedding dimension
-  hidden_dims: [256, 512, 1024, 1024, 512, 256]  # UNet hidden layers (matches CartPole, ~1.33M params)
+  hidden_dims: [256, 512, 1024, 1024, 512, 256]  # UNet hidden layers
   output_dim: 67               # Velocity in tangent space (67-dim)
   use_input_embeddings: false
   input_emb_dim: 128
@@ -41,6 +39,7 @@ data:
   batch_size: ${batch_size}
   val_batch_size: ${val_batch_size}
   num_workers: ${num_workers}
+
 
 # Optimizer: AdamW
 optimizer:
@@ -91,7 +90,6 @@ trainer:
 
 # Flow matching specific settings
 flow_matching:
-  latent_dim: 8                    # Dimension of Gaussian latent variable (higher for 67D state)
   num_integration_steps: 100       # ODE solver steps for inference
   mae_val_frequency: 10            # Compute MAE validation every N epochs
 

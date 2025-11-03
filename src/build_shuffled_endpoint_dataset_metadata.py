@@ -20,7 +20,6 @@ def main(cfg: DictConfig) -> None:
     start = cfg.start
     end = cfg.end
     attractor_radius = cfg.get('attractor_radius', 0.1)  # Default radius for classification
-    balance_dataset = cfg.get('balance_dataset', False)  # Balance success/failure for train/val
 
     # Get system name
     system_name = system.name if hasattr(system, 'name') else 'unknown'
@@ -37,8 +36,6 @@ def main(cfg: DictConfig) -> None:
 
     print(f"Found {len(trajectory_files)} trajectory files")
     endpoint_data = []
-    success_endpoints = []
-    failure_endpoints = []
     success_count = 0
     failure_count = 0
 
@@ -51,58 +48,26 @@ def main(cfg: DictConfig) -> None:
         final_state = traj[-1]
         is_success = system.is_in_attractor(final_state, radius=attractor_radius)
         
+        
         if is_success:
             success_count += 1
         else:
             failure_count += 1
 
         # Create endpoint metadata for all points in trajectory
-        # Format: [file_path, start_idx, attractor]
-        trajectory_endpoints = []
+        # Format: [file_path, start_idx, end_idx]
         for i in range(num_states - 1):  # Exclude final point as start
-            trajectory_endpoints.append([traj_file, i, traj.shape[0] - 1])
+            endpoint_data.append([traj_file, i, traj.shape[0] - 1, is_success])
             if type == "test":
                 break
-
-        # Store in separate lists for balancing or add directly
-        if balance_dataset and type != "test":
-            if is_success:
-                success_endpoints.extend(trajectory_endpoints)
-            else:
-                failure_endpoints.extend(trajectory_endpoints)
-        else:
-            endpoint_data.extend(trajectory_endpoints)
-
-    # Balance dataset for train/val splits if requested
-    if balance_dataset and type != "test":
-        min_count = min(len(success_endpoints), len(failure_endpoints))
-        total_before = len(success_endpoints) + len(failure_endpoints)
-        print(f"\n🔀 Balancing dataset:")
-        print(f"  BEFORE balancing:")
-        print(f"    Total endpoints: {total_before}")
-        print(f"    Success endpoints: {len(success_endpoints)} ({len(success_endpoints)/total_before*100:.1f}%)")
-        print(f"    Failure endpoints: {len(failure_endpoints)} ({len(failure_endpoints)/total_before*100:.1f}%)")
-        print(f"  AFTER balancing:")
-        print(f"    Sampling {min_count} from each class")
-
-        # Randomly sample equal numbers from each class
-        np.random.shuffle(success_endpoints)
-        np.random.shuffle(failure_endpoints)
-        endpoint_data = success_endpoints[:min_count] + failure_endpoints[:min_count]
-
-        # Shuffle the combined dataset
-        np.random.shuffle(endpoint_data)
-        print(f"    Final balanced dataset: {len(endpoint_data)} endpoints")
-        print(f"    Success: {min_count} (50.0%)")
-        print(f"    Failure: {min_count} (50.0%)")
 
     output_file = dest_dir / f"{increment}_endpoint_dataset.txt"
     print(f"Writing {len(endpoint_data)} endpoint metadata to file...")
     with open(output_file, 'w') as f:
         for endpoint in tqdm(endpoint_data, desc="Writing endpoints"):
-            # Format: file_path start_idx attractor
-            file_path, start_idx, end_idx = endpoint
-            f.write(f'{file_path} {start_idx} {end_idx}\n')
+            A
+            file_path, start_idx, end_idx, is_success = endpoint
+            f.write(f'{file_path} {start_idx} {end_idx} {int(is_success)}\n')
 
     print(f"\nBuilt endpoint metadata dataset with {len(endpoint_data)} endpoint pairs")
     print(f"Saved to: {output_file}")

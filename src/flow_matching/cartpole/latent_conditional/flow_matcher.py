@@ -44,26 +44,23 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
                  optimizer,
                  scheduler,
                  model_config: Optional[dict] = None,
-                 latent_dim: int = 2,
                  mae_val_frequency: int = 10):
         """
-        Initialize CartPole latent conditional flow matcher with FB FM integration
+        Initialize CartPole conditional flow matcher with FB FM integration
 
         Args:
             system: DynamicalSystem (CartPole with ℝ²×S¹×ℝ structure)
-            model: CartPoleLatentConditionalUNet1D model
+            model: CartPoleUNet model
             optimizer: Optimizer instance
             scheduler: Learning rate scheduler
             model_config: Configuration dict
-            latent_dim: Dimension of latent space
             mae_val_frequency: Compute MAE validation every N epochs
         """
-        super().__init__(system, model, optimizer, scheduler, model_config, latent_dim, mae_val_frequency)
+        super().__init__(system, model, optimizer, scheduler, model_config, mae_val_frequency)
 
-        print("✅ Initialized CartPole LCFM with Facebook Flow Matching:")
+        print("✅ Initialized CartPole CFM with Facebook Flow Matching:")
         print(f"   - Manifold: ℝ²×S¹×ℝ (Euclidean × FlatTorus × Euclidean)")
         print(f"   - Path: GeodesicProbPath with CondOTScheduler")
-        print(f"   - Latent dim: {latent_dim}")
         print(f"   - MAE validation frequency: every {mae_val_frequency} epochs")
 
     def _create_manifold(self):
@@ -161,8 +158,8 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         all_endpoints = []
 
         for _ in range(num_samples):
-            # Sample different latent vectors for each sample
-            endpoints_raw = self.predict_endpoint(start_states, num_steps, latent=None)
+            # Generate multiple samples
+            endpoints_raw = self.predict_endpoint(start_states, num_steps)
             all_endpoints.append(endpoints_raw)
 
         # Concatenate all samples: [B*num_samples, 4]

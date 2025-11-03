@@ -40,26 +40,23 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
                  optimizer,
                  scheduler,
                  model_config: Optional[dict] = None,
-                 latent_dim: int = 8,
                  mae_val_frequency: int = 10):
         """
-        Initialize Humanoid latent conditional flow matcher with FB FM integration
+        Initialize Humanoid conditional flow matcher with FB FM integration
 
         Args:
             system: DynamicalSystem (Humanoid with ℝ³⁴ × S² × ℝ³⁰ structure)
-            model: HumanoidLatentConditionalUNet model
+            model: HumanoidUNet model
             optimizer: Optimizer instance
             scheduler: Learning rate scheduler
             model_config: Configuration dict
-            latent_dim: Dimension of latent space (default: 8)
             mae_val_frequency: Compute MAE validation every N epochs
         """
-        super().__init__(system, model, optimizer, scheduler, model_config, latent_dim, mae_val_frequency)
+        super().__init__(system, model, optimizer, scheduler, model_config, mae_val_frequency)
 
-        print("✅ Initialized Humanoid LCFM with Facebook Flow Matching:")
+        print("✅ Initialized Humanoid CFM with Facebook Flow Matching:")
         print(f"   - Manifold: ℝ³⁴ × S² × ℝ³⁰ (Euclidean × Sphere × Euclidean)")
         print(f"   - Path: GeodesicProbPath with CondOTScheduler")
-        print(f"   - Latent dim: {latent_dim}")
         print(f"   - MAE validation frequency: every {mae_val_frequency} epochs")
 
     def _create_manifold(self):
@@ -79,6 +76,13 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
                 (Euclidean(), 30)   # Second Euclidean block
             ]
         )
+        
+        # return Product(
+        #     input_dim=67,
+        #     manifolds=[
+        #         (Euclidean(), 67),  # First Euclidean block
+        #     ]
+        # )
 
     def _get_start_states(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """Extract start states from batch"""
@@ -130,7 +134,8 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
             Noisy states [batch_size, 67]
         """
         noisy_states = torch.randn(batch_size, 67, device=device)
-        noisy_states[:, 34:37] = noisy_states[:, 34:37] / torch.norm(noisy_states[:, 34:37], dim=1, keepdim=True)
+        noisy_states = self.manifold.projx(noisy_states)
+        
         return noisy_states
 
     def normalize_state(self, state: torch.Tensor) -> torch.Tensor:
@@ -168,8 +173,8 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
         all_endpoints = []
 
         for _ in range(num_samples):
-            # Sample different latent vectors for each sample
-            endpoints_raw = self.predict_endpoint(start_states, num_steps, latent=None)
+            # Generate multiple samples
+            endpoints_raw = self.predict_endpoint(start_states, num_steps)
             all_endpoints.append(endpoints_raw)
 
         # Concatenate all samples: [B*num_samples, 67]
@@ -199,22 +204,25 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
         # Get distances from manifold (returns 65 components)
         mae_components = self.manifold.dist(predicted_endpoints, true_endpoints)  # [B, 65]
         mae_components = mae_components.mean(dim=0)  # [65]
+        if mae_components.shape[0] == 67:
+            return mae_components
+        else:
+            
+            # Expand to 67 dimensions by replicating sphere distance
+            # Components: [0-33: Euclidean1, 34: Sphere, 35-64: Euclidean2]
+            # Expand to: [0-33: Euclidean1, 34-36: Sphere×3, 37-66: Euclidean2]
 
-        # Expand to 67 dimensions by replicating sphere distance
-        # Components: [0-33: Euclidean1, 34: Sphere, 35-64: Euclidean2]
-        # Expand to: [0-33: Euclidean1, 34-36: Sphere×3, 37-66: Euclidean2]
+            euclidean1 = mae_components[:34]           # [34]
+            sphere_dist = mae_components[34]           # scalar
+            euclidean2 = mae_components[35:]           # [30]
 
-        euclidean1 = mae_components[:34]           # [34]
-        sphere_dist = mae_components[34]           # scalar
-        euclidean2 = mae_components[35:]           # [30]
+            # Replicate sphere distance 3 times
+            sphere_expanded = sphere_dist.repeat(3)    # [3]
 
-        # Replicate sphere distance 3 times
-        sphere_expanded = sphere_dist.repeat(3)    # [3]
+            # Concatenate: [34] + [3] + [30] = [67]
+            mae_per_dim = torch.cat([euclidean1, sphere_expanded, euclidean2])
 
-        # Concatenate: [34] + [3] + [30] = [67]
-        mae_per_dim = torch.cat([euclidean1, sphere_expanded, euclidean2])
-
-        return mae_per_dim
+            return mae_per_dim
 
     # ===================================================================
     # CHECKPOINT LOADING FOR INFERENCE
@@ -332,13 +340,7 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
         hparams = checkpoint.get("hyper_parameters", {})
         print("✅ Lightning checkpoint loaded")
 
-        # Extract latent_dim
-        latent_dim = hparams.get("latent_dim")
-        if latent_dim is None and hydra_config:
-            latent_dim = hydra_config.get("flow_matching", {}).get("latent_dim", 8)
-        if latent_dim is None:
-            latent_dim = 8
-            print(f"⚠️  Using default latent_dim: {latent_dim}")
+        # No latent variables needed anymore
 
         # Extract model config
         config_source = None
@@ -359,10 +361,7 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
         if isinstance(model_config, dict) and "_target_" in model_config:
             model_config = {k: v for k, v in model_config.items() if k != "_target_"}
 
-        model_config["latent_dim"] = latent_dim
-
         print(f"📋 Config source: {config_source}")
-        print(f"📋 Final config - latent_dim: {latent_dim}")
         print(f"📋 Model config keys: {list(model_config.keys())}")
 
         # Initialize system and model
@@ -387,7 +386,6 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
         # Create model architecture
         model = HumanoidUNet(
             embedded_dim=model_config.get('embedded_dim', 67),
-            latent_dim=model_config.get('latent_dim', 8),
             condition_dim=model_config.get('condition_dim', 67),
             time_emb_dim=model_config.get('time_emb_dim', 128),
             hidden_dims=model_config.get('hidden_dims', [256, 512, 512, 256]),
@@ -402,8 +400,7 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
             model=model,
             optimizer=None,
             scheduler=None,
-            model_config=model_config,
-            latent_dim=latent_dim
+            model_config=model_config
         )
 
         # Load model weights
@@ -426,7 +423,6 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
         print(f"   Config sources: {'Hydra + Lightning' if hydra_config else 'Lightning only'}")
         print(f"   System: {type(system).__name__}")
         print(f"   System bounds: Per-dimension (ℝ³⁴ × S² × ℝ³⁰)")
-        print(f"   Latent dim: {latent_dim}")
         print(f"   Model architecture: {model_config.get('hidden_dims', 'unknown')}")
         print(f"   Total parameters: {sum(p.numel() for p in model.parameters()):,}")
         print(f"   Device: {device}")

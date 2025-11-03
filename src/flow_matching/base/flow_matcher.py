@@ -20,33 +20,33 @@ from .config import FlowMatchingConfig
 from flow_matching.utils.manifolds import Manifold
 
 
-class LatentConditionalVelocityWrapper(ModelWrapper):
+class ConditionalVelocityWrapper(ModelWrapper):
     """
-    Wrapper to adapt latent conditional model for Facebook FM's RiemannianODESolver
+    Wrapper to adapt conditional model for Facebook FM's RiemannianODESolver
 
     FB FM solvers expect: velocity_model(x, t) → velocity
-    Our model needs: model(x_embedded, t, z, condition) → velocity
+    Our model needs: model(x_embedded, t, condition) → velocity
 
     This wrapper bridges the gap by handling:
     - State embedding via embed_fn
-    - Latent and condition broadcasting
+    - Condition broadcasting
     - Model invocation with correct arguments
     """
 
-    def __init__(self, model: nn.Module, latent: torch.Tensor,
-                 condition: torch.Tensor, embed_fn, manifold: Manifold):
+    def __init__(self, model: nn.Module, condition: torch.Tensor,
+                 embed_fn, manifold: Manifold):
         """
         Args:
             model: The neural network (UNet)
-            latent: Latent vectors [B, latent_dim] (fixed for trajectory)
             condition: Condition (start state embedded) [B, condition_dim]
             embed_fn: Function to embed state for model input
+            manifold: Manifold for projection
         """
         super().__init__(model)
-        self.latent = latent
         self.condition = condition
         self.embed_fn = embed_fn
         self.manifold = manifold
+
     def forward(self, x: torch.Tensor, t: torch.Tensor, **extras) -> torch.Tensor:
         """
         Forward pass compatible with RiemannianODESolver
@@ -65,18 +65,16 @@ class LatentConditionalVelocityWrapper(ModelWrapper):
         # Embed state for neural network
         x_embedded = self.embed_fn(x)
 
-        # Expand latent and condition to match batch size if needed
+        # Expand condition to match batch size if needed
         batch_size = x.shape[0]
-        z = self.latent
         cond = self.condition
 
-        if z.shape[0] == 1 and batch_size > 1:
-            z = z.expand(batch_size, -1)
         if cond.shape[0] == 1 and batch_size > 1:
             cond = cond.expand(batch_size, -1)
 
         # Call the model
-        velocity = self.model(x_embedded, t, z, cond)
+        velocity = self.model(x_embedded, t, cond)
+
         velocity = self.manifold.proju(x, velocity)
         return velocity
 
@@ -104,9 +102,7 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
                  optimizer: Any,
                  scheduler: Any,
                  model_config: Optional[FlowMatchingConfig] = None,
-                 latent_dim: int = 2,
-                 mae_val_frequency: int = 10,
-                 use_latent_noisy_input: bool = False):
+                 mae_val_frequency: int = 10):
         """
         Initialize base flow matcher
 
@@ -116,7 +112,6 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
             optimizer: Optimizer configuration
             scheduler: LR scheduler configuration
             model_config: Flow matching configuration
-            latent_dim: Dimension of latent variable z
             mae_val_frequency: Compute endpoint MAE every N epochs
         """
         super().__init__()
@@ -125,7 +120,6 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         self.system = system
         self.model = model
         self.config = model_config or FlowMatchingConfig()
-        self.latent_dim = latent_dim
         self.mae_val_frequency = mae_val_frequency
 
         # Store optimizer and scheduler configs (will be instantiated in configure_optimizers)
@@ -150,24 +144,10 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
 
         # Save hyperparameters (exclude model and optimizer/scheduler to avoid pickle issues)
         self.save_hyperparameters(ignore=['model', 'optimizer', 'scheduler', 'system'])
-    
-    def sample_latent(self, batch_size: int, device: torch.device) -> torch.Tensor:
-        """
-        Sample Gaussian latent vector
-
-        Args:
-            batch_size: Number of samples
-            device: Device to create tensors on
-
-        Returns:
-            Latent vectors [batch_size, latent_dim]
-        """
-        return torch.randn(batch_size, self.latent_dim, device=device)
 
     def forward(self,
                 x_t: torch.Tensor,
                 t: torch.Tensor,
-                z: torch.Tensor,
                 condition: torch.Tensor) -> torch.Tensor:
         """
         Forward pass through the model
@@ -175,13 +155,12 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         Args:
             x_t: Embedded interpolated state [batch_size, embedded_dim]
             t: Time parameter [batch_size]
-            z: Latent vector [batch_size, latent_dim]
             condition: Embedded start state [batch_size, condition_dim]
 
         Returns:
             Predicted velocity [batch_size, state_dim]
         """
-        return self.model(x_t, t, z, condition)
+        return self.model(x_t, t, condition)
 
     def compute_endpoint_mae_per_dim(self,
                                     predicted_endpoints: torch.Tensor,
@@ -306,26 +285,22 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
     def _prepare_model_inputs(self,
                               batch_size: int,
                               start_states: torch.Tensor,
-                              latent: Optional[torch.Tensor] = None,
                               device: Optional[torch.device] = None):
         """
         Common preparation logic for both training and inference
 
         Handles the shared pattern of:
         1. Sampling and normalizing noisy inputs
-        2. Handling latent vectors (sample or use provided)
-        3. Normalizing and embedding start states
+        2. Normalizing and embedding start states
 
         Args:
             batch_size: Number of samples
             start_states: Start states [batch_size, state_dim]
-            latent: Optional latent vectors [batch_size, latent_dim]. If None, will sample.
             device: Device for tensor creation. If None, uses self.device
 
         Returns:
             Tuple of:
                 x_noise_normalized: Normalized noisy input [batch_size, state_dim]
-                z: Latent vectors [batch_size, latent_dim]
                 start_embedded: Embedded start state [batch_size, condition_dim]
                 start_normalized: Normalized start state [batch_size, state_dim]
         """
@@ -334,23 +309,16 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
 
         # Sample and normalize noisy inputs
         x_noise_normalized = self.sample_noisy_input(batch_size, device)
-        # x_noise_normalized = self.normalize_state(x_noise)
-
-        # Handle latent vectors
-        if latent is None:
-            z = self.sample_latent(batch_size, device)
-        else:
-            z = latent
 
         # Normalize and embed start states
         start_normalized = self.normalize_state(start_states)
         start_normalized_embedded = self.embed_state_for_model(start_normalized)
 
-        return x_noise_normalized, z, start_normalized_embedded, start_normalized
+        return x_noise_normalized, start_normalized_embedded, start_normalized
 
     def compute_flow_loss(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """
-        Compute latent conditional flow matching loss using Facebook FM
+        Compute conditional flow matching loss using Facebook FM
 
         Unified implementation for all systems using:
         - GeodesicProbPath for interpolation (automatic geodesics!)
@@ -370,10 +338,9 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         device = self.device
 
         # Common preparation logic
-        x_noise_normalized, z, start_normalized_embedded, _ = self._prepare_model_inputs(
+        x_noise_normalized, start_normalized_embedded, _ = self._prepare_model_inputs(
             batch_size=batch_size,
             start_states=start_states,
-            latent=None,  # Always sample fresh latents for training
             device=device
         )
 
@@ -395,8 +362,8 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         x_t_embedded = self.embed_state_for_model(x_t)
 
         # Predict velocity using the model
-        predicted_velocity = self.forward(x_t_embedded, t, z, condition=start_normalized_embedded)
-        
+        predicted_velocity = self.forward(x_t_embedded, t, condition=start_normalized_embedded)
+
         predicted_velocity = self.manifold.proju(x_t, predicted_velocity)
 
         # Use automatic target velocity from path.sample()
@@ -410,7 +377,6 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
     def predict_endpoint(self,
                         start_states: torch.Tensor,
                         num_steps: int = 100,
-                        latent: Optional[torch.Tensor] = None,
                         method: str = "euler") -> torch.Tensor:
         """
         Predict endpoints from start states using Facebook FM's RiemannianODESolver
@@ -423,7 +389,6 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         Args:
             start_states: Start states [B, state_dim] in raw coordinates
             num_steps: Number of integration steps for ODE solving
-            latent: Optional latent vectors [B, latent_dim]. If None, will sample.
             method: Integration method ("euler", "rk4", "midpoint")
 
         Returns:
@@ -439,17 +404,15 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         try:
             with torch.no_grad():
                 # Common preparation logic
-                x_noise_normalized, z, start_normalized_embedded, start_normalized = self._prepare_model_inputs(
+                x_noise_normalized, start_normalized_embedded, start_normalized = self._prepare_model_inputs(
                     batch_size=batch_size,
                     start_states=start_states,
-                    latent=latent,  # Use provided or sample
                     device=device
                 )
 
                 # Create model wrapper for RiemannianODESolver
-                velocity_model = LatentConditionalVelocityWrapper(
+                velocity_model = ConditionalVelocityWrapper(
                     model=self.model,
-                    latent=z,
                     condition=start_normalized_embedded,
                     embed_fn=self.embed_state_for_model,
                     manifold=self.manifold
@@ -534,8 +497,7 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
             with torch.no_grad():
                 predicted_endpoints = self.predict_endpoint(
                     start_states=start_states,
-                    num_steps=100,
-                    latent=None
+                    num_steps=100
                 )
 
             # Compute MAE per dimension/component

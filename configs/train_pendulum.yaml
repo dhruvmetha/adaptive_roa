@@ -15,16 +15,15 @@ num_workers: 4
 # Flow Matcher: Facebook FM version with automatic geodesics
 flow_matcher:
   _target_: src.flow_matching.pendulum.latent_conditional.flow_matcher.PendulumLatentConditionalFlowMatcher
-  # Note: system, model, optimizer, scheduler, config, latent_dim are passed by training script
+  # Note: system, model, optimizer, scheduler, config are passed by training script
 
 # Model: Pendulum UNet
 model:
   _target_: src.model.pendulum_unet.PendulumUNet
   embedded_dim: 3              # (sin θ, cos θ, θ̇_norm)
-  latent_dim: 2                # Gaussian latent variable
   condition_dim: 3             # Embedded start state
   time_emb_dim: 64             # Time embedding dimension
-  hidden_dims: [256, 512, 256] # UNet hiddenå layers
+  hidden_dims: [256, 512, 256] # UNet hidden layers
   output_dim: 2                # Velocity in tangent space (dθ, dθ̇)
   use_input_embeddings: false
   input_emb_dim: 64
@@ -84,7 +83,6 @@ trainer:
 
 # Flow matching specific settings
 flow_matching:
-  latent_dim: 2                    # Dimension of Gaussian latent variable
   num_integration_steps: 100       # Number of ODE integration steps for inference
   mae_val_frequency: 10            # Compute MAE validation every N epochs
 

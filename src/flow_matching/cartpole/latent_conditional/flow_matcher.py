@@ -94,6 +94,10 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         Returns:
             Noisy states [batch_size, 4] as (x, θ, ẋ, θ̇)
         """
+        
+        raise NotImplementedError("This method is not implemented for Pendulum Latent Conditional Flow Matching")
+        
+        
         # x ~ Uniform[-cart_limit, +cart_limit] (symmetric bounds)
         x = torch.rand(batch_size, 1, device=device) * (2 * self.system.cart_limit) - self.system.cart_limit
 

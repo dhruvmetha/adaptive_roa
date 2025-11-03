@@ -21,28 +21,45 @@ class HumanoidEndpointDataset(Dataset):
         State format: [euclidean1(34), sphere_x, sphere_y, sphere_z, euclidean2(30)]
 
         Args:
-            data_file: Path to endpoint dataset file
+            data_file: Path to endpoint metadata file
             bounds_file: Path to pickle file with actual data bounds
         """
         self.bounds_file = bounds_file
         self._load_bounds()
 
-        # Load the endpoint data
+        # Load the endpoint metadata
         with open(data_file, 'r') as f:
             lines = f.readlines()
 
-        # Parse the data - each line has [start_state(67D), end_state(67D)]
-        data = []
+        # Parse the metadata - each line has [file_path, start_idx, end_idx]
+        self.metadata = []
+        unique_files = set()
+
         for line in lines:
             if line.strip():
-                values = list(map(float, line.strip().split()))
-                if len(values) == 134:  # start_state (67D) + end_state (67D)
-                    start_state = values[:67]
-                    end_state = values[67:]
-                    data.append((start_state, end_state))
+                parts = line.strip().split()
+                if len(parts) == 3:
+                    file_path = parts[0]
+                    start_idx = int(parts[1])
+                    end_idx = int(parts[2])
+                    self.metadata.append((file_path, start_idx, end_idx))
+                    unique_files.add(file_path)
 
-        print(f"Loaded {len(data)} samples for humanoid endpoint data")
-        self.data = data
+        print(f"Loaded {len(self.metadata)} endpoint metadata entries")
+        print(f"Loading {len(unique_files)} unique trajectory files...")
+
+        # Load all unique trajectory files into dictionary
+        self.trajectory_cache = {}
+        for file_path in tqdm(unique_files, desc="Loading trajectories"):
+            trajectory = []
+            with open(file_path, 'r') as f:
+                for line in f:
+                    if line.strip():
+                        values = list(map(float, line.strip().split(',')))
+                        trajectory.append(values)
+            self.trajectory_cache[file_path] = trajectory
+
+        print(f"Cached {len(self.trajectory_cache)} trajectories in memory")
 
     def _load_bounds(self):
         """Load data bounds from pickle file (just for verification/logging)
@@ -54,7 +71,6 @@ class HumanoidEndpointDataset(Dataset):
             with open(self.bounds_file, 'rb') as f:
                 bounds_data = pickle.load(f)
 
-            bounds = bounds_data.get('bounds', {})
             statistics = bounds_data.get('statistics', {})
 
             print(f"✅ Bounds file found: {self.bounds_file}")
@@ -66,13 +82,17 @@ class HumanoidEndpointDataset(Dataset):
             print(f"   HumanoidSystem will use default bounds (±20.0)")
 
     def __len__(self):
-        return len(self.data)
+        return len(self.metadata)
 
     def __getitem__(self, idx):
-        start_state, end_state = self.data[idx]
+        file_path, start_idx, end_idx = self.metadata[idx]
 
-        # No processing needed - sphere components (dims 34-36) are already unit vectors
-        # Data is already on the manifold (unit norm constraint satisfied)
+        # Look up trajectory in cache
+        trajectory = self.trajectory_cache[file_path]
+
+        # Extract start and end states
+        start_state = trajectory[start_idx]
+        end_state = trajectory[end_idx]
 
         return {
             'start_state': torch.tensor(start_state, dtype=torch.float32),  # [67] raw state
@@ -89,9 +109,9 @@ class HumanoidEndpointDataModule(pl.LightningDataModule):
         Humanoid Endpoint Data Module with separate train/val/test files
 
         Args:
-            data_file: Path to training dataset file
-            validation_file: Path to validation dataset file
-            test_file: Path to test dataset file
+            data_file: Path to training dataset metadata file
+            validation_file: Path to validation dataset metadata file
+            test_file: Path to test dataset metadata file
             batch_size: Batch size for training data loader
             val_batch_size: Batch size for validation/test data loaders (defaults to batch_size if None)
             num_workers: Number of workers for data loading
@@ -114,11 +134,20 @@ class HumanoidEndpointDataModule(pl.LightningDataModule):
 
     def setup(self, stage: Optional[str] = None):
         if stage == "fit" or stage is None:
-            self.train_dataset = HumanoidEndpointDataset(self.data_file, bounds_file=self.bounds_file)
-            self.val_dataset = HumanoidEndpointDataset(self.validation_file, bounds_file=self.bounds_file)
+            self.train_dataset = HumanoidEndpointDataset(
+                self.data_file,
+                bounds_file=self.bounds_file
+            )
+            self.val_dataset = HumanoidEndpointDataset(
+                self.validation_file,
+                bounds_file=self.bounds_file
+            )
 
         if stage == "test" or stage is None:
-            self.test_dataset = HumanoidEndpointDataset(self.test_file, bounds_file=self.bounds_file)
+            self.test_dataset = HumanoidEndpointDataset(
+                self.test_file,
+                bounds_file=self.bounds_file
+            )
 
     def train_dataloader(self):
         return DataLoader(

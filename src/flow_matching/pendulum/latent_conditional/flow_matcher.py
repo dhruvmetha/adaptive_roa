@@ -105,10 +105,13 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
         Returns:
             Noisy states [batch_size, 2] as (θ, θ̇) in raw coordinates
         """
+        
+        raise NotImplementedError("This method is not implemented for Pendulum Latent Conditional Flow Matching")
+        
         # θ ~ Uniform[-π, π] for circular angle
         theta_min = self.system.state_bounds["angle"][0]
         theta_max = self.system.state_bounds["angle"][1]
-        theta = torch.rand(batch_size, 1, device=device) * (theta_max - theta_min) + theta_min
+        theta = torch.randn(batch_size, 1, device=device) * (theta_max - theta_min) + theta_min
 
         # θ̇ ~ Uniform[-2π, 2π] for angular velocity
         vel_min = self.system.state_bounds["angular_velocity"][0]

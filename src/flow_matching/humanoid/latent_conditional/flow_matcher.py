@@ -129,29 +129,9 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
         Returns:
             Noisy states [batch_size, 67]
         """
-        samples = []
-
-        # Sample each dimension individually
-        for i in range(67):
-            if 34 <= i <= 36:
-                # Sphere dimension: will be sampled as a group after loop
-                continue
-            else:
-                # Euclidean dimension: sample uniformly in [-limit, +limit]
-                limit = self.system.dimension_limits[i]
-                sample = torch.rand(batch_size, 1, device=device) * (2 * limit) - limit
-                samples.append(sample)
-
-        # Combine Euclidean samples
-        euclidean1 = torch.cat(samples[:34], dim=1)  # dims 0-33
-        euclidean2 = torch.cat(samples[34:], dim=1)  # dims 37-66 (shifted by 3 for sphere)
-
-        # Sphere block (dims 34-36): uniform sampling on S² (unit sphere in ℝ³)
-        # Use normal distribution and normalize to get uniform distribution on sphere
-        sphere = torch.randn(batch_size, 3, device=device)
-        sphere = sphere / torch.norm(sphere, dim=1, keepdim=True)  # Normalize to unit vector
-
-        return torch.cat([euclidean1, sphere, euclidean2], dim=1)
+        noisy_states = torch.randn(batch_size, 67, device=device)
+        noisy_states[:, 34:37] = noisy_states[:, 34:37] / torch.norm(noisy_states[:, 34:37], dim=1, keepdim=True)
+        return noisy_states
 
     def normalize_state(self, state: torch.Tensor) -> torch.Tensor:
         """Delegate to system for normalization"""

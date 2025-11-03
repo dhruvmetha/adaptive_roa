@@ -17,6 +17,7 @@ from flow_matching.solver import RiemannianODESolver
 from flow_matching.utils import ModelWrapper
 
 from .config import FlowMatchingConfig
+from flow_matching.utils.manifolds import Manifold
 
 
 class LatentConditionalVelocityWrapper(ModelWrapper):
@@ -33,7 +34,7 @@ class LatentConditionalVelocityWrapper(ModelWrapper):
     """
 
     def __init__(self, model: nn.Module, latent: torch.Tensor,
-                 condition: torch.Tensor, embed_fn):
+                 condition: torch.Tensor, embed_fn, manifold: Manifold):
         """
         Args:
             model: The neural network (UNet)
@@ -45,7 +46,7 @@ class LatentConditionalVelocityWrapper(ModelWrapper):
         self.latent = latent
         self.condition = condition
         self.embed_fn = embed_fn
-
+        self.manifold = manifold
     def forward(self, x: torch.Tensor, t: torch.Tensor, **extras) -> torch.Tensor:
         """
         Forward pass compatible with RiemannianODESolver
@@ -76,7 +77,7 @@ class LatentConditionalVelocityWrapper(ModelWrapper):
 
         # Call the model
         velocity = self.model(x_embedded, t, z, cond)
-
+        velocity = self.manifold.proju(x, velocity)
         return velocity
 
 
@@ -104,7 +105,8 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
                  scheduler: Any,
                  model_config: Optional[FlowMatchingConfig] = None,
                  latent_dim: int = 2,
-                 mae_val_frequency: int = 10):
+                 mae_val_frequency: int = 10,
+                 use_latent_noisy_input: bool = False):
         """
         Initialize base flow matcher
 
@@ -331,8 +333,8 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
             device = self.device
 
         # Sample and normalize noisy inputs
-        x_noise = self.sample_noisy_input(batch_size, device)
-        x_noise_normalized = self.normalize_state(x_noise)
+        x_noise_normalized = self.sample_noisy_input(batch_size, device)
+        # x_noise_normalized = self.normalize_state(x_noise)
 
         # Handle latent vectors
         if latent is None:
@@ -389,10 +391,13 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         )
 
         # Embed interpolated state for neural network input
-        x_t_embedded = self.embed_state_for_model(path_sample.x_t)
+        x_t = path_sample.x_t
+        x_t_embedded = self.embed_state_for_model(x_t)
 
         # Predict velocity using the model
         predicted_velocity = self.forward(x_t_embedded, t, z, condition=start_normalized_embedded)
+        
+        predicted_velocity = self.manifold.proju(x_t, predicted_velocity)
 
         # Use automatic target velocity from path.sample()
         target_velocity = path_sample.dx_t
@@ -446,7 +451,8 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
                     model=self.model,
                     latent=z,
                     condition=start_normalized_embedded,
-                    embed_fn=self.embed_state_for_model
+                    embed_fn=self.embed_state_for_model,
+                    manifold=self.manifold
                 )
 
                 # Use RiemannianODESolver for integration

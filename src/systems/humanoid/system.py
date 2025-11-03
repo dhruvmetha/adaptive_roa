@@ -31,7 +31,7 @@ class HumanoidSystem(DynamicalSystem):
     def __init__(self,
                  bounds_file: str = None,
                  use_dynamic_bounds: bool = False,
-                 head_height_threshold: float = 1.4,
+                 head_height_threshold: float = 1.3,
                  torso_z_threshold: float = 0.9,
                  speed_threshold: float = 0.2):
         """

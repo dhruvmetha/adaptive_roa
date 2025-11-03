@@ -14,14 +14,14 @@
 defaults:
   - system: humanoid
 
-data_dirs: /common/users/shared/pracsys/genMoPlan/data_trajectories/humanoid_get_up_slow/trajectories
-shuffled_idxs_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/humanoid_get_up_slow/shuffled_indices.txt
-dest_dir: /common/users/dm1487/arcmg_datasets/humanoid_get_up/incremental_endpoint_dataset
+data_dirs: /common/users/shared/pracsys/genMoPlan/data_trajectories/humanoid_get_up_stable_split/trajectories
+shuffled_idxs_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/humanoid_get_up_stable_split/shuffled_indices.txt
+dest_dir: /common/users/dm1487/arcmg_datasets/humanoid_get_up_stable_split/incremental_endpoint_dataset
 
 # Processing range (slicing shuffled_indices.txt)
 start: 0    # Start index
-end: 9500       # End index (exclusive)
-increment: train_balanced # Number used in output filename (e.g., "100_endpoint_dataset.txt")
+end: 15000       # End index (exclusive)
+increment: train # Number used in output filename (e.g., "100_endpoint_dataset.txt")
 
 # Dataset type: "train", "val", or "test"
 # - train/val: Creates endpoint pairs for ALL states in trajectory → final state

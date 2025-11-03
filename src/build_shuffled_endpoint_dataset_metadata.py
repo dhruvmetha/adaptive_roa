@@ -65,7 +65,7 @@ def main(cfg: DictConfig) -> None:
     print(f"Writing {len(endpoint_data)} endpoint metadata to file...")
     with open(output_file, 'w') as f:
         for endpoint in tqdm(endpoint_data, desc="Writing endpoints"):
-            A
+            # Format: file_path start_idx end_idx label
             file_path, start_idx, end_idx, is_success = endpoint
             f.write(f'{file_path} {start_idx} {end_idx} {int(is_success)}\n')
 

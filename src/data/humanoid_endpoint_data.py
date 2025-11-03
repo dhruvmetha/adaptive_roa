@@ -2,12 +2,18 @@ import torch
 import numpy as np
 import pickle
 from pathlib import Path
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 from typing import Optional
 from tqdm import tqdm
 import os
 import lightning.pytorch as pl
 import random
+from concurrent.futures import ProcessPoolExecutor
+
+
+def _load_trajectory_file(file_path):
+    """Helper function to load a single trajectory file (module-level for multiprocessing)"""
+    return file_path, np.loadtxt(file_path, delimiter=",")
 
 
 class HumanoidEndpointDataset(Dataset):
@@ -31,33 +37,46 @@ class HumanoidEndpointDataset(Dataset):
         with open(data_file, 'r') as f:
             lines = f.readlines()
 
-        # Parse the metadata - each line has [file_path, start_idx, end_idx]
+        # Parse the metadata - each line has [file_path, start_idx, end_idx, label]
         self.metadata = []
+        self.labels = []
         unique_files = set()
 
-        for line in lines:
+        for line_num, line in enumerate(lines, start=1):
             if line.strip():
                 parts = line.strip().split()
-                if len(parts) == 3:
-                    file_path = parts[0]
-                    start_idx = int(parts[1])
-                    end_idx = int(parts[2])
-                    self.metadata.append((file_path, start_idx, end_idx))
-                    unique_files.add(file_path)
-
+                if len(parts) != 4:
+                    raise ValueError(
+                        f"Invalid metadata format at line {line_num} in {data_file}. "
+                        f"Expected 4 parts [file_path, start_idx, end_idx, label], got {len(parts)}. "
+                        f"Line content: {line.strip()}"
+                    )
+                file_path = parts[0]
+                start_idx = int(parts[1])
+                end_idx = int(parts[2])
+                label = int(parts[3])
+                self.metadata.append((file_path, start_idx, end_idx))
+                self.labels.append(label)
+                unique_files.add(file_path)
+                
+        self.metadata = self.metadata[:10]
+        self.labels = self.labels[:10]
         print(f"Loaded {len(self.metadata)} endpoint metadata entries")
         print(f"Loading {len(unique_files)} unique trajectory files...")
 
-        # Load all unique trajectory files into dictionary
+        # Load all unique trajectory files into dictionary (in parallel using multiprocessing)
         self.trajectory_cache = {}
-        for file_path in tqdm(unique_files, desc="Loading trajectories"):
-            trajectory = []
-            with open(file_path, 'r') as f:
-                for line in f:
-                    if line.strip():
-                        values = list(map(float, line.strip().split(',')))
-                        trajectory.append(values)
-            self.trajectory_cache[file_path] = trajectory
+        # Use ProcessPoolExecutor for parallel processing across multiple cores
+        with ProcessPoolExecutor(max_workers=8) as executor:
+            # Submit all loading tasks and wrap with tqdm for progress tracking
+            results = list(tqdm(
+                executor.map(_load_trajectory_file, unique_files),
+                total=len(unique_files),
+                desc="Loading trajectories"
+            ))
+            # Populate the cache dictionary
+            for file_path, trajectory_data in results:
+                self.trajectory_cache[file_path] = trajectory_data
 
         print(f"Cached {len(self.trajectory_cache)} trajectories in memory")
 
@@ -104,7 +123,8 @@ class HumanoidEndpointDataModule(pl.LightningDataModule):
     def __init__(self, data_file: str, validation_file: str, test_file: str,
                  batch_size: int = 64, val_batch_size: Optional[int] = None,
                  num_workers: int = 4, pin_memory: bool = True,
-                 bounds_file: str = "/common/users/dm1487/arcmg_datasets/humanoid_get_up/humanoid_data_bounds.pkl"):
+                 bounds_file: str = "/common/users/dm1487/arcmg_datasets/humanoid_get_up/humanoid_data_bounds.pkl",
+                 use_stratified_sampling: bool = False):
         """
         Humanoid Endpoint Data Module with separate train/val/test files
 
@@ -117,6 +137,7 @@ class HumanoidEndpointDataModule(pl.LightningDataModule):
             num_workers: Number of workers for data loading
             pin_memory: Whether to pin memory for data loaders
             bounds_file: Path to pickle file with actual data bounds
+            use_stratified_sampling: Whether to use WeightedRandomSampler for balanced training
         """
         super().__init__()
         self.data_file = data_file
@@ -127,6 +148,7 @@ class HumanoidEndpointDataModule(pl.LightningDataModule):
         self.num_workers = num_workers
         self.pin_memory = pin_memory
         self.bounds_file = bounds_file
+        self.use_stratified_sampling = use_stratified_sampling
 
         # Humanoid-specific dimensions
         self.state_dim = 67  # Raw state: [euclidean1(34), sphere(3), euclidean2(30)]
@@ -150,6 +172,44 @@ class HumanoidEndpointDataModule(pl.LightningDataModule):
             )
 
     def train_dataloader(self):
+        if self.use_stratified_sampling:
+            # Create weighted sampler for balanced training
+            labels = np.array(self.train_dataset.labels)
+
+            # Count samples per class
+            unique_labels, class_counts = np.unique(labels, return_counts=True)
+
+            # Compute class weights (inverse frequency)
+            class_weights = 1.0 / class_counts
+
+            # Create sample weights
+            label_to_weight = {label: weight for label, weight in zip(unique_labels, class_weights)}
+            sample_weights = np.array([label_to_weight[label] for label in labels])
+
+            
+            # Create sampler
+            sampler = WeightedRandomSampler(
+                weights=sample_weights,
+                num_samples=len(sample_weights),
+                replacement=True
+            )
+            
+            
+
+            print(f"\n🔀 Using stratified sampling for training:")
+            print(f"  Class distribution:")
+            for label, count in zip(unique_labels, class_counts):
+                print(f"    Label {label}: {count} samples ({count/len(labels)*100:.1f}%)")
+
+            return DataLoader(
+                self.train_dataset,
+                batch_size=self.batch_size,
+                sampler=sampler,  # Use sampler instead of shuffle
+                num_workers=self.num_workers,
+                pin_memory=self.pin_memory
+            )
+
+        # Default: shuffle without stratification
         return DataLoader(
             self.train_dataset,
             batch_size=self.batch_size,

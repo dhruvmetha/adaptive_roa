@@ -247,6 +247,7 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
         from pathlib import Path
         from src.systems.humanoid import HumanoidSystem
         from src.model.humanoid_unet import HumanoidUNet
+        from src.model.humanoid_unet_film import HumanoidUNetFiLM
 
         # Determine device
         if device is None:
@@ -383,16 +384,37 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
         else:
             print("✅ Restored Humanoid system from checkpoint")
 
+        # Determine which model class to use based on config
+        model_target = model_config.get('_target_', 'src.model.humanoid_unet.HumanoidUNet')
+        is_film_model = 'film' in model_target.lower()
+
         # Create model architecture
-        model = HumanoidUNet(
-            embedded_dim=model_config.get('embedded_dim', 67),
-            condition_dim=model_config.get('condition_dim', 67),
-            time_emb_dim=model_config.get('time_emb_dim', 128),
-            hidden_dims=model_config.get('hidden_dims', [256, 512, 512, 256]),
-            output_dim=model_config.get('output_dim', 67),
-            use_input_embeddings=model_config.get('use_input_embeddings', False),
-            input_emb_dim=model_config.get('input_emb_dim', 128)
-        )
+        if is_film_model:
+            model = HumanoidUNetFiLM(
+                embedded_dim=model_config.get('embedded_dim', 67),
+                condition_dim=model_config.get('condition_dim', 67),
+                time_emb_dim=model_config.get('time_emb_dim', 128),
+                hidden_dims=model_config.get('hidden_dims', [256, 512, 512, 256]),
+                output_dim=model_config.get('output_dim', 67),
+                use_input_embeddings=model_config.get('use_input_embeddings', False),
+                input_emb_dim=model_config.get('input_emb_dim', 128),
+                film_cond_dim=model_config.get('film_cond_dim', 256),
+                film_hidden_dims=model_config.get('film_hidden_dims', None),
+                dropout_p=model_config.get('dropout_p', 0.0),
+                residual_scale=model_config.get('residual_scale', None),
+                zero_init_blocks=model_config.get('zero_init_blocks', True),
+                zero_init_out=model_config.get('zero_init_out', False)
+            )
+        else:
+            model = HumanoidUNet(
+                embedded_dim=model_config.get('embedded_dim', 67),
+                condition_dim=model_config.get('condition_dim', 67),
+                time_emb_dim=model_config.get('time_emb_dim', 128),
+                hidden_dims=model_config.get('hidden_dims', [256, 512, 512, 256]),
+                output_dim=model_config.get('output_dim', 67),
+                use_input_embeddings=model_config.get('use_input_embeddings', False),
+                input_emb_dim=model_config.get('input_emb_dim', 128)
+            )
 
         # Create flow matcher instance
         flow_matcher = cls(

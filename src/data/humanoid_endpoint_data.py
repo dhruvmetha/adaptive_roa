@@ -59,8 +59,8 @@ class HumanoidEndpointDataset(Dataset):
                 self.labels.append(label)
                 unique_files.add(file_path)
                 
-        self.metadata = self.metadata[:10]
-        self.labels = self.labels[:10]
+        self.metadata = self.metadata
+        self.labels = self.labels
         print(f"Loaded {len(self.metadata)} endpoint metadata entries")
         print(f"Loading {len(unique_files)} unique trajectory files...")
 

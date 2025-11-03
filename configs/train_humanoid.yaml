@@ -24,7 +24,7 @@ model:
   embedded_dim: 67             # Humanoid embedded state dimension
   condition_dim: 67            # Embedded start state
   time_emb_dim: 128            # Time embedding dimension
-  hidden_dims: [256, 512, 1024, 1024, 512, 256]  # UNet hidden layers
+  hidden_dims: [512, 512, 512, 512]  # UNet hidden layers
   output_dim: 67               # Velocity in tangent space (67-dim)
   use_input_embeddings: false
   input_emb_dim: 128

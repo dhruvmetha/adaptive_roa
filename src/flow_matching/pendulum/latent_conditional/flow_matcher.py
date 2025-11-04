@@ -43,26 +43,23 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
                  optimizer,
                  scheduler,
                  model_config: Optional[dict] = None,
-                 latent_dim: int = 2,
                  mae_val_frequency: int = 10):
         """
-        Initialize latent conditional flow matcher with FB FM integration
+        Initialize conditional flow matcher with FB FM integration
 
         Args:
             system: DynamicalSystem (pendulum with S¹ × ℝ structure)
-            model: LatentConditionalUNet1D model
+            model: PendulumUNet model
             optimizer: Optimizer instance
             scheduler: Learning rate scheduler
             model_config: Configuration dict
-            latent_dim: Dimension of latent space
             mae_val_frequency: Compute MAE validation every N epochs
         """
-        super().__init__(system, model, optimizer, scheduler, model_config, latent_dim, mae_val_frequency)
+        super().__init__(system, model, optimizer, scheduler, model_config, mae_val_frequency)
 
-        print("✅ Initialized Pendulum LCFM with Facebook Flow Matching:")
+        print("✅ Initialized Pendulum CFM with Facebook Flow Matching:")
         print(f"   - Manifold: S¹×ℝ (FlatTorus × Euclidean)")
         print(f"   - Path: GeodesicProbPath with CondOTScheduler")
-        print(f"   - Latent dim: {latent_dim}")
         print(f"   - MAE validation frequency: every {mae_val_frequency} epochs")
 
     def _create_manifold(self):
@@ -105,10 +102,13 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
         Returns:
             Noisy states [batch_size, 2] as (θ, θ̇) in raw coordinates
         """
+        
+        raise NotImplementedError("This method is not implemented for Pendulum Latent Conditional Flow Matching")
+        
         # θ ~ Uniform[-π, π] for circular angle
         theta_min = self.system.state_bounds["angle"][0]
         theta_max = self.system.state_bounds["angle"][1]
-        theta = torch.rand(batch_size, 1, device=device) * (theta_max - theta_min) + theta_min
+        theta = torch.randn(batch_size, 1, device=device) * (theta_max - theta_min) + theta_min
 
         # θ̇ ~ Uniform[-2π, 2π] for angular velocity
         vel_min = self.system.state_bounds["angular_velocity"][0]
@@ -250,13 +250,7 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
         hparams = checkpoint.get("hyper_parameters", {})
         print("✅ Lightning checkpoint loaded")
 
-        # Extract latent_dim
-        latent_dim = hparams.get("latent_dim")
-        if latent_dim is None and hydra_config:
-            latent_dim = hydra_config.get("flow_matching", {}).get("latent_dim", 2)
-        if latent_dim is None:
-            latent_dim = 2
-            print(f"⚠️  Using default latent_dim: {latent_dim}")
+        # No latent variables needed anymore
 
         # Extract model config (try both 'model_config' and 'config' for backward compatibility)
         config_source = None
@@ -277,10 +271,7 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
         if isinstance(model_config, dict) and "_target_" in model_config:
             model_config = {k: v for k, v in model_config.items() if k != "_target_"}
 
-        model_config["latent_dim"] = latent_dim
-
         print(f"📋 Config source: {config_source}")
-        print(f"📋 Final config - latent_dim: {latent_dim}")
         print(f"📋 Model config keys: {list(model_config.keys())}")
 
         # Initialize system and model
@@ -292,9 +283,9 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
             print("✅ Restored Pendulum system from checkpoint")
 
         # Create model architecture
-        model = LatentConditionalUNet1D(
+        from src.model.pendulum_unet import PendulumUNet
+        model = PendulumUNet(
             embedded_dim=model_config.get('embedded_dim', 3),
-            latent_dim=model_config.get('latent_dim', latent_dim),
             condition_dim=model_config.get('condition_dim', 3),
             time_emb_dim=model_config.get('time_emb_dim', 64),
             hidden_dims=model_config.get('hidden_dims', [256, 512, 256]),
@@ -309,8 +300,7 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
             model=model,
             optimizer=None,
             scheduler=None,
-            model_config=model_config,
-            latent_dim=latent_dim
+            model_config=model_config
         )
 
         # Load model weights
@@ -332,7 +322,6 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
         print(f"   Checkpoint: {checkpoint_path.name}")
         print(f"   Config sources: {'Hydra + Lightning' if hydra_config else 'Lightning only'}")
         print(f"   System: {type(system).__name__}")
-        print(f"   Latent dim: {latent_dim}")
         print(f"   Model architecture: {model_config.get('hidden_dims', 'unknown')}")
         print(f"   Total parameters: {sum(p.numel() for p in model.parameters()):,}")
         print(f"   Device: {device}")

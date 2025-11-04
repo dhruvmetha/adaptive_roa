@@ -21,18 +21,38 @@ class HumanoidSystem(DynamicalSystem):
     - Dimensions 37-66: Euclidean (30 dims) - additional joint states
 
     Total: 34 + 3 + 30 = 67 dimensions
+
+    Success criteria (composite condition - ALL must be satisfied):
+    - head_height >= 1.4m (dimension 21)
+    - torso_vertical_z >= 0.9 (dimension 36) - torso nearly upright
+    - horizontal_speed <= 0.2 m/s (sqrt(vx² + vy²), dimensions 37-38) - stable CoM
     """
 
     def __init__(self,
                  bounds_file: str = None,
-                 use_dynamic_bounds: bool = False):
+                 use_dynamic_bounds: bool = False,
+                 head_height_threshold: float = 1.3,
+                 torso_z_threshold: float = 0.9,
+                 speed_threshold: float = 0.2):
         """
         Initialize Humanoid system
 
         Args:
             bounds_file: Path to pickle file containing actual data bounds (optional)
             use_dynamic_bounds: If True, load bounds from file; if False, use defaults
+            head_height_threshold: Minimum head height for success (default: 1.4m)
+            torso_z_threshold: Minimum torso z-component for upright stance (default: 0.9)
+            speed_threshold: Maximum horizontal speed for stability (default: 0.2 m/s)
         """
+        # Store success thresholds
+        self.head_height_threshold = head_height_threshold
+        self.torso_z_threshold = torso_z_threshold
+        self.speed_threshold = speed_threshold
+
+        # Store bounds configuration (CRITICAL for checkpoint saving/loading)
+        self.bounds_file = bounds_file
+        self.use_dynamic_bounds = use_dynamic_bounds
+
         if use_dynamic_bounds and bounds_file and Path(bounds_file).exists():
             self._load_bounds_from_file(bounds_file)
             print(f"Loaded Humanoid bounds from: {bounds_file}")
@@ -66,6 +86,7 @@ class HumanoidSystem(DynamicalSystem):
                 self.dimension_limits[i] = max(abs(min_val), abs(max_val))
             else:
                 # Default fallback for missing Euclidean dims
+                raise ValueError(f"Dimension {i} not found in bounds file")
                 self.dimension_limits[i] = 20.0
 
         print(f"✅ Loaded Humanoid bounds from: {bounds_file}")
@@ -162,40 +183,47 @@ class HumanoidSystem(DynamicalSystem):
         """
         Humanoid attractor positions (successful get-up pose)
 
-        For the get-up task, success is defined by head_height >= 1.3m (dimension 21).
-        The attractor represents a standing pose with head at target height.
+        For the get-up task, success is defined by a composite condition:
+        - head_height >= 1.4m (dimension 21)
+        - torso_vertical_z >= 0.9 (dimension 36) - upright torso
+        - horizontal_speed <= 0.2 m/s (dimensions 37-38) - stable CoM
 
-        Note: Success is determined by head_height threshold, not distance to this pose.
+        The attractor represents a standing pose meeting all criteria.
+
+        Note: Success is determined by composite threshold, not distance to this pose.
 
         Returns:
             List of [state_0, ..., state_66] attractor positions
         """
-        # Standing attractor: mostly zeros with successful head height
+        # Standing attractor: mostly zeros with successful standing configuration
         attractor = [0.0] * 67
         # Set head height to success threshold (dimension 21)
-        attractor[21] = 1.3  # Success threshold: head_height >= 1.3m
+        attractor[21] = self.head_height_threshold  # Default: 1.4m
         # Set orientation to upward unit vector [0, 0, 1] (dimensions 34-36)
         attractor[34] = 0.0
         attractor[35] = 0.0
-        attractor[36] = 1.0
+        attractor[36] = 1.0  # Torso vertical z = 1.0 (upright)
+        # CoM velocities (dimensions 37-38) already zero for stable standing
 
         return [attractor]
 
     def is_in_attractor(self, state, radius: float = 1.0):
         """
-        Check if humanoid successfully stood up (head_height >= 1.3m)
+        Check if humanoid successfully stood up using composite success criteria
 
-        Success criterion from genMoPlan dataset:
-        - x[21] >= 1.3m: SUCCESS (humanoid standing)
-        - x[21] < 1.3m:  FAILURE (humanoid lying/falling)
+        Success criteria from genMoPlan dataset (ALL must be satisfied):
+        - head_height >= 1.4m (dimension 21): humanoid standing
+        - torso_vertical_z >= 0.9 (dimension 36): torso nearly upright
+        - horizontal_speed <= 0.2 m/s (dimensions 37-38): stable center of mass
 
         Args:
             state: States [B, 67] or [67] - numpy array or torch tensor
             radius: NOT USED - kept for API compatibility (success is threshold-based)
 
         Returns:
-            Boolean tensor [B] or scalar indicating success (head_height >= 1.3)
+            Boolean tensor [B] or scalar indicating success (all criteria met)
         """
+        
         # Convert to torch tensor if needed
         if isinstance(state, np.ndarray):
             state = torch.from_numpy(state).float()
@@ -206,26 +234,32 @@ class HumanoidSystem(DynamicalSystem):
         else:
             single_state = False
 
-        # Extract head height (dimension 21)
-        head_height = state[:, 21]
+        # Extract relevant state components
+        head_height = state[:, 21]              # Dimension 21: head height
+        torso_z = state[:, 36]                  # Dimension 36: torso vertical z-component
+        com_vx = state[:, 37]                   # Dimension 37: CoM velocity x
+        com_vy = state[:, 38]                   # Dimension 38: CoM velocity y
+        com_speed = torch.sqrt(com_vx**2 + com_vy**2)  # Horizontal speed
 
-        # Success threshold: head_height >= 1.3m
-        SUCCESS_THRESHOLD = 1.3
-        result = head_height >= SUCCESS_THRESHOLD
+        # Composite success condition: ALL three criteria must be met
+        result = (head_height >= self.head_height_threshold) & \
+                 (torso_z >= self.torso_z_threshold) & \
+                 (com_speed <= self.speed_threshold)
+        
 
         # Return scalar if single state
         if single_state:
             return result.item()
-
+        
         return result
 
     def classify_attractor(self, state: torch.Tensor, radius: float = 1.0) -> torch.Tensor:
         """
         Classify humanoid states into success/failure categories
 
-        Binary classification based on head height:
-        1. SUCCESS (label=1):  head_height >= 1.3m (humanoid standing)
-        2. FAILURE (label=-1): head_height < 1.3m  (humanoid lying/falling)
+        Binary classification based on composite success criteria:
+        1. SUCCESS (label=1):  ALL criteria met (head_height >= 1.4m AND torso_z >= 0.9 AND speed <= 0.2)
+        2. FAILURE (label=-1): ANY criterion violated
 
         Args:
             state: States [B, 67] as full humanoid state
@@ -233,8 +267,8 @@ class HumanoidSystem(DynamicalSystem):
 
         Returns:
             Integer tensor [B] with:
-                 1: State is success (head_height >= 1.3m)
-                -1: State is failure (head_height < 1.3m)
+                 1: State is success (all criteria satisfied)
+                -1: State is failure (any criterion violated)
         """
         # Convert to torch tensor if needed
         if isinstance(state, np.ndarray):
@@ -243,7 +277,6 @@ class HumanoidSystem(DynamicalSystem):
         if state.dim() == 1:
             state = state.unsqueeze(0)
 
-        # Check if standing (head_height >= 1.3m)
         is_standing = self.is_in_attractor(state, radius=radius)
         if isinstance(is_standing, bool):
             is_standing = torch.tensor([is_standing])
@@ -275,7 +308,6 @@ class HumanoidSystem(DynamicalSystem):
             [B, 67] normalized state
         """
         normalized = state.clone()
-
         # Normalize each dimension individually
         for i in range(67):
             if 34 <= i <= 36:
@@ -283,7 +315,8 @@ class HumanoidSystem(DynamicalSystem):
                 continue
             else:
                 # Euclidean dimensions: normalize by per-dimension limit
-                normalized[:, i] = state[:, i] / self.dimension_limits[i]
+                normalized[:, i] = (state[:, i] - self.dimension_bounds[i]['min']) / (self.dimension_bounds[i]['max'] - self.dimension_bounds[i]['min'])
+
 
         return normalized
 
@@ -298,7 +331,6 @@ class HumanoidSystem(DynamicalSystem):
             [B, 67] raw state
         """
         denormalized = normalized_state.clone()
-
         # Denormalize each dimension individually
         for i in range(67):
             if 34 <= i <= 36:
@@ -306,7 +338,7 @@ class HumanoidSystem(DynamicalSystem):
                 continue
             else:
                 # Euclidean dimensions: denormalize by per-dimension limit
-                denormalized[:, i] = normalized_state[:, i] * self.dimension_limits[i]
+                denormalized[:, i] = normalized_state[:, i] * (self.dimension_bounds[i]['max'] - self.dimension_bounds[i]['min']) + self.dimension_bounds[i]['min']
 
         return denormalized
 
@@ -331,4 +363,5 @@ class HumanoidSystem(DynamicalSystem):
         return normalized_state
 
     def __repr__(self) -> str:
-        return f"HumanoidSystem(ℝ³⁴ × S² × ℝ³⁰, per-dimension bounds, 67D state)"
+        return (f"HumanoidSystem(ℝ³⁴ × S² × ℝ³⁰, per-dimension bounds, 67D state, "
+                f"success: h≥{self.head_height_threshold}m & tz≥{self.torso_z_threshold} & v≤{self.speed_threshold}m/s)")

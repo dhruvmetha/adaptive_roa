@@ -33,22 +33,20 @@ class MLP(nn.Module):
 
 class PendulumUNet(nn.Module):
     """
-    Pendulum UNet for Latent Conditional Flow Matching:
-    - Takes embedded state x_t (sin θ, cos θ, θ̇), time t, latent z, condition
+    Pendulum UNet for Conditional Flow Matching:
+    - Takes embedded state x_t (sin θ, cos θ, θ̇), time t, condition
     - Predicts velocity in S¹ × ℝ tangent space: (dθ/dt, dθ̇/dt)
     """
-    def __init__(self, 
+    def __init__(self,
                  embedded_dim: int,
-                 latent_dim: int,
-                 condition_dim: int,
-                 time_emb_dim: int,
-                 hidden_dims,
-                 output_dim: int,
+                 condition_dim: int = 3,
+                 time_emb_dim: int = 64,
+                 hidden_dims = [256, 512, 256],
+                 output_dim: int = 2,
                  use_input_embeddings: bool = False,
                  input_emb_dim: int = 64):
         super().__init__()
         self.embedded_dim = embedded_dim
-        self.latent_dim = latent_dim
         self.condition_dim = condition_dim
         self.time_emb_dim = time_emb_dim
         self.hidden_dims = hidden_dims
@@ -59,62 +57,56 @@ class PendulumUNet(nn.Module):
         # Input embeddings for richer representations
         if use_input_embeddings:
             self.state_embedding = nn.Linear(embedded_dim, input_emb_dim)
-            self.latent_embedding = nn.Linear(latent_dim, input_emb_dim)
             self.condition_embedding = nn.Linear(condition_dim, input_emb_dim)
-            
-            # Total input: 3 * input_emb_dim + time_emb_dim
-            total_input_dim = 3 * input_emb_dim + time_emb_dim
+
+            # Total input: state_emb + time_emb + condition_emb
+            total_input_dim = 2 * input_emb_dim + time_emb_dim
         else:
-            # Total input: embedded_state + time_emb + latent + condition
-            total_input_dim = embedded_dim + time_emb_dim + latent_dim + condition_dim
-        
+            # Total input: embedded_state + time_emb + condition
+            total_input_dim = embedded_dim + time_emb_dim + condition_dim
+
         # Velocity predictor in S¹ × ℝ tangent space
         self.vel_head = MLP(total_input_dim, hidden_dims, output_dim)
 
-    def forward(self, 
+    def forward(self,
                 x_t: torch.Tensor,        # [B, 3] embedded state (sin θ, cos θ, θ̇)
                 t: torch.Tensor,          # [B] time
-                z: torch.Tensor,          # [B, 2] latent vector
                 condition: torch.Tensor   # [B, 3] embedded start state
                 ) -> torch.Tensor:
         """
         Predict velocity in S¹ × ℝ tangent space
-        
+
         Args:
             x_t: Embedded interpolated state [B, 3]
             t: Time parameter [B] in [0,1]
-            z: Latent vector [B, 2] 
             condition: Embedded start state [B, 3]
-            
+
         Returns:
             Predicted velocity [B, 2] in tangent space (dθ/dt, dθ̇/dt)
         """
         # Ensure correct shapes
         if x_t.dim() != 2 or x_t.shape[1] != self.embedded_dim:
             x_t = x_t.view(x_t.shape[0], -1)
+
+        # Ensure condition has correct shape
         if condition.dim() != 2 or condition.shape[1] != self.condition_dim:
             condition = condition.view(condition.shape[0], -1)
-        if z.dim() != 2 or z.shape[1] != self.latent_dim:
-            z = z.view(z.shape[0], -1)
-        
+
         # Time embedding
         t_emb = timestep_embedding(t, self.time_emb_dim)
-        
+
         if self.use_input_embeddings:
             # Apply learned embeddings for richer representations
             state_emb = F.silu(self.state_embedding(x_t))
-            latent_emb = F.silu(self.latent_embedding(z))
             condition_emb = F.silu(self.condition_embedding(condition))
-            
-            # Concatenate embedded inputs
-            h = torch.cat([state_emb, latent_emb, condition_emb, t_emb], dim=1)
+            h = torch.cat([state_emb, condition_emb, t_emb], dim=1)
         else:
             # Standard concatenation
-            h = torch.cat([x_t, t_emb, z, condition], dim=1)
-        
+            h = torch.cat([x_t, t_emb, condition], dim=1)
+
         # Predict velocity in tangent space
         vel = self.vel_head(h)
-        
+
         return vel
 
     def get_model_info(self) -> dict:
@@ -122,12 +114,11 @@ class PendulumUNet(nn.Module):
         total_params = sum(p.numel() for p in self.parameters())
         return {
             "embedded_dim": self.embedded_dim,
-            "latent_dim": self.latent_dim,
             "condition_dim": self.condition_dim,
             "time_emb_dim": self.time_emb_dim,
             "output_dim": self.output_dim,
             "hidden_dims": self.hidden_dims,
             "use_input_embeddings": self.use_input_embeddings,
             "total_parameters": total_params,
-            "model_type": "Pendulum Latent Conditional Flow Matching",
+            "model_type": "Pendulum Conditional Flow Matching",
         }

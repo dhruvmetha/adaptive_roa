@@ -4,6 +4,7 @@ Universal dynamical systems framework
 from .base import DynamicalSystem, ManifoldComponent
 from .pendulum import PendulumSystem  # NEW: from refactored file
 from .cartpole import CartPoleSystem
+from .humanoid import HumanoidSystem
 
 # Legacy imports for backward compatibility
 try:
@@ -16,4 +17,5 @@ __all__ = [
     "ManifoldComponent",
     "PendulumSystem",
     "CartPoleSystem",
+    "HumanoidSystem",
 ]

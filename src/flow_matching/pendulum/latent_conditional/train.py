@@ -11,7 +11,6 @@ Usage:
 
     # Override parameters
     python src/flow_matching/pendulum/latent_conditional/train.py \
-        flow_matching.latent_dim=4 \
         trainer.max_epochs=200
 """
 import hydra
@@ -30,7 +29,7 @@ def main(cfg: DictConfig):
 
     # Print configuration
     print("="*80)
-    print("🚀 Latent Conditional Flow Matching Training (Facebook FM)")
+    print("🚀 Conditional Flow Matching Training (Facebook FM)")
     print("="*80)
     print(f"📋 Config: {cfg.get('name', 'unnamed')}")
     print(f"🎲 Seed: {cfg.seed}")
@@ -68,13 +67,17 @@ def main(cfg: DictConfig):
     print(f"     ✅ {model.__class__.__name__}")
 
     # Get model info
-    model_info = model.get_model_info()
-    print(f"        Architecture: {model_info['hidden_dims']}")
-    print(f"        Time embedding: {model_info['time_emb_dim']}D")
-    print(f"        Latent dim: {model_info['latent_dim']}D")
-    print(f"        Input: embedded={model_info['embedded_dim']}, condition={model_info['condition_dim']}")
-    print(f"        Output: {model_info['output_dim']}D")
-    print(f"        Parameters: {model_info['total_parameters']:,}")
+    try:
+        model_info = model.get_model_info()
+        print(f"        Architecture: {model_info['hidden_dims']}")
+        print(f"        Time embedding: {model_info['time_emb_dim']}D")
+        print(f"        Input: embedded={model_info['embedded_dim']}, condition={model_info['condition_dim']}")
+        print(f"        Output: {model_info['output_dim']}D")
+        print(f"        Parameters: {model_info['total_parameters']:,}")
+    except (AttributeError, KeyError):
+        # Fallback if get_model_info() doesn't exist or doesn't have all keys
+        total_params = sum(p.numel() for p in model.parameters())
+        print(f"        Parameters: {total_params:,}")
     print()
 
     # Optimizer (keep as config, will be instantiated in configure_optimizers)
@@ -88,7 +91,7 @@ def main(cfg: DictConfig):
     print(f"     ✅ {cfg.scheduler._target_.split('.')[-1]}")
     print()
 
-    # Flow matcher (e.g., LatentConditionalFlowMatcher or CartPoleLatentConditionalFlowMatcher)
+    # Flow matcher (e.g., ConditionalFlowMatcher or CartPoleConditionalFlowMatcher)
     print("  🌊 Flow matcher...")
     flow_matcher = hydra.utils.instantiate(
         cfg.flow_matcher,
@@ -97,7 +100,6 @@ def main(cfg: DictConfig):
         optimizer=cfg.optimizer,
         scheduler=cfg.scheduler,
         model_config=OmegaConf.to_container(cfg.model, resolve=True),
-        latent_dim=cfg.flow_matching.latent_dim,
         mae_val_frequency=cfg.flow_matching.mae_val_frequency,
         _recursive_=False
     )

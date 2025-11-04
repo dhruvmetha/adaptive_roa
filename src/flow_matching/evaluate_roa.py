@@ -360,11 +360,7 @@ def evaluate_probabilistic(flow_matcher,
 
     # Assign success/failure based on two thresholds
     predictions[p_stable > success_threshold] = 1      # Success: >success_threshold landed in stable/success attractor
-    predictions[p_stable < failure_threshold] = 0      # Failure: <failure_threshold landed in stable/success attractor
-
-    # States that remain -1 (separatrix):
-    # - failure_threshold ≤ p_stable ≤ success_threshold
-    # - These are uncertain states where predictions are in the middle range
+    predictions[p_unstable > failure_threshold] = 0      # Failure: >failure_threshold landed in unstable/failure attractor
 
     # Mark for exclusion
     is_separatrix = (predictions == -1)

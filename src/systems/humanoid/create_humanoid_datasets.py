@@ -12,7 +12,7 @@ Or specify custom source path:
 
 The script will:
 1. Create <dataset_name>_reach (truncated at first success)
-2. Create <dataset_name>_stable_split (recursive splitting at every success entry)
+2. Create <dataset_name>_stable_split (recursive splitting at every state transition F↔S)
 3. Generate roa_labels.txt, shuffled_indices.txt, and dataset_description.json for each
 """
 
@@ -21,6 +21,7 @@ import json
 import argparse
 from pathlib import Path
 from tqdm import tqdm
+from src.systems.humanoid import HumanoidSystem
 
 # Success criteria thresholds (configurable via command line)
 DEFAULT_H_THR = 1.4         # Head height threshold (meters)
@@ -57,6 +58,14 @@ class HumanoidDatasetCreator:
         self.h_thr = h_thr
         self.tz_thr = tz_thr
         self.speed_thr = speed_thr
+
+        # Initialize HumanoidSystem with the success thresholds
+        # This ensures consistency between dataset creation and model evaluation
+        self.system = HumanoidSystem(
+            head_height_threshold=h_thr,
+            torso_z_threshold=tz_thr,
+            speed_threshold=speed_thr
+        )
 
         # Toggles for what to create
         self.only_shuffled_indices = only_shuffled_indices
@@ -95,16 +104,29 @@ class HumanoidDatasetCreator:
         print(f"Stable split output: {self.stable_dir}")
 
     def check_success_criteria(self, state):
-        """Check if a single state meets success criteria."""
-        head_height = state[21]
-        torso_z = state[36]
-        com_vx = state[37]
-        com_vy = state[38]
-        com_speed = np.sqrt(com_vx**2 + com_vy**2)
+        """
+        Check if a single state meets success criteria using HumanoidSystem.
 
-        return (head_height >= self.h_thr and
-                torso_z >= self.tz_thr and
-                com_speed <= self.speed_thr)
+        This delegates to the system's is_in_attractor() method to ensure
+        consistency with model evaluation and training.
+
+        Args:
+            state: Numpy array or list representing the state (67 dimensions expected)
+
+        Returns:
+            bool: True if state meets success criteria, False otherwise
+        """
+        # Convert to numpy array if needed
+        if not isinstance(state, np.ndarray):
+            state = np.array(state)
+
+        # Validate state dimensions
+        if len(state) < 39:
+            raise ValueError(f"State vector too short: expected ≥39 dimensions, got {len(state)}")
+
+        # Use system's is_in_attractor method for consistency
+        # This handles both numpy arrays and torch tensors automatically
+        return self.system.is_in_attractor(state)
 
     def load_trajectory(self, traj_file):
         """Load a full trajectory from file."""
@@ -167,49 +189,43 @@ class HumanoidDatasetCreator:
 
     def process_trajectory_recursive(self, trajectory, output_dir, base_name, part_counter):
         """
-        Recursively split trajectory at every entry into success criteria.
+        Recursively split trajectory at every state transition (F→S or S→F).
+
+        Example: FFFSSFFSSS → FFFS, SSF, FFS, SSS
 
         Returns the next part_counter value to use.
         """
-        current_pos = 0
-
-        # If we start in success, find where we leave first
-        if self.check_success_criteria(trajectory[0]):
-            leave_idx = None
-            for i in range(1, len(trajectory)):
-                if not self.check_success_criteria(trajectory[i]):
-                    leave_idx = i
-                    break
-
-            if leave_idx is None:
-                # Never leave success - save entire trajectory
-                output_file = output_dir / f"{base_name}_part{part_counter}.txt"
-                self.save_trajectory(trajectory, output_file)
-                return part_counter + 1
-
-            current_pos = leave_idx
-
-        # Search for next entry into success from current_pos
-        next_entry_idx = None
-        for i in range(current_pos, len(trajectory)):
-            if self.check_success_criteria(trajectory[i]):
-                next_entry_idx = i
-                break
-
-        if next_entry_idx is None:
-            # Never enter/re-enter success - save entire trajectory
+        if len(trajectory) <= 1:
+            # Base case: single state or empty
             output_file = output_dir / f"{base_name}_part{part_counter}.txt"
             self.save_trajectory(trajectory, output_file)
             return part_counter + 1
 
-        # Found next entry - save from start to entry point (inclusive)
-        chunk = trajectory[:next_entry_idx + 1]
+        # Determine success status of first state
+        current_status = self.check_success_criteria(trajectory[0])
+
+        # Find next transition (change in success status)
+        transition_idx = None
+        for i in range(1, len(trajectory)):
+            next_status = self.check_success_criteria(trajectory[i])
+            if next_status != current_status:
+                transition_idx = i
+                break
+
+        if transition_idx is None:
+            # No transitions found - save entire trajectory
+            output_file = output_dir / f"{base_name}_part{part_counter}.txt"
+            self.save_trajectory(trajectory, output_file)
+            return part_counter + 1
+
+        # Found transition - save from start to transition point (inclusive)
+        chunk = trajectory[:transition_idx + 1]
         output_file = output_dir / f"{base_name}_part{part_counter}.txt"
         self.save_trajectory(chunk, output_file)
 
-        # Recursively process starting FROM the entry point (overlapping)
-        new_remaining = trajectory[next_entry_idx:]
-        return self.process_trajectory_recursive(new_remaining, output_dir, base_name, part_counter + 1)
+        # Recursively process from transition point onwards (overlapping)
+        remaining = trajectory[transition_idx:]
+        return self.process_trajectory_recursive(remaining, output_dir, base_name, part_counter + 1)
 
     def create_reach_dataset(self):
         """Create the reach dataset (truncated at first success)."""
@@ -389,7 +405,7 @@ class HumanoidDatasetCreator:
         print()
 
     def create_stable_split_dataset(self):
-        """Create the stable split dataset (recursive splitting at success entries)."""
+        """Create the stable split dataset (recursive splitting at every state transition)."""
         print("="*70)
         print(f"CREATING {self.dataset_name.upper()}_STABLE_SPLIT DATASET")
         print("="*70)
@@ -440,8 +456,8 @@ class HumanoidDatasetCreator:
         print(f"Found {len(traj_files)} trajectories to process")
         print()
 
-        # Process all trajectories with recursive splitting
-        print("Processing trajectories with recursive splitting...")
+        # Process all trajectories with recursive splitting at every state transition
+        print("Processing trajectories with recursive splitting (at every F↔S transition)...")
         roa_data = []
         total_splits = 0
         all_split_files = []  # Track all split trajectory filenames
@@ -497,11 +513,11 @@ class HumanoidDatasetCreator:
         if self.create_description:
             print("Creating dataset_description.json...")
             description = {
-                "dataset_name": f"{self.dataset_name.replace('_', ' ').title()} Stable Split Dataset (Recursive Splitting)",
-                "description": f"Dataset with {self.dataset_name} trajectories recursively split at EVERY entry into success criteria. Creates multiple trajectory segments emphasizing stability.",
+                "dataset_name": f"{self.dataset_name.replace('_', ' ').title()} Stable Split Dataset (State Transition Splitting)",
+                "description": f"Dataset with {self.dataset_name} trajectories recursively split at EVERY state transition (F↔S). Creates multiple overlapping trajectory segments capturing both approaches to and departures from success.",
                 "source_dataset": self.dataset_name,
                 "source_location": str(self.source_dir),
-                "processing": "Trajectories recursively split at every entry into success region",
+                "processing": "Trajectories recursively split at every state transition (both F→S and S→F)",
 
                 "success_condition": {
                     "type": "composite",

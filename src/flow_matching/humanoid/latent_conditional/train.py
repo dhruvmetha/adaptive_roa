@@ -12,7 +12,6 @@ Usage:
 
     # Override parameters
     python src/flow_matching/humanoid/latent_conditional/train.py \
-        flow_matching.latent_dim=16 \
         trainer.max_epochs=200 \
         batch_size=512
 """
@@ -32,7 +31,7 @@ def main(cfg: DictConfig):
 
     # Print configuration
     print("="*80)
-    print("🚀 Humanoid Latent Conditional Flow Matching Training (Facebook FM)")
+    print("🚀 Humanoid Conditional Flow Matching Training (Facebook FM)")
     print("="*80)
     print(f"📋 Config: {cfg.get('name', 'humanoid_lcfm')}")
     print(f"🎲 Seed: {cfg.seed}")
@@ -55,7 +54,7 @@ def main(cfg: DictConfig):
     print(f"     ✅ {system.__class__.__name__}")
     print(f"        {system}")
     print()
-
+    
     # Data module
     print("  📊 Data module...")
     data_module = hydra.utils.instantiate(cfg.data)
@@ -103,13 +102,13 @@ def main(cfg: DictConfig):
         optimizer=cfg.optimizer,
         scheduler=cfg.scheduler,
         model_config=OmegaConf.to_container(cfg.model, resolve=True),
-        latent_dim=cfg.flow_matching.latent_dim,
         mae_val_frequency=cfg.flow_matching.mae_val_frequency,
         _recursive_=False
     )
+    
+    
     print(f"     ✅ {flow_matcher.__class__.__name__}")
     print(f"        Manifold: ℝ³⁴ × S² × ℝ³⁰")
-    print(f"        Latent dim: {cfg.flow_matching.latent_dim}")
     print()
 
     # Trainer

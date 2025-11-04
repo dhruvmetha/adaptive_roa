@@ -15,13 +15,12 @@ num_workers: 4
 # Flow Matcher: Facebook FM version with automatic geodesics
 flow_matcher:
   _target_: src.flow_matching.cartpole.latent_conditional.flow_matcher.CartPoleLatentConditionalFlowMatcher
-  # Note: system, model, optimizer, scheduler, config, latent_dim are passed by training script
+  # Note: system, model, optimizer, scheduler, config are passed by training script
 
-# Model: Latent Conditional UNet for CartPole
+# Model: Conditional UNet for CartPole
 model:
   _target_: src.model.cartpole_unet.CartPoleUNet
   embedded_dim: 5              # (x_norm, sin θ, cos θ, ẋ_norm, θ̇_norm)
-  latent_dim: 2                # Gaussian latent variable
   condition_dim: 5             # Embedded start state
   time_emb_dim: 64             # Time embedding dimension
   hidden_dims: [256, 512, 1024, 512, 256] # UNet hidden layers
@@ -88,7 +87,6 @@ trainer:
 
 # Flow matching specific settings
 flow_matching:
-  latent_dim: 2                    # Dimension of Gaussian latent variable
   num_integration_steps: 100       # ODE solver steps for inference
   mae_val_frequency: 10            # Compute MAE validation every N epochs
 

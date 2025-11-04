@@ -16,30 +16,36 @@ num_workers: 4
 # Flow Matcher: Facebook FM version with automatic geodesics
 flow_matcher:
   _target_: src.flow_matching.humanoid.latent_conditional.flow_matcher.HumanoidLatentConditionalFlowMatcher
-  # Note: system, model, optimizer, scheduler, config, latent_dim are passed by training script
+  # Note: system, model, optimizer, scheduler, config are passed by training script
 
-# Model: Latent Conditional UNet for Humanoid
+# Model: Conditional UNet with FiLM for Humanoid
 model:
-  _target_: src.model.humanoid_unet.HumanoidUNet
+  _target_: src.model.humanoid_unet_film.HumanoidUNetFiLM
   embedded_dim: 67             # Humanoid embedded state dimension
-  latent_dim: 8                # Latent variable dimension (set by flow_matching config)
   condition_dim: 67            # Embedded start state
   time_emb_dim: 128            # Time embedding dimension
-  hidden_dims: [256, 512, 1024, 1024, 512, 256]  # UNet hidden layers (matches CartPole, ~1.33M params)
+  hidden_dims: [512, 512, 512, 512]  # UNet hidden layers
   output_dim: 67               # Velocity in tangent space (67-dim)
   use_input_embeddings: false
   input_emb_dim: 128
+  film_cond_dim: 256           # FiLM conditioning dimension
+  film_hidden_dims: []         # FiLM encoder hidden layers (empty = direct projection)
+  dropout_p: 0.0               # Dropout probability
+  residual_scale: null         # Auto-compute based on num_blocks
+  zero_init_blocks: false       # Zero-initialize residual blocks
+  zero_init_out: false         # Zero-initialize output projection
 
 # Data: Humanoid endpoint dataset
 data:
   _target_: src.data.humanoid_endpoint_data.HumanoidEndpointDataModule
-  data_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/incremental_endpoint_dataset/train_1000_balanced_endpoint_dataset.txt
-  validation_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/incremental_endpoint_dataset/val_balanced_endpoint_dataset.txt
-  test_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/incremental_endpoint_dataset/test_balanced_endpoint_dataset.txt
+  data_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up_slow_reach/incremental_endpoint_dataset/train_endpoint_dataset.txt
+  validation_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up_slow_reach/incremental_endpoint_dataset/val_endpoint_dataset.txt
+  test_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up_slow_reach/incremental_endpoint_dataset/test_endpoint_dataset.txt
   bounds_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/humanoid_data_bounds.pkl
   batch_size: ${batch_size}
   val_batch_size: ${val_batch_size}
   num_workers: ${num_workers}
+  use_stratified_sampling: true
 
 # Optimizer: AdamW
 optimizer:
@@ -62,7 +68,7 @@ trainer:
   max_epochs: 500
   accelerator: gpu
   devices: [0]
-  precision: 32
+  precision: 64
   gradient_clip_val: 1.0
   log_every_n_steps: 10
   check_val_every_n_epoch: 1
@@ -82,15 +88,14 @@ trainer:
       save_last: true
       filename: "epoch{epoch:02d}-val_loss{val_loss:.4f}"
       auto_insert_metric_name: false
-    - _target_: lightning.pytorch.callbacks.EarlyStopping
-      monitor: val_loss
-      mode: min
-      patience: 20
-      verbose: true
+    # - _target_: lightning.pytorch.callbacks.EarlyStopping
+    #   monitor: val_loss
+    #   mode: min
+    #   patience: 20
+    #   verbose: true
 
 # Flow matching specific settings
 flow_matching:
-  latent_dim: 8                    # Dimension of Gaussian latent variable (higher for 67D state)
   num_integration_steps: 100       # ODE solver steps for inference
   mae_val_frequency: 10            # Compute MAE validation every N epochs
 

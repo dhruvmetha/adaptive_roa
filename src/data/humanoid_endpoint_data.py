@@ -31,7 +31,6 @@ class HumanoidEndpointDataset(Dataset):
             bounds_file: Path to pickle file with actual data bounds
         """
         self.bounds_file = bounds_file
-        self._load_bounds()
 
         # Load the endpoint metadata
         with open(data_file, 'r') as f:
@@ -80,25 +79,6 @@ class HumanoidEndpointDataset(Dataset):
 
         print(f"Cached {len(self.trajectory_cache)} trajectories in memory")
 
-    def _load_bounds(self):
-        """Load data bounds from pickle file (just for verification/logging)
-
-        Note: Actual normalization is done by the HumanoidSystem class,
-        which loads per-dimension bounds. This method just prints summary info.
-        """
-        if Path(self.bounds_file).exists():
-            with open(self.bounds_file, 'rb') as f:
-                bounds_data = pickle.load(f)
-
-            statistics = bounds_data.get('statistics', {})
-
-            print(f"✅ Bounds file found: {self.bounds_file}")
-            print(f"   {statistics.get('euclidean_dimensions', 64)} Euclidean dims with PER-DIMENSION bounds")
-            print(f"   {statistics.get('sphere_dimensions', 3)} Sphere dims (34-36): NO normalization")
-            print(f"   (Normalization handled by HumanoidSystem with per-dimension limits)")
-        else:
-            print(f"⚠️  Bounds file not found: {self.bounds_file}")
-            print(f"   HumanoidSystem will use default bounds (±20.0)")
 
     def __len__(self):
         return len(self.metadata)

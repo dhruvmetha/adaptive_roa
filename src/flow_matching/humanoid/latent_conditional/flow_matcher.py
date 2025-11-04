@@ -133,8 +133,11 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
         Returns:
             Noisy states [batch_size, 67]
         """
-        noisy_states = torch.randn(batch_size, 67, device=device)
+        noisy_states = torch.randn(batch_size, 67, device=device) * 0.001
+        
+        
         noisy_states = self.manifold.projx(noisy_states)
+        
         
         return noisy_states
 
@@ -150,7 +153,7 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
         """Delegate to system for embedding"""
         return self.system.embed_state_for_model(normalized_state)
 
-    def predict_endpoints_batch(self,
+    def oints_batch(self,
                                start_states: torch.Tensor,
                                num_steps: int = 100,
                                num_samples: int = 1) -> torch.Tensor:

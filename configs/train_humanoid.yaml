@@ -8,7 +8,7 @@ defaults:
 
 name: humanoid_latent_conditional_fm
 seed: 42
-batch_size: 2048
+batch_size: 256
 val_batch_size: 1024  # Validation batch size (can be larger than training)
 base_lr: 1e-4
 num_workers: 4
@@ -33,7 +33,7 @@ model:
   dropout_p: 0.0               # Dropout probability
   residual_scale: null         # Auto-compute based on num_blocks
   zero_init_blocks: false       # Zero-initialize residual blocks
-  zero_init_out: true         # Zero-initialize output projection
+  zero_init_out: false         # Zero-initialize output projection
 
 # Data: Humanoid endpoint dataset
 data:
@@ -68,7 +68,7 @@ trainer:
   max_epochs: 500
   accelerator: gpu
   devices: [0]
-  precision: 32
+  precision: 64
   gradient_clip_val: 1.0
   log_every_n_steps: 10
   check_val_every_n_epoch: 1

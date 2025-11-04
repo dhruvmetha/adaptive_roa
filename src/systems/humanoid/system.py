@@ -308,7 +308,6 @@ class HumanoidSystem(DynamicalSystem):
             [B, 67] normalized state
         """
         normalized = state.clone()
-
         # Normalize each dimension individually
         for i in range(67):
             if 34 <= i <= 36:
@@ -317,6 +316,7 @@ class HumanoidSystem(DynamicalSystem):
             else:
                 # Euclidean dimensions: normalize by per-dimension limit
                 normalized[:, i] = (state[:, i] - self.dimension_bounds[i]['min']) / (self.dimension_bounds[i]['max'] - self.dimension_bounds[i]['min'])
+
 
         return normalized
 

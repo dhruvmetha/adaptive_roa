@@ -54,7 +54,7 @@ def main(cfg: DictConfig):
     print(f"     ✅ {system.__class__.__name__}")
     print(f"        {system}")
     print()
-
+    
     # Data module
     print("  📊 Data module...")
     data_module = hydra.utils.instantiate(cfg.data)
@@ -105,6 +105,8 @@ def main(cfg: DictConfig):
         mae_val_frequency=cfg.flow_matching.mae_val_frequency,
         _recursive_=False
     )
+    
+    
     print(f"     ✅ {flow_matcher.__class__.__name__}")
     print(f"        Manifold: ℝ³⁴ × S² × ℝ³⁰")
     print()

@@ -349,7 +349,7 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
 
         # Normalize data endpoints
         data_normalized = self.normalize_state(data_endpoints)
-
+        
         # Use Facebook FM GeodesicProbPath for geodesic interpolation
         path_sample = self.path.sample(
             x_0=x_noise_normalized,    # Normalized noise
@@ -368,10 +368,10 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
 
         # Use automatic target velocity from path.sample()
         target_velocity = path_sample.dx_t
-
+        
         # Compute MSE loss between predicted and target velocities
         loss = nn.functional.mse_loss(predicted_velocity, target_velocity)
-
+        
         return loss
 
     def predict_endpoint(self,

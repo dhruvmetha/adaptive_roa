@@ -10,13 +10,14 @@ name: humanoid_latent_conditional_fm
 seed: 42
 batch_size: 256
 val_batch_size: 1024  # Validation batch size (can be larger than training)
-base_lr: 1e-4
+base_lr: 1e-3
 num_workers: 4
 
 # Flow Matcher: Facebook FM version with automatic geodesics
 flow_matcher:
   _target_: src.flow_matching.humanoid.latent_conditional.flow_matcher.HumanoidLatentConditionalFlowMatcher
   # Note: system, model, optimizer, scheduler, config are passed by training script
+  noise_std: 0.001
 
 # Model: Conditional UNet with FiLM for Humanoid
 model:
@@ -38,9 +39,9 @@ model:
 # Data: Humanoid endpoint dataset
 data:
   _target_: src.data.humanoid_endpoint_data.HumanoidEndpointDataModule
-  data_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up_slow_reach/incremental_endpoint_dataset/train_endpoint_dataset.txt
-  validation_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up_slow_reach/incremental_endpoint_dataset/val_endpoint_dataset.txt
-  test_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up_slow_reach/incremental_endpoint_dataset/test_endpoint_dataset.txt
+  data_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up_slow_reach/incremental_endpoint_dataset/train_first_last_endpoint_dataset.txt
+  validation_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up_slow_reach/incremental_endpoint_dataset/val_first_last_endpoint_dataset.txt
+  test_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up_slow_reach/incremental_endpoint_dataset/test_first_last_endpoint_dataset.txt
   bounds_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/humanoid_data_bounds.pkl
   batch_size: ${batch_size}
   val_batch_size: ${val_batch_size}
@@ -65,7 +66,7 @@ scheduler:
 # Trainer: PyTorch Lightning
 trainer:
   _target_: lightning.pytorch.Trainer
-  max_epochs: 500
+  max_epochs: 5000
   accelerator: gpu
   devices: [0]
   precision: 64
@@ -88,11 +89,11 @@ trainer:
       save_last: true
       filename: "epoch{epoch:02d}-val_loss{val_loss:.4f}"
       auto_insert_metric_name: false
-    # - _target_: lightning.pytorch.callbacks.EarlyStopping
-    #   monitor: val_loss
-    #   mode: min
-    #   patience: 20
-    #   verbose: true
+    - _target_: lightning.pytorch.callbacks.EarlyStopping
+      monitor: val_loss
+      mode: min
+      patience: 500
+      verbose: true
 
 # Flow matching specific settings
 flow_matching:

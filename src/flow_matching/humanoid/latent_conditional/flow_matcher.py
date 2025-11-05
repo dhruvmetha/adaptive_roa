@@ -40,7 +40,8 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
                  optimizer,
                  scheduler,
                  model_config: Optional[dict] = None,
-                 mae_val_frequency: int = 10):
+                 mae_val_frequency: int = 10,
+                 noise_std: float = 0.001):
         """
         Initialize Humanoid conditional flow matcher with FB FM integration
 
@@ -54,10 +55,14 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
         """
         super().__init__(system, model, optimizer, scheduler, model_config, mae_val_frequency)
 
+        # Configurable standard deviation for initial noise sampling
+        self.noise_std = float(noise_std)
+
         print("✅ Initialized Humanoid CFM with Facebook Flow Matching:")
         print(f"   - Manifold: ℝ³⁴ × S² × ℝ³⁰ (Euclidean × Sphere × Euclidean)")
         print(f"   - Path: GeodesicProbPath with CondOTScheduler")
         print(f"   - MAE validation frequency: every {mae_val_frequency} epochs")
+        print(f"   - Initial noise std: {self.noise_std}")
 
     def _create_manifold(self):
         """
@@ -133,7 +138,7 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
         Returns:
             Noisy states [batch_size, 67]
         """
-        noisy_states = torch.randn(batch_size, 67, device=device) * 0.001
+        noisy_states = torch.randn(batch_size, 67, device=device) * self.noise_std
         
         
         noisy_states = self.manifold.projx(noisy_states)
@@ -153,7 +158,7 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
         """Delegate to system for embedding"""
         return self.system.embed_state_for_model(normalized_state)
 
-    def oints_batch(self,
+    def predict_endpoints_batch(self,
                                start_states: torch.Tensor,
                                num_steps: int = 100,
                                num_samples: int = 1) -> torch.Tensor:

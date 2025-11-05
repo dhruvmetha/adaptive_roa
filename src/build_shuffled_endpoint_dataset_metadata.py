@@ -20,6 +20,7 @@ def main(cfg: DictConfig) -> None:
     start = cfg.start
     end = cfg.end
     attractor_radius = cfg.get('attractor_radius', 0.1)  # Default radius for classification
+    first_last_only = cfg.get('first_last_only', False)
 
     # Get system name
     system_name = system.name if hasattr(system, 'name') else 'unknown'
@@ -58,6 +59,8 @@ def main(cfg: DictConfig) -> None:
         # Format: [file_path, start_idx, end_idx]
         for i in range(num_states - 1):  # Exclude final point as start
             endpoint_data.append([traj_file, i, traj.shape[0] - 1, is_success])
+            if first_last_only:
+                break
             if type == "test":
                 break
 

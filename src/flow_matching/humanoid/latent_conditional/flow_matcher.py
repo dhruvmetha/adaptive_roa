@@ -57,7 +57,7 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
 
         # Configurable standard deviation for initial noise sampling
         self.noise_std = float(noise_std)
-
+    
         print("✅ Initialized Humanoid CFM with Facebook Flow Matching:")
         print(f"   - Manifold: ℝ³⁴ × S² × ℝ³⁰ (Euclidean × Sphere × Euclidean)")
         print(f"   - Path: GeodesicProbPath with CondOTScheduler")
@@ -231,10 +231,41 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
             mae_per_dim = torch.cat([euclidean1, sphere_expanded, euclidean2])
 
             return mae_per_dim
+        
+    def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
+        """
+        Training step for Humanoid Latent Conditional Flow Matching
+        """
+        flow_loss = super().training_step(batch, batch_idx)
+        
+        x_1 = self.normalize_state(batch["end_state"])
+        condition = self.normalize_state(batch["start_state"])
+
+        log_p0 = lambda x: -0.5 * (x.pow(2).sum(-1) + 67 * torch.log(torch.tensor(2.0) * torch.pi))
+        
+        step_size = 1.0/10
+        
+        _, log_loss = self.solver.compute_likelihood( x_1=x_1, log_p0=log_p0, step_size=step_size, exact_divergence=False, enable_grad=True, condition=condition)
+        
+        
+        
+        
+        return flow_loss + 0.1 * (-log_loss.mean()) 
+    
+    
+    def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
+        """
+        Validation step for Humanoid Latent Conditional Flow Matching
+        """
+        flow_loss = super().validation_step(batch, batch_idx)
+        return flow_loss
 
     # ===================================================================
     # CHECKPOINT LOADING FOR INFERENCE
     # ===================================================================
+    
+    
+    
 
     @classmethod
     def load_from_checkpoint(cls, checkpoint_path: str, device: Optional[str] = None):

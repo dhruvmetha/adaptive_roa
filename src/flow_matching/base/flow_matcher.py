@@ -33,8 +33,7 @@ class ConditionalVelocityWrapper(ModelWrapper):
     - Model invocation with correct arguments
     """
 
-    def __init__(self, model: nn.Module, condition: torch.Tensor,
-                 embed_fn, manifold: Manifold):
+    def __init__(self, model: nn.Module, embed_fn, manifold: Manifold):
         """
         Args:
             model: The neural network (UNet)
@@ -43,11 +42,10 @@ class ConditionalVelocityWrapper(ModelWrapper):
             manifold: Manifold for projection
         """
         super().__init__(model)
-        self.condition = condition
         self.embed_fn = embed_fn
         self.manifold = manifold
 
-    def forward(self, x: torch.Tensor, t: torch.Tensor, **extras) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, t: torch.Tensor, condition: torch.Tensor, **extras) -> torch.Tensor:
         """
         Forward pass compatible with RiemannianODESolver
 
@@ -67,7 +65,7 @@ class ConditionalVelocityWrapper(ModelWrapper):
 
         # Expand condition to match batch size if needed
         batch_size = x.shape[0]
-        cond = self.condition
+        cond = condition
 
         if cond.shape[0] == 1 and batch_size > 1:
             cond = cond.expand(batch_size, -1)
@@ -140,6 +138,20 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         self.path = GeodesicProbPath(
             scheduler=CondOTScheduler(),
             manifold=self.manifold
+        )
+        
+        
+        # Create model wrapper for RiemannianODESolver
+        self.velocity_model = ConditionalVelocityWrapper(
+            model=self.model,
+            embed_fn=self.embed_state_for_model,
+            manifold=self.manifold
+        )
+
+        # Use RiemannianODESolver for integration
+        self.solver = RiemannianODESolver(
+            manifold=self.manifold,
+            velocity_model=self.velocity_model
         )
 
         # Save hyperparameters (exclude model and optimizer/scheduler to avoid pickle issues)
@@ -410,27 +422,14 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
                     device=device
                 )
 
-                # Create model wrapper for RiemannianODESolver
-                velocity_model = ConditionalVelocityWrapper(
-                    model=self.model,
-                    condition=start_normalized_embedded,
-                    embed_fn=self.embed_state_for_model,
-                    manifold=self.manifold
-                )
-
-                # Use RiemannianODESolver for integration
-                solver = RiemannianODESolver(
-                    manifold=self.manifold,
-                    velocity_model=velocity_model
-                )
-
-                final_states_normalized = solver.sample(
+                final_states_normalized = self.solver.sample(
                     x_init=x_noise_normalized,
                     step_size=1.0/num_steps,
                     method=method,
                     projx=True,   # Use manifold projection (wraps angles)
                     proju=True,   # Use tangent projection
-                    time_grid=torch.tensor([0.0, 1.0], device=device)
+                    time_grid=torch.tensor([0.0, 1.0], device=device),
+                    condition=start_normalized_embedded # model extra for condition
                 )
 
                 # Denormalize back to raw coordinates

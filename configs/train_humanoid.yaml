@@ -8,7 +8,7 @@ defaults:
 
 name: humanoid_latent_conditional_fm
 seed: 42
-batch_size: 256
+batch_size: 2048
 val_batch_size: 1024  # Validation batch size (can be larger than training)
 base_lr: 1e-3
 num_workers: 4

@@ -47,7 +47,7 @@ def main(cfg: DictConfig) -> None:
         num_states = traj.shape[0]
         
         final_state = traj[-1]
-        is_success = system.is_in_attractor(final_state, radius=attractor_radius)
+        is_success = system.is_in_attractor(final_state)
         
         
         if is_success:

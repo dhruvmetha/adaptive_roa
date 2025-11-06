@@ -1,0 +1,19 @@
+# Mountain Car Endpoint Data Configuration
+
+_target_: src.data.mountain_car_endpoint_data.MountainCarEndpointDataModule
+
+# Data files
+data_file: /common/users/dm1487/arcmg_datasets/mountain_car/train_endpoint_dataset.txt
+validation_file: /common/users/dm1487/arcmg_datasets/mountain_car/validation_endpoint_dataset.txt
+test_file: /common/users/dm1487/arcmg_datasets/mountain_car/test_endpoint_dataset.txt
+
+# Bounds file
+bounds_file: /common/users/dm1487/arcmg_datasets/mountain_car/mountain_car_data_bounds.pkl
+
+# Batch sizes
+batch_size: ${batch_size}
+val_batch_size: ${val_batch_size}
+
+# Data loading
+num_workers: ${num_workers}
+pin_memory: true

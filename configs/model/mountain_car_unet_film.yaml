@@ -1,0 +1,32 @@
+# Mountain Car UNet FiLM Model Configuration
+
+_target_: src.model.mountain_car_unet_film.MountainCarUNetFiLM
+
+# State dimensions
+embedded_dim: 2       # State after embedding: [position, velocity]
+condition_dim: 2      # Conditioning dimension (start state)
+output_dim: 2         # Velocity field: [d_position, d_velocity]
+
+# Time embedding
+time_emb_dim: 128
+
+# Main network architecture
+hidden_dims: [256, 512, 256]
+
+# FiLM conditioning
+film_cond_dim: 256           # FiLM conditioning dimension
+film_hidden_dims: []         # FiLM encoder hidden layers (empty = direct projection)
+
+# Input embeddings (optional rich embedding)
+use_input_embeddings: false
+input_emb_dim: 128
+
+# Regularization
+dropout_p: 0.0
+
+# Initialization
+zero_init_blocks: true       # Zero-initialize residual block outputs
+zero_init_out: false         # Zero-initialize final output layer
+
+# Note: Total input_dim = embedded_dim + time_emb_dim + condition_dim
+#                       = 2 + 128 + 2 = 132

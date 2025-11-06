@@ -1,0 +1,120 @@
+# Mountain Car Conditional Flow Matching Training Configuration (NO latent)
+
+defaults:
+  - system: mountain_car
+  - _self_
+
+# Experiment name
+name: mountain_car_latent_conditional_fm
+seed: 42
+
+# Training hyperparameters
+batch_size: 256
+val_batch_size: 1024
+base_lr: 1e-4
+num_workers: 4
+
+# Flow matcher
+flow_matcher:
+  _target_: src.flow_matching.mountain_car.latent_conditional.flow_matcher.MountainCarLatentConditionalFlowMatcher
+  noise_std: 0.1  # Standard deviation for Gaussian noise sampling
+
+# Model (FiLM conditioning, NO latent variables)
+model:
+  _target_: src.model.mountain_car_unet_film.MountainCarUNetFiLM
+  embedded_dim: 2       # [position, velocity]
+  output_dim: 2         # [d_position, d_velocity]
+  condition_dim: 2      # Conditioning dimension (start state)
+  time_emb_dim: 128
+  hidden_dims: [256, 512, 256]
+  film_cond_dim: 256    # FiLM conditioning dimension
+  film_hidden_dims: []  # FiLM encoder layers (empty = direct projection)
+  use_input_embeddings: false
+  input_emb_dim: 128
+  dropout_p: 0.0
+  zero_init_blocks: true
+  zero_init_out: false
+
+# Data
+data:
+  _target_: src.data.mountain_car_endpoint_data.MountainCarEndpointDataModule
+  data_file: /common/users/dm1487/arcmg_datasets/mountain_car_power_0p0008/incremental_endpoint_dataset/train_endpoint_dataset.txt
+  validation_file: /common/users/dm1487/arcmg_datasets/mountain_car_power_0p0008/incremental_endpoint_dataset/val_endpoint_dataset.txt
+  test_file: /common/users/dm1487/arcmg_datasets/mountain_car_power_0p0008/incremental_endpoint_dataset/test_endpoint_dataset.txt
+  bounds_file: /common/users/dm1487/arcmg_datasets/mountain_car_power_0p0008/mountain_car_data_bounds.pkl
+  batch_size: ${batch_size}
+  val_batch_size: ${val_batch_size}
+  num_workers: ${num_workers}
+  pin_memory: true
+  use_stratified_sampling: true  # Enable weighted sampling for balanced training
+
+# Optimizer
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: ${base_lr}
+  weight_decay: 1e-5
+  betas: [0.9, 0.999]
+
+# Scheduler
+scheduler:
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  mode: min
+  factor: 0.5
+  patience: 10
+  min_lr: 1e-6
+
+# Trainer
+trainer:
+  _target_: lightning.pytorch.Trainer
+  max_epochs: 500
+  accelerator: gpu
+  devices: [0]
+  precision: 32
+  gradient_clip_val: 1.0
+  log_every_n_steps: 10
+  check_val_every_n_epoch: 1
+  enable_progress_bar: true
+  enable_model_summary: true
+  deterministic: false
+
+  # Logger
+  logger:
+    _target_: lightning.pytorch.loggers.TensorBoardLogger
+    save_dir: "${hydra:runtime.output_dir}"
+    name: ""
+    version: null
+    default_hp_metric: false
+
+  # Callbacks
+  callbacks:
+    - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+      dirpath: "${hydra:runtime.output_dir}/version_0/checkpoints"
+      monitor: val_loss
+      mode: min
+      save_top_k: 3
+      save_last: true
+      filename: "epoch{epoch:02d}-val_loss{val_loss:.4f}"
+      auto_insert_metric_name: false
+      verbose: true
+
+    - _target_: lightning.pytorch.callbacks.EarlyStopping
+      monitor: val_loss
+      mode: min
+      patience: 50
+      verbose: true
+      min_delta: 1e-4
+
+    - _target_: lightning.pytorch.callbacks.LearningRateMonitor
+      logging_interval: epoch
+
+# Flow matching settings (NO latent variables)
+flow_matching:
+  num_integration_steps: 100  # ODE integration steps
+  mae_val_frequency: 10       # Compute MAE every N epochs
+
+# Hydra configuration
+hydra:
+  run:
+    dir: outputs/${name}/${now:%Y-%m-%d_%H-%M-%S}
+  job:
+    chdir: true

@@ -63,7 +63,8 @@ def main(cfg: DictConfig):
     print("  📊 Data module...")
     data_module = hydra.utils.instantiate(cfg.data)
     print(f"     ✅ {data_module.__class__.__name__}")
-    print(f"        Dataset: {data_module.data_file}")
+    print(f"        State dim: {data_module.state_dim}")
+    print(f"        Embedded dim: {data_module.embedded_dim}")
     print(f"        Batch size: {cfg.batch_size}")
     print()
 
@@ -134,6 +135,9 @@ def main(cfg: DictConfig):
     print("="*80)
     print("✅ Training Completed!")
     print("="*80)
+    print()
+    print(f"Checkpoints saved to: {trainer.checkpoint_callback.dirpath}")
+    print(f"Logs saved to: {trainer.logger.log_dir}")
 
 
 if __name__ == "__main__":

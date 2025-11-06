@@ -43,7 +43,8 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
                  optimizer,
                  scheduler,
                  model_config: Optional[dict] = None,
-                 mae_val_frequency: int = 10):
+                 mae_val_frequency: int = 10,
+                 noise_std: float = 0.1):
         """
         Initialize conditional flow matcher with FB FM integration
 
@@ -54,13 +55,18 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
             scheduler: Learning rate scheduler
             model_config: Configuration dict
             mae_val_frequency: Compute MAE validation every N epochs
+            noise_std: Standard deviation for Gaussian noise sampling
         """
         super().__init__(system, model, optimizer, scheduler, model_config, mae_val_frequency)
+
+        # Configurable standard deviation for initial noise sampling
+        self.noise_std = float(noise_std)
 
         print("✅ Initialized Pendulum CFM with Facebook Flow Matching:")
         print(f"   - Manifold: S¹×ℝ (FlatTorus × Euclidean)")
         print(f"   - Path: GeodesicProbPath with CondOTScheduler")
         print(f"   - MAE validation frequency: every {mae_val_frequency} epochs")
+        print(f"   - Initial noise std: {self.noise_std}")
 
     def _create_manifold(self):
         """Create S¹×ℝ manifold for pendulum"""
@@ -93,7 +99,7 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
 
     def sample_noisy_input(self, batch_size: int, device: torch.device) -> torch.Tensor:
         """
-        Sample noisy input uniformly in S¹ × ℝ space
+        Sample noisy input in S¹ × ℝ space using Gaussian noise
 
         Args:
             batch_size: Number of samples
@@ -102,20 +108,13 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
         Returns:
             Noisy states [batch_size, 2] as (θ, θ̇) in raw coordinates
         """
-        
-        raise NotImplementedError("This method is not implemented for Pendulum Latent Conditional Flow Matching")
-        
-        # θ ~ Uniform[-π, π] for circular angle
-        theta_min = self.system.state_bounds["angle"][0]
-        theta_max = self.system.state_bounds["angle"][1]
-        theta = torch.randn(batch_size, 1, device=device) * (theta_max - theta_min) + theta_min
+        # Sample Gaussian noise N(0, noise_std²)
+        noisy_states = torch.randn(batch_size, 2, device=device) * self.noise_std
 
-        # θ̇ ~ Uniform[-2π, 2π] for angular velocity
-        vel_min = self.system.state_bounds["angular_velocity"][0]
-        vel_max = self.system.state_bounds["angular_velocity"][1]
-        theta_dot = torch.rand(batch_size, 1, device=device) * (vel_max - vel_min) + vel_min
+        # Project onto manifold (wraps angle to [-π, π])
+        noisy_states = self.manifold.projx(noisy_states)
 
-        return torch.cat([theta, theta_dot], dim=1)
+        return noisy_states
 
     # ===================================================================
     # REMOVED METHODS (now in base class or handled by Facebook FM):

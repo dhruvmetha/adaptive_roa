@@ -36,6 +36,7 @@ def load_roa_data(data_file: str) -> Tuple[np.ndarray, np.ndarray]:
     Handles formats:
     1. Pendulum: "θ θ̇ label" (3 cols) or "index θ θ̇ label" (4 cols)
     2. CartPole: "x θ ẋ θ̇ label" (5 cols) or "index x θ ẋ θ̇ label" (6 cols)
+
     3. Humanoid: "state[67] label" (68 cols) - get-up task with head_height criterion
     4. Fallback: "state[N] label" - last column is label, rest are states
     """
@@ -50,35 +51,40 @@ def load_roa_data(data_file: str) -> Tuple[np.ndarray, np.ndarray]:
 
     # Detect format based on number of columns
     if num_cols == 3:
-        # Format: θ θ̇ label (no index)
+        # Format: 2D state + label (no index)
+        # Could be Pendulum (θ, θ̇) or Mountain Car (position, velocity)
         states = data[:, :-1]
-        system_name = "Pendulum (2D)"
+        system_type = "2D system"
     elif num_cols == 4:
-        # Format: index θ θ̇ label (with index)
-        states = data[:, 1:3]  # Skip first column (index), take θ and θ̇
-        system_name = "Pendulum (2D)"
+        # Format: index + 2D state + label
+        states = data[:, 1:3]  # Skip first column (index)
+        system_type = "2D system"
     elif num_cols == 5:
-        # Format: x θ ẋ θ̇ label (no index)
+        # Format: 4D state + label (no index)
+        # CartPole: (x, θ, ẋ, θ̇)
         states = data[:, :-1]
+        # Wrap angle during loading for CartPole
         states[:, 1] = np.arctan2(np.sin(states[:, 1]), np.cos(states[:, 1]))
-        system_name = "CartPole (4D)"
+        system_type = "4D system (likely CartPole)"
     elif num_cols == 6:
-        # Format: index x θ ẋ θ̇ label (with index)
-        states = data[:, 1:5]  # Skip first column (index), take state variables
+        # Format: index + 4D state + label
+        states = data[:, 1:5]  # Skip first column (index)
+        # Wrap angle during loading for CartPole
         states[:, 1] = np.arctan2(np.sin(states[:, 1]), np.cos(states[:, 1]))
-        system_name = "CartPole (4D)"
+        system_type = "4D system (likely CartPole)"
     elif num_cols == 68:
-        # Format: state[67] label (humanoid get-up task)
+        # Format: 67D state + label
+        # Humanoid get-up task
         states = data[:, :-1]
-        system_name = "Humanoid (67D)"
+        system_type = "67D system (Humanoid)"
         print(f"   📋 Humanoid Get-Up Task")
         print(f"   📏 Success criterion: head_height[21] >= 1.3m")
     else:
-        # Fallback: assume last column is label, rest are states (no index)
+        # Fallback: assume last column is label, rest are states
         states = data[:, :-1]
-        system_name = f"Unknown ({states.shape[1]}D)"
+        system_type = f"{states.shape[1]}D system"
 
-    print(f"   System: {system_name}")
+    print(f"   Detected: {system_type}")
     print(f"   State shape: {states.shape}")
     print(f"   Loaded {len(states)} samples")
     print(f"   Success (label=1): {(labels == 1).sum()} ({(labels == 1).mean():.1%})")
@@ -221,11 +227,12 @@ def evaluate_deterministic(flow_matcher,
     endpoints = torch.cat(all_endpoints, dim=0)
 
     # Wrap angles to [-π, π] before checking attractor membership
-    # For CartPole: state is [x, θ, ẋ, θ̇], wrap θ at index 1
-    if endpoints.shape[1] == 4:  # CartPole
-        endpoints[:, 1] = torch.atan2(torch.sin(endpoints[:, 1]), torch.cos(endpoints[:, 1]))
-    elif endpoints.shape[1] == 2:  # Pendulum
-        endpoints[:, 0] = torch.atan2(torch.sin(endpoints[:, 0]), torch.cos(endpoints[:, 0]))
+    # Use manifold structure to determine which dimensions are circular
+    manifold_components = flow_matcher.system._manifold_components
+    for idx, component in enumerate(manifold_components):
+        if component.manifold_type in ["SO2", "Circle"]:
+            # Wrap circular dimensions
+            endpoints[:, idx] = torch.atan2(torch.sin(endpoints[:, idx]), torch.cos(endpoints[:, idx]))
 
     # Check attractor membership (on wrapped angles)
     in_attractor = flow_matcher.system.is_in_attractor(endpoints, radius=attractor_radius)
@@ -284,6 +291,11 @@ def evaluate_probabilistic(flow_matcher,
            -1: Endpoint in unstable top attractors (failure)
             0: Endpoint in separatrix (not in any attractor)
 
+        Mountain Car:
+            1: Endpoint reached goal position π/6 with low velocity (success)
+           -1: Endpoint did not reach goal (failure)
+            0: Endpoint in uncertain region
+
         CartPole:
             1: Endpoint in balanced attractor [0, 0, 0, 0] (success)
            -1: Endpoint exceeded termination thresholds (failure - crashed)
@@ -322,10 +334,11 @@ def evaluate_probabilistic(flow_matcher,
                 )
 
             # Wrap angles to [-π, π] before classification
-            if endpoints.shape[1] == 4:  # CartPole
-                endpoints[:, 1] = torch.atan2(torch.sin(endpoints[:, 1]), torch.cos(endpoints[:, 1]))
-            elif endpoints.shape[1] == 2:  # Pendulum
-                endpoints[:, 0] = torch.atan2(torch.sin(endpoints[:, 0]), torch.cos(endpoints[:, 0]))
+            # Use manifold structure to determine which dimensions are circular
+            manifold_components = flow_matcher.system._manifold_components
+            for idx, component in enumerate(manifold_components):
+                if component.manifold_type in ["SO2", "Circle"]:
+                    endpoints[:, idx] = torch.atan2(torch.sin(endpoints[:, idx]), torch.cos(endpoints[:, idx]))
 
             # Save first endpoint sample (after wrapping)
             if sample_idx == 0:
@@ -513,8 +526,17 @@ def print_results(results: Dict[str, Any], probabilistic: bool):
 
 
 def save_plots(results: Dict[str, Any], states: np.ndarray, labels: np.ndarray,
-               output_dir: Path, probabilistic: bool):
-    """Generate and save visualization plots"""
+               output_dir: Path, probabilistic: bool, flow_matcher=None):
+    """Generate and save visualization plots
+
+    Args:
+        results: Evaluation results dictionary
+        states: State data
+        labels: Ground truth labels
+        output_dir: Directory to save plots
+        probabilistic: Whether probabilistic evaluation was used
+        flow_matcher: Flow matcher instance (optional, for getting dimension names from manifold)
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Confusion matrix
@@ -591,20 +613,25 @@ def save_plots(results: Dict[str, Any], states: np.ndarray, labels: np.ndarray,
     correct = results['predictions'] == labels
     incorrect = ~correct
 
+    # Get dimension names from manifold components if available
+    if flow_matcher is not None and hasattr(flow_matcher.system, '_manifold_components'):
+        manifold_components = flow_matcher.system._manifold_components
+        dim_names = [comp.name.replace('_', ' ').title() for comp in manifold_components]
+    else:
+        # Fallback to generic names
+        dim_names = [f'Dim {i}' for i in range(state_dim)]
+
     if state_dim == 4:
-        # CartPole 4D
-        dim_names = ['Cart Position', 'Pole Angle', 'Cart Velocity', 'Angular Velocity']
+        # 4D system
         dim_pairs = [(0, 1), (0, 2), (1, 3), (2, 3)]
         fig, axes = plt.subplots(2, 2, figsize=(12, 10))
     elif state_dim == 2:
-        # Pendulum 2D
-        dim_names = ['Angle', 'Angular Velocity']
+        # 2D system
         dim_pairs = [(0, 1)]
         fig, axes = plt.subplots(1, 1, figsize=(8, 6))
         axes = np.array([axes])  # Make it iterable
     else:
         # Generic case
-        dim_names = [f'Dim {i}' for i in range(state_dim)]
         # Plot first few dimensions
         dim_pairs = [(i, i+1) for i in range(min(state_dim-1, 3))]
         n_plots = len(dim_pairs)
@@ -636,7 +663,7 @@ def save_plots(results: Dict[str, Any], states: np.ndarray, labels: np.ndarray,
     preds = results['predictions']
 
     if state_dim == 2:
-        # Pendulum 2D
+        # 2D system (use manifold component names)
         fig, ax = plt.subplots(1, 1, figsize=(10, 8))
 
         # Plot each category with different color
@@ -654,8 +681,8 @@ def save_plots(results: Dict[str, Any], states: np.ndarray, labels: np.ndarray,
             ax.scatter(states[separatrix_mask, 0], states[separatrix_mask, 1],
                       c='orange', alpha=0.7, s=20, marker='^', label=f'Separatrix ({separatrix_mask.sum()})')
 
-        ax.set_xlabel('Angle (rad)')
-        ax.set_ylabel('Angular Velocity (rad/s)')
+        ax.set_xlabel(dim_names[0])
+        ax.set_ylabel(dim_names[1])
         ax.set_title('State Space Classification (Success/Failure/Separatrix)')
         ax.legend()
         ax.grid(alpha=0.3)
@@ -666,8 +693,7 @@ def save_plots(results: Dict[str, Any], states: np.ndarray, labels: np.ndarray,
         print(f"   Saved: state_space_classification.png")
 
     elif state_dim == 4:
-        # CartPole 4D - show multiple 2D projections
-        dim_names = ['Cart Position', 'Pole Angle', 'Cart Velocity', 'Angular Velocity']
+        # 4D system - show multiple 2D projections (use manifold component names)
         dim_pairs = [(0, 1), (0, 2), (1, 3), (2, 3)]
 
         fig, axes = plt.subplots(2, 2, figsize=(14, 12))
@@ -783,7 +809,7 @@ def main(cfg: DictConfig):
     if cfg.output.save_plots:
         print("📊 Generating Visualizations")
         print("="*80)
-        save_plots(results, states, labels, output_dir, cfg.evaluation.probabilistic)
+        save_plots(results, states, labels, output_dir, cfg.evaluation.probabilistic, flow_matcher)
         print()
 
     if cfg.output.save_data:

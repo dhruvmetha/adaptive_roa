@@ -1,0 +1,21 @@
+# Mountain Car UNet Model Configuration (Conditional, NO latent)
+
+_target_: src.model.mountain_car_unet.MountainCarUNet
+
+# State dimensions
+embedded_dim: 2      # State after embedding: [position, velocity] (no sin/cos needed)
+output_dim: 2        # Velocity field: [d_position, d_velocity]
+
+# Conditional flow matching (NO latent variables)
+condition_dim: 2     # Conditioning on start state (embedded_dim)
+
+# Model architecture
+time_emb_dim: 128
+hidden_dims: [256, 512, 256]
+
+# Input embeddings (optional rich embedding)
+use_input_embeddings: false
+input_emb_dim: 128
+
+# Note: Total input_dim = embedded_dim + time_emb_dim + condition_dim
+#                       = 2 + 128 + 2 = 132 (NO latent!)

@@ -1,0 +1,44 @@
+# Mountain Car ROA Evaluation Configuration
+
+name: mountain_car_roa_evaluation
+seed: 42
+
+# System and model
+system:
+  module: src.flow_matching.mountain_car.latent_conditional.flow_matcher
+  class: MountainCarLatentConditionalFlowMatcher
+
+# Checkpoint configuration
+checkpoint:
+  path: null  # If null, will auto-find latest checkpoint
+  auto_find: true
+  base_name: mountain_car_latent_conditional_fm
+
+# Evaluation data
+data:
+  file: /common/users/shared/pracsys/genMoPlan/data_trajectories/mountain_car_power_0p0008/roa_labels.txt
+  format: "state,label"  # Format: position velocity label
+
+# Evaluation settings
+evaluation:
+  batch_size: 512
+  num_steps: 100        # ODE integration steps
+  attractor_radius: 0.05  # Goal tolerance (matches system default)
+
+  # Probabilistic evaluation (uncertainty quantification)
+  probabilistic: true
+  num_samples: 20       # Number of samples per state for probabilistic mode
+  confidence_threshold: 0.6  # Threshold for separatrix classification
+
+# Output settings
+output:
+  dir: mountain_car_roa_evaluation
+  save_plots: true
+  save_data: true
+
+# Hydra configuration
+hydra:
+  run:
+    dir: outputs/${name}/${now:%Y-%m-%d_%H-%M-%S}
+  job:
+    chdir: true

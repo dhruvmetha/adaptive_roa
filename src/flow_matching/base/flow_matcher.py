@@ -377,7 +377,8 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
     def predict_endpoint(self,
                         start_states: torch.Tensor,
                         num_steps: int = 100,
-                        method: str = "euler") -> torch.Tensor:
+                        method: str = "euler",
+                        latent: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         Predict endpoints from start states using Facebook FM's RiemannianODESolver
 
@@ -390,6 +391,9 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
             start_states: Start states [B, state_dim] in raw coordinates
             num_steps: Number of integration steps for ODE solving
             method: Integration method ("euler", "rk4", "midpoint")
+            latent: Optional latent variable [B, latent_dim] for stochastic models.
+                   Ignored by default implementation (used by systems without latent variables).
+                   Subclasses with latent variables should override to use this parameter.
 
         Returns:
             Predicted endpoints [B, state_dim] in raw coordinates

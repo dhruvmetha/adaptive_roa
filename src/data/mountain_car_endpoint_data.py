@@ -1,10 +1,10 @@
-"""Pendulum Endpoint Dataset
+"""Mountain Car Endpoint Dataset
 
-Loads endpoint prediction data for Pendulum using metadata format:
+Loads endpoint prediction data for Mountain Car using metadata format:
 - Metadata file contains: [file_path, start_idx, end_idx, label]
 - Trajectory files are loaded and cached in memory
-- Start state: state at start_idx (θ, θ̇)
-- End state: state at end_idx (θ, θ̇)
+- Start state: state at start_idx
+- End state: state at end_idx
 """
 
 import numpy as np
@@ -15,7 +15,6 @@ from typing import Optional
 import pickle
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor
-import os
 
 
 def _load_trajectory_file(file_path):
@@ -23,12 +22,12 @@ def _load_trajectory_file(file_path):
     return file_path, np.loadtxt(file_path, delimiter=",")
 
 
-class EndpointDataset(Dataset):
-    """Dataset for Pendulum endpoint prediction using metadata format.
+class MountainCarEndpointDataset(Dataset):
+    """Dataset for Mountain Car endpoint prediction using metadata format.
 
     Each sample contains:
-    - start_state: Initial state [θ, θ̇]
-    - end_state: Final state [θ, θ̇]
+    - start_state: Initial state [position, velocity]
+    - end_state: Final state [position, velocity]
 
     Metadata format: file_path start_idx end_idx label
     """
@@ -45,7 +44,7 @@ class EndpointDataset(Dataset):
         self.bounds_file = bounds_file
 
         # Load bounds if provided (for info/validation)
-        if bounds_file and os.path.exists(bounds_file):
+        if bounds_file:
             with open(bounds_file, 'rb') as f:
                 self.bounds_data = pickle.load(f)
         else:
@@ -95,12 +94,17 @@ class EndpointDataset(Dataset):
                 self.trajectory_cache[file_path] = trajectory_data
 
         print(f"✅ Cached {len(self.trajectory_cache)} trajectories in memory")
-        print(f"   State dim: 2 (θ, θ̇)")
+        print(f"   State dim: 2 (position, velocity)")
 
     def __len__(self) -> int:
         return len(self.metadata)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> dict:
+        """Get a single endpoint pair.
+
+        Returns:
+            Dictionary with 'start_state' and 'end_state' tensors
+        """
         file_path, start_idx, end_idx = self.metadata[idx]
 
         # Look up trajectory in cache
@@ -111,127 +115,100 @@ class EndpointDataset(Dataset):
         end_state = trajectory[end_idx]
 
         return {
-            'start_state': torch.tensor(start_state, dtype=torch.float32),  # [2] raw state (θ, θ̇)
-            'end_state': torch.tensor(end_state, dtype=torch.float32)       # [2] raw state (θ, θ̇)
+            'start_state': torch.tensor(start_state, dtype=torch.float32),  # [2] raw state
+            'end_state': torch.tensor(end_state, dtype=torch.float32)       # [2] raw state
         }
 
 
-class EndpointDataModule(pl.LightningDataModule):
-    """Lightning DataModule for Pendulum endpoint prediction.
-
-    Supports:
-    - Metadata-based loading
-    - Separate train/validation/test files
-    - Stratified sampling for class balance
-    - Parallel trajectory loading
-    """
+class MountainCarEndpointDataModule(pl.LightningDataModule):
+    """Lightning DataModule for Mountain Car endpoint data."""
 
     def __init__(
         self,
-        train_file: str,
+        data_file: str,
         validation_file: str,
         test_file: Optional[str] = None,
-        bounds_file: Optional[str] = None,
-        batch_size: int = 32,
-        val_batch_size: Optional[int] = None,
+        batch_size: int = 256,
+        val_batch_size: int = 1024,
         num_workers: int = 4,
-        shuffle: bool = True,
         pin_memory: bool = True,
-        use_stratified_sampling: bool = False,
+        bounds_file: Optional[str] = None,
+        use_stratified_sampling: bool = False
     ):
-        """Initialize data module.
+        """Initialize DataModule.
 
         Args:
-            train_file: Path to training metadata file
+            data_file: Path to training metadata file
             validation_file: Path to validation metadata file
             test_file: Path to test metadata file (optional)
-            bounds_file: Path to bounds pickle file (optional)
             batch_size: Training batch size
-            val_batch_size: Validation batch size (defaults to batch_size)
+            val_batch_size: Validation/test batch size
             num_workers: Number of dataloader workers
-            shuffle: Whether to shuffle training data
-            pin_memory: Whether to pin memory for faster GPU transfer
-            use_stratified_sampling: Whether to use stratified sampling for training
+            pin_memory: Whether to pin memory for GPU transfer
+            bounds_file: Path to bounds pickle file
+            use_stratified_sampling: Whether to use WeightedRandomSampler for balanced training
         """
         super().__init__()
-
-        self.train_file = train_file
+        self.data_file = data_file
         self.validation_file = validation_file
         self.test_file = test_file
-        self.bounds_file = bounds_file
         self.batch_size = batch_size
-        self.val_batch_size = val_batch_size if val_batch_size is not None else batch_size
+        self.val_batch_size = val_batch_size
         self.num_workers = num_workers
-        self.shuffle = shuffle
         self.pin_memory = pin_memory
+        self.bounds_file = bounds_file
         self.use_stratified_sampling = use_stratified_sampling
 
-        self.train_dataset = None
-        self.val_dataset = None
-        self.test_dataset = None
-
-        # For convenience - match other systems' interface
-        self.state_dim = 2  # (θ, θ̇)
-        self.embedded_dim = 3  # (sin(θ), cos(θ), θ̇)
-
-    def prepare_data(self):
-        """Check if data files exist"""
-        if not os.path.exists(self.train_file):
-            raise FileNotFoundError(f"Training data file not found: {self.train_file}")
-        if not os.path.exists(self.validation_file):
-            raise FileNotFoundError(f"Validation data file not found: {self.validation_file}")
-        if self.test_file and not os.path.exists(self.test_file):
-            raise FileNotFoundError(f"Test data file not found: {self.test_file}")
+        # Mountain Car dimensions
+        self.state_dim = 2
+        self.embedded_dim = 2  # No embedding for pure Euclidean
 
     def setup(self, stage: Optional[str] = None):
-        """Load data and create datasets"""
-
+        """Set up datasets for different stages."""
         if stage == "fit" or stage is None:
-            print("\n📊 Setting up Pendulum datasets...")
-            print(f"   Train file: {self.train_file}")
-            print(f"   Validation file: {self.validation_file}")
-            if self.use_stratified_sampling:
-                print(f"   Using stratified sampling: True")
-            print()
-
-            self.train_dataset = EndpointDataset(
-                self.train_file,
-                bounds_file=self.bounds_file
+            self.train_dataset = MountainCarEndpointDataset(
+                self.data_file,
+                self.bounds_file
             )
-            self.val_dataset = EndpointDataset(
+            self.val_dataset = MountainCarEndpointDataset(
                 self.validation_file,
-                bounds_file=self.bounds_file
+                self.bounds_file
             )
 
         if stage == "test" or stage is None:
             if self.test_file:
-                print(f"\n📊 Setting up test dataset: {self.test_file}")
-                self.test_dataset = EndpointDataset(
+                self.test_dataset = MountainCarEndpointDataset(
                     self.test_file,
-                    bounds_file=self.bounds_file
+                    self.bounds_file
                 )
 
     def train_dataloader(self):
-        """Create training dataloader with optional stratified sampling"""
-        if self.use_stratified_sampling and hasattr(self.train_dataset, 'labels'):
-            # Compute class weights for stratified sampling
+        """Create training dataloader with optional stratified sampling."""
+        if self.use_stratified_sampling:
+            # Create weighted sampler for balanced training
             labels = np.array(self.train_dataset.labels)
-            unique_labels, counts = np.unique(labels, return_counts=True)
 
-            # Compute inverse frequency weights
-            class_weights = 1.0 / counts
-            sample_weights = class_weights[labels]
+            # Count samples per class
+            unique_labels, class_counts = np.unique(labels, return_counts=True)
 
-            # Create weighted sampler
+            # Compute class weights (inverse frequency)
+            class_weights = 1.0 / class_counts
+
+            # Create sample weights
+            label_to_weight = {label: weight for label, weight in zip(unique_labels, class_weights)}
+            sample_weights = np.array([label_to_weight[label] for label in labels])
+
+            # Create sampler
             sampler = WeightedRandomSampler(
                 weights=sample_weights,
                 num_samples=len(sample_weights),
                 replacement=True
             )
 
-            print(f"✅ Using stratified sampling:")
-            for label, count, weight in zip(unique_labels, counts, class_weights):
-                print(f"   Label {label}: {count} samples, weight {weight:.4f}")
+            print(f"\n🔀 Using stratified sampling for training:")
+            print(f"  Class distribution:")
+            for label, count in zip(unique_labels, class_counts):
+                print(f"    Label {label}: {count} samples ({count/len(labels)*100:.1f}%)")
 
             return DataLoader(
                 self.train_dataset,
@@ -239,34 +216,39 @@ class EndpointDataModule(pl.LightningDataModule):
                 sampler=sampler,  # Use sampler instead of shuffle
                 num_workers=self.num_workers,
                 pin_memory=self.pin_memory,
-            )
-        else:
-            return DataLoader(
-                self.train_dataset,
-                batch_size=self.batch_size,
-                num_workers=self.num_workers,
-                pin_memory=self.pin_memory,
-                shuffle=self.shuffle,
+                persistent_workers=True if self.num_workers > 0 else False
             )
 
+        # Default: shuffle without stratification
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_memory,
+            persistent_workers=True if self.num_workers > 0 else False
+        )
+
     def val_dataloader(self):
-        """Create validation dataloader"""
+        """Create validation dataloader."""
         return DataLoader(
             self.val_dataset,
             batch_size=self.val_batch_size,
+            shuffle=False,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
-            shuffle=False,
+            persistent_workers=True if self.num_workers > 0 else False
         )
 
     def test_dataloader(self):
-        """Create test dataloader"""
-        if self.test_dataset is None:
-            raise ValueError("Test dataset not initialized. Provide test_file in __init__")
-        return DataLoader(
-            self.test_dataset,
-            batch_size=self.val_batch_size,
-            num_workers=self.num_workers,
-            pin_memory=self.pin_memory,
-            shuffle=False,
-        )
+        """Create test dataloader."""
+        if hasattr(self, 'test_dataset'):
+            return DataLoader(
+                self.test_dataset,
+                batch_size=self.val_batch_size,
+                shuffle=False,
+                num_workers=self.num_workers,
+                pin_memory=self.pin_memory,
+                persistent_workers=True if self.num_workers > 0 else False
+            )
+        return None

@@ -1,0 +1,103 @@
+# Configuration for Trajectory MAE training on CartPole DM Control
+
+defaults:
+  - _self_
+  - trainer: default
+  - device: gpu0
+
+# Experiment name
+experiment_name: trajectory_mae_cartpole
+
+# Data configuration
+data:
+  _target_: src.representation.trajectory_data.TrajectoryMAEDataModule
+  data_dir: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_dmcontrol
+  batch_size: 64
+  num_workers: 4
+  train_split: 0.8
+  val_split: 0.1
+  max_seq_len: 1001  # Max trajectory length
+  normalize: true
+  use_labels: false  # Don't need labels for MAE
+  state_bounds:
+    # Bounds from dataset_description.json
+    min: [-2.4, -130.0, -10.0, -10.0]  # x, theta (unwrapped), x_dot, theta_dot
+    max: [2.4, 130.0, 10.0, 10.0]
+
+# Model configuration
+model:
+  _target_: src.representation.train_module.TrajectoryMAELightningModule
+  # Architecture
+  state_dim: 4
+  embed_dim: 256
+  encoder_depth: 6
+  num_heads: 8
+  mlp_ratio: 4.0
+  dropout: 0.1
+  max_seq_len: 1001
+  use_learned_embedding: true
+  decoder_hidden_dim: null  # If null, uses embed_dim * mlp_ratio
+
+  # Masking
+  mask_ratio: 0.75  # Mask 75% of tokens
+  mask_strategy: "random"  # "random" or "block"
+  block_size: null  # For block masking, null = adaptive
+
+  # Training
+  learning_rate: 1.0e-4
+  weight_decay: 0.05
+  warmup_epochs: 10
+  max_epochs: ${trainer.max_epochs}
+
+  # Loss
+  reconstruction_loss: "mse"  # "mse" or "smooth_l1"
+
+# Trainer configuration
+trainer:
+  max_epochs: 200
+  gradient_clip_val: 1.0
+  accelerator: gpu
+  devices: [0]
+  precision: 16-mixed  # Use mixed precision for speed
+  log_every_n_steps: 10
+  val_check_interval: 1.0
+  check_val_every_n_epoch: 1
+  enable_progress_bar: true
+  enable_model_summary: true
+  deterministic: false
+
+# Callbacks
+callbacks:
+  model_checkpoint:
+    _target_: pytorch_lightning.callbacks.ModelCheckpoint
+    dirpath: null  # Will be set by trainer
+    filename: "epoch_{epoch:03d}_val_loss_{val/loss:.4f}"
+    monitor: "val/loss"
+    mode: "min"
+    save_top_k: 3
+    save_last: true
+    verbose: true
+    auto_insert_metric_name: false
+
+  early_stopping:
+    _target_: pytorch_lightning.callbacks.EarlyStopping
+    monitor: "val/loss"
+    patience: 30
+    mode: "min"
+    verbose: true
+    min_delta: 1.0e-4
+
+  learning_rate_monitor:
+    _target_: pytorch_lightning.callbacks.LearningRateMonitor
+    logging_interval: "epoch"
+
+# Logging
+logger:
+  _target_: pytorch_lightning.loggers.TensorBoardLogger
+  save_dir: outputs
+  name: ${experiment_name}
+  version: null
+  default_hp_metric: false
+
+# Seed for reproducibility
+seed: 42

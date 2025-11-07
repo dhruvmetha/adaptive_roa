@@ -21,12 +21,12 @@ dest_dir: /common/users/dm1487/arcmg_datasets/cartpole_dmcontrol/incremental_end
 # Processing range (slicing shuffled_indices.txt)
 start: 1000    # Start indexx
 end: 1500       # End index (exclusive)
-increment: val_balanced # Number used in output filename (e.g., "train_first_last_endpoint_dataset.txt")
+increment: test # Number used in output filename (e.g., "train_first_last_endpoint_dataset.txt")
 
 # Dataset type: "train", "val", or "test"
 # - train/val: Creates endpoint pairs for ALL states in trajectory → final state
 # - test: Creates only FIRST state → final state (one pair per trajectory)
-type: val
+type: test
 # =====================================================================
 # Attractor Classification & Balancing
 # =====================================================================
@@ -40,5 +40,5 @@ type: val
 # Model learns to regress from start_state → scalar (1 or -1)
 # =====================================================================
 attractor_radius: 0.1        # Radius for success/failure classification
-balance_dataset: true        # true = balance success/failure counts (train/val only)
-first_last_only: false        # true = only use first and last state for endpoint pairs
+balance_dataset: false        # true = balance success/failure counts (train/val only)
+first_last_only: true        # true = only use first and last state for endpoint pairs

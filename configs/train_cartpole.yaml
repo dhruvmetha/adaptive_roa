@@ -92,7 +92,7 @@ trainer:
 # Flow matching specific settings
 flow_matching:
   num_integration_steps: 100       # ODE solver steps for inference
-  mae_val_frequency: 10            # Compute MAE validation every N epochs
+  mae_val_frequency: 1            # Compute MAE validation every N epochs
 
 # Hydra output directory
 hydra:

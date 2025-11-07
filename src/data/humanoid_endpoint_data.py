@@ -144,12 +144,19 @@ class HumanoidEndpointDataModule(pl.LightningDataModule):
                 self.validation_file,
                 bounds_file=self.bounds_file
             )
+            # Also initialize test dataset during fit stage (needed for MAE computation)
+            if self.test_file:
+                self.test_dataset = HumanoidEndpointDataset(
+                    self.test_file,
+                    bounds_file=self.bounds_file
+                )
 
-        if stage == "test" or stage is None:
-            self.test_dataset = HumanoidEndpointDataset(
-                self.test_file,
-                bounds_file=self.bounds_file
-            )
+        if stage == "test":
+            if self.test_file:
+                self.test_dataset = HumanoidEndpointDataset(
+                    self.test_file,
+                    bounds_file=self.bounds_file
+                )
 
     def train_dataloader(self):
         if self.use_stratified_sampling:

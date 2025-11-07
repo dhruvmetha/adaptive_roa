@@ -4,7 +4,7 @@ Abstract base class for flow matching models
 import torch
 import torch.nn as nn
 import lightning.pytorch as pl
-from torchmetrics import MeanMetric
+from torchmetrics import MeanMetric, Precision, Recall, Specificity
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 import hydra
@@ -112,7 +112,7 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
             optimizer: Optimizer configuration
             scheduler: LR scheduler configuration
             model_config: Flow matching configuration
-            mae_val_frequency: Compute endpoint MAE every N epochs
+            mae_val_frequency: Compute endpoint MAE on test set every N epochs
         """
         super().__init__()
 
@@ -134,6 +134,12 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         self.val_endpoint_mae_per_dim = nn.ModuleList([
             MeanMetric() for _ in range(self.system.state_dim)
         ])
+
+        # Classification metrics (attractor prediction)
+        # Binary classification: 1 = in attractor (success), 0 = not in attractor
+        self.test_precision = Precision(task='binary')
+        self.test_recall = Recall(task='binary')
+        self.test_specificity = Specificity(task='binary')
 
         # Facebook FM components (subclass creates manifold)
         self.manifold = self._create_manifold()
@@ -478,7 +484,7 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         return loss
     
     def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
-        """Validation step with optional endpoint MAE computation"""
+        """Validation step - only compute validation loss"""
         loss = self.compute_flow_loss(batch)
 
         # Log metrics with compatibility for different TorchMetrics versions
@@ -491,11 +497,33 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
 
         self.log('val_loss', self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
 
-        # Compute endpoint MAE every N epochs
+        # Compute endpoint MAE on test set every N epochs
         if self.current_epoch % self.mae_val_frequency == 0:
-            # Extract states from batch
-            start_states = self._get_start_states(batch)
-            true_endpoints = self._get_end_states(batch)
+            self._compute_mae_on_test_set()
+
+        return loss
+
+    def _compute_mae_on_test_set(self):
+        """Compute MAE and classification metrics on entire test set (called during validation)"""
+        if not hasattr(self.trainer, 'datamodule') or self.trainer.datamodule is None:
+            print("⚠️  Warning: No datamodule found, skipping test MAE computation")
+            return
+
+        # Get test dataloader
+        test_loader = self.trainer.datamodule.test_dataloader()
+
+        all_mae_per_dim = []
+        all_predicted_labels = []
+        all_true_labels = []
+
+        # Iterate over entire test set
+        for test_batch in test_loader:
+            # Move batch to device
+            test_batch = {k: v.to(self.device) if isinstance(v, torch.Tensor) else v
+                         for k, v in test_batch.items()}
+
+            start_states = self._get_start_states(test_batch)
+            true_endpoints = self._get_end_states(test_batch)
 
             # Predict endpoints
             with torch.no_grad():
@@ -504,26 +532,80 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
                     num_steps=100
                 )
 
-            # Compute MAE per dimension/component
-            # Note: For Product manifolds, this returns per-component distances
-            # (e.g., 65 for Humanoid: 34 Euclidean + 1 Sphere + 30 Euclidean)
+            # Compute MAE per dimension for this batch
             mae_per_dim = self.compute_endpoint_mae_per_dim(predicted_endpoints, true_endpoints)
+            all_mae_per_dim.append(mae_per_dim)
 
-            # Update metrics - iterate over actual number of distance components
-            num_components = len(mae_per_dim)
-            for dim_idx in range(num_components):
-                try:
-                    self.val_endpoint_mae_per_dim[dim_idx](mae_per_dim[dim_idx])
-                except Exception:
-                    self.val_endpoint_mae_per_dim[dim_idx].update(mae_per_dim[dim_idx])
+            # Compute classification labels (in attractor = 1, not in attractor = 0)
+            predicted_in_attractor = self.system.is_in_attractor(predicted_endpoints)
+            true_in_attractor = self.system.is_in_attractor(true_endpoints)
 
-                # Log individual dimension MAE
-                self.log(f'val_endpoint_mae_{self._get_dimension_name(dim_idx)}',
-                        self.val_endpoint_mae_per_dim[dim_idx],
-                        on_step=False, on_epoch=True, prog_bar=False)
+            all_predicted_labels.append(predicted_in_attractor.float())
+            all_true_labels.append(true_in_attractor.float())
+
+        # Average MAE across all test batches
+        avg_mae_per_dim = torch.stack(all_mae_per_dim).mean(dim=0)
+
+        # Concatenate all labels for classification metrics
+        all_predicted_labels = torch.cat(all_predicted_labels)
+        all_true_labels = torch.cat(all_true_labels)
+
+        # Update MAE metrics
+        num_components = len(avg_mae_per_dim)
+        for dim_idx in range(num_components):
+            try:
+                self.val_endpoint_mae_per_dim[dim_idx](avg_mae_per_dim[dim_idx])
+            except Exception:
+                self.val_endpoint_mae_per_dim[dim_idx].update(avg_mae_per_dim[dim_idx])
+
+            # Log as "test_mae" to distinguish from validation
+            self.log(f'test_endpoint_mae_{self._get_dimension_name(dim_idx)}',
+                    self.val_endpoint_mae_per_dim[dim_idx],
+                    on_step=False, on_epoch=True, prog_bar=False)
+
+        # Update and log classification metrics
+        self.test_precision(all_predicted_labels, all_true_labels)
+        self.test_recall(all_predicted_labels, all_true_labels)
+        self.test_specificity(all_predicted_labels, all_true_labels)
+
+        self.log('test_precision', self.test_precision, on_step=False, on_epoch=True, prog_bar=True)
+        self.log('test_recall', self.test_recall, on_step=False, on_epoch=True, prog_bar=True)
+        self.log('test_specificity', self.test_specificity, on_step=False, on_epoch=True, prog_bar=True)
+
+        # Print classification metrics
+        print(f"\n📊 Test Set Classification Metrics (Epoch {self.current_epoch}):")
+        print(f"  Precision:   {self.test_precision.compute():.4f}")
+        print(f"  Recall:      {self.test_recall.compute():.4f}")
+        print(f"  Specificity: {self.test_specificity.compute():.4f}")
+
+    def test_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
+        """Test step - compute endpoint MAE and loss on test set"""
+        # Extract states from batch
+        start_states = self._get_start_states(batch)
+        true_endpoints = self._get_end_states(batch)
+
+        # Predict endpoints
+        with torch.no_grad():
+            predicted_endpoints = self.predict_endpoint(
+                start_states=start_states,
+                num_steps=100
+            )
+
+        # Compute MAE per dimension
+        mae_per_dim = self.compute_endpoint_mae_per_dim(predicted_endpoints, true_endpoints)
+
+        # Log test MAE for each dimension
+        for dim_idx in range(len(mae_per_dim)):
+            self.log(f'test_endpoint_mae_{self._get_dimension_name(dim_idx)}',
+                    mae_per_dim[dim_idx],
+                    on_step=False, on_epoch=True, prog_bar=True)
+
+        # Compute and log test loss
+        loss = self.compute_flow_loss(batch)
+        self.log('test_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
 
         return loss
-    
+
     def configure_optimizers(self):
         """Configure optimizers and schedulers"""
         # Instantiate optimizer from config

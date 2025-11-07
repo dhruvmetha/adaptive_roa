@@ -1,0 +1,23 @@
+# @package _global_.system
+# =====================================================================
+# CartPole DeepMind Control Suite System Configuration
+# =====================================================================
+# CartPole DM Control dynamics with ℝ × S¹ × ℝ² manifold structure
+# State: (x, θ, ẋ, θ̇) where:
+#   - x ∈ ℝ (cart position)
+#   - θ ∈ S¹ (pole angle, WRAPPED to [-π, π])
+#   - ẋ ∈ ℝ (cart velocity)
+#   - θ̇ ∈ ℝ (pole angular velocity)
+#
+# Key Differences from Regular CartPole:
+#   - Theta is UNWRAPPED in raw data (up to ±130 rad)
+#   - Data loading wraps theta to [-π, π]
+#   - Radius-based success criterion (no failure thresholds)
+#   - Higher velocity bounds (dm_control physics)
+# =====================================================================
+
+_target_: src.systems.cartpole_dmcontrol.CartPoleDMControlSystem
+
+# Data bounds configuration
+bounds_file: /common/users/dm1487/arcmg_datasets/cartpole_dmcontrol/cartpole_dmcontrol_data_bounds.pkl
+use_dynamic_bounds: true  # If false, uses default fallback bounds

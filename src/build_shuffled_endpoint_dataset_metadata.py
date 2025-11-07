@@ -21,6 +21,7 @@ def main(cfg: DictConfig) -> None:
     end = cfg.end
     attractor_radius = cfg.get('attractor_radius', 0.1)  # Default radius for classification
     first_last_only = cfg.get('first_last_only', False)
+    balance_dataset = cfg.get('balance_dataset', False)
 
     # Get system name
     system_name = system.name if hasattr(system, 'name') else 'unknown'
@@ -31,38 +32,70 @@ def main(cfg: DictConfig) -> None:
     print(f"Classifying trajectories using system attractor:")
     print(f"  Target attractor: 1 (success), -1 (failure)")
     print(f"  Attractor radius: {attractor_radius}")
+    if balance_dataset and type != "test":
+        print(f"  Balancing: Enabled (will match success/failure counts)")
 
     dest_dir.mkdir(parents=True, exist_ok=True)
 
 
     print(f"Found {len(trajectory_files)} trajectory files")
-    endpoint_data = []
-    success_count = 0
-    failure_count = 0
+    success_trajectories = []
+    failure_trajectories = []
 
-    for traj_file in tqdm(trajectory_files, desc="Processing trajectories"):
-        
-        
+    # First pass: classify trajectories and separate by success/failure
+    for traj_file in tqdm(trajectory_files, desc="Classifying trajectories"):
         traj = np.loadtxt(traj_file, delimiter=",")
         num_states = traj.shape[0]
-        
+
         final_state = traj[-1]
         is_success = system.is_in_attractor(final_state)
-        
-        
-        if is_success:
-            success_count += 1
-        else:
-            failure_count += 1
 
-        # Create endpoint metadata for all points in trajectory
-        # Format: [file_path, start_idx, end_idx]
+        if is_success:
+            success_trajectories.append((traj_file, num_states))
+        else:
+            failure_trajectories.append((traj_file, num_states))
+
+    success_count = len(success_trajectories)
+    failure_count = len(failure_trajectories)
+
+    # Balance dataset if requested (only for train/val)
+    if balance_dataset and type != "test":
+        min_count = min(success_count, failure_count)
+        print(f"\nBalancing dataset:")
+        print(f"  Original - Success: {success_count}, Failure: {failure_count}")
+        print(f"  Sampling {min_count} trajectories from each class")
+
+        # Randomly sample to balance
+        random.shuffle(success_trajectories)
+        random.shuffle(failure_trajectories)
+        success_trajectories = success_trajectories[:min_count]
+        failure_trajectories = failure_trajectories[:min_count]
+
+        success_count = len(success_trajectories)
+        failure_count = len(failure_trajectories)
+        print(f"  Balanced - Success: {success_count}, Failure: {failure_count}")
+
+    # Second pass: create endpoint data from selected trajectories
+    endpoint_data = []
+
+    for traj_file, num_states in tqdm(success_trajectories, desc="Processing success trajectories"):
         for i in range(num_states - 1):  # Exclude final point as start
-            endpoint_data.append([traj_file, i, traj.shape[0] - 1, is_success])
+            endpoint_data.append([traj_file, i, num_states - 1, True])
             if first_last_only:
                 break
             if type == "test":
                 break
+
+    for traj_file, num_states in tqdm(failure_trajectories, desc="Processing failure trajectories"):
+        for i in range(num_states - 1):  # Exclude final point as start
+            endpoint_data.append([traj_file, i, num_states - 1, False])
+            if first_last_only:
+                break
+            if type == "test":
+                break
+
+    # Shuffle the combined endpoint data
+    random.shuffle(endpoint_data)
 
     output_file = dest_dir / f"{increment}_endpoint_dataset.txt"
     print(f"Writing {len(endpoint_data)} endpoint metadata to file...")
@@ -83,6 +116,8 @@ def main(cfg: DictConfig) -> None:
         print(f"  Total trajectories: {total}")
         print(f"  Success: {success_count} ({success_pct:.1f}%)")
         print(f"  Failure: {failure_count} ({failure_pct:.1f}%)")
+        
+    
 
 if __name__ == "__main__":
     main()

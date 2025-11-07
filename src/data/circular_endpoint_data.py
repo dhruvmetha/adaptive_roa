@@ -103,12 +103,14 @@ class CircularEndpointDataModule(pl.LightningDataModule):
         
     def setup(self, stage: Optional[str] = None):
         """Load data and create datasets"""
-        
+
         if stage == "fit" or stage is None:
             self.train_dataset = CircularEndpointDataset(self.data_file, split="train")
             self.val_dataset = CircularEndpointDataset(self.data_file, split="val")
-            
-        if stage == "test" or stage is None:
+            # Also initialize test dataset during fit stage (needed for MAE computation)
+            self.test_dataset = CircularEndpointDataset(self.data_file, split="test")
+
+        if stage == "test":
             self.test_dataset = CircularEndpointDataset(self.data_file, split="test")
     
     def train_dataloader(self):

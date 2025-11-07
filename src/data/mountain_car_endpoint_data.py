@@ -174,8 +174,14 @@ class MountainCarEndpointDataModule(pl.LightningDataModule):
                 self.validation_file,
                 self.bounds_file
             )
+            # Also initialize test dataset during fit stage (needed for MAE computation)
+            if self.test_file:
+                self.test_dataset = MountainCarEndpointDataset(
+                    self.test_file,
+                    self.bounds_file
+                )
 
-        if stage == "test" or stage is None:
+        if stage == "test":
             if self.test_file:
                 self.test_dataset = MountainCarEndpointDataset(
                     self.test_file,

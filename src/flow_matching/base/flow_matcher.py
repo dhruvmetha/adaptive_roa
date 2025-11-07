@@ -102,7 +102,8 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
                  optimizer: Any,
                  scheduler: Any,
                  model_config: Optional[FlowMatchingConfig] = None,
-                 mae_val_frequency: int = 10):
+                 mae_val_frequency: int = 10,
+                 loss_weights: Optional[Dict[int, float]] = None):
         """
         Initialize base flow matcher
 
@@ -113,6 +114,8 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
             scheduler: LR scheduler configuration
             model_config: Flow matching configuration
             mae_val_frequency: Compute endpoint MAE on test set every N epochs
+            loss_weights: Optional dictionary mapping class labels to loss weights
+                         e.g., {0: 1.2, 1: 6.0} to upweight success samples
         """
         super().__init__()
 
@@ -121,6 +124,7 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         self.model = model
         self.config = model_config or FlowMatchingConfig()
         self.mae_val_frequency = mae_val_frequency
+        self.loss_weights = loss_weights
 
         # Store optimizer and scheduler configs (will be instantiated in configure_optimizers)
         self.optimizer_config = optimizer
@@ -322,7 +326,7 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
 
         return x_noise_normalized, start_normalized_embedded, start_normalized
 
-    def compute_flow_loss(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+    def compute_flow_loss(self, batch: Dict[str, torch.Tensor], reduction: str = 'mean') -> torch.Tensor:
         """
         Compute conditional flow matching loss using Facebook FM
 
@@ -332,9 +336,10 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
 
         Args:
             batch: Dictionary containing batch data
+            reduction: 'mean' (default) for scalar loss, 'none' for per-sample loss
 
         Returns:
-            Flow matching loss
+            Flow matching loss (scalar if reduction='mean', [batch_size] if reduction='none')
         """
         # Extract data endpoints and start states
         start_states = self._get_start_states(batch)
@@ -374,10 +379,10 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
 
         # Use automatic target velocity from path.sample()
         target_velocity = path_sample.dx_t
-        
+
         # Compute MSE loss between predicted and target velocities
-        loss = nn.functional.mse_loss(predicted_velocity, target_velocity)
-        
+        loss = nn.functional.mse_loss(predicted_velocity, target_velocity, reduction=reduction)
+
         return loss
 
     def predict_endpoint(self,
@@ -469,8 +474,34 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
     
     def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Training step - common across all variants"""
-        loss = self.compute_flow_loss(batch)
-        
+
+        # Apply per-sample loss weighting if loss_weights is provided
+        if self.loss_weights is not None and 'label' in batch:
+            # Compute per-sample loss (shape: [batch_size, state_dim])
+            per_sample_loss = self.compute_flow_loss(batch, reduction='none')
+
+            # Reduce over state dimensions to get per-sample scalar loss [batch_size]
+            per_sample_loss = per_sample_loss.mean(dim=1)
+
+            # Get labels from batch
+            labels = batch['label']
+            if isinstance(labels, torch.Tensor):
+                labels = labels.cpu().numpy()
+
+            # Create weight tensor for each sample
+            weights = torch.tensor(
+                [self.loss_weights[int(label)] for label in labels],
+                dtype=per_sample_loss.dtype,
+                device=per_sample_loss.device
+            )
+
+            # Apply weights and compute mean
+            weighted_loss = (per_sample_loss * weights).mean()
+            loss = weighted_loss
+        else:
+            # Standard scalar loss (no weighting)
+            loss = self.compute_flow_loss(batch)
+
         # Log metrics with compatibility for different TorchMetrics versions
         try:
             # TorchMetrics >= 1.2 style
@@ -478,9 +509,9 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         except Exception:
             # Fallback for older TorchMetrics versions
             self.train_loss.update(loss)
-        
+
         self.log('train_loss', self.train_loss, on_step=True, on_epoch=True, prog_bar=True)
-        
+
         return loss
     
     def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:

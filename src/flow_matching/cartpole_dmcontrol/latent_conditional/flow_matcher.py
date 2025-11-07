@@ -39,6 +39,7 @@ class CartPoleDMControlLatentConditionalFlowMatcher(BaseFlowMatcher):
                  scheduler,
                  model_config: Optional[dict] = None,
                  mae_val_frequency: int = 10,
+                 loss_weights: Optional[Dict[int, float]] = None,
                  noise_std: float = 0.1):
         """
         Initialize CartPole DM Control conditional flow matcher
@@ -50,9 +51,10 @@ class CartPoleDMControlLatentConditionalFlowMatcher(BaseFlowMatcher):
             scheduler: Learning rate scheduler
             model_config: Configuration dict
             mae_val_frequency: Compute MAE validation every N epochs
+            loss_weights: Optional dictionary mapping class labels to loss weights
             noise_std: Standard deviation for Gaussian noise sampling
         """
-        super().__init__(system, model, optimizer, scheduler, model_config, mae_val_frequency)
+        super().__init__(system, model, optimizer, scheduler, model_config, mae_val_frequency, loss_weights)
 
         # Configurable standard deviation for initial noise sampling
         self.noise_std = float(noise_std)
@@ -63,6 +65,8 @@ class CartPoleDMControlLatentConditionalFlowMatcher(BaseFlowMatcher):
         print(f"   - MAE validation frequency: every {mae_val_frequency} epochs")
         print(f"   - Initial noise std: {self.noise_std}")
         print(f"   - Success criterion: radius-based (no failure thresholds)")
+        if loss_weights is not None:
+            print(f"   - Loss weights: {loss_weights}")
 
     def _create_manifold(self):
         """Create ℝ × S¹ × ℝ² manifold for CartPole DM Control (same as regular CartPole)"""

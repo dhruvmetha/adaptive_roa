@@ -102,9 +102,12 @@ def main(cfg: DictConfig):
         scheduler=cfg.scheduler,
         model_config=OmegaConf.to_container(cfg.model, resolve=True),
         mae_val_frequency=cfg.flow_matching.mae_val_frequency,
+        loss_weights=cfg.flow_matching.get('loss_weights', None),
         _recursive_=False
     )
     print(f"     ✅ {flow_matcher.__class__.__name__}")
+    if cfg.flow_matching.get('loss_weights', None) is not None:
+        print(f"        Loss weights: {dict(cfg.flow_matching.loss_weights)}")
     print()
 
     # Trainer

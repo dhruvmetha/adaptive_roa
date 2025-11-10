@@ -23,6 +23,7 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 import torch
 import lightning.pytorch as pl
+from lightning.pytorch.callbacks import ModelCheckpoint
 
 
 @hydra.main(version_base=None, config_path="../../../../configs", config_name="train_cartpole")
@@ -136,8 +137,14 @@ def main(cfg: DictConfig):
     print("✅ Training Completed!")
     print("="*80)
     print()
-    print(f"Checkpoints saved to: {trainer.checkpoint_callback.dirpath}")
-    print(f"Logs saved to: {trainer.logger.log_dir}")
+    # Resolve checkpoint directory robustly for Lightning 2.x
+    ckpt_dir = None
+    for cb in trainer.callbacks:
+        if isinstance(cb, ModelCheckpoint):
+            ckpt_dir = cb.dirpath
+            break
+    print(f"Checkpoints saved to: {ckpt_dir if ckpt_dir is not None else 'N/A'}")
+    print(f"Logs saved to: {trainer.logger.log_dir if hasattr(trainer.logger, 'log_dir') else 'N/A'}")
 
 
 if __name__ == "__main__":

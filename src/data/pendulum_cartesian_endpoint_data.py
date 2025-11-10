@@ -1,10 +1,11 @@
-"""Pendulum Endpoint Dataset
+"""Pendulum Cartesian Endpoint Dataset
 
-Loads endpoint prediction data for Pendulum using metadata format:
+Loads endpoint prediction data for Pendulum in Cartesian coordinates:
 - Metadata file contains: [file_path, start_idx, end_idx, label]
 - Trajectory files are loaded and cached in memory
-- Start state: state at start_idx (θ, θ̇)
-- End state: state at end_idx (θ, θ̇)
+- Start state: state at start_idx (x, y, ẋ, ẏ)
+- End state: state at end_idx (x, y, ẋ, ẏ)
+- All Euclidean coordinates (no angle wrapping needed)
 """
 
 import numpy as np
@@ -16,6 +17,7 @@ import pickle
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor
 import os
+from pathlib import Path
 
 
 def _load_trajectory_file(file_path):
@@ -23,12 +25,12 @@ def _load_trajectory_file(file_path):
     return file_path, np.loadtxt(file_path, delimiter=",")
 
 
-class EndpointDataset(Dataset):
-    """Dataset for Pendulum endpoint prediction using metadata format.
+class PendulumCartesianEndpointDataset(Dataset):
+    """Dataset for Pendulum Cartesian endpoint prediction using metadata format.
 
     Each sample contains:
-    - start_state: Initial state [θ, θ̇]
-    - end_state: Final state [θ, θ̇]
+    - start_state: Initial state [x, y, ẋ, ẏ]
+    - end_state: Final state [x, y, ẋ, ẏ]
 
     Metadata format: file_path start_idx end_idx label
     """
@@ -47,8 +49,14 @@ class EndpointDataset(Dataset):
         # Load bounds if provided (for info/validation)
         if bounds_file and os.path.exists(bounds_file):
             with open(bounds_file, 'rb') as f:
-                self.bounds_data = pickle.load(f)
+                bounds_data = pickle.load(f)
+            self._load_bounds(bounds_data)
         else:
+            # Use default symmetric bounds
+            self.x_limit = 1.0
+            self.y_limit = 1.0
+            self.x_dot_limit = 2 * np.pi
+            self.y_dot_limit = 2 * np.pi
             self.bounds_data = None
 
         # Load the endpoint metadata
@@ -95,7 +103,23 @@ class EndpointDataset(Dataset):
                 self.trajectory_cache[file_path] = trajectory_data
 
         print(f"✅ Cached {len(self.trajectory_cache)} trajectories in memory")
-        print(f"   State dim: 2 (θ, θ̇)")
+        print(f"   State dim: 4 (x, y, ẋ, ẏ)")
+
+    def _load_bounds(self, bounds_data):
+        """Load data bounds from pickle and compute symmetric limits"""
+        bounds = bounds_data['bounds']
+
+        # Compute symmetric bounds (all Euclidean)
+        self.x_limit = max(abs(bounds['x']['min']), abs(bounds['x']['max']))
+        self.y_limit = max(abs(bounds['y']['min']), abs(bounds['y']['max']))
+        self.x_dot_limit = max(abs(bounds['x_dot']['min']), abs(bounds['x_dot']['max']))
+        self.y_dot_limit = max(abs(bounds['y_dot']['min']), abs(bounds['y_dot']['max']))
+
+        print(f"   Using symmetric bounds from {self.bounds_file}")
+        print(f"     Position x: [{bounds['x']['min']:.3f}, {bounds['x']['max']:.3f}] -> symmetric: ±{self.x_limit:.3f}")
+        print(f"     Position y: [{bounds['y']['min']:.3f}, {bounds['y']['max']:.3f}] -> symmetric: ±{self.y_limit:.3f}")
+        print(f"     Velocity ẋ: [{bounds['x_dot']['min']:.3f}, {bounds['x_dot']['max']:.3f}] -> symmetric: ±{self.x_dot_limit:.3f}")
+        print(f"     Velocity ẏ: [{bounds['y_dot']['min']:.3f}, {bounds['y_dot']['max']:.3f}] -> symmetric: ±{self.y_dot_limit:.3f}")
 
     def __len__(self) -> int:
         return len(self.metadata)
@@ -110,14 +134,15 @@ class EndpointDataset(Dataset):
         start_state = trajectory[start_idx]
         end_state = trajectory[end_idx]
 
+        # No angle wrapping needed - all Euclidean coordinates
         return {
-            'start_state': torch.tensor(start_state, dtype=torch.float32),  # [2] raw state (θ, θ̇)
-            'end_state': torch.tensor(end_state, dtype=torch.float32)       # [2] raw state (θ, θ̇)
+            'start_state': torch.tensor(start_state, dtype=torch.float32),  # [4] raw (x, y, ẋ, ẏ)
+            'end_state': torch.tensor(end_state, dtype=torch.float32)       # [4] raw (x, y, ẋ, ẏ)
         }
 
 
-class EndpointDataModule(pl.LightningDataModule):
-    """Lightning DataModule for Pendulum endpoint prediction.
+class PendulumCartesianEndpointDataModule(pl.LightningDataModule):
+    """Lightning DataModule for Pendulum Cartesian endpoint prediction.
 
     Supports:
     - Metadata-based loading
@@ -171,8 +196,8 @@ class EndpointDataModule(pl.LightningDataModule):
         self.test_dataset = None
 
         # For convenience - match other systems' interface
-        self.state_dim = 2  # (θ, θ̇)
-        self.embedded_dim = 3  # (sin(θ), cos(θ), θ̇)
+        self.state_dim = 4         # (x, y, ẋ, ẏ)
+        self.embedded_dim = 4      # Identity embedding (no sin/cos)
 
     def prepare_data(self):
         """Check if data files exist"""
@@ -187,26 +212,34 @@ class EndpointDataModule(pl.LightningDataModule):
         """Load data and create datasets"""
 
         if stage == "fit" or stage is None:
-            print("\n📊 Setting up Pendulum datasets...")
+            print("\n📊 Setting up Pendulum Cartesian datasets...")
             print(f"   Train file: {self.train_file}")
             print(f"   Validation file: {self.validation_file}")
+            if self.test_file:
+                print(f"   Test file: {self.test_file}")
             if self.use_stratified_sampling:
                 print(f"   Using stratified sampling: True")
             print()
 
-            self.train_dataset = EndpointDataset(
+            self.train_dataset = PendulumCartesianEndpointDataset(
                 self.train_file,
                 bounds_file=self.bounds_file
             )
-            self.val_dataset = EndpointDataset(
+            self.val_dataset = PendulumCartesianEndpointDataset(
                 self.validation_file,
                 bounds_file=self.bounds_file
             )
+            # Also initialize test dataset during fit stage (needed for MAE computation)
+            if self.test_file:
+                self.test_dataset = PendulumCartesianEndpointDataset(
+                    self.test_file,
+                    bounds_file=self.bounds_file
+                )
 
-        if stage == "test" or stage is None:
+        if stage == "test":
             if self.test_file:
                 print(f"\n📊 Setting up test dataset: {self.test_file}")
-                self.test_dataset = EndpointDataset(
+                self.test_dataset = PendulumCartesianEndpointDataset(
                     self.test_file,
                     bounds_file=self.bounds_file
                 )

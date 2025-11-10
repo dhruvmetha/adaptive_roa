@@ -21,10 +21,15 @@ def main(cfg: DictConfig) -> None:
     end = cfg.end
     attractor_radius = cfg.get('attractor_radius', 0.1)  # Default radius for classification
     first_last_only = cfg.get('first_last_only', False)
-    balance_dataset = cfg.get('balance_dataset', False)
+    
+    success_endpoint_count = 0
+    failure_endpoint_count = 0
+    
 
     # Get system name
     system_name = system.name if hasattr(system, 'name') else 'unknown'
+    
+    print(f"System name: {system_name}")
 
     with open(shuffled_idxs_file, 'r') as f:
         trajectory_files = [os.path.join(data_dirs, line.strip()) for line in f.readlines()][start:end]
@@ -32,8 +37,6 @@ def main(cfg: DictConfig) -> None:
     print(f"Classifying trajectories using system attractor:")
     print(f"  Target attractor: 1 (success), -1 (failure)")
     print(f"  Attractor radius: {attractor_radius}")
-    if balance_dataset and type != "test":
-        print(f"  Balancing: Enabled (will match success/failure counts)")
 
     dest_dir.mkdir(parents=True, exist_ok=True)
 
@@ -52,28 +55,13 @@ def main(cfg: DictConfig) -> None:
 
         if is_success:
             success_trajectories.append((traj_file, num_states))
+            success_endpoint_count += num_states - 1
         else:
             failure_trajectories.append((traj_file, num_states))
+            failure_endpoint_count += num_states - 1
 
     success_count = len(success_trajectories)
     failure_count = len(failure_trajectories)
-
-    # Balance dataset if requested (only for train/val)
-    if balance_dataset and type != "test":
-        min_count = min(success_count, failure_count)
-        print(f"\nBalancing dataset:")
-        print(f"  Original - Success: {success_count}, Failure: {failure_count}")
-        print(f"  Sampling {min_count} trajectories from each class")
-
-        # Randomly sample to balance
-        random.shuffle(success_trajectories)
-        random.shuffle(failure_trajectories)
-        success_trajectories = success_trajectories[:min_count]
-        failure_trajectories = failure_trajectories[:min_count]
-
-        success_count = len(success_trajectories)
-        failure_count = len(failure_trajectories)
-        print(f"  Balanced - Success: {success_count}, Failure: {failure_count}")
 
     # Second pass: create endpoint data from selected trajectories
     endpoint_data = []
@@ -117,7 +105,11 @@ def main(cfg: DictConfig) -> None:
         print(f"  Success: {success_count} ({success_pct:.1f}%)")
         print(f"  Failure: {failure_count} ({failure_pct:.1f}%)")
         
-    
+    print(f"Success endpoint count: {success_endpoint_count}")
+    print(f"Failure endpoint count: {failure_endpoint_count}")
+    print(f"Total endpoint count: {success_endpoint_count + failure_endpoint_count}")
+    print(f"Success endpoint percentage: {success_endpoint_count / (success_endpoint_count + failure_endpoint_count) * 100:.1f}%")
+    print(f"Failure endpoint percentage: {failure_endpoint_count / (success_endpoint_count + failure_endpoint_count) * 100:.1f}%")
 
 if __name__ == "__main__":
     main()

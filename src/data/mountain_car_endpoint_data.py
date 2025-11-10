@@ -197,8 +197,11 @@ class MountainCarEndpointDataModule(pl.LightningDataModule):
             # Count samples per class
             unique_labels, class_counts = np.unique(labels, return_counts=True)
 
-            # Compute class weights (inverse frequency)
-            class_weights = 1.0 / class_counts
+            # Compute balanced class weights: total / (n_classes * count_per_class)
+            # This gives minority class weight > 1.0, majority class weight < 1.0
+            n_samples = len(labels)
+            n_classes = len(unique_labels)
+            class_weights = n_samples / (n_classes * class_counts)
 
             # Create sample weights
             label_to_weight = {label: weight for label, weight in zip(unique_labels, class_weights)}
@@ -211,10 +214,9 @@ class MountainCarEndpointDataModule(pl.LightningDataModule):
                 replacement=True
             )
 
-            print(f"\n🔀 Using stratified sampling for training:")
-            print(f"  Class distribution:")
-            for label, count in zip(unique_labels, class_counts):
-                print(f"    Label {label}: {count} samples ({count/len(labels)*100:.1f}%)")
+            print(f"\n✅ Using stratified sampling:")
+            for label, count, weight in zip(unique_labels, class_counts, class_weights):
+                print(f"   Label {label}: {count:,} samples ({count/len(labels)*100:.1f}%), weight {weight:.6f} ({weight:.2e})")
 
             return DataLoader(
                 self.train_dataset,

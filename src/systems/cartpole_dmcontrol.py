@@ -143,8 +143,15 @@ class CartPoleDMControlSystem(DynamicalSystem):
             state = state.unsqueeze(0)
 
         # Compute Euclidean distance from origin
-        distance = torch.norm(state, dim=1)
-        result = distance < radius
+        # distance = torch.norm(state, dim=1)
+        # result = distance < radius
+        
+        x, theta, x_dot, theta_dot = state[:, 0], state[:, 1], state[:, 2], state[:, 3]
+        position_ok = torch.abs(x) < radius
+        velocity_ok = torch.abs(x_dot) < radius
+        angular_velocity_ok = torch.abs(theta_dot) < radius
+        angle_ok = torch.abs(theta) < radius
+        result = position_ok & velocity_ok & angle_ok & angular_velocity_ok
 
         # Convert back to scalar if input was single state
         if len(result) == 1:

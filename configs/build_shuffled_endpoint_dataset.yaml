@@ -12,11 +12,11 @@
 # =====================================================================
 
 defaults:
-  - system: cartpole_dmcontrol
+  - system: cartpole
 
-data_dirs: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_dmcontrol/trajectories
-shuffled_idxs_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_dmcontrol/shuffled_indices.txt
-dest_dir: /common/users/dm1487/arcmg_datasets/cartpole_dmcontrol/incremental_endpoint_dataset
+data_dirs: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/trajectories
+shuffled_idxs_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/shuffled_indices.txt
+dest_dir: /common/users/dm1487/arcmg_datasets/cartpole_pybullet/incremental_endpoint_dataset/
 
 # Processing range (slicing shuffled_indices.txt)
 start: 1000    # Start indexx
@@ -41,4 +41,4 @@ type: test
 # =====================================================================
 attractor_radius: 0.1        # Radius for success/failure classification
 balance_dataset: false        # true = balance success/failure counts (train/val only)
-first_last_only: true        # true = only use first and last state for endpoint pairs
+first_last_only: false        # true = only use first and last state for endpoint pairs

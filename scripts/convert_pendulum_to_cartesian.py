@@ -39,6 +39,14 @@ def polar_to_cartesian(theta, theta_dot):
 
     return x, y, x_dot, y_dot
 
+# def cartesian_to_polar(x, y, x_dot, y_dot):
+#     """
+#     Convert Cartesian (x, y, ẋ, ẏ) to polar (θ, θ̇).
+#     """
+#     theta = np.arctan2(y, x)
+#     theta_dot = (x_dot * np.cos(theta) - y_dot * np.sin(theta)) / (x**2 + y**2)
+#     return theta, theta_dot
+
 
 def convert_trajectory_file(input_path, output_path):
     """

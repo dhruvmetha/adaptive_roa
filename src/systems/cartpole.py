@@ -108,7 +108,7 @@ class CartPoleSystem(DynamicalSystem):
             [0.0, 0.0, 0.0, 0.0],      # Cart centered, pole upright (0° only)
         ]
     
-    def is_in_attractor(self, state, radius: float = 1.0):
+    def is_in_attractor(self, state, radius: float = 0.1):
         """
         Check if states are within attractor basins (balanced CartPole)
 
@@ -126,26 +126,28 @@ class CartPoleSystem(DynamicalSystem):
         if state.dim() == 1:
             state = state.unsqueeze(0)
 
-        result = torch.norm(state, dim=1) < radius
+        # result = torch.norm(state, dim=1) < radius
 
-        # x, theta, x_dot, theta_dot = state[:, 0], state[:, 1], state[:, 2], state[:, 3]
+        x, theta, x_dot, theta_dot = state[:, 0], state[:, 1], state[:, 2], state[:, 3]
 
-        # # Position and velocity constraints (using radius = 0.1 consistently)
-        # position_ok = torch.abs(x) < radius
-        # velocity_ok = torch.abs(x_dot) < radius
-        # angular_velocity_ok = torch.abs(theta_dot) < radius
+        # Position and velocity constraints (using radius = 0.1 consistently)
+        position_ok = torch.abs(x) < radius
+        velocity_ok = torch.abs(x_dot) < radius
+        angular_velocity_ok = torch.abs(theta_dot) < radius
 
-        # # Angular constraint: check if close to upright (0° ONLY)
-        # # Distance from 0° (upright position)
-        # dist_from_zero = torch.abs(theta)
-        # angle_ok = dist_from_zero < radius
+        # Angular constraint: check if close to upright (0° ONLY)
+        # Distance from 0° (upright position)
+        dist_from_zero = torch.abs(theta)
+        angle_ok = dist_from_zero < radius
 
-        # result = position_ok & velocity_ok & angle_ok & angular_velocity_ok
-        # # Convert back to numpy if input was numpy
+        result = position_ok & velocity_ok & angle_ok & angular_velocity_ok
+        # Convert back to numpy if input was numpy
+        
         if len(result) == 1:
             return result.item()
         
         return result
+        
 
     def classify_attractor(self, state: torch.Tensor, radius: float = 0.1) -> torch.Tensor:
         """
@@ -230,12 +232,15 @@ class CartPoleSystem(DynamicalSystem):
         theta = state[:, 1]  # Keep as-is (already wrapped)
         x_dot = state[:, 2]
         theta_dot = state[:, 3]
+        
+        
+        # print(self.cart_limit, self.velocity_limit, self.angular_velocity_limit)
 
         # Normalize linear quantities to [-1, 1] range using symmetric bounds
         x_norm = x / self.cart_limit
         x_dot_norm = x_dot / self.velocity_limit
         theta_dot_norm = theta_dot / self.angular_velocity_limit
-
+        
         return torch.stack([x_norm, theta, x_dot_norm, theta_dot_norm], dim=1)
 
     def denormalize_state(self, normalized_state: torch.Tensor) -> torch.Tensor:

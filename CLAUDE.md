@@ -25,11 +25,15 @@ This is a robotics research project for training neural network classifiers, rea
 
 - **Models**: Located in `src/model/`
   - **Pendulum Models**:
-    - `pendulum_unet.py`: Latent conditional UNet for S¹×ℝ manifold
-    - `pendulum_gaussian_noise_unet.py`: Gaussian noise UNet (simplified, no latent/conditioning)
+    - `pendulum_unet.py`: Original latent conditional UNet for S¹×ℝ manifold
+    - `pendulum_unet_film.py`: FiLM-based UNet with residual conditioning
+    - `pendulum_cartesian_unet.py`: Original UNet for ℝ⁴ Cartesian manifold
+    - `pendulum_cartesian_unet_film.py`: FiLM-based UNet for Cartesian coordinates
   - **CartPole Models**:
-    - `cartpole_unet.py`: Latent conditional UNet for ℝ²×S¹×ℝ manifold
-    - `cartpole_gaussian_perturbed_unet1d.py`: Gaussian noise UNet (simplified)
+    - `cartpole_unet.py`: Original latent conditional UNet for ℝ²×S¹×ℝ manifold
+    - `cartpole_unet_film.py`: FiLM-based UNet with residual conditioning
+  - **Humanoid Models**:
+    - `humanoid_unet_film.py`: FiLM-based UNet for ℝ³⁴×S²×ℝ³⁰ manifold
   - **Generic/Legacy Models**:
     - `simple_mlp.py`: Multi-layer perceptron with configurable hidden layers
     - `unet1d.py`: Generic 1D U-Net architecture
@@ -40,26 +44,21 @@ This is a robotics research project for training neural network classifiers, rea
 - **Flow Matching Framework**: Located in `src/flow_matching/`
   - `base/`: Abstract base classes and common functionality
     - `flow_matcher.py`: Base Lightning module for latent conditional FM (~500 lines of shared code)
-    - `gaussian_noise_flow_matcher.py`: Base Lightning module for Gaussian noise FM (~500 lines)
     - `config.py`: Common configuration and state handling
     - `inference.py`: Generic inference utilities
-  - `pendulum/`: Pendulum flow matching variants
+  - `pendulum/`: Pendulum flow matching
     - `latent_conditional/`: Latent Conditional FM (S¹×ℝ manifold)
       - `flow_matcher.py`: Flow matching with Facebook FM library
       - `inference.py`: Inference wrapper
       - `train.py`: Training script for pendulum
-    - `gaussian_noise/`: Gaussian Noise FM (simplified variant)
-      - `flow_matcher.py`: Simplified FM without latent variables or conditioning
-      - `inference.py`: Inference class
-      - `train.py`: Training script (25% faster than latent conditional)
-  - `cartpole/`: CartPole flow matching variants
+  - `cartpole/`: CartPole flow matching
     - `latent_conditional/`: Latent Conditional FM (ℝ²×S¹×ℝ manifold)
       - `flow_matcher.py`: Flow matching with latent variables & conditioning
       - `train.py`: Training script for CartPole
-    - `gaussian_noise/`: Gaussian Noise FM (simplified variant)
-      - `flow_matcher.py`: Simplified FM without latent variables or conditioning
-      - `inference.py`: Inference class
-      - `train.py`: Training script (25% faster than latent conditional)
+  - `humanoid/`: Humanoid flow matching
+    - `latent_conditional/`: Latent Conditional FM (ℝ³⁴×S²×ℝ³⁰ manifold)
+      - `flow_matcher.py`: Flow matching with FiLM conditioning
+      - `train.py`: Training script for humanoid
   - `evaluate_roa.py`: Unified ROA evaluation for all flow matching variants
 
 ### Unified Evaluation & Visualization System
@@ -93,15 +92,15 @@ The `AttractorBasinAnalyzer` provides state space discretization and basin mappi
 
 Uses Hydra for configuration management with YAML files in `configs/`:
 - **Main Training Configs**:
-  - `train_pendulum.yaml`: Pendulum latent conditional FM
-  - `train_pendulum_gaussian_noise.yaml`: Pendulum Gaussian noise FM
-  - `train_cartpole.yaml`: CartPole latent conditional FM
-  - `train_cartpole_gaussian_noise.yaml`: CartPole Gaussian noise FM
+  - `train_pendulum.yaml`: Pendulum latent conditional FM with FiLM
+  - `train_pendulum_cartesian.yaml`: Pendulum Cartesian latent conditional FM with FiLM
+  - `train_cartpole.yaml`: CartPole latent conditional FM with FiLM
+  - `train_cartpole_dmcontrol.yaml`: CartPole DM Control latent conditional FM with FiLM
+  - `train_humanoid.yaml`: Humanoid latent conditional FM with FiLM
 - **Evaluation Configs**:
-  - `evaluate_pendulum_roa.yaml`: Pendulum ROA evaluation (latent conditional)
-  - `evaluate_pendulum_gaussian_roa.yaml`: Pendulum ROA evaluation (Gaussian noise)
-  - `evaluate_cartpole_roa.yaml`: CartPole ROA evaluation (latent conditional)
-  - `evaluate_cartpole_gaussian_roa.yaml`: CartPole ROA evaluation (Gaussian noise)
+  - `evaluate_pendulum_roa.yaml`: Pendulum ROA evaluation
+  - `evaluate_cartpole_roa.yaml`: CartPole ROA evaluation
+  - `evaluate_cartpole_dmcontrol_roa.yaml`: CartPole DM Control ROA evaluation
 - **Data Configs**: `configs/data/`
   - `endpoint_data.yaml`: Pendulum endpoint data
   - `cartpole_endpoint_data.yaml`: CartPole endpoint data
@@ -126,17 +125,14 @@ Uses Hydra for configuration management with YAML files in `configs/`:
 
 ### Training Commands
 ```bash
-# Pendulum (Latent Conditional)
+# Pendulum (Latent Conditional with FiLM)
 python src/flow_matching/pendulum/latent_conditional/train.py
 
-# Pendulum (Gaussian Noise - faster, simpler)
-python src/flow_matching/pendulum/gaussian_noise/train.py
-
-# CartPole (Latent Conditional - richer model)
+# CartPole (Latent Conditional with FiLM)
 python src/flow_matching/cartpole/latent_conditional/train.py
 
-# CartPole (Gaussian Noise - faster, simpler)
-python src/flow_matching/cartpole/gaussian_noise/train.py
+# Humanoid (Latent Conditional with FiLM)
+python src/flow_matching/humanoid/latent_conditional/train.py
 ```
 
 ### Evaluation Commands
@@ -164,27 +160,20 @@ pip install -e .
 
 ### Training
 ```bash
-# Pendulum (Latent Conditional)
+# Pendulum (Latent Conditional with FiLM)
 python src/flow_matching/pendulum/latent_conditional/train.py
 
-# Pendulum (Gaussian Noise - faster, simpler)
-python src/flow_matching/pendulum/gaussian_noise/train.py
-
-# CartPole (Latent Conditional - richer model)
+# CartPole (Latent Conditional with FiLM)
 python src/flow_matching/cartpole/latent_conditional/train.py
 
-# CartPole (Gaussian Noise - faster, simpler)
-python src/flow_matching/cartpole/gaussian_noise/train.py
+# Humanoid (Latent Conditional with FiLM)
+python src/flow_matching/humanoid/latent_conditional/train.py
 
-# Customize training parameters (Latent Conditional)
+# Customize training parameters
 python src/flow_matching/pendulum/latent_conditional/train.py \
-    flow_matching.latent_dim=4 \
+    model.film_cond_dim=512 \
+    model.dropout_p=0.1 \
     base_lr=5e-4 \
-    batch_size=512
-
-# Customize training parameters (Gaussian Noise)
-python src/flow_matching/pendulum/gaussian_noise/train.py \
-    flow_matching.noise_std=0.2 \
     batch_size=512
 ```
 
@@ -204,34 +193,28 @@ python src/flow_matching/evaluate_roa.py \
 ```python
 # Load trained models
 from src.flow_matching.pendulum.latent_conditional.flow_matcher import PendulumLatentConditionalFlowMatcher
-from src.flow_matching.pendulum.gaussian_noise.inference import PendulumGaussianNoiseInference
 from src.flow_matching.cartpole.latent_conditional.flow_matcher import CartPoleLatentConditionalFlowMatcher
-from src.flow_matching.cartpole.gaussian_noise.inference import CartPoleGaussianNoiseInference
+from src.flow_matching.humanoid.latent_conditional.flow_matcher import HumanoidLatentConditionalFlowMatcher
 import torch
 
-# Pendulum (Latent Conditional)
+# Pendulum (Latent Conditional with FiLM)
 pendulum_model = PendulumLatentConditionalFlowMatcher.load_from_checkpoint(
     "outputs/pendulum_latent_conditional_fm/2025-10-13_18-45-32"
 )
 
-# Pendulum (Gaussian Noise)
-pendulum_gaussian = PendulumGaussianNoiseInference(
-    "outputs/pendulum_gaussian_noise_fm/2025-10-21_12-30-45"
-)
-
-# CartPole (Latent Conditional)
+# CartPole (Latent Conditional with FiLM)
 cartpole_model = CartPoleLatentConditionalFlowMatcher.load_from_checkpoint(
     "outputs/cartpole_latent_conditional_fm/2025-10-13_18-45-32"
 )
 
-# CartPole (Gaussian Noise)
-cartpole_gaussian = CartPoleGaussianNoiseInference(
-    "outputs/cartpole_gaussian_noise_fm/2025-10-17_14-15-30"
+# Humanoid (Latent Conditional with FiLM)
+humanoid_model = HumanoidLatentConditionalFlowMatcher.load_from_checkpoint(
+    "outputs/humanoid_latent_conditional_fm/2025-10-13_18-45-32"
 )
 
 # Predict endpoints (Pendulum)
 start_states_pendulum = torch.tensor([[0.5, 1.0]])  # (θ, θ̇)
-endpoints = pendulum_gaussian.predict_endpoint(start_states_pendulum, num_steps=100)
+endpoints = pendulum_model.predict_endpoint(start_states_pendulum, num_steps=100)
 
 # Predict endpoints (CartPole)
 start_states_cartpole = torch.tensor([[0.5, 0.1, 2.0, 1.0]])  # (x, θ, ẋ, θ̇)
@@ -243,7 +226,6 @@ endpoints_batch = cartpole_model.predict_endpoints_batch(start_states_cartpole, 
 
 ### Attractor Basin Analysis Usage
 ```python
-# Works with both flow matching variants
 from src.visualization.attractor_analysis import AttractorBasinAnalyzer
 from src.systems.pendulum_config import PendulumConfig
 
@@ -251,9 +233,9 @@ from src.systems.pendulum_config import PendulumConfig
 config = PendulumConfig()
 analyzer = AttractorBasinAnalyzer(config)
 
-# Run analysis (automatically detects variant)
+# Run analysis
 results = analyzer.analyze_attractor_basins(
-    inferencer,         # Works with standard OR circular
+    inferencer,         # Flow matching inferencer
     resolution=0.1,     # Grid resolution (configurable)
     batch_size=1000     # Batch size for efficiency
 )
@@ -262,15 +244,18 @@ results = analyzer.analyze_attractor_basins(
 analyzer.save_analysis_results("output_dir", results)
 ```
 
-### Model Variants Comparison
+### Model Architecture Comparison
 
-| Variant | Systems | Latent | Conditioning | Params | Speed |
-|---------|---------|--------|--------------|--------|-------|
-| **Latent Conditional** | Pendulum, CartPole | ✅ z ~ N(0,I) | ✅ On start state | ~2M | Baseline |
-| **Gaussian Noise** | Pendulum, CartPole | ❌ None | ❌ None | ~1.5M | 25% faster |
+| Architecture | Systems | FiLM Conditioning | Residual Blocks | Features |
+|--------------|---------|-------------------|-----------------|----------|
+| **Original UNet** | All | ❌ None | ❌ None | Simple MLP-based, baseline |
+| **FiLM UNet** | All | ✅ Yes | ✅ Yes | Advanced conditioning, LayerNorm, zero-init |
 
-**Use Latent Conditional when**: Richer multimodal predictions, explicit conditioning needed
-**Use Gaussian Noise when**: Simpler/faster training, explicit Gaussian noise preferred
+**FiLM UNet Features**:
+- Feature-wise Linear Modulation (FiLM) for conditioning
+- Pre-norm residual blocks with skip connections
+- Configurable dropout and residual scaling
+- Optional zero-initialization for stable training
 
 ### GPU Configuration
 GPU selection is configured via Hydra config files in `configs/device/`:
@@ -297,12 +282,13 @@ Training outputs are saved to `outputs/` directory with timestamped subdirectori
 ## Model Features
 
 ### Flow Matching Models
-- **Two Variants**:
-  - **Latent Conditional**: Uses latent variables z ~ N(0,I) and conditioning on start states
-  - **Gaussian Noise**: Simplified variant with Gaussian-perturbed initial states (25% faster)
+- **Latent Conditional Flow Matching**: Uses latent variables z ~ N(0,I) and conditioning on start states
+- **FiLM Architecture**: Feature-wise Linear Modulation with residual blocks for advanced conditioning
 - **Manifold-Aware**:
   - Pendulum: S¹×ℝ manifold with circular angle handling
+  - Pendulum Cartesian: ℝ⁴ fully Euclidean manifold
   - CartPole: ℝ²×S¹×ℝ manifold with mixed Euclidean/circular structure
+  - Humanoid: ℝ³⁴×S²×ℝ³⁰ manifold with quaternion/circular components
 - **Facebook Flow Matching Library**: Uses geodesic probability paths and Riemannian ODE solvers
 - **Endpoint Prediction**: Predict final states from initial conditions
 - **Flow Path Generation**: Generate complete trajectories through phase space

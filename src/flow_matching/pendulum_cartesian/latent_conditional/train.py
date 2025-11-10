@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """
-Training script for CartPole DeepMind Control Suite Latent Conditional Flow Matching
+Training script for Pendulum Cartesian Latent Conditional Flow Matching (Facebook FM)
 
 Uses Hydra target instantiation for clean, config-driven architecture.
 
+System: Pendulum in Cartesian coordinates (ℝ⁴ manifold)
+
 Usage:
-    # Train CartPole DM Control
-    python src/flow_matching/cartpole_dmcontrol/latent_conditional/train.py
+    # Train Pendulum Cartesian
+    python src/flow_matching/pendulum_cartesian/latent_conditional/train.py
 
     # Override parameters
-    python src/flow_matching/cartpole_dmcontrol/latent_conditional/train.py \
+    python src/flow_matching/pendulum_cartesian/latent_conditional/train.py \
         trainer.max_epochs=200 \
         batch_size=512
 """
@@ -19,19 +21,19 @@ import torch
 import lightning.pytorch as pl
 
 
-@hydra.main(version_base=None, config_path="../../../../configs", config_name="train_cartpole_dmcontrol")
+@hydra.main(version_base=None, config_path="../../../../configs", config_name="train_pendulum_cartesian")
 def main(cfg: DictConfig):
     """
-    Training for CartPole DM Control Latent Conditional Flow Matching
+    Training for Pendulum Cartesian Latent Conditional Flow Matching using Hydra instantiation
 
     All components are instantiated from config using Hydra's _target_ mechanism.
     """
 
     # Print configuration
     print("="*80)
-    print("🚀 CartPole DM Control - Latent Conditional Flow Matching Training")
+    print("🚀 Pendulum Cartesian - Conditional Flow Matching Training (Facebook FM)")
     print("="*80)
-    print(f"📋 Config: {cfg.get('name', 'unnamed')}")
+    print(f"📋 Config: {cfg.get('name', 'pendulum_cartesian')}")
     print(f"🎲 Seed: {cfg.seed}")
     print("="*80)
     print()
@@ -46,7 +48,7 @@ def main(cfg: DictConfig):
     print("📥 Instantiating components from config...")
     print()
 
-    # System (CartPoleDMControlSystem)
+    # System (PendulumCartesianSystem)
     print("  🔧 System...")
     system = hydra.utils.instantiate(cfg.system)
     print(f"     ✅ {system.__class__.__name__}")
@@ -62,7 +64,7 @@ def main(cfg: DictConfig):
     print(f"        Batch size: {cfg.batch_size}")
     print()
 
-    # Model (reuses CartPoleUNet - same manifold!)
+    # Model (PendulumCartesianUNet)
     print("  🏗️  Model...")
     model = hydra.utils.instantiate(cfg.model)
     print(f"     ✅ {model.__class__.__name__}")
@@ -76,23 +78,23 @@ def main(cfg: DictConfig):
         print(f"        Output: {model_info['output_dim']}D")
         print(f"        Parameters: {model_info['total_parameters']:,}")
     except (AttributeError, KeyError):
-        # Fallback if get_model_info() doesn't exist
+        # Fallback if get_model_info() doesn't exist or doesn't have all keys
         total_params = sum(p.numel() for p in model.parameters())
         print(f"        Parameters: {total_params:,}")
     print()
 
-    # Optimizer
+    # Optimizer (keep as config, will be instantiated in configure_optimizers)
     print("  ⚙️  Optimizer...")
     print(f"     ✅ {cfg.optimizer._target_.split('.')[-1]}")
     print(f"        Learning rate: {cfg.base_lr}")
     print()
 
-    # Scheduler
+    # Scheduler (keep as config, will be instantiated in configure_optimizers)
     print("  📈 Scheduler...")
     print(f"     ✅ {cfg.scheduler._target_.split('.')[-1]}")
     print()
 
-    # Flow matcher (CartPoleDMControlLatentConditionalFlowMatcher)
+    # Flow matcher (PendulumCartesianLatentConditionalFlowMatcher)
     print("  🌊 Flow matcher...")
     flow_matcher = hydra.utils.instantiate(
         cfg.flow_matcher,

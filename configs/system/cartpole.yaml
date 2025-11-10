@@ -13,5 +13,5 @@
 _target_: src.systems.cartpole.CartPoleSystem
 
 # Data bounds configuration
-bounds_file: /common/users/dm1487/arcmg_datasets/cartpole/new_cartpole_data_bounds.pkl
+bounds_file: /common/users/dm1487/arcmg_datasets/cartpole_pybullet/cartpole_pybullet_data_bounds.pkl
 use_dynamic_bounds: true  # If false, uses default fallback bounds

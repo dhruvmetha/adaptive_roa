@@ -102,8 +102,7 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
                  optimizer: Any,
                  scheduler: Any,
                  model_config: Optional[FlowMatchingConfig] = None,
-                 mae_val_frequency: int = 10,
-                 loss_weights: Optional[Dict[int, float]] = None):
+                 mae_val_frequency: int = 10):
         """
         Initialize base flow matcher
 
@@ -114,8 +113,6 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
             scheduler: LR scheduler configuration
             model_config: Flow matching configuration
             mae_val_frequency: Compute endpoint MAE on test set every N epochs
-            loss_weights: Optional dictionary mapping class labels to loss weights
-                         e.g., {0: 1.2, 1: 6.0} to upweight success samples
         """
         super().__init__()
 
@@ -124,7 +121,6 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         self.model = model
         self.config = model_config or FlowMatchingConfig()
         self.mae_val_frequency = mae_val_frequency
-        self.loss_weights = loss_weights
 
         # Store optimizer and scheduler configs (will be instantiated in configure_optimizers)
         self.optimizer_config = optimizer
@@ -319,6 +315,7 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
 
         # Sample and normalize noisy inputs
         x_noise_normalized = self.sample_noisy_input(batch_size, device)
+        
 
         # Normalize and embed start states
         start_normalized = self.normalize_state(start_states)
@@ -475,32 +472,8 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
     def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Training step - common across all variants"""
 
-        # Apply per-sample loss weighting if loss_weights is provided
-        if self.loss_weights is not None and 'label' in batch:
-            # Compute per-sample loss (shape: [batch_size, state_dim])
-            per_sample_loss = self.compute_flow_loss(batch, reduction='none')
-
-            # Reduce over state dimensions to get per-sample scalar loss [batch_size]
-            per_sample_loss = per_sample_loss.mean(dim=1)
-
-            # Get labels from batch
-            labels = batch['label']
-            if isinstance(labels, torch.Tensor):
-                labels = labels.cpu().numpy()
-
-            # Create weight tensor for each sample
-            weights = torch.tensor(
-                [self.loss_weights[int(label)] for label in labels],
-                dtype=per_sample_loss.dtype,
-                device=per_sample_loss.device
-            )
-
-            # Apply weights and compute mean
-            weighted_loss = (per_sample_loss * weights).mean()
-            loss = weighted_loss
-        else:
-            # Standard scalar loss (no weighting)
-            loss = self.compute_flow_loss(batch)
+        # Compute standard scalar loss
+        loss = self.compute_flow_loss(batch)
 
         # Log metrics with compatibility for different TorchMetrics versions
         try:
@@ -527,10 +500,6 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
             self.val_loss.update(loss)
 
         self.log('val_loss', self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
-
-        # Compute endpoint MAE on test set every N epochs
-        if self.current_epoch % self.mae_val_frequency == 0:
-            self._compute_mae_on_test_set()
 
         return loss
 
@@ -599,15 +568,15 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         self.test_recall(all_predicted_labels, all_true_labels)
         self.test_specificity(all_predicted_labels, all_true_labels)
 
-        self.log('test_precision', self.test_precision, on_step=False, on_epoch=True, prog_bar=True)
-        self.log('test_recall', self.test_recall, on_step=False, on_epoch=True, prog_bar=True)
-        self.log('test_specificity', self.test_specificity, on_step=False, on_epoch=True, prog_bar=True)
+        # Log scalar values to avoid metric object lifecycle issues
+        precision_value = self.test_precision.compute()
+        recall_value = self.test_recall.compute()
+        specificity_value = self.test_specificity.compute()
+        self.log('test_precision', precision_value, on_step=False, on_epoch=True, prog_bar=True)
+        self.log('test_recall', recall_value, on_step=False, on_epoch=True, prog_bar=True)
+        self.log('test_specificity', specificity_value, on_step=False, on_epoch=True, prog_bar=True)
 
-        # Print classification metrics
-        print(f"\n📊 Test Set Classification Metrics (Epoch {self.current_epoch}):")
-        print(f"  Precision:   {self.test_precision.compute():.4f}")
-        print(f"  Recall:      {self.test_recall.compute():.4f}")
-        print(f"  Specificity: {self.test_specificity.compute():.4f}")
+        
 
     def test_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Test step - compute endpoint MAE and loss on test set"""
@@ -672,14 +641,28 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         self.log('val_loss_epoch', val_loss)
         self.val_loss.reset()
 
-        # Print MAE per dimension every N epochs
+        # Compute endpoints/test metrics and print summaries every N epochs
         if self.current_epoch % self.mae_val_frequency == 0:
+            # Run once per epoch to avoid duplicate heavy computation
+            self._compute_mae_on_test_set()
+
             print(f"\n📊 Epoch {self.current_epoch} - Validation MAE per dimension:")
             for dim_idx in range(self.system.state_dim):
                 comp_name = self._get_dimension_name(dim_idx)
                 mae_value = self.val_endpoint_mae_per_dim[dim_idx].compute()
                 print(f"   {comp_name:20s}: {mae_value:.6f}")
             print()
+
+            # Print classification metrics
+            print(f"\n📊 Test Set Classification Metrics (Epoch {self.current_epoch}):")
+            print(f"  Precision:   {float(self.test_precision.compute()):.4f}")
+            print(f"  Recall:      {float(self.test_recall.compute()):.4f}")
+            print(f"  Specificity: {float(self.test_specificity.compute()):.4f}")
+            
+            # Reset classification metrics after reporting
+            self.test_precision.reset()
+            self.test_recall.reset()
+            self.test_specificity.reset()
 
         # Reset endpoint MAE metrics
         for metric in self.val_endpoint_mae_per_dim:

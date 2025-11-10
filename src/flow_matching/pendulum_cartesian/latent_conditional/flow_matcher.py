@@ -1,7 +1,7 @@
 """
-CartPole Latent Conditional Flow Matching implementation using Facebook Flow Matching library
+Pendulum Cartesian Latent Conditional Flow Matching implementation using Facebook Flow Matching library
 
-REFACTORED VERSION - Uses GeodesicProbPath and RiemannianODESolver
+All Euclidean manifold (ℝ⁴) - no circular components
 """
 import torch
 import torch.nn as nn
@@ -18,24 +18,22 @@ from flow_matching.utils import ModelWrapper
 
 from src.flow_matching.base.flow_matcher import BaseFlowMatcher
 from src.systems.base import DynamicalSystem
-from src.utils.fb_manifolds import CartPoleManifold
 
-from flow_matching.utils.manifolds import Product, FlatTorus, Euclidean
+from flow_matching.utils.manifolds import Product, Euclidean
 
 
-class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
+class PendulumCartesianLatentConditionalFlowMatcher(BaseFlowMatcher):
     """
-    CartPole Latent Conditional Flow Matching using Facebook FM:
-    - Uses GeodesicProbPath for geodesic interpolation on ℝ²×S¹×ℝ
+    Pendulum Cartesian Latent Conditional Flow Matching using Facebook FM:
+    - Uses GeodesicProbPath for geodesic interpolation on ℝ⁴
     - Uses RiemannianODESolver for manifold-aware ODE integration
     - Neural net takes embedded x_t, time t, latent z, and start state condition
-    - Predicts velocity in ℝ²×S¹×ℝ tangent space (x, θ, ẋ, θ̇)
+    - Predicts velocity in ℝ⁴ tangent space (x, y, ẋ, ẏ)
 
-    KEY CHANGES FROM ORIGINAL:
-    - ✅ Removed: manual interpolate_r2_s1_r() → uses GeodesicProbPath
-    - ✅ Removed: manual compute_target_velocity_r2_s1_r() → automatic via path.sample()
-    - ✅ Added: RiemannianODESolver for inference
-    - ✅ Kept: latent variable z, conditioning on start state, all model logic
+    KEY DIFFERENCE FROM ANGULAR PENDULUM:
+    - All Euclidean manifold (no SO2/circular components)
+    - Identity embedding (no sin/cos)
+    - Simpler sampling (no angle wrapping)
     """
 
     def __init__(self,
@@ -47,11 +45,11 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
                  mae_val_frequency: int = 10,
                  noise_std: float = 0.1):
         """
-        Initialize CartPole conditional flow matcher with FB FM integration
+        Initialize Pendulum Cartesian conditional flow matcher with FB FM integration
 
         Args:
-            system: DynamicalSystem (CartPole with ℝ²×S¹×ℝ structure)
-            model: CartPoleUNet model
+            system: DynamicalSystem (PendulumCartesian with ℝ⁴ structure)
+            model: PendulumCartesianUNet model
             optimizer: Optimizer instance
             scheduler: Learning rate scheduler
             model_config: Configuration dict
@@ -63,15 +61,15 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         # Configurable standard deviation for initial noise sampling
         self.noise_std = float(noise_std)
 
-        print("✅ Initialized CartPole CFM with Facebook Flow Matching:")
-        print(f"   - Manifold: ℝ²×S¹×ℝ (Euclidean × FlatTorus × Euclidean)")
+        print("✅ Initialized Pendulum Cartesian CFM with Facebook Flow Matching:")
+        print(f"   - Manifold: ℝ⁴ (all Euclidean)")
         print(f"   - Path: GeodesicProbPath with CondOTScheduler")
         print(f"   - MAE validation frequency: every {mae_val_frequency} epochs")
         print(f"   - Initial noise std: {self.noise_std}")
 
     def _create_manifold(self):
-        """Create ℝ²×S¹×ℝ manifold for CartPole"""
-        return Product(input_dim=4, manifolds=[(Euclidean(), 1), (FlatTorus(), 1), (Euclidean(), 2)])
+        """Create ℝ⁴ manifold for Pendulum Cartesian (all Euclidean)"""
+        return Product(input_dim=4, manifolds=[(Euclidean(), 4)])
 
     def _get_start_states(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """Extract start states from batch"""
@@ -82,43 +80,25 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         return batch["end_state"]
 
     def _get_dimension_name(self, dim_idx: int) -> str:
-        """Get human-readable dimension name for CartPole"""
-        names = ["cart_position", "pole_angle", "cart_velocity", "angular_velocity"]
+        """Get human-readable dimension name for Pendulum Cartesian"""
+        names = ["position_x", "position_y", "velocity_x", "velocity_y"]
         return names[dim_idx] if 0 <= dim_idx < len(names) else f"dim_{dim_idx}"
 
     def sample_noisy_input(self, batch_size: int, device: torch.device) -> torch.Tensor:
         """
-        Sample noisy input in ℝ²×S¹×ℝ space using Gaussian noise
+        Sample noisy input in ℝ⁴ space using Gaussian noise
 
         Args:
             batch_size: Number of samples
             device: Device to create tensors on
 
         Returns:
-            Noisy states [batch_size, 4] as (x, θ, ẋ, θ̇)
+            Noisy states [batch_size, 4] as (x, y, ẋ, ẏ)
         """
-        
-        
-        # # x ~ Uniform[-cart_limit, +cart_limit] (symmetric bounds)
-        # x = torch.rand(batch_size, 1, device=device) * (2 * self.system.cart_limit) - self.system.cart_limit
-
-        # # θ ~ Uniform[-π, π] (wrapped angle)
-        # theta = torch.rand(batch_size, 1, device=device) * (2 * torch.pi) - torch.pi
-
-        # # ẋ ~ Uniform[-velocity_limit, +velocity_limit] (symmetric bounds)
-        # x_dot = torch.rand(batch_size, 1, device=device) * (2 * self.system.velocity_limit) - self.system.velocity_limit
-
-        # # θ̇ ~ Uniform[-angular_velocity_limit, +angular_velocity_limit] (symmetric bounds)
-        # theta_dot = torch.rand(batch_size, 1, device=device) * (2 * self.system.angular_velocity_limit) - self.system.angular_velocity_limit
-
-        # noisy_states = torch.cat([x, theta, x_dot, theta_dot], dim=1)
-        
-        # Sample Gaussian noise N(0, noise_std²)
+        # Sample Gaussian noise N(0, noise_std²) - all Euclidean
         noisy_states = torch.randn(batch_size, 4, device=device) * self.noise_std
 
-        # Project onto manifold (wraps angle to [-π, π])
-        noisy_states = self.manifold.projx(noisy_states)
-
+        # No angle wrapping needed (all Euclidean)
         return noisy_states
 
     # ===================================================================
@@ -140,7 +120,7 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         return self.system.denormalize_state(normalized_state)
 
     def embed_state_for_model(self, normalized_state: torch.Tensor) -> torch.Tensor:
-        """Delegate to system for embedding"""
+        """Delegate to system for embedding (identity for all Euclidean)"""
         return self.system.embed_state_for_model(normalized_state)
 
     # ===================================================================
@@ -184,7 +164,7 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
     @classmethod
     def load_from_checkpoint(cls, checkpoint_path: str, device: Optional[str] = None):
         """
-        Load a trained CartPole LCFM model from checkpoint for inference.
+        Load a trained Pendulum Cartesian LCFM model from checkpoint for inference.
 
         Args:
             checkpoint_path: Path to Lightning checkpoint file (.ckpt) OR training folder
@@ -199,8 +179,8 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         import yaml
         from pathlib import Path
         from omegaconf import OmegaConf
-        from src.systems.cartpole import CartPoleSystem
-        from src.model.cartpole_unet_film import CartPoleUNetFiLM
+        from src.systems.pendulum_cartesian import PendulumCartesianSystem
+        from src.model.pendulum_cartesian_unet import PendulumCartesianUNet
 
         # Determine device
         if device is None:
@@ -253,7 +233,7 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
 
             print(f"   📄 Using: {checkpoint_path.name}")
 
-        print(f"🤖 Loading CartPole LCFM checkpoint: {checkpoint_path}")
+        print(f"🤖 Loading Pendulum Cartesian LCFM checkpoint: {checkpoint_path}")
         print(f"📍 Device: {device}")
 
         # Verify checkpoint exists
@@ -261,8 +241,6 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
             raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
         # Find the training directory (Hydra root)
-        # New structure: outputs/{name}/{timestamp}/version_0/checkpoints/{checkpoint}.ckpt
-        # Old structure: outputs/{name}/{timestamp}/checkpoints/{checkpoint}.ckpt
         if checkpoint_path.parent.name == "checkpoints":
             # Could be version_0/checkpoints/ or just checkpoints/
             potential_version_dir = checkpoint_path.parent.parent
@@ -307,7 +285,7 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
             latent_dim = 2
             print(f"⚠️  Using default latent_dim: {latent_dim}")
 
-        # Extract model config (try both 'model_config' and 'config' for backward compatibility)
+        # Extract model config
         config_source = None
         if "model_config" in hparams:
             model_config = hparams["model_config"]
@@ -322,7 +300,7 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
             model_config = {}
             config_source = "defaults (empty)"
 
-        # Remove _target_ key if present (not needed for reconstruction)
+        # Remove _target_ key if present
         if isinstance(model_config, dict) and "_target_" in model_config:
             model_config = {k: v for k, v in model_config.items() if k != "_target_"}
 
@@ -335,38 +313,33 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         # Initialize system and model
         system = hparams.get("system")
         if system is None:
-            print("🔧 Creating new CartPole system (not found in hparams)")
+            print("🔧 Creating new Pendulum Cartesian system (not found in hparams)")
             # Use system config from Hydra if available
             if hydra_config and "system" in hydra_config:
                 system_config = hydra_config["system"]
                 print(f"   Using system config from Hydra config")
                 # Extract bounds configuration
-                bounds_file = system_config.get("bounds_file", "/common/users/dm1487/arcmg_datasets/cartpole/cartpole_data_bounds.pkl")
+                bounds_file = system_config.get("bounds_file", "/common/users/dm1487/arcmg_datasets/pendulum_cartesian/pendulum_cartesian_data_bounds.pkl")
                 use_dynamic_bounds = system_config.get("use_dynamic_bounds", True)
                 print(f"   bounds_file: {bounds_file}")
                 print(f"   use_dynamic_bounds: {use_dynamic_bounds}")
-                system = CartPoleSystem(bounds_file=bounds_file, use_dynamic_bounds=use_dynamic_bounds)
+                system = PendulumCartesianSystem(bounds_file=bounds_file, use_dynamic_bounds=use_dynamic_bounds)
             else:
                 print("   No Hydra system config found, using defaults")
-                system = CartPoleSystem()
+                system = PendulumCartesianSystem()
         else:
-            print("✅ Restored CartPole system from checkpoint")
+            print("✅ Restored Pendulum Cartesian system from checkpoint")
 
         # Create model architecture
-        model = CartPoleUNetFiLM(
-            embedded_dim=model_config.get('embedded_dim', 5),
-            condition_dim=model_config.get('condition_dim', 5),
+        model = PendulumCartesianUNet(
+            embedded_dim=model_config.get('embedded_dim', 4),
+            latent_dim=model_config.get('latent_dim', latent_dim),
+            condition_dim=model_config.get('condition_dim', 4),
             time_emb_dim=model_config.get('time_emb_dim', 64),
             hidden_dims=model_config.get('hidden_dims', [256, 512, 256]),
             output_dim=model_config.get('output_dim', 4),
             use_input_embeddings=model_config.get('use_input_embeddings', False),
-            input_emb_dim=model_config.get('input_emb_dim', 64),
-            film_cond_dim=model_config.get('film_cond_dim', 256),
-            film_hidden_dims=model_config.get('film_hidden_dims', []),
-            dropout_p=model_config.get('dropout_p', 0.0),
-            residual_scale=model_config.get('residual_scale', None),
-            zero_init_blocks=model_config.get('zero_init_blocks', True),
-            zero_init_out=model_config.get('zero_init_out', False)
+            input_emb_dim=model_config.get('input_emb_dim', 64)
         )
 
         # Create flow matcher instance
@@ -376,6 +349,7 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
             optimizer=None,
             scheduler=None,
             model_config=model_config,
+            latent_dim=latent_dim
         )
 
         # Load model weights
@@ -397,14 +371,10 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         print(f"   Checkpoint: {checkpoint_path.name}")
         print(f"   Config sources: {'Hydra + Lightning' if hydra_config else 'Lightning only'}")
         print(f"   System: {type(system).__name__}")
-        print(f"   System bounds: cart±{system.cart_limit:.1f}, vel±{system.velocity_limit:.1f}")
+        print(f"   System bounds: x±{system.x_limit:.1f}, y±{system.y_limit:.1f}, ẋ±{system.x_dot_limit:.1f}, ẏ±{system.y_dot_limit:.1f}")
         print(f"   Latent dim: {latent_dim}")
         print(f"   Model architecture: {model_config.get('hidden_dims', 'unknown')}")
         print(f"   Total parameters: {sum(p.numel() for p in model.parameters()):,}")
         print(f"   Device: {device}")
 
         return flow_matcher
-# ============================================================================
-# NOTE: VelocityModelWrapper moved to BaseFlowMatcher
-# (LatentConditionalVelocityWrapper)
-# ============================================================================

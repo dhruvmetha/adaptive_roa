@@ -24,16 +24,22 @@ flow_matcher:
   noise_std: 0.01  # Standard deviation for Gaussian noise sampling
   # Note: system, model, optimizer, scheduler, config are passed by training script
 
-# Model: Reuse CartPoleUNet (same ℝ × S¹ × ℝ² manifold!)
+# Model: CartPole UNet with FiLM (same ℝ × S¹ × ℝ² manifold!)
 model:
-  _target_: src.model.cartpole_unet.CartPoleUNet
+  _target_: src.model.cartpole_unet_film.CartPoleUNetFiLM
   embedded_dim: 5              # (x_norm, sin θ, cos θ, ẋ_norm, θ̇_norm)
   condition_dim: 5             # Embedded start state
-  time_emb_dim: 64             # Time embedding dimension
-  hidden_dims: [256, 512, 1024, 512, 256] # UNet hidden layers
+  time_emb_dim: 128            # Time embedding dimension
+  hidden_dims: [256, 512, 512, 256]  # UNet hidden layers
   output_dim: 4                # Velocity in tangent space (dx, dθ, dẋ, dθ̇)
   use_input_embeddings: false
-  input_emb_dim: 64
+  input_emb_dim: 128
+  film_cond_dim: 256           # FiLM conditioning dimension
+  film_hidden_dims: []         # FiLM encoder hidden layers (empty = direct projection)
+  dropout_p: 0.0               # Dropout probability
+  residual_scale: null         # Auto-compute based on num_blocks
+  zero_init_blocks: false      # Zero-initialize residual blocks
+  zero_init_out: false         # Zero-initialize output projection
 
 # Data: CartPole DM Control endpoint dataset (metadata format)
 # NOTE: You need to create metadata files first using roa_labels.txt
@@ -46,7 +52,7 @@ data:
   val_batch_size: ${val_batch_size}
   num_workers: ${num_workers}
   shuffle: true
-  use_stratified_sampling: true  # Enable stratified sampling for class balance
+  use_stratified_sampling: false  # Enable stratified sampling for class balance
 
 # Optimizer: AdamW
 optimizer:
@@ -103,9 +109,6 @@ trainer:
 flow_matching:
   num_integration_steps: 100       # ODE solver steps for inference
   mae_val_frequency: 1            # Compute MAE on test set every N epochs
-  loss_weights:                   # Per-class loss weights for imbalanced data
-    0: 1.0                        # Failure samples (83.4% of data): 1/0.834 ≈ 1.2
-    1: 10.0                        # Success samples (16.6% of data): 1/0.166 ≈ 6.0
 
 # Hydra output directory
 hydra:

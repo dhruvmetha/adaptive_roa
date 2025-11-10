@@ -1,0 +1,16 @@
+# @package _global_.system
+# =====================================================================
+# Pendulum Cartesian System Configuration
+# =====================================================================
+# Pendulum in Cartesian coordinates with ℝ⁴ manifold structure
+# State: (x, y, ẋ, ẏ) where:
+#   - x, y ∈ ℝ (position on unit circle, constrained: x² + y² = 1)
+#   - ẋ, ẏ ∈ ℝ (velocity components)
+# All dimensions are Euclidean (no circular SO2 components)
+# =====================================================================
+
+_target_: src.systems.pendulum_cartesian.PendulumCartesianSystem
+
+# Data bounds configuration
+bounds_file: /common/users/dm1487/arcmg_datasets/pendulum_cartesian/pendulum_cartesian_data_bounds.pkl
+use_dynamic_bounds: true  # If false, uses default fallback bounds

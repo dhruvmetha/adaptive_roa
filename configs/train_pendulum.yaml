@@ -18,21 +18,27 @@ flow_matcher:
   noise_std: 0.1  # Standard deviation for Gaussian noise sampling
   # Note: system, model, optimizer, scheduler, config are passed by training script
 
-# Model: Pendulum UNet
+# Model: Conditional UNet with FiLM for Pendulum
 model:
-  _target_: src.model.pendulum_unet.PendulumUNet
+  _target_: src.model.pendulum_unet_film.PendulumUNetFiLM
   embedded_dim: 3              # (sin θ, cos θ, θ̇_norm)
   condition_dim: 3             # Embedded start state
-  time_emb_dim: 64             # Time embedding dimension
-  hidden_dims: [256, 512, 256] # UNet hidden layers
+  time_emb_dim: 128            # Time embedding dimension
+  hidden_dims: [256, 512, 512, 256]  # UNet hidden layers
   output_dim: 2                # Velocity in tangent space (dθ, dθ̇)
   use_input_embeddings: false
-  input_emb_dim: 64
+  input_emb_dim: 128
+  film_cond_dim: 256           # FiLM conditioning dimension
+  film_hidden_dims: []         # FiLM encoder hidden layers (empty = direct projection)
+  dropout_p: 0.0               # Dropout probability
+  residual_scale: null         # Auto-compute based on num_blocks
+  zero_init_blocks: false      # Zero-initialize residual blocks
+  zero_init_out: false         # Zero-initialize output projection
 
 # Data: Pendulum endpoint dataset (metadata format)
 data:
   _target_: src.data.endpoint_data.EndpointDataModule
-  train_file: /common/users/dm1487/arcmg_datasets/pendulum_lqr/incremental_endpoint_dataset/train_metadata.txt
+  train_file: /common/users/dm1487/arcmg_datasets/pendulum_lqr_50/incremental_endpoint_dataset/train_metadata.txt
   validation_file: /common/users/dm1487/arcmg_datasets/pendulum_lqr/incremental_endpoint_dataset/validation_metadata.txt
   test_file: /common/users/dm1487/arcmg_datasets/pendulum_lqr/incremental_endpoint_dataset/test_metadata.txt
   bounds_file: null  # Optional: path to bounds pickle file

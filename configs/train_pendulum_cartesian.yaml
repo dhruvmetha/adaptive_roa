@@ -1,11 +1,11 @@
-# CartPole Latent Conditional Flow Matching (Facebook FM)
-# Uses: ℝ²×S¹×ℝ manifold, GeodesicProbPath, RiemannianODESolver
+# Pendulum Cartesian Latent Conditional Flow Matching (Facebook FM)
+# Uses: ℝ⁴ manifold (all Euclidean), GeodesicProbPath, RiemannianODESolver
 
 defaults:
-  - system: cartpole
+  - system: pendulum_cartesian
   - _self_
 
-name: cartpole_latent_conditional_fm
+name: pendulum_cartesian_latent_conditional_fm
 seed: 42
 batch_size: 256
 val_batch_size: 2048  # Validation batch size (can be larger than training)
@@ -14,34 +14,34 @@ num_workers: 4
 
 # Flow Matcher: Facebook FM version with automatic geodesics
 flow_matcher:
-  _target_: src.flow_matching.cartpole.latent_conditional.flow_matcher.CartPoleLatentConditionalFlowMatcher
+  _target_: src.flow_matching.pendulum_cartesian.latent_conditional.flow_matcher.PendulumCartesianLatentConditionalFlowMatcher
   noise_std: 0.1  # Standard deviation for Gaussian noise sampling
-  # Note: system, model, optimizer, scheduler, config are passed by training script
+  # Note: system, model, optimizer, scheduler, model_config are passed by training script
 
-# Model: Conditional UNet with FiLM for CartPole
+# Model: Conditional UNet with FiLM for Pendulum Cartesian
 model:
-  _target_: src.model.cartpole_unet_film.CartPoleUNetFiLM
-  embedded_dim: 5              # (x_norm, sin θ, cos θ, ẋ_norm, θ̇_norm)
-  condition_dim: 5             # Embedded start state
-  time_emb_dim: 64            # Time embedding dimension
-  hidden_dims: [256, 512, 1024, 512, 256]  # UNet hidden layers
-  output_dim: 4                # Velocity in tangent space (dx, dθ, dẋ, dθ̇)
+  _target_: src.model.pendulum_cartesian_unet_film.PendulumCartesianUNetFiLM
+  embedded_dim: 4              # (x, y, ẋ, ẏ) - identity embedding
+  condition_dim: 4             # Embedded start state
+  time_emb_dim: 128            # Time embedding dimension
+  hidden_dims: [256, 512, 512, 256]  # UNet hidden layers
+  output_dim: 4                # Velocity in tangent space (dx, dy, dẋ, dẏ)
   use_input_embeddings: false
   input_emb_dim: 128
   film_cond_dim: 256           # FiLM conditioning dimension
   film_hidden_dims: []         # FiLM encoder hidden layers (empty = direct projection)
   dropout_p: 0.0               # Dropout probability
-  residual_scale: 1.0         # Auto-compute based on num_blocks
+  residual_scale: null         # Auto-compute based on num_blocks
   zero_init_blocks: false      # Zero-initialize residual blocks
   zero_init_out: false         # Zero-initialize output projection
 
-# Data: CartPole endpoint dataset (metadata format)
+# Data: Pendulum Cartesian endpoint dataset (metadata format)
 data:
-  _target_: src.data.cartpole_endpoint_data.CartPoleEndpointDataModule
-  train_file: /common/users/dm1487/arcmg_datasets/cartpole_pybullet/incremental_endpoint_dataset/train_endpoint_dataset.txt
-  validation_file: /common/users/dm1487/arcmg_datasets/cartpole_pybullet/incremental_endpoint_dataset/val_endpoint_dataset.txt
-  test_file: /common/users/dm1487/arcmg_datasets/cartpole_pybullet/incremental_endpoint_dataset/test_endpoint_dataset.txt
-  bounds_file: /common/users/dm1487/arcmg_datasets/cartpole_pybullet/cartpole_pybullet_data_bounds.pkl
+  _target_: src.data.pendulum_cartesian_endpoint_data.PendulumCartesianEndpointDataModule
+  train_file: /common/users/dm1487/arcmg_datasets/pendulum_cartesian_50k/incremental_endpoint_dataset/train_endpoint_dataset.txt
+  validation_file: /common/users/dm1487/arcmg_datasets/pendulum_cartesian_50k/incremental_endpoint_dataset/val_balanced_endpoint_dataset.txt
+  test_file: /common/users/dm1487/arcmg_datasets/pendulum_cartesian_50k/incremental_endpoint_dataset/test_balanced_endpoint_dataset.txt
+  bounds_file: /common/users/dm1487/arcmg_datasets/pendulum_cartesian_50k/pendulum_cartesian_50k_data_bounds.pkl
   batch_size: ${batch_size}
   val_batch_size: ${val_batch_size}
   num_workers: ${num_workers}
@@ -66,7 +66,7 @@ scheduler:
 # Trainer: PyTorch Lightning
 trainer:
   _target_: lightning.pytorch.Trainer
-  max_epochs: 2000
+  max_epochs: 500
   accelerator: gpu
   devices: [0]
   precision: 32
@@ -92,7 +92,7 @@ trainer:
     - _target_: lightning.pytorch.callbacks.EarlyStopping
       monitor: val_loss
       mode: min
-      patience: 500
+      patience: 20
       verbose: true
 
 # Flow matching specific settings

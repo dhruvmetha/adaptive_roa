@@ -30,6 +30,12 @@ class CartPoleSystem(DynamicalSystem):
             bounds_file: Path to pickle file containing actual data bounds
             use_dynamic_bounds: If True, load bounds from file; if False, use fallback defaults
         """
+        
+        print(f"Loading CartPole bounds from: {bounds_file}")
+        print(f"Use dynamic bounds: {use_dynamic_bounds}")
+        print(f"Path exists: {Path(bounds_file).exists()}")
+        
+        
         if use_dynamic_bounds and Path(bounds_file).exists():
             self._load_bounds_from_file(bounds_file)
             print(f"Loaded CartPole bounds from: {bounds_file}")
@@ -70,6 +76,7 @@ class CartPoleSystem(DynamicalSystem):
         self.angular_velocity_limit = 10.0
         self.actual_bounds = None
         print("Using default CartPole bounds (fallback mode)")
+        
     
     def define_manifold_structure(self) -> List[ManifoldComponent]:
         """

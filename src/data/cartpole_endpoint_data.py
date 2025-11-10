@@ -24,7 +24,7 @@ class CartPoleEndpointDataset(Dataset):
             bounds_file: Path to pickle file with actual data bounds
         """
         self.bounds_file = bounds_file
-        self._load_bounds()
+        # self._load_bounds()
 
         # Load the endpoint data
         with open(data_file, 'r') as f:

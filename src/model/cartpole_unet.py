@@ -60,6 +60,8 @@ class CartPoleUNet(nn.Module):
         self.output_dim = output_dim
         self.use_input_embeddings = use_input_embeddings
         self.input_emb_dim = input_emb_dim
+        
+        
 
         # Input embeddings for richer representations
         if use_input_embeddings:

@@ -196,11 +196,13 @@ class CartPoleSystem(DynamicalSystem):
 
         in_attractor = position_ok & velocity_ok & angle_ok & angular_velocity_ok
 
+
+
         # FAILURE: Check if exceeded termination thresholds
         # From dataset_description.json termination thresholds
-        x_failed = torch.abs(x) > 6.0           # Cart hit boundary
-        x_dot_failed = torch.abs(x_dot) > 5.0  # Cart velocity too high
-        theta_dot_failed = torch.abs(theta_dot) > 5.0  # Angular velocity too high
+        x_failed = torch.abs(x) > 5.9           # Cart hit boundary
+        x_dot_failed = torch.abs(x_dot) > 4.9  # Cart velocity too high
+        theta_dot_failed = torch.abs(theta_dot) > 4.9  # Angular velocity too high
         # Note: theta has no termination threshold (inf)
 
         exceeded_thresholds = x_failed | x_dot_failed | theta_dot_failed

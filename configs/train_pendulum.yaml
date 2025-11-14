@@ -32,7 +32,7 @@ model:
 # Data: Pendulum endpoint dataset
 data:
   _target_: src.data.endpoint_data.EndpointDataModule
-  data_file: /common/users/dm1487/arcmg_datasets/pendulum_lqr/incremental_endpoint_dataset/1000_endpoint_dataset.txt
+  data_file: /common/users/dm1487/arcmg_datasets/pendulum_lqr/incremental_endpoint_dataset/train_100_endpoint_dataset.txt
   batch_size: ${batch_size}
   val_batch_size: ${val_batch_size}
   num_workers: ${num_workers}

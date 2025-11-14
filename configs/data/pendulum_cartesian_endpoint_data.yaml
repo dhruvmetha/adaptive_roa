@@ -1,0 +1,8 @@
+# Pendulum Cartesian Endpoint Data Configuration
+_target_: src.data.pendulum_cartesian_endpoint_data.PendulumCartesianEndpointDataModule
+data_file: /common/users/dm1487/arcmg_datasets/pendulum_cartesian/train_endpoints.txt
+validation_file: /common/users/dm1487/arcmg_datasets/pendulum_cartesian/val_endpoints.txt
+test_file: /common/users/dm1487/arcmg_datasets/pendulum_cartesian/test_endpoints.txt
+bounds_file: /common/users/dm1487/arcmg_datasets/pendulum_cartesian/pendulum_cartesian_data_bounds.pkl
+num_workers: 4
+pin_memory: true

@@ -14,7 +14,7 @@ This project implements flow matching models for **endpoint prediction** on dyna
 ### Key Features
 
 - ✅ **Geodesic interpolation** on circular manifolds via Facebook Flow Matching
-- ✅ **Multiple model variants**: Latent Conditional (rich) vs Gaussian Perturbed (fast)
+- ✅ **Latent Conditional models** for Pendulum and CartPole
 - ✅ **Automatic validation inference** during training (every 10 epochs)
 - ✅ **ROA evaluation** with probabilistic uncertainty quantification
 - ✅ **Production-ready**: PyTorch Lightning, Hydra configs, comprehensive logging
@@ -55,9 +55,6 @@ python src/flow_matching/pendulum/latent_conditional/train.py
 
 # CartPole (Latent Conditional - richer model)
 python src/flow_matching/cartpole/latent_conditional/train.py
-
-# CartPole (Gaussian Noise - faster, simpler)
-python src/flow_matching/cartpole/gaussian_noise/train.py
 ```
 
 ### **Evaluation**
@@ -114,18 +111,13 @@ src/
 │   │       ├── inference.py
 │   │       └── train.py
 │   └── cartpole/             # CartPole flow matching
-│       ├── latent_conditional/
-│       │   ├── flow_matcher.py
-│       │   └── train.py
-│       └── gaussian_noise/   # Simplified variant
+│       └── latent_conditional/
 │           ├── flow_matcher.py
-│           ├── inference.py
 │           └── train.py
 │
 ├── model/                     # Neural network architectures
 │   ├── pendulum_unet.py      # Pendulum UNet
-│   ├── cartpole_unet.py      # CartPole UNet (latent)
-│   └── cartpole_gaussian_perturbed_unet1d.py  # CartPole UNet (simple)
+│   └── cartpole_unet.py      # CartPole UNet (latent)
 │
 ├── data/                      # Data loading
 │   ├── endpoint_data.py       # Pendulum endpoint data
@@ -137,7 +129,6 @@ src/
 configs/                       # Hydra configuration files
 ├── train_pendulum.yaml
 ├── train_cartpole.yaml
-├── train_cartpole_gaussian_noise.yaml
 ├── evaluate_pendulum_roa.yaml
 └── evaluate_cartpole_roa.yaml
 ```
@@ -147,10 +138,7 @@ configs/                       # Hydra configuration files
 | Variant | Systems | Latent | Conditioning | Params | Speed |
 |---------|---------|--------|--------------|--------|-------|
 | **Latent Conditional** | Pendulum, CartPole | ✅ z ~ N(0,I) | ✅ On start state | ~2M | Baseline |
-| **Gaussian Noise** | CartPole only | ❌ None | ❌ None | ~1.5M | 25% faster |
-
 **Latent Conditional**: Richer multimodal predictions, explicit conditioning
-**Gaussian Noise**: Simpler architecture, explicit Gaussian noise, faster training
 
 ---
 
@@ -194,7 +182,6 @@ The sin/cos embedding allows neural networks to learn the circular geometry natu
 ### **Training Times** (500 epochs, single GPU)
 - Pendulum: ~2-4 hours
 - CartPole (Latent Conditional): ~4-6 hours
-- CartPole (Gaussian Perturbed): ~3-5 hours (25% faster)
 
 ### **Expected Metrics**
 - Training loss: ~1.0-3.0 → ~0.1-0.5
@@ -328,8 +315,7 @@ Research code for AI Olympics project.
 ```bash
 # Train
 python src/flow_matching/pendulum/latent_conditional/train.py          # Pendulum
-python src/flow_matching/cartpole/latent_conditional/train.py          # CartPole (rich)
-python src/flow_matching/cartpole/gaussian_noise/train.py              # CartPole (fast)
+python src/flow_matching/cartpole/latent_conditional/train.py          # CartPole
 
 # Evaluate
 python src/flow_matching/evaluate_roa.py --config-name=evaluate_cartpole_roa

@@ -1,0 +1,22 @@
+# Pendulum Cartesian UNet Configuration for Latent Conditional Flow Matching
+_target_: src.model.pendulum_cartesian_unet.PendulumCartesianUNet
+
+# Dimensions
+embedded_dim: 4        # Pendulum Cartesian state (x, y, vx, vy) - no embedding transformation
+latent_dim: 4          # Latent variable dimension (will be overridden by flow_matching.latent_dim)
+condition_dim: 4       # Condition on embedded start state (same as embedded_dim)
+output_dim: 4          # Output velocity dimension (matches state_dim)
+
+# Architecture
+time_emb_dim: 128      # Time embedding dimension
+hidden_dims: [256, 512, 512, 256]  # Hidden layer sizes for velocity head
+
+# Input embeddings (optional)
+use_input_embeddings: false  # Set to true for richer input representations
+input_emb_dim: 128           # Dimension of input embeddings (if use_input_embeddings=true)
+
+# Notes:
+# - embedded_dim = 4 (pure Euclidean, no SO2 embedding)
+# - Total input_dim = embedded_dim + time_emb_dim + latent_dim + condition_dim
+#                   = 4 + 128 + 4 + 4 = 140
+# - For use_input_embeddings=true: input_dim = 3*input_emb_dim + time_emb_dim = 512

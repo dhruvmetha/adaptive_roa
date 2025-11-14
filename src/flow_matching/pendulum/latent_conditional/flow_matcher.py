@@ -68,6 +68,7 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
     def _create_manifold(self):
         """Create S¹×ℝ manifold for pendulum"""
         return Product(input_dim=2, manifolds=[(FlatTorus(), 1), (Euclidean(), 1)])
+        # return Product(input_dim=2, manifolds=[(Euclidean(), 2)])
 
     def _get_start_states(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """Extract start states from batch"""
@@ -152,8 +153,8 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
         import yaml
         from pathlib import Path
         from omegaconf import OmegaConf
-        from src.systems.pendulum_lcfm import PendulumSystemLCFM
-        from src.model.latent_conditional_unet1d import LatentConditionalUNet1D
+        from src.systems.pendulum import PendulumSystem
+        from src.model.pendulum_unet import PendulumUNet
 
         # Determine device
         if device is None:
@@ -287,12 +288,12 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
         system = hparams.get("system")
         if system is None:
             print("🔧 Creating new Pendulum system (not found in hparams)")
-            system = PendulumSystemLCFM()
+            system = PendulumSystem()
         else:
             print("✅ Restored Pendulum system from checkpoint")
 
         # Create model architecture
-        model = LatentConditionalUNet1D(
+        model = PendulumUNet(
             embedded_dim=model_config.get('embedded_dim', 3),
             latent_dim=model_config.get('latent_dim', latent_dim),
             condition_dim=model_config.get('condition_dim', 3),

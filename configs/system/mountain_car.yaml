@@ -1,0 +1,17 @@
+# @package _global_.system
+# =====================================================================
+# Mountain Car System Configuration
+# =====================================================================
+# Mountain Car dynamics with ℝ² manifold structure (pure Euclidean)
+# State: (position, velocity) where:
+#   - position ∈ ℝ (car position on hill)
+#   - velocity ∈ ℝ (car velocity)
+#
+# Goal: Navigate car to goal region at x = π/6 ≈ 0.524
+# =====================================================================
+
+_target_: src.systems.mountain_car.MountainCarSystem
+
+# Data bounds configuration
+bounds_file: /common/users/dm1487/arcmg_datasets/mountain_car/mountain_car_data_bounds.pkl
+use_dynamic_bounds: true  # If false, uses default fallback bounds

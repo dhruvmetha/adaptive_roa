@@ -69,6 +69,7 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
     def _create_manifold(self):
         """Create ℝ²×S¹×ℝ manifold for CartPole"""
         return Product(input_dim=4, manifolds=[(Euclidean(), 1), (FlatTorus(), 1), (Euclidean(), 2)])
+        # return Product(input_dim=4, manifolds=[(Euclidean(), 4)])
 
     def _get_start_states(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """Extract start states from batch"""
@@ -95,18 +96,24 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
             Noisy states [batch_size, 4] as (x, θ, ẋ, θ̇)
         """
         # x ~ Uniform[-cart_limit, +cart_limit] (symmetric bounds)
-        x = torch.rand(batch_size, 1, device=device) * (2 * self.system.cart_limit) - self.system.cart_limit
+        # x = torch.rand(batch_size, 1, device=device) * (2 * self.system.cart_limit) - self.system.cart_limit
 
-        # θ ~ Uniform[-π, π] (wrapped angle)
-        theta = torch.rand(batch_size, 1, device=device) * (2 * torch.pi) - torch.pi
+        # # θ ~ Uniform[-π, π] (wrapped angle)
+        # theta = torch.rand(batch_size, 1, device=device) * (2 * torch.pi) - torch.pi
 
-        # ẋ ~ Uniform[-velocity_limit, +velocity_limit] (symmetric bounds)
-        x_dot = torch.rand(batch_size, 1, device=device) * (2 * self.system.velocity_limit) - self.system.velocity_limit
+        # # ẋ ~ Uniform[-velocity_limit, +velocity_limit] (symmetric bounds)
+        # x_dot = torch.rand(batch_size, 1, device=device) * (2 * self.system.velocity_limit) - self.system.velocity_limit
 
-        # θ̇ ~ Uniform[-angular_velocity_limit, +angular_velocity_limit] (symmetric bounds)
-        theta_dot = torch.rand(batch_size, 1, device=device) * (2 * self.system.angular_velocity_limit) - self.system.angular_velocity_limit
+        # # θ̇ ~ Uniform[-angular_velocity_limit, +angular_velocity_limit] (symmetric bounds)
+        # theta_dot = torch.rand(batch_size, 1, device=device) * (2 * self.system.angular_velocity_limit) - self.system.angular_velocity_limit
+        
+        # return torch.cat([x, theta, x_dot, theta_dot], dim=1)
+    
+        # gaussian noise
+        noisy_input = torch.randn(batch_size, 4, device=device)
+        noisy_input = self.manifold.projx(noisy_input)
 
-        return torch.cat([x, theta, x_dot, theta_dot], dim=1)
+        return noisy_input
 
     # ===================================================================
     # REMOVED METHODS (now in base class or handled by Facebook FM):

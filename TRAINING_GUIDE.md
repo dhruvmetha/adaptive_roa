@@ -10,9 +10,8 @@ Complete guide for training and evaluating flow matching models for Pendulum and
 2. [System Overview](#system-overview)
 3. [Training](#training)
 4. [Evaluation](#evaluation)
-5. [Model Variants](#model-variants)
-6. [Configuration](#configuration)
-7. [Troubleshooting](#troubleshooting)
+5. [Configuration](#configuration)
+6. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -40,14 +39,6 @@ python src/flow_matching/pendulum/latent_conditional/train.py
 python src/flow_matching/cartpole/latent_conditional/train.py
 ```
 
-### **Train CartPole (Gaussian Noise - Simpler/Faster)**
-
-```bash
-python src/flow_matching/cartpole/gaussian_noise/train.py
-```
-
----
-
 ## 🎯 System Overview
 
 ### **Available Systems**
@@ -56,7 +47,6 @@ python src/flow_matching/cartpole/gaussian_noise/train.py
 |--------|----------|-------|--------|
 | **Pendulum** | S¹×ℝ | (θ, θ̇) | `train_pendulum.yaml` |
 | **CartPole** | ℝ²×S¹×ℝ | (x, θ, ẋ, θ̇) | `train_cartpole.yaml` |
-| **CartPole (Gaussian)** | ℝ²×S¹×ℝ | (x, θ, ẋ, θ̇) | `train_cartpole_gaussian_noise.yaml` |
 
 ### **Key Insight: Circular Coordinates**
 
@@ -186,60 +176,6 @@ data:
 
 ---
 
-### **3. CartPole Training (Gaussian Noise - Simpler Variant)**
-
-#### **Location**
-```
-src/flow_matching/cartpole/gaussian_noise/train.py
-```
-
-#### **Configuration**
-```
-configs/train_cartpole_gaussian_noise.yaml
-```
-
-#### **Command**
-```bash
-python src/flow_matching/cartpole/gaussian_noise/train.py
-```
-
-#### **Key Differences from Latent Conditional**
-- ❌ **NO latent variables** (z removed)
-- ❌ **NO conditioning** on start state
-- ✅ **Gaussian perturbation**: x₀ ~ N(start_state, σ²I)
-- ✅ **25% fewer parameters** (~1.5M vs ~2M)
-- ✅ **Faster training** and inference
-
-#### **Key Config Parameters**
-```yaml
-# Flow matching settings
-flow_matching:
-  noise_std: 0.1             # Gaussian noise std around start state
-  mae_val_frequency: 10
-
-# Simpler model (no latent, no condition)
-model:
-  _target_: src.model.cartpole_gaussian_perturbed_unet1d.CartPoleGaussianPerturbedUNet1D
-  embedded_dim: 5            # (x_norm, sin θ, cos θ, ẋ_norm, θ̇_norm)
-  output_dim: 4              # (dx, dθ, dẋ, dθ̇)
-  hidden_dims: [256, 512, 1024, 512, 256]
-  # NO latent_dim
-  # NO condition_dim
-```
-
-#### **Customize Gaussian Noise**
-```bash
-# Tighter noise (closer to start state)
-python src/flow_matching/cartpole/gaussian_noise/train.py \
-    flow_matching.noise_std=0.05
-
-# More exploration
-python src/flow_matching/cartpole/gaussian_noise/train.py \
-    flow_matching.noise_std=0.2
-```
-
----
-
 ## 📊 Training Outputs
 
 ### **Checkpoint Location**
@@ -361,14 +297,6 @@ model = CartPoleLatentConditionalFlowMatcher.load_from_checkpoint(
 )
 ```
 
-**CartPole (Gaussian Noise):**
-```python
-from src.flow_matching.cartpole.gaussian_noise.inference import CartPoleGaussianNoiseInference
-
-inferencer = CartPoleGaussianNoiseInference(
-    "outputs/cartpole_gaussian_noise_fm/2025-10-17_14-15-30"
-)
-```
 
 #### **Predict Endpoints**
 
@@ -420,37 +348,6 @@ for i, state in enumerate(trajectory[::10]):  # Every 10th step
 
 ---
 
-## 🎨 Model Variants Comparison
-
-| Aspect | Latent Conditional | Gaussian Noise |
-|--------|-------------------|----------------|
-| **Systems** | Pendulum, CartPole | CartPole only |
-| **Latent Variables** | ✅ z ~ N(0,I) | ❌ None |
-| **Conditioning** | ✅ On start state | ❌ None |
-| **Initial Noise** | Uniform over state space | Gaussian around start state |
-| **Model Input** | `f(x_t, t, z, condition)` | `f(x_t, t)` |
-| **Parameters** | ~2M (CartPole) | ~1.5M (25% fewer) |
-| **Training Speed** | Baseline | 25% faster |
-| **Inference Speed** | Baseline | Faster |
-| **Stochasticity** | Via latent z | Via Gaussian noise |
-| **Use Case** | Rich multimodal predictions | Simpler, faster, explicit noise |
-
-### **When to Use Each**
-
-**Use Latent Conditional when:**
-- You want richer multimodal predictions
-- You need explicit conditioning on start state
-- You have sufficient computational resources
-- You want to model complex, multi-path dynamics
-
-**Use Gaussian Noise when:**
-- You want simpler, faster training/inference
-- You prefer explicit initial distribution (interpretable)
-- You have limited computational resources
-- You want direct perturbation-based uncertainty
-
----
-
 ## ⚙️ Configuration
 
 ### **Config File Structure**
@@ -480,7 +377,6 @@ model:
 # Flow matching
 flow_matching:
   latent_dim: 2              # Only for latent conditional
-  noise_std: 0.1             # Only for Gaussian noise
   mae_val_frequency: 10
 
 # Optimizer
@@ -653,12 +549,6 @@ python train.py trainer.accumulate_grad_batches=2
 - Training time: ~4-6 hours (500 epochs, GPU)
 - Validation MAE: < 0.5 per dimension
 
-**CartPole (Gaussian Perturbed):**
-- Initial loss: ~1.0-3.0
-- Final loss: ~0.1-0.5
-- Training time: ~3-5 hours (500 epochs, GPU, 25% faster)
-- Validation MAE: < 0.5 per dimension
-
 ### **ROA Evaluation Performance**
 
 **Deterministic Mode:**
@@ -685,7 +575,7 @@ python train.py trainer.accumulate_grad_batches=2
 ## 🎓 Key Takeaways
 
 1. **Both systems use circular coordinates** - Pendulum θ and CartPole pole angle θ
-2. **Two CartPole variants available** - Latent Conditional (richer) vs Gaussian Perturbed (simpler/faster)
+2. **CartPole uses the latent conditional model** - same training/eval workflow as Pendulum
 3. **Training is automatic** - Just run the training script, validation inference runs every 10 epochs
 4. **Evaluation supports uncertainty** - Use probabilistic mode for uncertainty quantification
 5. **Configs are composable** - Easy to override any parameter from command line
@@ -700,7 +590,4 @@ python src/flow_matching/pendulum/latent_conditional/train.py
 
 # CartPole (rich model)
 python src/flow_matching/cartpole/latent_conditional/train.py
-
-# CartPole (fast model)
-python src/flow_matching/cartpole/gaussian_noise/train.py
 ```

@@ -1,8 +1,0 @@
-model_config:
-  hidden_dims:
-  - 256
-  - 256
-  - 128
-  dropout: 0.1
-  activation: relu
-learning_rate: 0.001

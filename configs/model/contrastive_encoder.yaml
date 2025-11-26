@@ -1,0 +1,17 @@
+# Contrastive Encoder Model Configuration
+_target_: src.model.contrastive_encoder.ContrastiveEncoder
+
+# Input dimension (will be overridden by system-specific config)
+input_dim: 67  # Default for humanoid
+
+# Embedding dimension
+embedding_dim: 128
+
+# Hidden layers
+hidden_channels: [512, 256, 128]
+
+# Regularization
+dropout: 0.1
+
+# L2 normalization of output embeddings
+normalize_output: true

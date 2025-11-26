@@ -18,15 +18,18 @@ flow_matcher:
   _target_: src.flow_matching.humanoid.latent_conditional.flow_matcher.HumanoidLatentConditionalFlowMatcher
   # Note: system, model, optimizer, scheduler, config, latent_dim are passed by training script
 
-# Model: Latent Conditional UNet for Humanoid
+# Model: Custom Humanoid UNet for Latent Conditional Flow Matching
 model:
-  _target_: src.model.universal_unet.UniversalUNet
-  input_dim: 142               # embedded(67) + condition(67) + latent(8)
-  output_dim: 67               # Velocity in tangent space (67-dim)
-  time_embed_dim: 128          # Time embedding dimension
-  hidden_dims: [256, 512, 512, 256]  # UNet hidden layers
-  dropout: 0.1
-  activation: silu             # SiLU/Swish activation
+  _target_: src.model.humanoid_unet.HumanoidUNet
+  embedded_dim: 67             # Humanoid embedded state dimension (identity: 67→67)
+  latent_dim: 8                # Latent variable dimension (matched with flow_matching.latent_dim)
+  condition_dim: 67            # Condition dimension (embedded start state)
+  time_emb_dim: 128            # Time embedding dimension (increased for 67D)
+  output_dim: 67               # Output dimension (67D velocity in tangent space)
+  hidden_dims: [256, 512, 1024, 1024, 512, 256]  # Deeper than CartPole for 67D complexity
+  use_input_embeddings: true   # Enable input embeddings for richer representations
+  input_emb_dim: 128           # Embedding dimension for state/latent/condition
+  dropout: 0.1                 # Regularization for large model
 
 # Data: Humanoid endpoint dataset
 data:

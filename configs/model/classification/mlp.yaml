@@ -1,0 +1,6 @@
+# MLP Classifier Configuration
+
+hidden_dims: [128, 256, 512, 1024, 1024, 512, 256, 128]
+dropout: 0.1
+activation: relu
+

@@ -1,0 +1,78 @@
+# CartPole Contrastive Representation Learning
+# Self-supervised learning from trajectory temporal structure
+# 4-dimensional state space: ℝ² × S¹ × ℝ (x, θ, ẋ, θ̇)
+
+defaults:
+  - system: cartpole
+  - data: cartpole_trajectory_contrastive
+  - model: contrastive_encoder
+  - _self_
+
+name: cartpole_contrastive_repr
+seed: 42
+batch_size: 256
+val_batch_size: 512
+base_lr: 1e-3
+num_workers: 4
+
+# Model override for smaller state space
+model:
+  input_dim: 4  # CartPole state dimension
+  embedding_dim: 64
+  hidden_channels: [256, 128]
+
+# Contrastive learning settings
+contrastive:
+  loss_type: infonce
+  margin: 0.5
+  temperature: 0.07
+
+# Optimizer: AdamW
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: ${base_lr}
+  weight_decay: 1e-5
+  betas: [0.9, 0.999]
+
+# Scheduler: Cosine annealing
+scheduler:
+  _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+  T_max: 50
+  eta_min: 1e-6
+
+# Trainer: PyTorch Lightning
+trainer:
+  _target_: lightning.pytorch.Trainer
+  max_epochs: 50
+  accelerator: gpu
+  devices: [0]
+  precision: 32
+  gradient_clip_val: 1.0
+  log_every_n_steps: 10
+  check_val_every_n_epoch: 1
+  enable_progress_bar: true
+  enable_model_summary: true
+  logger:
+    _target_: lightning.pytorch.loggers.TensorBoardLogger
+    save_dir: "${hydra:runtime.output_dir}"
+    name: ""
+    version: null
+  callbacks:
+    - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+      dirpath: "${hydra:runtime.output_dir}/checkpoints"
+      monitor: val_nn_acc
+      mode: max
+      save_top_k: 3
+      save_last: true
+      filename: "epoch{epoch:02d}-nn_acc{val_nn_acc:.4f}"
+      auto_insert_metric_name: false
+    - _target_: lightning.pytorch.callbacks.EarlyStopping
+      monitor: val_loss
+      mode: min
+      patience: 15
+      verbose: true
+
+# Hydra output directory
+hydra:
+  run:
+    dir: outputs/${name}/${now:%Y-%m-%d_%H-%M-%S}

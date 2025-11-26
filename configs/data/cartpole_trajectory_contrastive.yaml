@@ -1,0 +1,27 @@
+# CartPole Trajectory Contrastive Data Configuration
+_target_: src.data.trajectory_contrastive_data.TrajectoryContrastiveDataModule
+
+# Trajectory directories
+train_trajectory_dir: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_dmcontrol/trajectories
+val_trajectory_dir: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_dmcontrol/trajectories
+test_trajectory_dir: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_dmcontrol/trajectories
+
+# State dimension
+state_dim: 4  # CartPole: ℝ² × S¹ × ℝ (x, θ, ẋ, θ̇)
+
+# Contrastive learning settings
+temporal_window: 10
+num_negatives: 1
+
+# Dataset size limits
+max_trajectories_train: 3000
+max_trajectories_val: 300
+max_trajectories_test: 300
+trajectory_subsample: 1
+
+# DataLoader settings
+batch_size: ${batch_size}
+val_batch_size: ${batch_size}
+num_workers: 4
+pin_memory: true
+cache_trajectories: true

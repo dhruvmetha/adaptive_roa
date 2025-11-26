@@ -33,6 +33,9 @@ class HumanoidSystem(DynamicalSystem):
             bounds_file: Path to pickle file containing actual data bounds (optional)
             use_dynamic_bounds: If True, load bounds from file; if False, use defaults
         """
+        self.dim_min = None
+        self.dim_max = None
+        
         if use_dynamic_bounds and bounds_file and Path(bounds_file).exists():
             self._load_bounds_from_file(bounds_file)
             print(f"Loaded Humanoid bounds from: {bounds_file}")
@@ -53,10 +56,23 @@ class HumanoidSystem(DynamicalSystem):
         limits = bounds_data.get('limits', {})
         self.euclidean_limit = limits.get('euclidean_limit', 20.0)
         self.dimension_bounds = bounds_data.get('bounds', {})
+        
+        # Load per-dimension min/max if available
+        # The bounds pickle usually contains 'dim_min' and 'dim_max' vectors
+        if 'dim_min' in bounds_data and 'dim_max' in bounds_data:
+            self.dim_min = torch.tensor(bounds_data['dim_min']).float()
+            self.dim_max = torch.tensor(bounds_data['dim_max']).float()
+            print(f"  Loaded per-dimension normalization bounds")
+        else:
+            print("  Warning: per-dimension bounds not found in file, using symmetric global limit")
 
-        print(f"Loaded Humanoid bounds")
-        print(f"  Euclidean dimensions limit: ±{self.euclidean_limit:.3f}")
-        print(f"  Sphere dimensions: unit norm (no normalization)")
+        print("Loaded Humanoid bounds")
+        print(f"  Euclidean dimensions limit (legacy): ±{self.euclidean_limit:.3f}")
+        if self.dim_min is not None:
+            print("  Per-dimension normalization: AVAILABLE (dim_min/dim_max)")
+        else:
+            print("  Per-dimension normalization: NOT FOUND (falling back to legacy limit)")
+        print("  Sphere dimensions: unit norm (no normalization)")
 
     def _use_default_bounds(self):
         """Use default fallback bounds"""
@@ -64,6 +80,8 @@ class HumanoidSystem(DynamicalSystem):
         # Based on sampling: actual range is ~[-17, 20], so use 20 as limit
         self.euclidean_limit = 20.0
         self.dimension_bounds = None
+        self.dim_min = None
+        self.dim_max = None
         print(f"Using default Humanoid bounds:")
         print(f"  Euclidean (64 dims): ±{self.euclidean_limit}")
         print(f"  Sphere (3 dims): unit norm")
@@ -217,8 +235,8 @@ class HumanoidSystem(DynamicalSystem):
         """
         Normalize raw state coordinates
 
-        - Euclidean dimensions: normalize to [-1, 1] using bounds
-        - Sphere dimensions: keep as-is (already unit norm)
+        If per-dimension bounds are available (dim_min, dim_max), use min-max scaling to [-1, 1].
+        Otherwise, use global symmetric limit.
 
         Args:
             state: [B, 67] raw humanoid state
@@ -228,14 +246,40 @@ class HumanoidSystem(DynamicalSystem):
         """
         normalized = state.clone()
 
-        # Normalize first Euclidean block (dims 0-33)
-        normalized[:, :34] = state[:, :34] / self.euclidean_limit
+        if self.dim_min is not None and self.dim_max is not None:
+            # Ensure bounds are on the same device as state
+            if self.dim_min.device != state.device:
+                self.dim_min = self.dim_min.to(state.device)
+                self.dim_max = self.dim_max.to(state.device)
+            
+            # Avoid division by zero
+            denom = self.dim_max - self.dim_min
+            denom[denom < 1e-6] = 1.0
+            
+            # Scale to [0, 1] -> (x - min) / (max - min)
+            scaled = (state - self.dim_min) / denom
+            
+            # Scale to [-1, 1] -> 2 * scaled - 1
+            normalized = 2.0 * scaled - 1.0
+            
+            # For sphere components (34-36), we might want to preserve them exactly
+            # if the bounds were just min/max of data which might not be -1/1
+            # But usually we trust the bounds. 
+            # However, strictly speaking, sphere components should be unit norm.
+            # If we normalize them min-max, they won't be unit norm anymore.
+            # So we should revert sphere components to original values (they are already bounded [-1, 1])
+            normalized[:, 34:37] = state[:, 34:37]
+            
+        else:
+            # Fallback to global symmetric scaling
+            # Normalize first Euclidean block (dims 0-33)
+            normalized[:, :34] = state[:, :34] / self.euclidean_limit
 
-        # Sphere block (dims 34-36): keep as-is (already unit norm)
-        # normalized[:, 34:37] = state[:, 34:37]  # No change
+            # Sphere block (dims 34-36): keep as-is (already unit norm)
+            # normalized[:, 34:37] = state[:, 34:37]  # No change
 
-        # Normalize second Euclidean block (dims 37-66)
-        normalized[:, 37:] = state[:, 37:] / self.euclidean_limit
+            # Normalize second Euclidean block (dims 37-66)
+            normalized[:, 37:] = state[:, 37:] / self.euclidean_limit
 
         return normalized
 
@@ -251,21 +295,39 @@ class HumanoidSystem(DynamicalSystem):
         """
         denormalized = normalized_state.clone()
 
-        # Denormalize first Euclidean block (dims 0-33)
-        denormalized[:, :34] = normalized_state[:, :34] * self.euclidean_limit
+        if self.dim_min is not None and self.dim_max is not None:
+            # Ensure bounds are on correct device
+            if self.dim_min.device != normalized_state.device:
+                self.dim_min = self.dim_min.to(normalized_state.device)
+                self.dim_max = self.dim_max.to(normalized_state.device)
+                
+            # Inverse of: 2 * (x - min)/(max - min) - 1
+            # (y + 1) / 2 = (x - min) / (max - min)
+            # x = min + (max - min) * (y + 1) / 2
+            
+            scaled_01 = (normalized_state + 1.0) / 2.0
+            denormalized = self.dim_min + (self.dim_max - self.dim_min) * scaled_01
+            
+            # Restore sphere components (which were passed through)
+            denormalized[:, 34:37] = normalized_state[:, 34:37]
+            
+        else:
+            # Fallback to global symmetric scaling
+            # Denormalize first Euclidean block (dims 0-33)
+            denormalized[:, :34] = normalized_state[:, :34] * self.euclidean_limit
 
-        # Sphere block (dims 34-36): keep as-is (already unit norm)
-        # No denormalization needed
+            # Sphere block (dims 34-36): keep as-is (already unit norm)
+            # No denormalization needed
 
-        # Denormalize second Euclidean block (dims 37-66)
-        denormalized[:, 37:] = normalized_state[:, 37:] * self.euclidean_limit
+            # Denormalize second Euclidean block (dims 37-66)
+            denormalized[:, 37:] = normalized_state[:, 37:] * self.euclidean_limit
 
         return denormalized
 
     def embed_state_for_model(self, normalized_state: torch.Tensor) -> torch.Tensor:
         """
         Embed normalized state for neural network input
-
+        
         For this manifold structure (ℝ³⁴ × S² × ℝ³⁰):
         - Euclidean components: pass through as-is
         - Sphere components: pass through as-is (already 3D continuous)
@@ -283,4 +345,6 @@ class HumanoidSystem(DynamicalSystem):
         return normalized_state
 
     def __repr__(self) -> str:
+        if self.dim_min is not None:
+            return f"HumanoidSystem(ℝ³⁴ × S² × ℝ³⁰, per-dimension normalization)"
         return f"HumanoidSystem(ℝ³⁴ × S² × ℝ³⁰, euclidean_limit=±{self.euclidean_limit})"

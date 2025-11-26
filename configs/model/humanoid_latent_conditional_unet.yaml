@@ -1,5 +1,5 @@
 # Configuration for Humanoid Latent Conditional UNet model
-_target_: src.model.universal_unet.UniversalUNet
+_target_: src.model.humanoid_unet.HumanoidUNet
 
 # Humanoid-specific dimensions
 # Manifold: ℝ³⁴ × S² × ℝ³⁰ (67-dimensional state)
@@ -7,11 +7,14 @@ _target_: src.model.universal_unet.UniversalUNet
 # - Dims 34-36: Sphere (3 dims) - 3D unit vector
 # - Dims 37-66: Euclidean (30 dims)
 
-input_dim: 142         # embedded(67) + condition(67) + latent(8)
-output_dim: 67         # 67-dimensional velocity in tangent space
-time_embed_dim: 128    # Time embedding dimension
+embedded_dim: 67       # Humanoid embedded state dimension (identity: 67→67)
+latent_dim: 8          # Latent variable dimension (will be set by main config)
+condition_dim: 67      # Condition dimension (embedded start state)
+time_emb_dim: 128      # Time embedding dimension (increased for 67D)
+output_dim: 67         # Output dimension (67D velocity in tangent space)
 
-# Architecture - deeper for high-dimensional space
-hidden_dims: [256, 512, 512, 256]
-dropout: 0.1
-activation: silu       # SiLU/Swish activation (smooth, works well with flow matching)
+# Architecture - deeper for 67D complexity
+hidden_dims: [256, 512, 1024, 1024, 512, 256]  # Deeper than CartPole for 67D
+use_input_embeddings: true   # Enable input embeddings for richer representations
+input_emb_dim: 128           # Embedding dimension for state/latent/condition
+dropout: 0.1                 # Regularization for large model

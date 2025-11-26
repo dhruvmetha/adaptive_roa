@@ -14,5 +14,5 @@
 _target_: src.systems.humanoid.HumanoidSystem
 
 # Data bounds configuration (optional)
-bounds_file: null  # Set to path if you have precomputed bounds
-use_dynamic_bounds: false  # If false, uses default fallback bounds
+bounds_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/humanoid_data_bounds.pkl  # Set to path if you have precomputed bounds
+use_dynamic_bounds: true  # If false, uses default fallback bounds

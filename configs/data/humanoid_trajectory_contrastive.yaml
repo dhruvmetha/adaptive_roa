@@ -10,7 +10,7 @@ test_trajectory_dir: null  # Not used when use_split=true
 state_dim: 67  # Humanoid: ℝ³⁴ × S² × ℝ³⁰
 
 # Contrastive learning settings
-temporal_window: 3   # ±k timesteps for positive sampling (reduced for harder task)
+temporal_window: 50  # ±k timesteps for positive sampling
 num_negatives: 5     # Number of negative samples per anchor (increased for harder task)
 
 # Train/Val split settings (disjoint trajectories)

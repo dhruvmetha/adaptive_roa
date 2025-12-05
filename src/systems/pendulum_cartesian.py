@@ -27,28 +27,17 @@ class PendulumCartesianSystem(DynamicalSystem):
     """
 
     def __init__(self,
-                 bounds_file: str = "/common/users/dm1487/arcmg_datasets/pendulum_cartesian/pendulum_cartesian_data_bounds.pkl",
-                 use_dynamic_bounds: bool = True):
+                 bounds_file: str = "/common/users/dm1487/arcmg_datasets/pendulum_cartesian/pendulum_cartesian_data_bounds.pkl"):
         """
         Initialize Pendulum Cartesian system
 
         Args:
             bounds_file: Path to pickle file containing actual data bounds
-            use_dynamic_bounds: If True, load bounds from file; if False, use fallback defaults
         """
+        if not Path(bounds_file).exists():
+            raise FileNotFoundError(f"Pendulum Cartesian bounds file not found: {bounds_file}")
 
-        print(f"Loading Pendulum Cartesian bounds from: {bounds_file}")
-        print(f"Use dynamic bounds: {use_dynamic_bounds}")
-        print(f"Path exists: {Path(bounds_file).exists()}")
-
-        if use_dynamic_bounds and Path(bounds_file).exists():
-            self._load_bounds_from_file(bounds_file)
-            print(f"Loaded Pendulum Cartesian bounds from: {bounds_file}")
-        else:
-            # Fallback to default bounds if file not found
-            self._use_default_bounds()
-            if use_dynamic_bounds:
-                print(f"Warning: Bounds file not found at {bounds_file}, using defaults")
+        self._load_bounds_from_file(bounds_file)
 
         # Goal parameters (upright position)
         self.goal_position = np.array([0.0, 1.0, 0.0, 0.0])  # Top of circle (upright)
@@ -76,19 +65,6 @@ class PendulumCartesianSystem(DynamicalSystem):
         print(f"  [1] Y Position: [{bounds['y']['min']:.3f}, {bounds['y']['max']:.3f}] -> limit: ±{self.y_limit:.3f}")
         print(f"  [2] X Velocity: [{bounds['vx']['min']:.3f}, {bounds['vx']['max']:.3f}] -> limit: ±{self.vx_limit:.3f}")
         print(f"  [3] Y Velocity: [{bounds['vy']['min']:.3f}, {bounds['vy']['max']:.3f}] -> limit: ±{self.vy_limit:.3f}")
-
-    def _use_default_bounds(self):
-        """Use default fallback bounds (from computed data)"""
-        self.x_limit = 1.0      # X position on unit circle: [-1, 1]
-        self.y_limit = 1.0      # Y position on unit circle: [-1, 1]
-        self.vx_limit = 6.3     # X velocity ≈ 2π
-        self.vy_limit = 6.3     # Y velocity ≈ 2π
-        self.actual_bounds = None
-        print("Using default Pendulum Cartesian bounds (fallback mode)")
-        print(f"  X limit: ±{self.x_limit}")
-        print(f"  Y limit: ±{self.y_limit}")
-        print(f"  VX limit: ±{self.vx_limit}")
-        print(f"  VY limit: ±{self.vy_limit}")
 
     def define_manifold_structure(self) -> List[ManifoldComponent]:
         """

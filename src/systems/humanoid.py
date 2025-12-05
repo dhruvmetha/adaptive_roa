@@ -24,22 +24,17 @@ class HumanoidSystem(DynamicalSystem):
     """
 
     def __init__(self,
-                 bounds_file: str = None,
-                 use_dynamic_bounds: bool = False):
+                 bounds_file: str = "/common/users/dm1487/arcmg_datasets/humanoid_get_up/humanoid_data_bounds.pkl"):
         """
         Initialize Humanoid system
 
         Args:
-            bounds_file: Path to pickle file containing actual data bounds (optional)
-            use_dynamic_bounds: If True, load bounds from file; if False, use defaults
+            bounds_file: Path to pickle file containing actual data bounds
         """
-        if use_dynamic_bounds and bounds_file and Path(bounds_file).exists():
-            self._load_bounds_from_file(bounds_file)
-            print(f"Loaded Humanoid bounds from: {bounds_file}")
-        else:
-            self._use_default_bounds()
-            if use_dynamic_bounds and bounds_file:
-                print(f"Warning: Bounds file not found at {bounds_file}, using defaults")
+        if not Path(bounds_file).exists():
+            raise FileNotFoundError(f"Humanoid bounds file not found: {bounds_file}")
+
+        self._load_bounds_from_file(bounds_file)
 
         super().__init__()
         self.name = "humanoid"
@@ -57,16 +52,6 @@ class HumanoidSystem(DynamicalSystem):
         print(f"Loaded Humanoid bounds")
         print(f"  Euclidean dimensions limit: ±{self.euclidean_limit:.3f}")
         print(f"  Sphere dimensions: unit norm (no normalization)")
-
-    def _use_default_bounds(self):
-        """Use default fallback bounds"""
-        # Conservative default for Euclidean dimensions
-        # Based on sampling: actual range is ~[-17, 20], so use 20 as limit
-        self.euclidean_limit = 20.0
-        self.dimension_bounds = None
-        print(f"Using default Humanoid bounds:")
-        print(f"  Euclidean (64 dims): ±{self.euclidean_limit}")
-        print(f"  Sphere (3 dims): unit norm")
 
     def define_manifold_structure(self) -> List[ManifoldComponent]:
         """

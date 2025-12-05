@@ -20,31 +20,18 @@ class CartPoleSystem(DynamicalSystem):
     - θ̇ ∈ ℝ (pole angular velocity, normalized to [-1, 1])
     """
     
-    def __init__(self, 
-                 bounds_file: str = "/common/users/dm1487/arcmg_datasets/cartpole/cartpole_data_bounds.pkl",
-                 use_dynamic_bounds: bool = True):
+    def __init__(self,
+                 bounds_file: str = "/common/users/dm1487/arcmg_datasets/cartpole/cartpole_data_bounds.pkl"):
         """
         Initialize CartPole system
-        
+
         Args:
             bounds_file: Path to pickle file containing actual data bounds
-            use_dynamic_bounds: If True, load bounds from file; if False, use fallback defaults
         """
-        
-        print(f"Loading CartPole bounds from: {bounds_file}")
-        print(f"Use dynamic bounds: {use_dynamic_bounds}")
-        print(f"Path exists: {Path(bounds_file).exists()}")
-        
-        
-        if use_dynamic_bounds and Path(bounds_file).exists():
-            self._load_bounds_from_file(bounds_file)
-            print(f"Loaded CartPole bounds from: {bounds_file}")
-        else:
-            # Fallback to default bounds if file not found
-            self._use_default_bounds()
-            if use_dynamic_bounds:
-                print(f"Warning: Bounds file not found at {bounds_file}, using defaults")
-        
+        if not Path(bounds_file).exists():
+            raise FileNotFoundError(f"CartPole bounds file not found: {bounds_file}")
+
+        self._load_bounds_from_file(bounds_file)
         super().__init__()
     
     def _load_bounds_from_file(self, bounds_file: str):
@@ -67,16 +54,6 @@ class CartPoleSystem(DynamicalSystem):
         print(f"  [1] Pole angle (θ): [{bounds['theta']['min']:.3f}, {bounds['theta']['max']:.3f}] -> WRAPPED to ±π")
         print(f"  [2] Cart velocity (ẋ): [{bounds['x_dot']['min']:.3f}, {bounds['x_dot']['max']:.3f}] -> limit: ±{self.velocity_limit:.3f}")
         print(f"  [3] Angular velocity (θ̇): [{bounds['theta_dot']['min']:.3f}, {bounds['theta_dot']['max']:.3f}] -> limit: ±{self.angular_velocity_limit:.3f}")
-    
-    def _use_default_bounds(self):
-        """Use default fallback bounds"""
-        self.cart_limit = 2.4
-        self.velocity_limit = 10.0
-        self.angle_limit = np.pi
-        self.angular_velocity_limit = 10.0
-        self.actual_bounds = None
-        print("Using default CartPole bounds (fallback mode)")
-        
     
     def define_manifold_structure(self) -> List[ManifoldComponent]:
         """

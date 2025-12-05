@@ -21,28 +21,17 @@ class MountainCarSystem(DynamicalSystem):
     """
 
     def __init__(self,
-                 bounds_file: str = "/common/users/dm1487/arcmg_datasets/mountain_car/mountain_car_data_bounds.pkl",
-                 use_dynamic_bounds: bool = True):
+                 bounds_file: str = "/common/users/dm1487/arcmg_datasets/mountain_car/mountain_car_data_bounds.pkl"):
         """
         Initialize Mountain Car system
 
         Args:
             bounds_file: Path to pickle file containing actual data bounds
-            use_dynamic_bounds: If True, load bounds from file; if False, use fallback defaults
         """
+        if not Path(bounds_file).exists():
+            raise FileNotFoundError(f"Mountain Car bounds file not found: {bounds_file}")
 
-        print(f"Loading Mountain Car bounds from: {bounds_file}")
-        print(f"Use dynamic bounds: {use_dynamic_bounds}")
-        print(f"Path exists: {Path(bounds_file).exists()}")
-
-        if use_dynamic_bounds and Path(bounds_file).exists():
-            self._load_bounds_from_file(bounds_file)
-            print(f"Loaded Mountain Car bounds from: {bounds_file}")
-        else:
-            # Fallback to default bounds if file not found
-            self._use_default_bounds()
-            if use_dynamic_bounds:
-                print(f"Warning: Bounds file not found at {bounds_file}, using defaults")
+        self._load_bounds_from_file(bounds_file)
 
         # Goal parameters (from dataset description)
         self.goal_center = np.pi / 6  # ≈ 0.524 rad
@@ -66,15 +55,6 @@ class MountainCarSystem(DynamicalSystem):
         # Print in state vector order: [position, velocity]
         print(f"  [0] Position: [{bounds['position']['min']:.3f}, {bounds['position']['max']:.3f}] -> limit: ±{self.position_limit:.3f}")
         print(f"  [1] Velocity: [{bounds['velocity']['min']:.3f}, {bounds['velocity']['max']:.3f}] -> limit: ±{self.velocity_limit:.3f}")
-
-    def _use_default_bounds(self):
-        """Use default fallback bounds (from dataset description)"""
-        self.position_limit = 2.0  # Position range: [-2, 1] → symmetric limit ±2
-        self.velocity_limit = 0.1  # Velocity range: [-0.1, 0.1] → symmetric limit ±0.1
-        self.actual_bounds = None
-        print("Using default Mountain Car bounds (fallback mode)")
-        print(f"  Position limit: ±{self.position_limit}")
-        print(f"  Velocity limit: ±{self.velocity_limit}")
 
     def define_manifold_structure(self) -> List[ManifoldComponent]:
         """

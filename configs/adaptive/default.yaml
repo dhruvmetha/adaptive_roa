@@ -1,0 +1,20 @@
+# @package _global_.adaptive
+# =====================================================================
+# Adaptive Sampling Configuration
+# =====================================================================
+# Parameters for the adaptive sampling loop
+# =====================================================================
+
+_target_: src.adaptive.pipeline.AdaptivePipelineConfig
+
+# Sampling parameters
+n_samples_per_epoch: 50     # New states to sample each epoch
+d1_ratio: 0.5               # Fraction for calibration (D1), rest is selection pool (D2)
+
+# Stopping criteria
+max_epochs: 10              # Maximum number of epochs
+convergence_threshold: 0.01 # Stop if F1 improvement < this
+
+# Output
+output_dir: outputs/adaptive/${now:%Y-%m-%d_%H-%M-%S}
+save_intermediate: true     # Save results after each epoch

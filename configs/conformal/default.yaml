@@ -1,0 +1,36 @@
+# @package _global_.conformal
+# =====================================================================
+# Conformal Prediction Configuration
+# =====================================================================
+# Hyperparameters for conformal prediction with coverage guarantees
+# Used for three-way classification: SUCCESS / FAILURE / UNKNOWN
+# =====================================================================
+
+_target_: src.conformal.config.ConformalConfig
+
+# Decision boundary parameters
+delta: 0.05                # Unknown region half-width [λ-δ, λ+δ] (used when optimize_mode="lambda")
+w: 0.9                     # Misclassification weight in loss (higher = penalize wrong predictions more)
+
+# Coverage parameters
+alpha: 0.1                 # Significance level (0.1 = 90% coverage guarantee)
+
+# Monte Carlo sampling for probability estimation
+num_mc_samples: 100        # Number of latent z samples per state
+mc_batch_size: 1024        # Batch size for MC sampling (memory management)
+
+# Classification parameters
+attractor_radius: 0.2      # Radius for system.classify_attractor()
+
+# Optimization mode: "lambda" or "delta"
+# - "lambda": Optimize λ* with fixed δ (find best decision boundary)
+# - "delta": Optimize δ* with fixed λ=0.5 (find best uncertainty width)
+optimize_mode: lambda
+
+# Lambda optimization (when optimize_mode="lambda")
+lambda_grid_size: 100      # Grid search resolution for finding λ*
+
+# Delta optimization (when optimize_mode="delta")
+delta_grid_size: 100       # Grid search resolution for finding δ*
+delta_min: 0.01            # Minimum δ value for grid search
+delta_max: 0.49            # Maximum δ value for grid search

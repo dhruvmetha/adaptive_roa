@@ -68,7 +68,29 @@ This is a robotics research project for training neural network classifiers, rea
   - `flow_visualizer.py`: Flow path and trajectory visualization
   - `attractor_analysis.py`: Advanced basin analysis and separatrix detection
 
-### Attractor Basin Analysis (NEW FEATURE)
+### Conformal Prediction & Adaptive Sampling
+
+Modules for uncertainty quantification and efficient data collection. See [docs/CONFORMAL_ADAPTIVE_SAMPLING.md](docs/CONFORMAL_ADAPTIVE_SAMPLING.md) for full documentation.
+
+- **Conformal Prediction** (`src/conformal/`):
+  - `config.py`: ConformalConfig dataclass (δ, w, α, MC samples, etc.)
+  - `probability_estimator.py`: MC sampling for p(success|x) estimation
+  - `lambda_optimizer.py`: Grid search for optimal decision boundary λ*
+  - `calibrator.py`: Non-conformity scores and q_hat calibration
+  - `predictor.py`: Main ConformalPredictor class with coverage guarantees
+
+- **Adaptive Sampling** (`src/adaptive/`):
+  - `data_manager.py`: Track trajectory and classification data across epochs
+  - `sampler.py`: Sample initial states from state space
+  - `simulator.py`: Simulator interface (FileBasedSimulator, CallbackSimulator, PoolSimulator)
+  - `pipeline.py`: AdaptiveSamplingPipeline orchestrator
+
+- **Configs**:
+  - `configs/conformal/default.yaml`: Conformal prediction parameters
+  - `configs/adaptive/default.yaml`: Adaptive sampling parameters
+  - `configs/adaptive_pipeline_cartpole.yaml`: Full pipeline config
+
+### Attractor Basin Analysis
 
 The `AttractorBasinAnalyzer` provides state space discretization and basin mapping:
 
@@ -216,6 +238,48 @@ results = analyzer.analyze_attractor_basins(
 
 # Save complete analysis
 analyzer.save_analysis_results("output_dir", results)
+```
+
+### Conformal Prediction Usage
+```python
+from src.conformal import ConformalConfig, ConformalPredictor
+from src.systems.cartpole import CartPoleSystem
+
+# Setup
+flow_matcher = YourFlowMatcher.load_from_checkpoint("path/to/checkpoint")
+system = CartPoleSystem()
+config = ConformalConfig(delta=0.05, alpha=0.1, num_mc_samples=100)
+
+# Create and fit predictor
+predictor = ConformalPredictor(flow_matcher, system, config, device="cuda")
+predictor.fit(X_train, y_train, X_cal, y_cal)
+
+# Predict with coverage guarantees
+prediction_sets, p_success = predictor.predict(X_new)
+
+# Select uncertain points for adaptive sampling
+uncertain_mask, indices, probs = predictor.select_uncertain(X_candidates)
+```
+
+### Adaptive Sampling Pipeline Usage
+```python
+from src.conformal import ConformalConfig
+from src.adaptive import AdaptiveSamplingPipeline, AdaptivePipelineConfig
+from src.adaptive.simulator import PoolSimulator
+from src.systems.cartpole import CartPoleSystem
+
+# Setup
+system = CartPoleSystem()
+simulator = PoolSimulator("trajectory_pool.txt", system, attractor_radius=0.2)
+conformal_config = ConformalConfig(delta=0.05, alpha=0.1)
+pipeline_config = AdaptivePipelineConfig(n_samples_per_epoch=50, max_epochs=10)
+
+# Create pipeline
+pipeline = AdaptiveSamplingPipeline(system, simulator, conformal_config, pipeline_config)
+pipeline.initialize_with_data("initial_trajectories.txt", flow_matcher_factory)
+
+# Run adaptive sampling
+results = pipeline.run(trainer_fn=your_training_function, n_epochs=10)
 ```
 
 ### GPU Configuration

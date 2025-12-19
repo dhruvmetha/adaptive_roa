@@ -1,0 +1,31 @@
+system,method,dataset_size,separatrix_fraction,f1_score
+Pendulum 2D,FM (Manifold),100,0.3104,0.8189
+Pendulum 2D,FM (Manifold),500,0.041,0.9881
+Pendulum 2D,FM (Manifold),1000,0.02,0.997
+Pendulum 2D,FM (No Manifold),100,0.34,0.9179
+Pendulum 2D,FM (No Manifold),500,0.027,0.9858
+Pendulum 2D,FM (No Manifold),1000,0.022,0.9948
+Pendulum 2D,CLF (No Manifold),100,0.0581,0.9015
+Pendulum 2D,CLF (No Manifold),500,0.0215,0.9685
+Pendulum 2D,CLF (No Manifold),1000,0.0176,0.9857
+Mountain Car 2D (Euclidean),FM,100,0.091,0.929
+Mountain Car 2D (Euclidean),FM,500,0.055,0.9856
+Mountain Car 2D (Euclidean),FM,1000,0.063,0.9791
+Mountain Car 2D (Euclidean),CLF,100,0.076,0.8577
+Mountain Car 2D (Euclidean),CLF,500,0.0419,0.9489
+Mountain Car 2D (Euclidean),CLF,1000,0.0351,0.9581
+Cartpole-Pybullet (4D),FM (Manifold),100,0.967,0.0
+Cartpole-Pybullet (4D),FM (Manifold),500,0.32,0.9216
+Cartpole-Pybullet (4D),FM (Manifold),1000,0.255,0.9905
+Cartpole-Pybullet (4D),FM (No Manifold),100,0.8,0.9959
+Cartpole-Pybullet (4D),FM (No Manifold),500,0.2967,0.9082
+Cartpole-Pybullet (4D),FM (No Manifold),1000,0.218,0.9767
+Cartpole-Pybullet (4D),CLF,100,0.0589,0.7039
+Cartpole-Pybullet (4D),CLF,500,0.0232,0.8766
+Cartpole-Pybullet (4D),CLF,1000,0.0174,0.9079
+"Pendulum (4D, Euclidean)",FM,100,0.0272,0.9308
+"Pendulum (4D, Euclidean)",FM,500,0.011,0.9234
+"Pendulum (4D, Euclidean)",FM,1000,0.014,0.9415
+"Pendulum (4D, Euclidean)",CLF,100,0.0503,0.886
+"Pendulum (4D, Euclidean)",CLF,500,0.0168,0.9687
+"Pendulum (4D, Euclidean)",CLF,1000,0.012,0.9848

@@ -1,0 +1,143 @@
+# Adaptive Sampling Pipeline for Pendulum 2D
+# =====================================================================
+# Uses pre-collected trajectory data with conformal prediction
+# to efficiently build training datasets for pendulum (S^1 x R manifold)
+# =====================================================================
+
+defaults:
+  - system: pendulum
+  - _self_
+
+name: adaptive_pendulum
+seed: 42
+
+# Output directory
+output_dir: /common/users/dm1487/tripods/adaptive/outputs/adaptive_pendulum/${now:%Y-%m-%d_%H-%M-%S}
+
+# Device
+device: cuda:0
+
+# =====================================================================
+# Data Source Configuration
+# =====================================================================
+data_source:
+  trajectories_dir: /common/users/shared/pracsys/genMoPlan/data_trajectories/pendulum_lqr_50k/trajectories
+  shuffled_indices_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/pendulum_lqr_50k/shuffled_indices.txt
+  roa_labels_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/pendulum_lqr_50k/roa_labels.txt
+
+# Dataset splits (val/test are subsets of training with overlap)
+val_ratio: 0.1      # 10% of training for validation
+test_ratio: 0.1     # 10% of training for testing
+
+# =====================================================================
+# Adaptive Sampling Configuration
+# =====================================================================
+initial_train_size: 50    # Initial training trajectories
+n_epochs: 20               # Number of adaptive sampling epochs
+samples_per_epoch: 50      # New candidates per epoch
+d1_ratio: 0.5              # Fraction always added (calibration)
+warm_start: true          # If true, continue training from previous epoch's checkpoint
+
+# =====================================================================
+# Conformal Prediction Configuration
+# =====================================================================
+conformal:
+  delta: 0.05              # Unknown region half-width (used when optimize_mode="lambda")
+  w: 1.0                   # Misclassification weight (1.0 = only minimize errors, ignore unknown rate)
+  alpha: 0.1               # 90% coverage guarantee
+  num_mc_samples: 10       # MC samples for probability estimation (fitting)
+  num_mc_samples_eval: 10  # MC samples for full ROA evaluation (faster)
+  attractor_radius: 0.1    # For classify_attractor() - pendulum attractors are small
+  calibration_ratio: 0.3   # Fraction of training labels for calibration
+
+  # Optimization mode: "lambda" or "delta"
+  # - "lambda": Optimize λ* with fixed δ (find best decision boundary)
+  # - "delta": Optimize δ* with fixed λ=0.5 (find best uncertainty width)
+  optimize_mode: delta
+
+  # Lambda optimization (when optimize_mode="lambda")
+  lambda_grid_size: 100    # Number of grid points for λ search
+
+  # Delta optimization (when optimize_mode="delta")
+  delta_grid_size: 100     # Number of grid points for δ search
+  delta_min: 0.05          # Minimum δ value
+  delta_max: 0.45          # Maximum δ value
+
+# =====================================================================
+# Flow Matcher Training Configuration
+# =====================================================================
+batch_size: 64
+val_batch_size: 2048
+num_workers: 4
+latent_dim: 2
+
+# Trainer: PyTorch Lightning
+trainer:
+  max_epochs: 50
+  accelerator: gpu
+  devices: 1
+  precision: 32
+  gradient_clip_val: 1.0
+  log_every_n_steps: 10
+  check_val_every_n_epoch: 1
+  enable_progress_bar: true
+  enable_model_summary: true
+  callbacks:
+    - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+      monitor: val_loss
+      mode: min
+      save_top_k: 1
+      save_last: true
+      filename: "best-{epoch:02d}-{val_loss:.4f}"
+      auto_insert_metric_name: false
+    - _target_: lightning.pytorch.callbacks.EarlyStopping
+      monitor: val_loss
+      mode: min
+      patience: 20
+      verbose: true
+
+# Flow matching specific settings
+flow_matching:
+  latent_dim: ${latent_dim}
+  num_integration_steps: 100       # ODE solver steps for inference
+  mae_val_frequency: 10            # Compute MAE validation every N epochs
+
+# Flow Matcher
+flow_matcher:
+  _target_: src.flow_matching.pendulum.latent_conditional.flow_matcher.PendulumLatentConditionalFlowMatcher
+
+# Model: Pendulum UNet (S^1 x R manifold)
+model:
+  _target_: src.model.pendulum_unet.PendulumUNet
+  embedded_dim: 3              # (sin theta, cos theta, theta_dot_norm)
+  latent_dim: ${latent_dim}
+  condition_dim: 3             # Embedded start state
+  time_emb_dim: 64
+  hidden_dims: [256, 512, 256]
+  output_dim: 2                # Velocity in tangent space (d_theta, d_theta_dot)
+  use_input_embeddings: false
+  input_emb_dim: 64
+
+# Optimizer
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 1e-4
+  weight_decay: 1e-5
+  betas: [0.9, 0.999]
+
+# Scheduler
+scheduler:
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  mode: min
+  factor: 0.5
+  patience: 10
+  min_lr: 1e-6
+
+# System (Pendulum)
+system:
+  _target_: src.systems.pendulum.PendulumSystem
+
+# Hydra
+hydra:
+  run:
+    dir: ${output_dir}

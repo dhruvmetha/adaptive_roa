@@ -1,0 +1,47 @@
+# Adaptive Sampling Pipeline for CartPole
+# =====================================================================
+# Combines conformal prediction with flow matching for efficient
+# data collection on the CartPole system
+# =====================================================================
+
+defaults:
+  - system: cartpole
+  - conformal: default
+  - adaptive: default
+  - _self_
+
+name: adaptive_cartpole
+seed: 42
+
+# Initial data
+initial_data:
+  trajectory_file: /common/users/dm1487/arcmg_datasets/cartpole_pybullet/incremental_endpoint_dataset/train_1000_endpoint_dataset.txt
+
+# Device configuration
+device: cuda:0
+
+# Flow matcher training (reused for each retrain)
+fm_training:
+  max_epochs: 500
+  batch_size: 256
+  val_batch_size: 2048
+  base_lr: 1e-4
+  latent_dim: 0
+
+# Override conformal config for CartPole
+conformal:
+  attractor_radius: 0.2     # CartPole attractor radius
+  num_mc_samples: 100       # MC samples for probability estimation
+  delta: 0.05               # Unknown region half-width
+  alpha: 0.1                # 90% coverage guarantee
+
+# Override adaptive config
+adaptive:
+  n_samples_per_epoch: 50
+  max_epochs: 10
+  output_dir: outputs/adaptive_cartpole/${now:%Y-%m-%d_%H-%M-%S}
+
+# Hydra output directory
+hydra:
+  run:
+    dir: outputs/adaptive_cartpole/${now:%Y-%m-%d_%H-%M-%S}

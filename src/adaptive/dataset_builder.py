@@ -38,23 +38,22 @@ class AdaptiveDatasetBuilder:
     Tracks which trajectory indices are assigned to train/val/test splits.
     Builds endpoint dataset files on demand for flow matcher training.
 
-    IMPORTANT: Sampling is SEQUENTIAL from the shuffled_indices ordering.
-    The shuffled_indices.txt file already provides randomization, so we
-    maintain that ordering by taking indices 0, 1, 2, ... in sequence.
+    Supports two sampling modes:
+    1. Sequential (default): Uses pointer, indices 0, 1, 2, ... in sequence
+    2. Balanced: Uses explicit "used" set, allows discarding without marking
 
     Key responsibilities:
     - Manage train/val/test index splits
     - Build endpoint datasets from selected indices
-    - Track which indices have been used (sequential pointer)
+    - Track which indices have been used
     - Support incremental addition of new data
 
     Attributes:
         data_source: TrajectoryDataSource providing access to trajectory data
         train_split: Indices assigned to training
-        val_split: Indices assigned to validation (fixed)
-        test_split: Indices assigned to testing (fixed)
         output_dir: Directory for saving dataset files
         next_available_idx: Pointer to next unused index in sequential order
+        used_indices: Set of indices that have been added to training
     """
 
     def __init__(
@@ -81,8 +80,11 @@ class AdaptiveDatasetBuilder:
         self.val_ratio = val_ratio
         self.test_ratio = test_ratio
 
-        # Sequential pointer - tracks next available index
+        # Sequential pointer - tracks next available index (for sequential mode)
         self.next_available_idx = 0
+
+        # Explicit used set - tracks indices added to training (for balanced mode)
+        self.used_indices: set = set()
 
         # All trajectories available for training (no reserved sets)
         self.max_train_idx = self.data_source.n_trajectories
@@ -124,7 +126,7 @@ class AdaptiveDatasetBuilder:
 
     def add_to_training(self, indices: List[int]):
         """
-        Add trajectory indices to training set.
+        Add trajectory indices to training set AND mark as used.
 
         Args:
             indices: Trajectory indices to add
@@ -132,8 +134,85 @@ class AdaptiveDatasetBuilder:
         for idx in indices:
             if idx < self.max_train_idx:
                 self.train_split.add(idx)
+                self.used_indices.add(idx)  # Also mark as used
             else:
                 print(f"WARNING: Index {idx} is reserved for val/test, skipping")
+
+    # =========================================================================
+    # Balanced Sampling Methods (for balanced_uncertain strategy)
+    # =========================================================================
+
+    def get_available_indices(self) -> List[int]:
+        """
+        Get all indices that have NOT been used (not in training).
+
+        Returns:
+            List of available trajectory indices
+        """
+        all_indices = set(range(self.max_train_idx))
+        available = all_indices - self.used_indices
+        return sorted(list(available))
+
+    def get_n_available(self) -> int:
+        """Get count of available (unused) indices."""
+        return self.max_train_idx - len(self.used_indices)
+
+    def sample_candidates_without_marking(self, n: int) -> Tuple[np.ndarray, List[int]]:
+        """
+        Sample n candidates from available pool WITHOUT marking as used.
+
+        This allows evaluating candidates and discarding certain ones
+        without permanently removing them from the pool.
+
+        Args:
+            n: Number of candidates to sample
+
+        Returns:
+            Tuple of (start_states [n, dim], trajectory_indices)
+        """
+        available = self.get_available_indices()
+
+        if len(available) == 0:
+            print("WARNING: No more trajectories available!")
+            return np.array([]), []
+
+        # Take first n from available (maintains shuffled order)
+        n_actual = min(n, len(available))
+        if n_actual < n:
+            print(f"WARNING: Only {n_actual} trajectories remaining (requested {n})")
+
+        indices = available[:n_actual]
+        starts = self.data_source.get_start_states(indices)
+        return starts, indices
+
+    def mark_indices_as_used(self, indices: List[int]):
+        """
+        Mark indices as used (added to training).
+
+        Call this ONLY when actually adding to training set.
+        Discarded candidates should NOT be marked.
+
+        Args:
+            indices: Trajectory indices to mark as used
+        """
+        for idx in indices:
+            self.used_indices.add(idx)
+
+    def add_to_training_balanced(self, indices: List[int]):
+        """
+        Add indices to training set AND mark as used.
+
+        Use this for balanced sampling strategy.
+
+        Args:
+            indices: Trajectory indices to add to training
+        """
+        for idx in indices:
+            if idx < self.max_train_idx:
+                self.train_split.add(idx)
+                self.used_indices.add(idx)
+            else:
+                print(f"WARNING: Index {idx} out of range, skipping")
 
     def get_initial_training_set(self, n: int) -> List[int]:
         """
@@ -306,22 +385,27 @@ class AdaptiveDatasetBuilder:
         """Get current dataset statistics."""
         train_stats = self.data_source.get_statistics(list(self.train_split))
 
-        # Available = indices from next_available_idx to max_train_idx
-        available_count = self.max_train_idx - self.next_available_idx
+        # Available = indices not in used_indices (for balanced mode)
+        available_balanced = self.get_n_available()
+        # Available = indices from next_available_idx (for sequential mode)
+        available_sequential = self.max_train_idx - self.next_available_idx
 
         return {
             'train_trajectories': len(self.train_split),
-            'available_trajectories': available_count,
+            'used_trajectories': len(self.used_indices),
+            'available_trajectories': available_balanced,
+            'available_sequential': available_sequential,
             'next_available_idx': self.next_available_idx,
             'max_train_idx': self.max_train_idx,
             'train_success_rate': train_stats['success_rate'],
         }
 
     def save_state(self, filepath: str):
-        """Save current state (indices and pointer) to file."""
+        """Save current state (indices, pointer, and used set) to file."""
         import json
         state = {
             'train_indices': list(self.train_split),
+            'used_indices': list(self.used_indices),
             'next_available_idx': self.next_available_idx,
             'max_train_idx': self.max_train_idx,
         }
@@ -329,7 +413,7 @@ class AdaptiveDatasetBuilder:
             json.dump(state, f, indent=2)
 
     def load_state(self, filepath: str):
-        """Load state (indices and pointer) from file."""
+        """Load state (indices, pointer, and used set) from file."""
         import json
         with open(filepath, 'r') as f:
             state = json.load(f)
@@ -339,3 +423,10 @@ class AdaptiveDatasetBuilder:
         # Restore sequential pointer
         self.next_available_idx = state['next_available_idx']
         self.max_train_idx = state['max_train_idx']
+
+        # Restore used indices set (with backward compatibility)
+        if 'used_indices' in state:
+            self.used_indices = set(state['used_indices'])
+        else:
+            # Backward compatibility: used_indices = train_indices
+            self.used_indices = set(state['train_indices'])

@@ -28,7 +28,9 @@ from typing import Dict
 
 from src.adaptive.data_source import TrajectoryDataSource, TrajectoryDataSourceConfig
 from src.adaptive.dataset_builder import AdaptiveDatasetBuilder
+from src.adaptive.balanced_sampler import BalancedUncertainSampler
 from src.conformal import ConformalConfig, ConformalPredictor
+from src.conformal.probability_estimator import ProbabilityEstimator
 from src.data.pendulum_endpoint_data import PendulumEndpointDataModule
 
 import matplotlib.pyplot as plt
@@ -745,43 +747,95 @@ def main(cfg: DictConfig):
             verbose=True
         )
 
-        # Step 6: Get candidate trajectories and evaluate uncertainty
-        print(f"\n[6] Sampling {samples_per_epoch} candidate trajectories...")
-        candidate_states, candidate_indices = dataset_builder.get_candidate_states(samples_per_epoch)
+        # Step 6: Sample candidates based on strategy
+        sampling_strategy = cfg.get('sampling_strategy', 'fixed')
 
-        if len(candidate_indices) == 0:
-            print("No more trajectories available!")
-            break
+        if sampling_strategy == 'balanced_uncertain':
+            # Balanced Uncertain Sampling: sample until |uncertain| == |D1|
+            print(f"\n[6] Balanced Uncertain Sampling...")
 
-        # Split into D1 (calibration) and D2 (selection pool)
-        n_d1 = int(len(candidate_indices) * d1_ratio)
-        d1_indices = candidate_indices[:n_d1]
-        d2_indices = candidate_indices[n_d1:]
-        d1_states = candidate_states[:n_d1]
-        d2_states = candidate_states[n_d1:]
+            # Create probability estimator for uncertainty evaluation
+            prob_estimator = ProbabilityEstimator(
+                flow_matcher=flow_matcher,
+                system=system,
+                config=conformal_config,
+                device=device
+            )
 
-        print(f"    D1 (always add): {len(d1_indices)} trajectories")
-        print(f"    D2 (selective): {len(d2_indices)} trajectories")
+            # Create balanced sampler
+            balanced_sampler = BalancedUncertainSampler(
+                dataset_builder=dataset_builder,
+                initial_batch_size=cfg.get('initial_batch_size', samples_per_epoch),
+                d1_ratio=d1_ratio,
+                additional_batch_size=cfg.get('additional_batch_size', samples_per_epoch),
+                max_samples=cfg.get('max_samples_per_epoch', 500),
+            )
 
-        # Always add D1 to training
-        dataset_builder.add_selected_to_training(d1_indices)
+            # Sample epoch
+            sample_result = balanced_sampler.sample_epoch(
+                prob_estimator=prob_estimator,
+                lambda_star=lambda_star,
+                delta_star=delta_star,
+                verbose=True
+            )
 
-        # Evaluate D2 for uncertainty
-        if len(d2_indices) > 0:
-            print(f"\n[7] Evaluating D2 for uncertain points...")
-            uncertain_mask, uncertain_idx, p_success = conformal_predictor.select_uncertain(d2_states)
+            if len(sample_result.d1_indices) == 0:
+                print("No more trajectories available!")
+                break
 
-            n_uncertain = np.sum(uncertain_mask)
-            n_confident = len(d2_indices) - n_uncertain
-            print(f"    Uncertain: {n_uncertain} trajectories")
-            print(f"    Confident: {n_confident} trajectories (skipped)")
+            # Add D1 and uncertain to training
+            d1_indices = sample_result.d1_indices
+            uncertain_traj_indices = sample_result.uncertain_indices
 
-            # Add only uncertain trajectories from D2
-            uncertain_traj_indices = [d2_indices[i] for i in range(len(d2_indices)) if uncertain_mask[i]]
-            dataset_builder.add_selected_to_training(uncertain_traj_indices)
+            print(f"\n[7] Adding to training...")
+            dataset_builder.add_to_training_balanced(d1_indices)
+            dataset_builder.add_to_training_balanced(uncertain_traj_indices)
+
+            n_uncertain = len(uncertain_traj_indices)
+            n_confident = sample_result.n_discarded_certain
+            n_total_sampled = sample_result.n_total_sampled
+
+            print(f"    Added: D1={len(d1_indices)}, Uncertain={n_uncertain}")
+            print(f"    Discarded (certain, stay in pool): {n_confident}")
+            print(f"    Total evaluated: {n_total_sampled} over {sample_result.n_batches} batches")
+
         else:
-            n_uncertain = 0
-            n_confident = 0
+            # Fixed sampling (original behavior)
+            print(f"\n[6] Fixed Sampling: {samples_per_epoch} candidate trajectories...")
+            candidate_states, candidate_indices = dataset_builder.get_candidate_states(samples_per_epoch)
+
+            if len(candidate_indices) == 0:
+                print("No more trajectories available!")
+                break
+
+            # Split into D1 (calibration) and D2 (selection pool)
+            n_d1 = int(len(candidate_indices) * d1_ratio)
+            d1_indices = candidate_indices[:n_d1]
+            d2_indices = candidate_indices[n_d1:]
+            d2_states = candidate_states[n_d1:]
+
+            print(f"    D1 (always add): {len(d1_indices)} trajectories")
+            print(f"    D2 (selective): {len(d2_indices)} trajectories")
+
+            # Always add D1 to training
+            dataset_builder.add_selected_to_training(d1_indices)
+
+            # Evaluate D2 for uncertainty
+            if len(d2_indices) > 0:
+                print(f"\n[7] Evaluating D2 for uncertain points...")
+                uncertain_mask, uncertain_idx, p_success = conformal_predictor.select_uncertain(d2_states)
+
+                n_uncertain = np.sum(uncertain_mask)
+                n_confident = len(d2_indices) - n_uncertain
+                print(f"    Uncertain: {n_uncertain} trajectories")
+                print(f"    Confident: {n_confident} trajectories (skipped)")
+
+                # Add only uncertain trajectories from D2
+                uncertain_traj_indices = [d2_indices[i] for i in range(len(d2_indices)) if uncertain_mask[i]]
+                dataset_builder.add_selected_to_training(uncertain_traj_indices)
+            else:
+                n_uncertain = 0
+                n_confident = 0
 
         # Rebuild datasets with new data
         print(f"\n[8] Rebuilding datasets...")

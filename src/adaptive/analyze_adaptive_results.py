@@ -85,25 +85,28 @@ def correct_train_trajectories(epoch_results: List[Dict], initial_train_size: in
     """
     Correct the train_trajectories count for each epoch.
 
-    The stored train_trajectories is recorded AFTER adding samples for the next epoch.
+    The stored train_trajectories is recorded AFTER adding samples in the current epoch.
+    To get the actual training size for epoch N, we need to subtract the samples added in that epoch.
+    
     The actual training size for epoch N is:
-    - For epoch 0: initial_train_size
-    - For epoch N (N>0): train_trajectories from epoch N-1
+    - train_trajectories[N] - (n_d1_added[N] + n_d2_uncertain[N])
+    
+    This gives us the size BEFORE adding samples in epoch N, which is what we trained on.
 
     Args:
         epoch_results: List of epoch result dicts
         initial_train_size: Initial training set size before any adaptive sampling
 
     Returns:
-        List of corrected training sizes for each epoch
+        List of corrected training sizes for each epoch (same length as epoch_results)
     """
     corrected = []
     for i, r in enumerate(epoch_results):
-        if i == 0:
-            corrected.append(initial_train_size)
-        else:
-            # Use previous epoch's stored value (which is what was actually trained on)
-            corrected.append(epoch_results[i-1]['train_trajectories'])
+        # train_trajectories is recorded AFTER adding samples
+        # So we subtract the samples added in this epoch to get the training size
+        samples_added = r.get('n_d1_added', 0) + r.get('n_d2_uncertain', 0)
+        training_size = r['train_trajectories'] - samples_added
+        corrected.append(training_size)
     return corrected
 
 
@@ -1158,9 +1161,12 @@ def print_summary(results_dir: Path) -> None:
     first = epoch_results[0]
     last = epoch_results[-1]
 
+    initial_train_size = get_initial_train_size(results_dir)
+    corrected_sizes = correct_train_trajectories(epoch_results, initial_train_size)
+
     print(f"\n--- Training Set ---")
-    print(f"  Initial: {first['train_trajectories']} trajectories")
-    print(f"  Final:   {last['train_trajectories']} trajectories")
+    print(f"  Initial: {corrected_sizes[0]} trajectories")
+    print(f"  Final:   {corrected_sizes[-1]} trajectories")
 
     print(f"\n--- Conformal Parameters ---")
     print(f"  λ*: {first['lambda_star']:.4f} -> {last['lambda_star']:.4f}")

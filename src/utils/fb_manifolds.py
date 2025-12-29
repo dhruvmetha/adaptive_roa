@@ -16,8 +16,8 @@ import torch
 from torch import Tensor
 import sys
 import math
-sys.path.append('/common/home/dm1487/robotics_research/tripods/olympics-classifier/flow_matching')
-from flow_matching.utils.manifolds import Manifold
+sys.path.append('/common/users/rm1838/adaptive_roa_project/flow_matching')
+from fb_fm.utils.manifolds import Manifold
 
 
 # flat torus
@@ -100,6 +100,11 @@ class PendulumManifold(Manifold):
     def proju(self, x: Tensor, u: Tensor) -> Tensor:
         """Project vector onto tangent space (identity for S¹×ℝ)"""
         return u
+
+    def dist(self, x: Tensor, y: Tensor) -> Tensor:
+        """Geodesic distance on S¹×ℝ - returns per-dimension absolute distances"""
+        tangent = self.logmap(x, y)
+        return torch.abs(tangent)  # [B, 2] per-dimension distances
 
 
 class CartPoleManifold(Manifold):

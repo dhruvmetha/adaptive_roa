@@ -8,19 +8,16 @@ import torch.nn as nn
 from typing import Dict, Optional, Tuple
 import lightning.pytorch as pl
 from torchmetrics import MeanMetric
-import sys
-sys.path.append('/common/home/dm1487/robotics_research/tripods/olympics-classifier/flow_matching')
-
-from flow_matching.path import GeodesicProbPath
-from flow_matching.path.scheduler import CondOTScheduler
-from flow_matching.solver import RiemannianODESolver
-from flow_matching.utils import ModelWrapper
+from fb_fm.path import GeodesicProbPath
+from fb_fm.path.scheduler import CondOTScheduler
+from fb_fm.solver import RiemannianODESolver
+from fb_fm.utils import ModelWrapper
 
 from src.flow_matching.base.flow_matcher import BaseFlowMatcher
 from src.systems.base import DynamicalSystem
 from src.utils.fb_manifolds import PendulumManifold
 
-from flow_matching.utils.manifolds import Product, FlatTorus, Euclidean
+from fb_fm.utils.manifolds import Product, FlatTorus, Euclidean
 
 class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
     """

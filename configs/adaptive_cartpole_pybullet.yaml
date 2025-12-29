@@ -12,7 +12,7 @@ name: adaptive_cartpole_pybullet
 seed: 42
 
 # Output directory
-output_dir: /common/users/dm1487/tripods/adaptive/outputs/adaptive_cartpole_pybullet/${now:%Y-%m-%d_%H-%M-%S}
+output_dir: /common/users/rm1838/tripods/adaptive/outputs/adaptive_cartpole_pybullet/${now:%Y-%m-%d_%H-%M-%S}
 
 # Device
 device: cuda:0
@@ -33,7 +33,7 @@ test_ratio: 0.1     # 10% of training for testing
 # Adaptive Sampling Configuration
 # =====================================================================
 initial_train_size: 500    # Initial training trajectories
-n_epochs: 20               # Number of adaptive sampling epochs
+adaptive_iterations: 20    # Number of adaptive sampling iterations
 samples_per_epoch: 50      # New candidates per epoch
 d1_ratio: 0.5              # Fraction always added (calibration)
 warm_start: false          # If true, continue training from previous epoch's checkpoint
@@ -124,7 +124,7 @@ scheduler:
 # System (CartPole)
 system:
   _target_: src.systems.cartpole.CartPoleSystem
-  bounds_file: /common/users/dm1487/arcmg_datasets/cartpole/new_cartpole_data_bounds.pkl
+  bounds_file: /common/users/rm1838/arcmg_datasets/cartpole/new_cartpole_data_bounds.pkl
 
 # Hydra
 hydra:

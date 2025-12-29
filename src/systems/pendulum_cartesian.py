@@ -27,7 +27,7 @@ class PendulumCartesianSystem(DynamicalSystem):
     """
 
     def __init__(self,
-                 bounds_file: str = "/common/users/dm1487/arcmg_datasets/pendulum_cartesian/pendulum_cartesian_data_bounds.pkl"):
+                 bounds_file: str = "/common/users/rm1838/arcmg_datasets/pendulum_cartesian/pendulum_cartesian_data_bounds.pkl"):
         """
         Initialize Pendulum Cartesian system
 

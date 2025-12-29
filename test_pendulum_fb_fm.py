@@ -11,11 +11,11 @@ This script tests:
 """
 import torch
 import sys
-sys.path.append('/common/home/dm1487/robotics_research/tripods/olympics-classifier/flow_matching')
+sys.path.append('/common/users/rm1838/adaptive_roa_project/flow_matching')
 
 from src.utils.fb_manifolds import PendulumManifold
-from flow_matching.path import GeodesicProbPath
-from flow_matching.path.scheduler import CondOTScheduler
+from fb_fm.path import GeodesicProbPath
+from fb_fm.path.scheduler import CondOTScheduler
 from src.flow_matching.latent_conditional.flow_matcher_fb import LatentConditionalFlowMatcher
 from src.model.latent_conditional_unet1d import LatentConditionalUNet1D
 from src.systems.pendulum_lcfm import PendulumSystemLCFM

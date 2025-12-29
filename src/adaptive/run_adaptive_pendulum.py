@@ -652,7 +652,7 @@ def main(cfg: DictConfig):
     device = cfg.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
 
     # Adaptive sampling loop
-    n_epochs = cfg.get('n_epochs', 10)
+    adaptive_iterations = cfg.get('adaptive_iterations', 10)
     samples_per_epoch = cfg.get('samples_per_epoch', 50)
     d1_ratio = cfg.get('d1_ratio', 0.5)
     warm_start = cfg.get('warm_start', False)
@@ -660,7 +660,7 @@ def main(cfg: DictConfig):
     epoch_results = []
     previous_best_checkpoint = None
 
-    for epoch in range(n_epochs):
+    for epoch in range(adaptive_iterations):
         print("\n" + "=" * 70)
         print(f"EPOCH {epoch}")
         print("=" * 70)
@@ -768,7 +768,7 @@ def main(cfg: DictConfig):
                 initial_batch_size=cfg.get('initial_batch_size', samples_per_epoch),
                 d1_ratio=d1_ratio,
                 additional_batch_size=cfg.get('additional_batch_size', samples_per_epoch),
-                max_samples=cfg.get('max_samples_per_epoch', 500),
+                max_samples=cfg.get('max_samples_per_iter', 500),
             )
 
             # Sample epoch
@@ -798,6 +798,26 @@ def main(cfg: DictConfig):
             print(f"    Added: D1={len(d1_indices)}, Uncertain={n_uncertain}")
             print(f"    Discarded (certain, stay in pool): {n_confident}")
             print(f"    Total evaluated: {n_total_sampled} over {sample_result.n_batches} batches")
+            
+            # Log detailed sampling results to file
+            log_file = epoch_output_dir / "sampling_debug.log"
+            with open(log_file, 'w') as f:
+                f.write(f"=== EPOCH {epoch} SAMPLING DEBUG ===\n")
+                f.write(f"Target: D1={len(d1_indices)}, Uncertain={len(d1_indices)} (should match)\n")
+                f.write(f"Actual: D1={len(d1_indices)}, Uncertain={n_uncertain}\n")
+                f.write(f"Total sampled: {n_total_sampled} candidates\n")
+                f.write(f"Number of batches: {sample_result.n_batches}\n")
+                f.write(f"Discarded (certain): {n_confident}\n")
+                f.write(f"Lambda*: {lambda_star:.4f}, Delta*: {delta_star:.4f}\n")
+                f.write(f"Initial batch size: {cfg.get('initial_batch_size', 50)}\n")
+                f.write(f"Additional batch size: {cfg.get('additional_batch_size', 50)}\n")
+                f.write(f"Max samples per iter: {cfg.get('max_samples_per_iter', 50000)}\n")
+                f.write(f"D1 ratio: {d1_ratio}\n")
+                if n_uncertain != len(d1_indices):
+                    f.write(f"\n⚠️  WARNING: Uncertain count ({n_uncertain}) != D1 count ({len(d1_indices)})\n")
+                else:
+                    f.write(f"\n✅ SUCCESS: Uncertain count matches D1 count!\n")
+            print(f"    Detailed log saved to: {log_file}")
 
         else:
             # Fixed sampling (original behavior)

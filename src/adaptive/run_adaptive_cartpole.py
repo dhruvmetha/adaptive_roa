@@ -426,7 +426,7 @@ def main(cfg: DictConfig):
     device = cfg.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
 
     # Adaptive sampling loop
-    n_epochs = cfg.get('n_epochs', 10)
+    adaptive_iterations = cfg.get('adaptive_iterations', 10)
     samples_per_epoch = cfg.get('samples_per_epoch', 50)
     d1_ratio = cfg.get('d1_ratio', 0.5)
     warm_start = cfg.get('warm_start', False)
@@ -434,7 +434,7 @@ def main(cfg: DictConfig):
     epoch_results = []
     previous_best_checkpoint = None  # Track previous epoch's best checkpoint for warm start
 
-    for epoch in range(n_epochs):
+    for epoch in range(adaptive_iterations):
         print("\n" + "=" * 70)
         print(f"EPOCH {epoch}")
         print("=" * 70)

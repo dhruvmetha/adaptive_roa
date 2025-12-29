@@ -12,7 +12,7 @@ name: adaptive_pendulum
 seed: 42
 
 # Output directory
-output_dir: /common/users/dm1487/tripods/adaptive/outputs/adaptive_pendulum/${now:%Y-%m-%d_%H-%M-%S}
+output_dir: /common/users/rm1838/tripods/adaptive/outputs/adaptive_pendulum/${now:%Y-%m-%d_%H-%M-%S}
 
 # Device
 device: cuda:0
@@ -33,10 +33,10 @@ test_ratio: 0.1     # 10% of training for testing
 # Adaptive Sampling Configuration
 # =====================================================================
 initial_train_size: 50    # Initial training trajectories
-n_epochs: 20               # Number of adaptive sampling epochs
-samples_per_epoch: 50      # New candidates per epoch (for fixed strategy)
+adaptive_iterations: 20   # Number of adaptive sampling iterations
+samples_per_epoch: 50000      # New candidates per epoch (for fixed strategy)
 d1_ratio: 0.5              # Fraction for D1 (calibration)
-warm_start: true          # If true, continue training from previous epoch's checkpoint
+warm_start: false         # If true, continue training from previous epoch's checkpoint (TEST: cold start)
 
 # Sampling Strategy: "fixed" or "balanced_uncertain"
 # - "fixed": Sample fixed number, add D1 + uncertain from D2
@@ -46,7 +46,7 @@ sampling_strategy: balanced_uncertain
 # Balanced Uncertain Sampling Options (when sampling_strategy="balanced_uncertain")
 initial_batch_size: 50     # First batch size (split into D1 + D2)
 additional_batch_size: 50  # Size of subsequent batches when searching for uncertain
-max_samples_per_epoch: 500 # Safety cap on total samples per epoch
+max_samples_per_iter: 50000 # Safety cap on total samples per adaptive iteration
 
 # =====================================================================
 # Conformal Prediction Configuration
@@ -83,7 +83,7 @@ latent_dim: 2
 
 # Trainer: PyTorch Lightning
 trainer:
-  max_epochs: 50
+  max_epochs: 1000  # Training epochs per adaptive iteration
   accelerator: gpu
   devices: 1
   precision: 32

@@ -14,10 +14,10 @@ import sys
 import math
 
 # Add flow_matching to path
-sys.path.append('/common/home/dm1487/robotics_research/tripods/olympics-classifier/flow_matching')
+sys.path.append('/common/users/rm1838/adaptive_roa_project/flow_matching')
 
-from flow_matching.path import GeodesicProbPath
-from flow_matching.path.scheduler import CondOTScheduler
+from fb_fm.path import GeodesicProbPath
+from fb_fm.path.scheduler import CondOTScheduler
 
 from src.utils.fb_manifolds import CartPoleManifold
 from src.flow_matching.cartpole_latent_conditional.flow_matcher_fb import CartPoleLatentConditionalFlowMatcher

@@ -11,9 +11,9 @@ import torch
 import torch.nn as nn
 from typing import Dict, Optional
 import sys
-sys.path.append('/common/home/dm1487/robotics_research/tripods/olympics-classifier/flow_matching')
+sys.path.append('/common/users/rm1838/adaptive_roa_project/flow_matching')
 
-from flow_matching.utils.manifolds import Product, Euclidean, Sphere
+from fb_fm.utils.manifolds import Product, Euclidean, Sphere
 
 from src.flow_matching.base.flow_matcher import BaseFlowMatcher
 from src.systems.base import DynamicalSystem

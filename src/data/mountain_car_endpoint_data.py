@@ -12,7 +12,7 @@ import random
 
 class MountainCarEndpointDataset(Dataset):
     def __init__(self, data_file: str,
-                 bounds_file: str = "/common/users/dm1487/arcmg_datasets/mountain_car/mountain_car_data_bounds.pkl"):
+                 bounds_file: str = "/common/users/rm1838/arcmg_datasets/mountain_car/mountain_car_data_bounds.pkl"):
         """
         Dataset for Mountain Car endpoint pairs (start_state, end_state)
         Handles 2D Mountain Car state (pure Euclidean manifold)
@@ -59,7 +59,7 @@ class MountainCarEndpointDataModule(pl.LightningDataModule):
     def __init__(self, data_file: str, validation_file: str, test_file: str,
                  batch_size: int = 64, val_batch_size: Optional[int] = None,
                  num_workers: int = 4, pin_memory: bool = True,
-                 bounds_file: str = "/common/users/dm1487/arcmg_datasets/mountain_car/mountain_car_data_bounds.pkl"):
+                 bounds_file: str = "/common/users/rm1838/arcmg_datasets/mountain_car/mountain_car_data_bounds.pkl"):
         """
         Mountain Car Endpoint Data Module with separate train/val/test files
 

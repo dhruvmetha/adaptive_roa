@@ -9,18 +9,18 @@ from typing import Dict, Optional, Tuple
 import lightning.pytorch as pl
 from torchmetrics import MeanMetric
 import sys
-sys.path.append('/common/home/dm1487/robotics_research/tripods/olympics-classifier/flow_matching')
+sys.path.append('/common/users/rm1838/adaptive_roa_project/flow_matching')
 
-from flow_matching.path import GeodesicProbPath
-from flow_matching.path.scheduler import CondOTScheduler
-from flow_matching.solver import RiemannianODESolver
-from flow_matching.utils import ModelWrapper
+from fb_fm.path import GeodesicProbPath
+from fb_fm.path.scheduler import CondOTScheduler
+from fb_fm.solver import RiemannianODESolver
+from fb_fm.utils import ModelWrapper
 
 from src.flow_matching.base.flow_matcher import BaseFlowMatcher
 from src.systems.base import DynamicalSystem
 from src.utils.fb_manifolds import CartPoleManifold
 
-from flow_matching.utils.manifolds import Product, FlatTorus, Euclidean
+from fb_fm.utils.manifolds import Product, FlatTorus, Euclidean
 
 
 class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
@@ -335,7 +335,7 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
                 system_config = hydra_config["system"]
                 print(f"   Using system config from Hydra config")
                 # Extract bounds configuration
-                bounds_file = system_config.get("bounds_file", "/common/users/dm1487/arcmg_datasets/cartpole/cartpole_data_bounds.pkl")
+                bounds_file = system_config.get("bounds_file", "/common/users/rm1838/arcmg_datasets/cartpole/cartpole_data_bounds.pkl")
                 print(f"   bounds_file: {bounds_file}")
                 system = CartPoleSystem(bounds_file=bounds_file)
             else:

@@ -157,7 +157,11 @@ class AdaptiveDatasetBuilder:
         """Get count of available (unused) indices."""
         return self.max_train_idx - len(self.used_indices)
 
-    def sample_candidates_without_marking(self, n: int) -> Tuple[np.ndarray, List[int]]:
+    def sample_candidates_without_marking(
+        self, 
+        n: int, 
+        exclude: set = None
+    ) -> Tuple[np.ndarray, List[int]]:
         """
         Sample n candidates from available pool WITHOUT marking as used.
 
@@ -166,11 +170,21 @@ class AdaptiveDatasetBuilder:
 
         Args:
             n: Number of candidates to sample
+            exclude: Optional set of indices to exclude (e.g., already sampled this epoch)
 
         Returns:
             Tuple of (start_states [n, dim], trajectory_indices)
         """
-        available = self.get_available_indices()
+        # Get available indices as a set for efficient operations
+        all_indices = set(range(self.max_train_idx))
+        available_set = all_indices - self.used_indices
+        
+        # Exclude indices if provided (for within-epoch deduplication)
+        if exclude:
+            available_set = available_set - exclude
+        
+        # Convert to sorted list (maintains consistent ordering)
+        available = sorted(available_set)
 
         if len(available) == 0:
             print("WARNING: No more trajectories available!")
@@ -312,13 +326,18 @@ class AdaptiveDatasetBuilder:
 
     def get_test_data(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Get test data as numpy arrays.
+        Get test data as numpy arrays (subset of training with overlap).
 
         Returns:
             Tuple of (start_states, end_states, labels)
         """
+        # Take test_ratio of training indices (last portion)
+        train_indices = list(self.train_split)
+        n_test = max(1, int(len(train_indices) * self.test_ratio))
+        test_indices = train_indices[-n_test:]  # Last n_test from training
+        
         return self.data_source.build_endpoint_dataset(
-            list(self.test_split),
+            test_indices,
             mode="test"
         )
 

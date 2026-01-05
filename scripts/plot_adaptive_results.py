@@ -11,9 +11,64 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import numpy as np
 from pathlib import Path
+from typing import List, Dict
 
 # Use a clean style
 plt.style.use('seaborn-v0_8-whitegrid')
+
+
+def get_initial_train_size(output_dir: Path) -> int:
+    """
+    Get the initial training size from the Hydra config.
+
+    The train_trajectories field in results.json is recorded AFTER adding new samples,
+    so we need the initial_train_size to correctly compute the actual training size
+    for each epoch.
+    """
+    # Try to load from Hydra config in epoch_000
+    hydra_config = output_dir / "epoch_000" / ".hydra" / "config.yaml"
+    if hydra_config.exists():
+        import yaml
+        with open(hydra_config, 'r') as f:
+            cfg = yaml.safe_load(f)
+            return cfg.get('initial_train_size', 50)
+
+    # Fallback: try root .hydra
+    hydra_config = output_dir / ".hydra" / "config.yaml"
+    if hydra_config.exists():
+        import yaml
+        with open(hydra_config, 'r') as f:
+            cfg = yaml.safe_load(f)
+            return cfg.get('initial_train_size', 50)
+
+    # Default fallback
+    return 50
+
+
+def correct_train_trajectories(epoch_results: List[Dict], initial_train_size: int) -> List[int]:
+    """
+    Correct the train_trajectories count for each epoch.
+
+    The stored train_trajectories is recorded AFTER adding samples for the next epoch.
+    The actual training size for epoch N is:
+    - For epoch 0: initial_train_size
+    - For epoch N (N>0): train_trajectories from epoch N-1
+
+    Args:
+        epoch_results: List of epoch result dicts
+        initial_train_size: Initial training set size before any adaptive sampling
+
+    Returns:
+        List of corrected training sizes for each epoch
+    """
+    corrected = []
+    for i, r in enumerate(epoch_results):
+        if i == 0:
+            corrected.append(initial_train_size)
+        else:
+            # Use previous epoch's stored value (which is what was actually trained on)
+            corrected.append(epoch_results[i-1]['train_trajectories'])
+    return corrected
 
 
 def load_results(output_dir: Path) -> dict:
@@ -26,10 +81,10 @@ def load_results(output_dir: Path) -> dict:
         return json.load(f)
 
 
-def plot_training_progress(epoch_results: list, save_dir: Path):
+def plot_training_progress(epoch_results: list, save_dir: Path, initial_train_size: int = 50):
     """Plot training dataset growth and sampling statistics."""
     epochs = [r['epoch'] for r in epoch_results]
-    train_trajectories = [r['train_trajectories'] for r in epoch_results]
+    train_trajectories = correct_train_trajectories(epoch_results, initial_train_size)
     n_d1_added = [r['n_d1_added'] for r in epoch_results]
     n_d2_uncertain = [r['n_d2_uncertain'] for r in epoch_results]
     n_d2_confident = [r['n_d2_confident'] for r in epoch_results]
@@ -286,12 +341,12 @@ def plot_confusion_matrix_evolution(epoch_results: list, save_dir: Path):
     print(f"Saved confusion_evolution.png")
 
 
-def plot_summary_dashboard(epoch_results: list, final_stats: dict, save_dir: Path):
+def plot_summary_dashboard(epoch_results: list, final_stats: dict, save_dir: Path, initial_train_size: int = 50):
     """Create a summary dashboard with key metrics."""
     epochs = [r['epoch'] for r in epoch_results]
 
     # Extract key metrics
-    train_trajectories = [r['train_trajectories'] for r in epoch_results]
+    train_trajectories = correct_train_trajectories(epoch_results, initial_train_size)
     f1_conf = [r['full_roa']['conformal_thresholds']['f1'] for r in epoch_results]
     recall_conf = [r['full_roa']['conformal_thresholds']['recall'] for r in epoch_results]
     accuracy_conf = [r['full_roa']['conformal_thresholds']['accuracy'] for r in epoch_results]
@@ -437,10 +492,10 @@ def plot_threshold_comparison_detailed(epoch_results: list, save_dir: Path):
     print(f"Saved threshold_comparison.png")
 
 
-def plot_conformal_vs_fixed(epoch_results: list, save_dir: Path):
+def plot_conformal_vs_fixed(epoch_results: list, save_dir: Path, initial_train_size: int = 50):
     """Original comparison plot: F1 and separatrix vs dataset size."""
     # Extract data
-    train_sizes = [r['train_trajectories'] for r in epoch_results]
+    train_sizes = correct_train_trajectories(epoch_results, initial_train_size)
     conformal_f1 = [r['full_roa']['conformal_thresholds']['f1'] for r in epoch_results]
     conformal_separatrix = [r['full_roa']['conformal_thresholds']['separatrix_pct'] * 100 for r in epoch_results]
     fixed_f1 = [r['full_roa']['fixed_thresholds']['f1'] for r in epoch_results]
@@ -521,8 +576,12 @@ def main():
     epoch_results = results['epoch_results']
     final_stats = results['final_stats']
 
+    # Get initial train size for correcting trajectory counts
+    initial_train_size = get_initial_train_size(output_dir)
+
     print(f"Loaded results from {output_dir}")
     print(f"  - {len(epoch_results)} epochs")
+    print(f"  - Initial training size: {initial_train_size}")
     print(f"  - Final training trajectories: {final_stats['train_trajectories']}")
 
     # Create save directory
@@ -532,13 +591,13 @@ def main():
     print(f"\nSaving plots to {save_dir}")
 
     # Generate all plots
-    plot_training_progress(epoch_results, save_dir)
+    plot_training_progress(epoch_results, save_dir, initial_train_size)
     plot_conformal_metrics(epoch_results, save_dir)
     plot_roa_metrics(epoch_results, save_dir)
     plot_confusion_matrix_evolution(epoch_results, save_dir)
     plot_threshold_comparison_detailed(epoch_results, save_dir)
-    plot_conformal_vs_fixed(epoch_results, save_dir)
-    plot_summary_dashboard(epoch_results, final_stats, save_dir)
+    plot_conformal_vs_fixed(epoch_results, save_dir, initial_train_size)
+    plot_summary_dashboard(epoch_results, final_stats, save_dir, initial_train_size)
 
     # Print summary
     print_summary(epoch_results, final_stats)

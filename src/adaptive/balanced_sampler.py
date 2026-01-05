@@ -14,11 +14,12 @@ from src.adaptive.dataset_builder import AdaptiveDatasetBuilder
 @dataclass
 class BalancedSamplingResult:
     """Result from balanced sampling."""
-    d1_indices: List[int]           # Calibration indices (certain, always add)
+    d1_indices: List[int]           # Calibration indices (unclassified, always add)
     uncertain_indices: List[int]    # Uncertain indices (matched to |D1|)
     n_total_sampled: int            # Total candidates evaluated
     n_batches: int                  # Number of batches sampled
     n_discarded_certain: int        # Certain points discarded (stay in pool)
+    n_truncated_uncertain: int = 0  # Uncertain points truncated (if overshot target)
 
 
 class BalancedUncertainSampler:
@@ -84,10 +85,14 @@ class BalancedUncertainSampler:
         Returns:
             BalancedSamplingResult with indices to add to training
         """
+        # Track indices sampled within this epoch to avoid re-sampling
+        sampled_this_epoch = set()
+        
         # Step 1: Sample initial batch
         states, indices = self.dataset_builder.sample_candidates_without_marking(
             self.initial_batch_size
         )
+        sampled_this_epoch.update(indices)
 
         if len(indices) == 0:
             if verbose:
@@ -131,20 +136,25 @@ class BalancedUncertainSampler:
         target_uncertain = len(d1_indices)
 
         while len(uncertain_indices) < target_uncertain and n_total_sampled < self.max_samples:
-            # Check if more candidates available
-            n_available = self.dataset_builder.get_n_available()
-            if n_available == 0:
+            # Check if more candidates available (excluding already sampled this epoch)
+            n_available = self.dataset_builder.get_n_available() - len(sampled_this_epoch)
+            if n_available <= 0:
                 if verbose:
                     print(f"    No more candidates available. Stopping with {len(uncertain_indices)} uncertain.")
                 break
 
-            # Sample additional batch
+            # Sample additional batch (excluding already sampled this epoch)
             batch_size = min(self.additional_batch_size, self.max_samples - n_total_sampled)
-            add_states, add_indices = self.dataset_builder.sample_candidates_without_marking(batch_size)
+            add_states, add_indices = self.dataset_builder.sample_candidates_without_marking(
+                batch_size, 
+                exclude=sampled_this_epoch
+            )
 
             if len(add_indices) == 0:
                 break
 
+            # Track these indices as sampled this epoch
+            sampled_this_epoch.update(add_indices)
             n_total_sampled += len(add_indices)
             n_batches += 1
 
@@ -163,12 +173,12 @@ class BalancedUncertainSampler:
                       f"Total uncertain: {len(uncertain_indices)}/{target_uncertain}")
 
         # Step 5: Truncate if we overshot
+        n_truncated = 0
         if len(uncertain_indices) > target_uncertain:
-            extra = len(uncertain_indices) - target_uncertain
+            n_truncated = len(uncertain_indices) - target_uncertain
             uncertain_indices = uncertain_indices[:target_uncertain]
-            certain_discarded += extra  # Extra uncertain also discarded
             if verbose:
-                print(f"    Truncated to {target_uncertain} uncertain (discarded {extra} extra)")
+                print(f"    Truncated to {target_uncertain} uncertain (discarded {n_truncated} extra)")
 
         if verbose:
             print(f"    FINAL: D1={len(d1_indices)}, Uncertain={len(uncertain_indices)}, "
@@ -179,7 +189,8 @@ class BalancedUncertainSampler:
             uncertain_indices=uncertain_indices,
             n_total_sampled=n_total_sampled,
             n_batches=n_batches,
-            n_discarded_certain=certain_discarded
+            n_discarded_certain=certain_discarded,
+            n_truncated_uncertain=n_truncated
         )
 
     def _classify_candidates(

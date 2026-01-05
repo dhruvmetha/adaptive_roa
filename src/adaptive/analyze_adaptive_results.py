@@ -44,13 +44,30 @@ import shutil
 
 
 def load_final_results(results_dir: Path) -> Dict:
-    """Load final_results.json from a run directory."""
-    final_results_path = results_dir / "final_results.json"
-    if not final_results_path.exists():
-        raise FileNotFoundError(f"final_results.json not found in {results_dir}")
+    """
+    Load final_results.json from a run directory.
 
-    with open(final_results_path, 'r') as f:
-        return json.load(f)
+    Tries multiple file names in order:
+    1. final_results.json (original)
+    2. final_results_reconstructed.json (from reconstruct_results.py)
+    """
+    # Try original file first
+    final_results_path = results_dir / "final_results.json"
+    if final_results_path.exists():
+        with open(final_results_path, 'r') as f:
+            return json.load(f)
+
+    # Try reconstructed file
+    reconstructed_path = results_dir / "final_results_reconstructed.json"
+    if reconstructed_path.exists():
+        print(f"Note: Using reconstructed results from {reconstructed_path.name}")
+        with open(reconstructed_path, 'r') as f:
+            return json.load(f)
+
+    raise FileNotFoundError(
+        f"Neither final_results.json nor final_results_reconstructed.json found in {results_dir}\n"
+        f"Run `python src/adaptive/reconstruct_results.py -r {results_dir}` to reconstruct from checkpoints."
+    )
 
 
 def get_initial_train_size(results_dir: Path) -> int:

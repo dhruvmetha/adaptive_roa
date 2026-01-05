@@ -83,7 +83,7 @@ latent_dim: 2
 
 # Trainer: PyTorch Lightning
 trainer:
-  max_epochs: 50
+  max_epochs: 1000
   accelerator: gpu
   devices: 1
   precision: 32

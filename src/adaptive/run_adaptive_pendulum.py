@@ -650,6 +650,7 @@ def main(cfg: DictConfig):
     system = hydra.utils.instantiate(cfg.system)
 
     device = cfg.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device: {device}")
 
     # Adaptive sampling loop
     adaptive_iterations = cfg.get('adaptive_iterations', 10)

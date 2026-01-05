@@ -335,7 +335,7 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
                 system_config = hydra_config["system"]
                 print(f"   Using system config from Hydra config")
                 # Extract bounds configuration
-                bounds_file = system_config.get("bounds_file", "/common/users/rm1838/arcmg_datasets/cartpole/cartpole_data_bounds.pkl")
+                bounds_file = system_config.get("bounds_file", "/common/users/rm1838/arcmg_datasets/cartpole/new_cartpole_data_bounds.pkl")
                 print(f"   bounds_file: {bounds_file}")
                 system = CartPoleSystem(bounds_file=bounds_file)
             else:

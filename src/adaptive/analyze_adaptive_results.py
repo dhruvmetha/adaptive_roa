@@ -83,31 +83,83 @@ def get_initial_train_size(results_dir: Path) -> int:
 
 def correct_train_trajectories(epoch_results: List[Dict], initial_train_size: int) -> List[int]:
     """
-    Correct the train_trajectories count for each epoch.
+    Get the actual training size used for each epoch.
 
     The stored train_trajectories is recorded AFTER adding samples in the current epoch.
-    To get the actual training size for epoch N, we need to subtract the samples added in that epoch.
-    
-    The actual training size for epoch N is:
-    - train_trajectories[N] - (n_d1_added[N] + n_d2_uncertain[N])
-    
-    This gives us the size BEFORE adding samples in epoch N, which is what we trained on.
+    The actual training size for epoch N is the size BEFORE adding samples, which equals:
+    - For epoch 0: initial_train_size
+    - For epoch N > 0: train_trajectories from epoch N-1
+
+    Note: We cannot simply subtract (n_d1_added + n_d2_uncertain) because the balanced
+    sampling strategy can re-sample previously discarded "certain" candidates. When these
+    are added to training, DatasetSplit.add() deduplicates them, so actual growth may be
+    less than the nominal samples added.
 
     Args:
         epoch_results: List of epoch result dicts
         initial_train_size: Initial training set size before any adaptive sampling
 
     Returns:
-        List of corrected training sizes for each epoch (same length as epoch_results)
+        List of actual training sizes for each epoch (same length as epoch_results)
     """
     corrected = []
     for i, r in enumerate(epoch_results):
-        # train_trajectories is recorded AFTER adding samples
-        # So we subtract the samples added in this epoch to get the training size
-        samples_added = r.get('n_d1_added', 0) + r.get('n_d2_uncertain', 0)
-        training_size = r['train_trajectories'] - samples_added
+        if i == 0:
+            # Epoch 0 trains on the initial training set
+            training_size = initial_train_size
+        else:
+            # Epoch N trains on the dataset size from end of epoch N-1
+            training_size = epoch_results[i - 1]['train_trajectories']
         corrected.append(training_size)
     return corrected
+
+
+def get_actual_training_sizes(epoch_results: List[Dict], initial_train_size: int) -> List[int]:
+    """
+    Get the training set size AFTER adding samples in each epoch (for plotting dataset growth).
+    
+    This is different from correct_train_trajectories() which returns the size BEFORE training.
+    This function returns the size AFTER adding samples, which is what train_trajectories
+    actually represents.
+    
+    Args:
+        epoch_results: List of epoch result dicts
+        initial_train_size: Initial training set size before any adaptive sampling
+        
+    Returns:
+        List of training set sizes after adding samples in each epoch
+    """
+    sizes = []
+    for i, r in enumerate(epoch_results):
+        # train_trajectories is recorded AFTER adding samples in this epoch
+        sizes.append(r['train_trajectories'])
+    return sizes
+
+
+def compute_actual_growth_per_epoch(epoch_results: List[Dict], initial_train_size: int) -> List[int]:
+    """
+    Compute the actual growth in training set size per epoch.
+    
+    This accounts for deduplication - if duplicates are added, the actual growth
+    will be less than n_d1_added + n_d2_uncertain.
+    
+    Args:
+        epoch_results: List of epoch result dicts
+        initial_train_size: Initial training set size before any adaptive sampling
+        
+    Returns:
+        List of actual growth amounts per epoch (same length as epoch_results)
+    """
+    growth = []
+    prev_size = initial_train_size
+    
+    for i, r in enumerate(epoch_results):
+        current_size = r['train_trajectories']
+        actual_growth = current_size - prev_size
+        growth.append(actual_growth)
+        prev_size = current_size
+    
+    return growth
 
 
 def load_epoch_npz(results_dir: Path, epoch: int) -> Optional[Dict]:
@@ -411,7 +463,8 @@ def plot_metrics_vs_dataset_size(
 
     f1_scores = [r['full_roa'][key]['f1'] for r in epoch_results]
     separatrix_pct = [r['full_roa'][key]['separatrix_pct'] for r in epoch_results]
-    # Use corrected train_trajectories
+    # For metrics vs dataset size, use the size that was actually used for training
+    # (before adding samples in this epoch, which is what the model was trained on)
     train_trajectories = correct_train_trajectories(epoch_results, initial_train_size)
 
     # Create figure with 2 subplots side by side (extra height for legends below)
@@ -1031,6 +1084,16 @@ def create_epoch_animation_frames(
 
     video_paths = {}
 
+    # Load full results to get corrected training sizes
+    try:
+        full_results = load_final_results(results_dir)
+        initial_train_size = get_initial_train_size(results_dir)
+        corrected_sizes = correct_train_trajectories(full_results['epoch_results'], initial_train_size)
+        # Build a map from epoch number to corrected training size
+        epoch_to_train_size = {r['epoch']: corrected_sizes[i] for i, r in enumerate(full_results['epoch_results'])}
+    except FileNotFoundError:
+        epoch_to_train_size = {}
+
     for threshold_type in threshold_types:
         frames_dir = output_dir / f"animation_frames_{threshold_type}"
         frames_dir.mkdir(parents=True, exist_ok=True)
@@ -1050,7 +1113,8 @@ def create_epoch_animation_frames(
             if results_file.exists():
                 with open(results_file) as f:
                     epoch_results = json.load(f)
-                train_size = epoch_results.get('train_trajectories', '?')
+                # Use corrected training size (what was actually trained on)
+                train_size = epoch_to_train_size.get(epoch_num, epoch_results.get('train_trajectories', '?'))
                 # Get F1 score for display based on threshold type
                 f1_key = f"{threshold_type}_thresholds"
                 f1 = epoch_results.get('full_roa', {}).get(f1_key, {}).get('f1', None)
@@ -1059,7 +1123,7 @@ def create_epoch_animation_frames(
                 else:
                     title = f"Epoch {epoch_num} | Training: {train_size} trajectories"
             else:
-                train_size = '?'
+                train_size = epoch_to_train_size.get(epoch_num, '?')
                 title = f"Epoch {epoch_num} | Training: {train_size} trajectories"
 
             phase_space_file = frames_dir / f"frame_{epoch_num:03d}.png"
@@ -1163,10 +1227,23 @@ def print_summary(results_dir: Path) -> None:
 
     initial_train_size = get_initial_train_size(results_dir)
     corrected_sizes = correct_train_trajectories(epoch_results, initial_train_size)
+    actual_sizes = get_actual_training_sizes(epoch_results, initial_train_size)
+    actual_growth = compute_actual_growth_per_epoch(epoch_results, initial_train_size)
 
     print(f"\n--- Training Set ---")
     print(f"  Initial: {corrected_sizes[0]} trajectories")
-    print(f"  Final:   {corrected_sizes[-1]} trajectories")
+    print(f"  Final:   {actual_sizes[-1]} trajectories (after adding samples)")
+    print(f"  Final (trained on): {corrected_sizes[-1]} trajectories")
+    
+    # Show growth per epoch to diagnose non-uniform growth
+    print(f"\n--- Dataset Growth Per Epoch ---")
+    print(f"  Epoch | Expected | Actual | D1+Uncertain | Duplicates")
+    print(f"  ------|----------|-------|---------------|-----------")
+    for i, r in enumerate(epoch_results):
+        expected = r.get('n_d1_added', 0) + r.get('n_d2_uncertain', 0)
+        actual = actual_growth[i]
+        duplicates = expected - actual if expected > 0 else 0
+        print(f"  {i:5d} | {expected:8d} | {actual:5d} | {expected:13d} | {duplicates:10d}")
 
     print(f"\n--- Conformal Parameters ---")
     print(f"  λ*: {first['lambda_star']:.4f} -> {last['lambda_star']:.4f}")

@@ -52,7 +52,7 @@ max_samples_per_iter: 50000 # Safety cap on total samples per adaptive iteration
 # Conformal Prediction Configuration
 # =====================================================================
 conformal:
-  delta: 0.05              # Unknown region half-width (used when optimize_mode="lambda")
+  delta: 0.1              # Unknown region half-width (used when optimize_mode="lambda")
   w: 1.0                   # Misclassification weight (1.0 = only minimize errors, ignore unknown rate)
   alpha: 0.1               # 90% coverage guarantee
   num_mc_samples: 10       # MC samples for probability estimation (fitting)

@@ -32,23 +32,46 @@ test_ratio: 0.1     # 10% of training for testing
 # =====================================================================
 # Adaptive Sampling Configuration
 # =====================================================================
-initial_train_size: 500    # Initial training trajectories
-adaptive_iterations: 20    # Number of adaptive sampling iterations
-samples_per_epoch: 50      # New candidates per epoch
-d1_ratio: 0.5              # Fraction always added (calibration)
-warm_start: false          # If true, continue training from previous epoch's checkpoint
+initial_train_size: 100    # Initial training trajectories
+adaptive_iterations: 100    # Number of adaptive sampling iterations
+samples_per_epoch: 50000   # New candidates per epoch (for fixed strategy)
+d1_ratio: 0.5              # Fraction for D1 (calibration)
+warm_start: true           # If true, continue training from previous epoch's checkpoint
+
+# Sampling Strategy: "fixed" or "balanced_uncertain"
+# - "fixed": Sample fixed number, add D1 + uncertain from D2
+# - "balanced_uncertain": Keep sampling until |uncertain| == |D1|
+sampling_strategy: balanced_uncertain
+
+# Balanced Uncertain Sampling Options (when sampling_strategy="balanced_uncertain")
+initial_batch_size: 100     # First batch size (split into D1 + D2)
+additional_batch_size: 100  # Size of subsequent batches when searching for uncertain
+max_samples_per_iter: 1000000 # Safety cap on total samples per adaptive iteration
 
 # =====================================================================
 # Conformal Prediction Configuration
 # =====================================================================
 conformal:
-  delta: 0.05              # Unknown region half-width
-  w: 0.9                   # Misclassification weight
+  delta: 0.1            # Unknown region half-width (used when optimize_mode="lambda")
+  w: 1.0                   # Misclassification weight (1.0 = only minimize errors, ignore unknown rate)
   alpha: 0.1               # 90% coverage guarantee
-  num_mc_samples: 10      # MC samples for probability estimation (fitting)
+  num_mc_samples: 10       # MC samples for probability estimation (fitting)
   num_mc_samples_eval: 10  # MC samples for full ROA evaluation (faster)
-  attractor_radius: 0.1    # For classify_attractor()
-  calibration_ratio: 0.3   # Fraction of training labels for calibration (rest for λ optimization)
+  attractor_radius: 0.1    # For classify_attractor() - CartPole attractor is small
+  calibration_ratio: 0.3   # Fraction of training labels for calibration
+
+  # Optimization mode: "lambda" or "delta"
+  # - "lambda": Optimize λ* with fixed δ (find best decision boundary)
+  # - "delta": Optimize δ* with fixed λ=0.5 (find best uncertainty width)
+  optimize_mode: delta
+
+  # Lambda optimization (when optimize_mode="lambda")
+  lambda_grid_size: 100    # Number of grid points for λ search
+
+  # Delta optimization (when optimize_mode="delta")
+  delta_grid_size: 100     # Number of grid points for δ search
+  delta_min: 0.05          # Minimum δ value
+  delta_max: 0.45          # Maximum δ value
 
 # =====================================================================
 # Flow Matcher Training Configuration

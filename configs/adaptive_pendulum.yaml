@@ -12,7 +12,7 @@ name: adaptive_pendulum
 seed: 42
 
 # Output directory
-output_dir: /common/users/dm1487/tripods/adaptive/outputs/adaptive_pendulum/${now:%Y-%m-%d_%H-%M-%S}
+output_dir: /common/users/rm1838/adaptive_cartpole/outputs/adaptive_pendulum/${now:%Y-%m-%d_%H-%M-%S}
 
 # Device
 device: cuda:0
@@ -34,19 +34,19 @@ test_ratio: 0.1     # 10% of training for testing
 # =====================================================================
 initial_train_size: 50    # Initial training trajectories
 n_epochs: 20               # Number of adaptive sampling epochs
-samples_per_epoch: 50      # New candidates per epoch (for fixed strategy)
-d1_ratio: 0.5              # Fraction for D1 (calibration)
+samples_per_epoch: 50      # New candidates per epoch (for fixed strategy only)
 warm_start: True          # If true, continue training from previous epoch's checkpoint
 
 # Sampling Strategy: "fixed" or "balanced_uncertain"
-# - "fixed": Sample fixed number, add D1 + uncertain from D2
-# - "balanced_uncertain": Keep sampling until |uncertain| == |D1|
+# - "fixed": Sample fixed number, add all to training
+# - "balanced_uncertain": Sample D1 random + D2 uncertain, total = adaptive_data_max
 sampling_strategy: balanced_uncertain
 
 # Balanced Uncertain Sampling Options (when sampling_strategy="balanced_uncertain")
-initial_batch_size: 50     # First batch size (split into D1 + D2)
-additional_batch_size: 50  # Size of subsequent batches when searching for uncertain
-max_samples_per_epoch: 50000 # Safety cap on total samples per epoch
+adaptive_data_max: 50      # Total samples to add per epoch (D1 + D2)
+d2_ratio: 0.5              # Fraction for D2 (uncertainty-filtered). 0=all random, 1=all filtered
+batch_size_sampling: 50    # Size of batches when searching for uncertain points in D2
+max_samples_per_epoch: 50000 # Safety cap on total candidates evaluated per epoch
 
 # =====================================================================
 # Conformal Prediction Configuration

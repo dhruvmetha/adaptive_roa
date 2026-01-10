@@ -10,11 +10,7 @@ This script validates:
 """
 
 import torch
-import sys
 import math
-
-# Add flow_matching to path
-sys.path.append('/common/home/dm1487/robotics_research/tripods/olympics-classifier/flow_matching')
 
 from flow_matching.path import GeodesicProbPath
 from flow_matching.path.scheduler import CondOTScheduler

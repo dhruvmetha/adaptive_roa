@@ -8,18 +8,15 @@ import torch.nn as nn
 from typing import Dict, Optional, Tuple
 import lightning.pytorch as pl
 from torchmetrics import MeanMetric
-import sys
-sys.path.append('/common/home/dm1487/robotics_research/tripods/olympics-classifier/flow_matching')
 
-from flow_matching.path import GeodesicProbPath
-from flow_matching.path.scheduler import CondOTScheduler
-from flow_matching.solver import RiemannianODESolver
-from flow_matching.utils import ModelWrapper
+from fb_fm.path import GeodesicProbPath
+from fb_fm.path.scheduler import CondOTScheduler
+from fb_fm.solver import RiemannianODESolver
+from fb_fm.utils import ModelWrapper
+from fb_fm.utils.manifolds import Euclidean
 
 from src.flow_matching.base.flow_matcher import BaseFlowMatcher
 from src.systems.base import DynamicalSystem
-
-from flow_matching.utils.manifolds import Product, Euclidean
 
 
 class PendulumCartesianLatentConditionalFlowMatcher(BaseFlowMatcher):
@@ -66,7 +63,7 @@ class PendulumCartesianLatentConditionalFlowMatcher(BaseFlowMatcher):
 
     def _create_manifold(self):
         """Create ℝ⁴ manifold for Pendulum Cartesian (pure Euclidean)"""
-        return Product(input_dim=4, manifolds=[(Euclidean(), 4)])
+        return Euclidean()
 
     def _get_start_states(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """Extract start states from batch"""
@@ -319,7 +316,7 @@ class PendulumCartesianLatentConditionalFlowMatcher(BaseFlowMatcher):
             if hydra_config and "system" in hydra_config:
                 system_config = hydra_config["system"]
                 print(f"   Using system config from Hydra config")
-                bounds_file = system_config.get("bounds_file", "/common/users/dm1487/arcmg_datasets/pendulum_cartesian/pendulum_cartesian_data_bounds.pkl")
+                bounds_file = system_config.get("bounds_file", "/common/users/rm1838/arcmg_datasets/pendulum_cartesian/pendulum_cartesian_data_bounds.pkl")
                 use_dynamic_bounds = system_config.get("use_dynamic_bounds", True)
                 print(f"   bounds_file: {bounds_file}")
                 print(f"   use_dynamic_bounds: {use_dynamic_bounds}")

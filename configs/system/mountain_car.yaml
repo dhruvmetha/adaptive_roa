@@ -13,5 +13,4 @@
 _target_: src.systems.mountain_car.MountainCarSystem
 
 # Data bounds configuration
-bounds_file: /common/users/dm1487/arcmg_datasets/mountain_car/mountain_car_data_bounds.pkl
-use_dynamic_bounds: true  # If false, uses default fallback bounds
+bounds_file: /common/users/rm1838/adaptive_cartpole/data/mountain_car_data_bounds.pkl

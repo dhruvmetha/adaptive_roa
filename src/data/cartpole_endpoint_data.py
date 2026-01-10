@@ -12,7 +12,7 @@ import random
 
 class CartPoleEndpointDataset(Dataset):
     def __init__(self, data_file: str,
-                 bounds_file: str = "/common/users/dm1487/arcmg_datasets/cartpole/cartpole_data_bounds.pkl"):
+                 bounds_file: str = "/common/users/rm1838/adaptive_cartpole/data/cartpole_data_bounds.pkl"):
         """
         Dataset for cartpole endpoint pairs (start_state, end_state)
         Handles 4D cartpole state with proper embedding for circular angle
@@ -102,7 +102,7 @@ class CartPoleEndpointDataModule(pl.LightningDataModule):
     def __init__(self, data_file: str, validation_file: str, test_file: str,
                  batch_size: int = 64, val_batch_size: Optional[int] = None,
                  num_workers: int = 4, pin_memory: bool = True,
-                 bounds_file: str = "/common/users/dm1487/arcmg_datasets/cartpole/cartpole_data_bounds.pkl"):
+                 bounds_file: str = "/common/users/rm1838/adaptive_cartpole/data/cartpole_data_bounds.pkl"):
         """
         CartPole Endpoint Data Module with separate train/val/test files
 

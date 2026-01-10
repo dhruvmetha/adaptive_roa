@@ -10,13 +10,10 @@ Manifold: ℝ³⁴ × S² × ℝ³⁰ (67-dimensional state)
 import torch
 import torch.nn as nn
 from typing import Dict, Optional
-import sys
-sys.path.append('/common/home/dm1487/robotics_research/tripods/olympics-classifier/flow_matching')
-
-from flow_matching.utils.manifolds import Product, Euclidean, Sphere
 
 from src.flow_matching.base.flow_matcher import BaseFlowMatcher
 from src.systems.base import DynamicalSystem
+from src.utils.fb_manifolds import HumanoidManifold
 
 
 class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
@@ -71,14 +68,8 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
         - Sphere(3): Dims 34-36 (3D unit vector on S²)
         - Euclidean(30): Dims 37-66
         """
-        return Product(
-            input_dim=67,
-            manifolds=[
-                (Euclidean(), 34),  # First Euclidean block
-                (Sphere(), 3),      # Sphere manifold (3D unit vector)
-                (Euclidean(), 30)   # Second Euclidean block
-            ]
-        )
+        # Use custom HumanoidManifold that properly handles the product structure
+        return HumanoidManifold()
 
     def _get_start_states(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """Extract start states from batch"""

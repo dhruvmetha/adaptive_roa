@@ -28,8 +28,209 @@ from typing import Dict
 
 from src.adaptive.data_source import TrajectoryDataSource, TrajectoryDataSourceConfig
 from src.adaptive.dataset_builder import AdaptiveDatasetBuilder
+from src.adaptive.balanced_sampler import BalancedUncertainSampler
 from src.conformal import ConformalConfig, ConformalPredictor
+from src.conformal.probability_estimator import ProbabilityEstimator
 from src.data.cartpole_endpoint_data import CartPoleEndpointDataModule
+
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+
+
+def plot_cartpole_roa_projections(
+    start_states: np.ndarray,
+    success_rate: np.ndarray,
+    true_labels: np.ndarray,
+    lambda_star: float,
+    delta: float,
+    output_file: str,
+    title: str = "CartPole ROA Phase Space Projections",
+):
+    """
+    Plot the Region of Attraction (ROA) for CartPole as 2D projections.
+
+    Since CartPole has 4D state (x, θ, ẋ, θ̇), we create multiple 2D projections:
+    - (x, θ): Position vs angle
+    - (ẋ, θ̇): Velocity vs angular velocity
+    - (θ, θ̇): Pole phase space (similar to pendulum)
+    - (x, ẋ): Cart phase space
+
+    Args:
+        start_states: [N, 4] array of (x, θ, ẋ, θ̇)
+        success_rate: [N] array of p(success) from MC sampling
+        true_labels: [N] array of ground truth labels (1=success, -1=failure)
+        lambda_star: Optimal decision boundary from conformal prediction
+        delta: Unknown region half-width
+        output_file: Path to save the plot
+        title: Plot title
+    """
+    fig, axes = plt.subplots(2, 4, figsize=(20, 10))
+
+    # State ordering: (x, θ, ẋ, θ̇) at indices 0, 1, 2, 3
+
+    # Classify based on lambda* +/- delta
+    pred_labels = np.zeros(len(success_rate))
+    pred_labels[success_rate > lambda_star + delta] = 1   # Success
+    pred_labels[success_rate < lambda_star - delta] = -1  # Failure
+
+    # Create color arrays
+    pred_colors = np.array(['gold'] * len(pred_labels))
+    pred_colors[pred_labels == 1] = 'blue'
+    pred_colors[pred_labels == -1] = 'red'
+
+    gt_colors = np.array(['gold'] * len(true_labels))
+    gt_colors[true_labels == 1] = 'blue'
+    gt_colors[true_labels == -1] = 'red'
+
+    # Sort for visualization (uncertain on top)
+    pred_order = np.argsort(np.abs(pred_labels))[::-1]
+    gt_order = np.argsort(np.abs(true_labels))[::-1]
+
+    # Define projections: (x_idx, y_idx, x_label, y_label, x_lim, y_lim)
+    projections = [
+        (0, 1, 'x (cart pos)', r'$\theta$ (pole angle)', None, (-np.pi, np.pi)),
+        (2, 3, r'$\dot{x}$ (cart vel)', r'$\dot{\theta}$ (pole ang vel)', None, None),
+        (1, 3, r'$\theta$ (pole angle)', r'$\dot{\theta}$ (pole ang vel)', (-np.pi, np.pi), None),
+        (0, 2, 'x (cart pos)', r'$\dot{x}$ (cart vel)', None, None),
+    ]
+
+    for col, (xi, yi, xlabel, ylabel, xlim, ylim) in enumerate(projections):
+        # Top row: Predictions
+        ax_pred = axes[0, col]
+        ax_pred.scatter(
+            start_states[pred_order, xi],
+            start_states[pred_order, yi],
+            c=pred_colors[pred_order],
+            s=2, alpha=0.5, edgecolors='none'
+        )
+        ax_pred.set_xlabel(xlabel, fontsize=10)
+        ax_pred.set_ylabel(ylabel, fontsize=10)
+        ax_pred.set_title(f'Predicted ({xlabel} vs {ylabel})', fontsize=10)
+        if xlim:
+            ax_pred.set_xlim(xlim)
+        if ylim:
+            ax_pred.set_ylim(ylim)
+        ax_pred.grid(True, alpha=0.3)
+        ax_pred.axhline(y=0, color='gray', linestyle='--', alpha=0.3)
+        ax_pred.axvline(x=0, color='gray', linestyle='--', alpha=0.3)
+
+        # Bottom row: Ground Truth
+        ax_gt = axes[1, col]
+        ax_gt.scatter(
+            start_states[gt_order, xi],
+            start_states[gt_order, yi],
+            c=gt_colors[gt_order],
+            s=2, alpha=0.5, edgecolors='none'
+        )
+        ax_gt.set_xlabel(xlabel, fontsize=10)
+        ax_gt.set_ylabel(ylabel, fontsize=10)
+        ax_gt.set_title(f'Ground Truth ({xlabel} vs {ylabel})', fontsize=10)
+        if xlim:
+            ax_gt.set_xlim(xlim)
+        if ylim:
+            ax_gt.set_ylim(ylim)
+        ax_gt.grid(True, alpha=0.3)
+        ax_gt.axhline(y=0, color='gray', linestyle='--', alpha=0.3)
+        ax_gt.axvline(x=0, color='gray', linestyle='--', alpha=0.3)
+
+    # Count labels
+    n_pred_success = np.sum(pred_labels == 1)
+    n_pred_failure = np.sum(pred_labels == -1)
+    n_pred_sep = np.sum(pred_labels == 0)
+    n_gt_success = np.sum(true_labels == 1)
+    n_gt_failure = np.sum(true_labels == -1)
+
+    # Add legend to first column
+    legend_elements = [
+        mpatches.Patch(color='blue', label=f'Success'),
+        mpatches.Patch(color='red', label=f'Failure'),
+        mpatches.Patch(color='gold', label=f'Separatrix'),
+    ]
+    axes[0, 0].legend(handles=legend_elements, loc='upper right', fontsize=8)
+    axes[1, 0].legend(handles=legend_elements, loc='upper right', fontsize=8)
+
+    plt.suptitle(f'{title}\n(λ*={lambda_star:.3f}, δ={delta:.3f}) | '
+                 f'Pred: S={n_pred_success}, F={n_pred_failure}, Sep={n_pred_sep} | '
+                 f'GT: S={n_gt_success}, F={n_gt_failure}',
+                 fontsize=12, fontweight='bold')
+    plt.tight_layout()
+    plt.savefig(output_file, dpi=150, bbox_inches='tight')
+    plt.close()
+
+    print(f"Saved CartPole ROA projections to: {output_file}")
+
+    return {
+        'n_pred_success': int(n_pred_success),
+        'n_pred_failure': int(n_pred_failure),
+        'n_pred_separatrix': int(n_pred_sep),
+        'n_gt_success': int(n_gt_success),
+        'n_gt_failure': int(n_gt_failure),
+    }
+
+
+def plot_cartpole_probability_heatmap(
+    start_states: np.ndarray,
+    success_rate: np.ndarray,
+    lambda_star: float,
+    delta: float,
+    output_file: str,
+    title: str = "CartPole ROA - Success Probability",
+):
+    """
+    Plot the ROA as probability heatmaps for each 2D projection.
+
+    Args:
+        start_states: [N, 4] array of (x, θ, ẋ, θ̇)
+        success_rate: [N] array of p(success) from MC sampling
+        lambda_star: Optimal decision boundary
+        delta: Unknown region half-width
+        output_file: Path to save the plot
+        title: Plot title
+    """
+    fig, axes = plt.subplots(1, 4, figsize=(20, 5))
+
+    projections = [
+        (0, 1, 'x (cart pos)', r'$\theta$ (pole angle)', None, (-np.pi, np.pi)),
+        (2, 3, r'$\dot{x}$ (cart vel)', r'$\dot{\theta}$ (pole ang vel)', None, None),
+        (1, 3, r'$\theta$ (pole angle)', r'$\dot{\theta}$ (pole ang vel)', (-np.pi, np.pi), None),
+        (0, 2, 'x (cart pos)', r'$\dot{x}$ (cart vel)', None, None),
+    ]
+
+    for col, (xi, yi, xlabel, ylabel, xlim, ylim) in enumerate(projections):
+        ax = axes[col]
+        scatter = ax.scatter(
+            start_states[:, xi],
+            start_states[:, yi],
+            c=success_rate,
+            cmap='RdYlBu',
+            s=2, alpha=0.7, edgecolors='none',
+            vmin=0, vmax=1
+        )
+
+        ax.set_xlabel(xlabel, fontsize=10)
+        ax.set_ylabel(ylabel, fontsize=10)
+        ax.set_title(f'{xlabel} vs {ylabel}', fontsize=10)
+        if xlim:
+            ax.set_xlim(xlim)
+        if ylim:
+            ax.set_ylim(ylim)
+        ax.grid(True, alpha=0.3)
+        ax.axhline(y=0, color='gray', linestyle='--', alpha=0.3)
+        ax.axvline(x=0, color='gray', linestyle='--', alpha=0.3)
+
+        if col == 3:  # Add colorbar to last plot
+            cbar = plt.colorbar(scatter, ax=ax, label='p(success)')
+            cbar.ax.axhline(y=lambda_star + delta, color='black', linestyle='--', linewidth=1)
+            cbar.ax.axhline(y=lambda_star - delta, color='black', linestyle='--', linewidth=1)
+            cbar.ax.axhline(y=lambda_star, color='black', linestyle='-', linewidth=0.5)
+
+    plt.suptitle(f'{title}\n(λ*={lambda_star:.3f}, bounds: [{lambda_star-delta:.3f}, {lambda_star+delta:.3f}])',
+                 fontsize=12, fontweight='bold')
+    plt.tight_layout()
+    plt.savefig(output_file, dpi=150, bbox_inches='tight')
+    plt.close()
+
+    print(f"Saved CartPole probability heatmap to: {output_file}")
 
 
 def compute_metrics_at_threshold(success_rate: np.ndarray, y_all: np.ndarray,
@@ -238,6 +439,29 @@ def evaluate_full_roa_fast(
             print(f"Saved per-point data to: {npz_file}")
             print(f"  Arrays: start_states [{X_all.shape}], probabilities [{success_rate.shape}], true_labels [{y_all.shape}]")
 
+        # Generate ROA phase space projection plots
+        phase_space_file = output_file.replace('.json', '_roa_projections.png')
+        plot_cartpole_roa_projections(
+            start_states=X_all,
+            success_rate=success_rate,
+            true_labels=y_all,
+            lambda_star=lambda_star,
+            delta=delta,
+            output_file=phase_space_file,
+            title="CartPole ROA - Epoch Evaluation"
+        )
+
+        # Generate probability heatmap
+        heatmap_file = output_file.replace('.json', '_roa_heatmap.png')
+        plot_cartpole_probability_heatmap(
+            start_states=X_all,
+            success_rate=success_rate,
+            lambda_star=lambda_star,
+            delta=delta,
+            output_file=heatmap_file,
+            title="CartPole ROA - Success Probability"
+        )
+
     return metrics
 
 
@@ -418,6 +642,12 @@ def main(cfg: DictConfig):
         alpha=cfg.conformal.get('alpha', 0.1),
         num_mc_samples=cfg.conformal.get('num_mc_samples', 100),
         attractor_radius=cfg.conformal.get('attractor_radius', 0.2),
+        # Optimization mode: "lambda" or "delta"
+        optimize_mode=cfg.conformal.get('optimize_mode', 'lambda'),
+        lambda_grid_size=cfg.conformal.get('lambda_grid_size', 100),
+        delta_grid_size=cfg.conformal.get('delta_grid_size', 100),
+        delta_min=cfg.conformal.get('delta_min', 0.01),
+        delta_max=cfg.conformal.get('delta_max', 0.49),
     )
 
     # Instantiate system for conformal prediction
@@ -427,8 +657,9 @@ def main(cfg: DictConfig):
 
     # Adaptive sampling loop
     n_epochs = cfg.get('n_epochs', 10)
-    samples_per_epoch = cfg.get('samples_per_epoch', 50)
-    d1_ratio = cfg.get('d1_ratio', 0.5)
+    samples_per_epoch = cfg.get('samples_per_epoch', 50)  # Legacy, used for fixed sampling
+    adaptive_data_max = cfg.get('adaptive_data_max', 50)  # Total samples per epoch (D1 + D2)
+    d2_ratio = cfg.get('d2_ratio', 0.5)  # Fraction for uncertainty-filtered sampling
     warm_start = cfg.get('warm_start', False)
 
     epoch_results = []
@@ -499,14 +730,14 @@ def main(cfg: DictConfig):
         test_metrics = conformal_predictor.evaluate(X_test, y_test, verbose=True)
 
         # Step 5b: Evaluate on FULL roa_labels.txt (fast batched)
-        # Use λ* and δ from conformal predictor for consistent classification
+        # Use λ* and δ* from conformal predictor for consistent classification
         num_mc_samples_eval = cfg.conformal.get('num_mc_samples_eval', 20)
         conformal_state = conformal_predictor.get_state()
         lambda_star = conformal_state['lambda_star']
-        delta = cfg.conformal.delta
+        delta_star = conformal_state['delta_star']  # Use optimized delta (may differ from config if optimize_mode="delta")
 
         print(f"\n[5] Evaluating on FULL roa_labels.txt ({num_mc_samples_eval} MC samples, fast batched)...")
-        print(f"    Using λ*={lambda_star:.4f} ± δ={delta:.4f} from conformal prediction")
+        print(f"    Using λ*={lambda_star:.4f} ± δ*={delta_star:.4f} from conformal prediction")
         full_roa_output_file = epoch_output_dir / "full_roa_evaluation.json"
         full_roa_metrics = evaluate_full_roa_fast(
             flow_matcher=flow_matcher,
@@ -515,50 +746,102 @@ def main(cfg: DictConfig):
             num_mc_samples=num_mc_samples_eval,
             batch_size=cfg.get('val_batch_size', 2048),
             lambda_star=lambda_star,
-            delta=delta,
+            delta=delta_star,
             attractor_radius=cfg.conformal.get('attractor_radius', 0.2),
             device=device,
             output_file=str(full_roa_output_file),
             verbose=True
         )
 
-        # Step 6: Get candidate trajectories and evaluate uncertainty
-        print(f"\n[6] Sampling {samples_per_epoch} candidate trajectories...")
-        candidate_states, candidate_indices = dataset_builder.get_candidate_states(samples_per_epoch)
+        # Step 6: Sample candidates based on strategy
+        sampling_strategy = cfg.get('sampling_strategy', 'fixed')
 
-        if len(candidate_indices) == 0:
-            print("No more trajectories available!")
-            break
+        if sampling_strategy == 'balanced_uncertain':
+            # Balanced Uncertain Sampling: sample until |uncertain| == |D1|
+            print(f"\n[6] Balanced Uncertain Sampling...")
 
-        # Split into D1 (calibration) and D2 (selection pool)
-        n_d1 = int(len(candidate_indices) * d1_ratio)
-        d1_indices = candidate_indices[:n_d1]
-        d2_indices = candidate_indices[n_d1:]
-        d1_states = candidate_states[:n_d1]
-        d2_states = candidate_states[n_d1:]
+            # Create probability estimator for uncertainty evaluation
+            prob_estimator = ProbabilityEstimator(
+                flow_matcher=flow_matcher,
+                system=system,
+                config=conformal_config,
+                device=device
+            )
 
-        print(f"    D1 (always add): {len(d1_indices)} trajectories")
-        print(f"    D2 (selective): {len(d2_indices)} trajectories")
+            # Create balanced sampler
+            balanced_sampler = BalancedUncertainSampler(
+                dataset_builder=dataset_builder,
+                adaptive_data_max=adaptive_data_max,
+                d2_ratio=d2_ratio,
+                batch_size=cfg.get('batch_size_sampling', 50),
+                max_samples=cfg.get('max_samples_per_epoch', 50000),
+            )
 
-        # Always add D1 to training
-        dataset_builder.add_selected_to_training(d1_indices)
+            # Sample epoch
+            sample_result = balanced_sampler.sample_epoch(
+                prob_estimator=prob_estimator,
+                lambda_star=lambda_star,
+                delta_star=delta_star,
+                verbose=True
+            )
 
-        # Evaluate D2 for uncertainty
-        if len(d2_indices) > 0:
-            print(f"\n[7] Evaluating D2 for uncertain points...")
-            uncertain_mask, uncertain_idx, p_success = conformal_predictor.select_uncertain(d2_states)
+            if len(sample_result.d1_indices) == 0 and len(sample_result.d2_indices) == 0:
+                print("No more trajectories available!")
+                break
 
-            n_uncertain = np.sum(uncertain_mask)
-            n_confident = len(d2_indices) - n_uncertain
-            print(f"    Uncertain: {n_uncertain} trajectories")
-            print(f"    Confident: {n_confident} trajectories (skipped)")
+            # Add D1 and D2 to training
+            d1_indices = sample_result.d1_indices
+            d2_indices = sample_result.d2_indices
 
-            # Add only uncertain trajectories from D2
-            uncertain_traj_indices = [d2_indices[i] for i in range(len(d2_indices)) if uncertain_mask[i]]
-            dataset_builder.add_selected_to_training(uncertain_traj_indices)
+            print(f"\n[7] Adding to training...")
+            dataset_builder.add_to_training_balanced(d1_indices)
+            dataset_builder.add_to_training_balanced(d2_indices)
+
+            n_d2 = len(d2_indices)
+            n_confident = sample_result.n_discarded_certain
+            n_total_sampled = sample_result.n_total_sampled
+
+            print(f"    Added: D1={len(d1_indices)}, D2={n_d2}, Total={len(d1_indices) + n_d2}")
+            print(f"    Discarded (certain, stay in pool): {n_confident}")
+            print(f"    Total evaluated: {n_total_sampled} over {sample_result.n_batches} batches")
+
         else:
-            n_uncertain = 0
-            n_confident = 0
+            # Fixed sampling (original behavior)
+            print(f"\n[6] Fixed Sampling: {samples_per_epoch} candidate trajectories...")
+            candidate_states, candidate_indices = dataset_builder.get_candidate_states(samples_per_epoch)
+
+            if len(candidate_indices) == 0:
+                print("No more trajectories available!")
+                break
+
+            # Split into D1 (calibration) and D2 (selection pool)
+            n_d1 = int(len(candidate_indices) * d1_ratio)
+            d1_indices = candidate_indices[:n_d1]
+            d2_indices = candidate_indices[n_d1:]
+            d2_states = candidate_states[n_d1:]
+
+            print(f"    D1 (always add): {len(d1_indices)} trajectories")
+            print(f"    D2 (selective): {len(d2_indices)} trajectories")
+
+            # Always add D1 to training
+            dataset_builder.add_selected_to_training(d1_indices)
+
+            # Evaluate D2 for uncertainty
+            if len(d2_indices) > 0:
+                print(f"\n[7] Evaluating D2 for uncertain points...")
+                uncertain_mask, uncertain_idx, p_success = conformal_predictor.select_uncertain(d2_states)
+
+                n_uncertain = np.sum(uncertain_mask)
+                n_confident = len(d2_indices) - n_uncertain
+                print(f"    Uncertain: {n_uncertain} trajectories")
+                print(f"    Confident: {n_confident} trajectories (skipped)")
+
+                # Add only uncertain trajectories from D2
+                uncertain_traj_indices = [d2_indices[i] for i in range(len(d2_indices)) if uncertain_mask[i]]
+                dataset_builder.add_selected_to_training(uncertain_traj_indices)
+            else:
+                n_uncertain = 0
+                n_confident = 0
 
         # Rebuild datasets with new data
         print(f"\n[8] Rebuilding datasets...")
@@ -569,11 +852,13 @@ def main(cfg: DictConfig):
             'epoch': epoch,
             'train_trajectories': len(dataset_builder.train_split),
             'n_d1_added': len(d1_indices),
-            'n_d2_uncertain': int(n_uncertain),
-            'n_d2_confident': int(n_confident),
+            'n_d2_added': int(n_d2),
+            'n_discarded_certain': int(n_confident),
             # Conformal parameters
             'lambda_star': float(conformal_predictor.lambda_star),
+            'delta_star': float(conformal_predictor.delta_star),
             'q_hat': float(conformal_predictor.q_hat),
+            'optimize_mode': cfg.conformal.get('optimize_mode', 'lambda'),
             # Test set metrics (subset of training)
             'test_coverage': test_metrics['coverage'],
             'test_f1': test_metrics['f1'],
@@ -587,9 +872,9 @@ def main(cfg: DictConfig):
         print(f"EPOCH {epoch} SUMMARY")
         print("-" * 70)
         print(f"  Training trajectories: {epoch_result['train_trajectories']}")
-        print(f"  Added this epoch: {len(d1_indices) + n_uncertain} (D1={len(d1_indices)}, D2_uncertain={n_uncertain})")
+        print(f"  Added this epoch: {len(d1_indices) + n_d2} (D1={len(d1_indices)}, D2={n_d2})")
         print(f"  Skipped (confident): {n_confident}")
-        print(f"  λ* = {epoch_result['lambda_star']:.4f}, q_hat = {epoch_result['q_hat']:.4f}")
+        print(f"  λ* = {epoch_result['lambda_star']:.4f}, δ* = {epoch_result['delta_star']:.4f}, q_hat = {epoch_result['q_hat']:.4f}")
         print(f"  --- Full ROA (all {full_roa_metrics['n_total']} trajectories) ---")
         conf_m = full_roa_metrics['conformal_thresholds']
         fixed_m = full_roa_metrics['fixed_thresholds']
@@ -641,7 +926,7 @@ def main(cfg: DictConfig):
         print(f"\n--- Full ROA Metrics Progression (Initial → Final) ---")
         first = epoch_results[0]['full_roa']
         last = epoch_results[-1]['full_roa']
-        print(f"\n  [λ*±δ Thresholds]")
+        print(f"\n  [λ*±δ* Thresholds]")
         print(f"  Separatrix %:  {first['conformal_thresholds']['separatrix_pct']:.2%} → {last['conformal_thresholds']['separatrix_pct']:.2%}")
         print(f"  F1 Score:      {first['conformal_thresholds']['f1']:.2%} → {last['conformal_thresholds']['f1']:.2%}")
         print(f"  Accuracy:      {first['conformal_thresholds']['accuracy']:.2%} → {last['conformal_thresholds']['accuracy']:.2%}")
@@ -650,6 +935,7 @@ def main(cfg: DictConfig):
         print(f"  F1 Score:      {first['fixed_thresholds']['f1']:.2%} → {last['fixed_thresholds']['f1']:.2%}")
         print(f"  Accuracy:      {first['fixed_thresholds']['accuracy']:.2%} → {last['fixed_thresholds']['accuracy']:.2%}")
         print(f"\n  λ*:            {epoch_results[0]['lambda_star']:.4f} → {epoch_results[-1]['lambda_star']:.4f}")
+        print(f"  δ*:            {epoch_results[0]['delta_star']:.4f} → {epoch_results[-1]['delta_star']:.4f}")
         print(f"  q_hat:         {epoch_results[0]['q_hat']:.4f} → {epoch_results[-1]['q_hat']:.4f}")
 
     # Save final results

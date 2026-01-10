@@ -21,10 +21,10 @@ Complete guide for training and evaluating flow matching models for Pendulum and
 
 ```bash
 # Activate environment
-conda activate /common/users/dm1487/envs/arcmg
+conda activate /common/users/rm1838/envs/arcmg
 
 # Ensure you're in the project root
-cd /common/home/dm1487/robotics_research/tripods/olympics-classifier
+cd /common/home/rm1838/robotics_research/tripods/olympics-classifier
 ```
 
 ### **Train Pendulum (Latent Conditional)**
@@ -164,14 +164,14 @@ trainer:
 #### **Data Files**
 The CartPole system loads bounds automatically from:
 ```
-/common/users/dm1487/arcmg_datasets/cartpole/cartpole_data_bounds.pkl
+/common/users/rm1838/arcmg_datasets/cartpole/cartpole_data_bounds.pkl
 ```
 
 Training data:
 ```yaml
 data:
-  data_file: /common/users/dm1487/arcmg_datasets/cartpole/incremental_endpoint_dataset/1000_endpoint_dataset.txt
-  validation_file: /common/users/dm1487/arcmg_datasets/cartpole/incremental_endpoint_dataset/validation_endpoint_dataset.txt
+  data_file: /common/users/rm1838/arcmg_datasets/cartpole/incremental_endpoint_dataset/1000_endpoint_dataset.txt
+  validation_file: /common/users/rm1838/arcmg_datasets/cartpole/incremental_endpoint_dataset/validation_endpoint_dataset.txt
 ```
 
 ---

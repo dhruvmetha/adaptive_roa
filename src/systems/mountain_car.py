@@ -21,7 +21,7 @@ class MountainCarSystem(DynamicalSystem):
     """
 
     def __init__(self,
-                 bounds_file: str = "/common/users/dm1487/arcmg_datasets/mountain_car/mountain_car_data_bounds.pkl"):
+                 bounds_file: str = "/common/users/rm1838/adaptive_cartpole/data/mountain_car_data_bounds.pkl"):
         """
         Initialize Mountain Car system
 

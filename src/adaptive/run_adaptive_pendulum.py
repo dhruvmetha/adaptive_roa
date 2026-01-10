@@ -653,8 +653,9 @@ def main(cfg: DictConfig):
 
     # Adaptive sampling loop
     n_epochs = cfg.get('n_epochs', 10)
-    samples_per_epoch = cfg.get('samples_per_epoch', 50)
-    d1_ratio = cfg.get('d1_ratio', 0.5)
+    samples_per_epoch = cfg.get('samples_per_epoch', 50)  # Legacy, used for fixed sampling
+    adaptive_data_max = cfg.get('adaptive_data_max', 50)  # Total samples per epoch (D1 + D2)
+    d2_ratio = cfg.get('d2_ratio', 0.5)  # Fraction for uncertainty-filtered sampling
     warm_start = cfg.get('warm_start', False)
 
     epoch_results = []
@@ -765,10 +766,10 @@ def main(cfg: DictConfig):
             # Create balanced sampler
             balanced_sampler = BalancedUncertainSampler(
                 dataset_builder=dataset_builder,
-                initial_batch_size=cfg.get('initial_batch_size', samples_per_epoch),
-                d1_ratio=d1_ratio,
-                additional_batch_size=cfg.get('additional_batch_size', samples_per_epoch),
-                max_samples=cfg.get('max_samples_per_epoch', 500),
+                adaptive_data_max=adaptive_data_max,
+                d2_ratio=d2_ratio,
+                batch_size=cfg.get('batch_size_sampling', 50),
+                max_samples=cfg.get('max_samples_per_epoch', 50000),
             )
 
             # Sample epoch
@@ -779,23 +780,23 @@ def main(cfg: DictConfig):
                 verbose=True
             )
 
-            if len(sample_result.d1_indices) == 0:
+            if len(sample_result.d1_indices) == 0 and len(sample_result.d2_indices) == 0:
                 print("No more trajectories available!")
                 break
 
-            # Add D1 and uncertain to training
+            # Add D1 and D2 to training
             d1_indices = sample_result.d1_indices
-            uncertain_traj_indices = sample_result.uncertain_indices
+            d2_indices = sample_result.d2_indices
 
             print(f"\n[7] Adding to training...")
             dataset_builder.add_to_training_balanced(d1_indices)
-            dataset_builder.add_to_training_balanced(uncertain_traj_indices)
+            dataset_builder.add_to_training_balanced(d2_indices)
 
-            n_uncertain = len(uncertain_traj_indices)
+            n_d2 = len(d2_indices)
             n_confident = sample_result.n_discarded_certain
             n_total_sampled = sample_result.n_total_sampled
 
-            print(f"    Added: D1={len(d1_indices)}, Uncertain={n_uncertain}")
+            print(f"    Added: D1={len(d1_indices)}, D2={n_d2}, Total={len(d1_indices) + n_d2}")
             print(f"    Discarded (certain, stay in pool): {n_confident}")
             print(f"    Total evaluated: {n_total_sampled} over {sample_result.n_batches} batches")
 
@@ -846,8 +847,8 @@ def main(cfg: DictConfig):
             'epoch': epoch,
             'train_trajectories': len(dataset_builder.train_split),
             'n_d1_added': len(d1_indices),
-            'n_d2_uncertain': int(n_uncertain),
-            'n_d2_confident': int(n_confident),
+            'n_d2_added': int(n_d2),
+            'n_discarded_certain': int(n_confident),
             # Conformal parameters
             'lambda_star': float(conformal_predictor.lambda_star),
             'delta_star': float(conformal_predictor.delta_star),
@@ -866,7 +867,7 @@ def main(cfg: DictConfig):
         print(f"EPOCH {epoch} SUMMARY")
         print("-" * 70)
         print(f"  Training trajectories: {epoch_result['train_trajectories']}")
-        print(f"  Added this epoch: {len(d1_indices) + n_uncertain} (D1={len(d1_indices)}, D2_uncertain={n_uncertain})")
+        print(f"  Added this epoch: {len(d1_indices) + n_d2} (D1={len(d1_indices)}, D2={n_d2})")
         print(f"  Skipped (confident): {n_confident}")
         print(f"  lambda* = {epoch_result['lambda_star']:.4f}, delta* = {epoch_result['delta_star']:.4f}, q_hat = {epoch_result['q_hat']:.4f}")
         print(f"  --- Full ROA (all {full_roa_metrics['n_total']} trajectories) ---")

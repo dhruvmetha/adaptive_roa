@@ -33,9 +33,9 @@ model:
 # Data: CartPole endpoint dataset
 data:
   _target_: src.data.cartpole_endpoint_data.CartPoleEndpointDataModule
-  data_file: /common/users/dm1487/arcmg_datasets/cartpole_pybullet/incremental_endpoint_dataset/train_1000_endpoint_dataset.txt
-  validation_file: /common/users/dm1487/arcmg_datasets/cartpole_pybullet/incremental_endpoint_dataset/val_endpoint_dataset.txt
-  test_file: /common/users/dm1487/arcmg_datasets/cartpole_pybullet/incremental_endpoint_dataset/test_endpoint_dataset.txt
+  data_file: /common/users/rm1838/arcmg_datasets/cartpole_pybullet/incremental_endpoint_dataset/train_1000_endpoint_dataset.txt
+  validation_file: /common/users/rm1838/arcmg_datasets/cartpole_pybullet/incremental_endpoint_dataset/val_endpoint_dataset.txt
+  test_file: /common/users/rm1838/arcmg_datasets/cartpole_pybullet/incremental_endpoint_dataset/test_endpoint_dataset.txt
   batch_size: ${batch_size}
   val_batch_size: ${val_batch_size}
   num_workers: ${num_workers}

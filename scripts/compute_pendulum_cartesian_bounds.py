@@ -158,7 +158,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output",
         type=str,
-        default="/common/users/dm1487/arcmg_datasets/pendulum_cartesian/pendulum_cartesian_data_bounds.pkl",
+        default="/common/users/rm1838/arcmg_datasets/pendulum_cartesian/pendulum_cartesian_data_bounds.pkl",
         help="Output pickle file path"
     )
 

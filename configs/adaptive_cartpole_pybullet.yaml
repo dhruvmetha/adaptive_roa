@@ -1,7 +1,7 @@
 # Adaptive Sampling Pipeline for CartPole PyBullet
 # =====================================================================
 # Uses pre-collected trajectory data with conformal prediction
-# to efficiently build training datasets
+# to efficiently build training datasets for CartPole (R^2 x S^1 x R manifold)
 # =====================================================================
 
 defaults:
@@ -12,7 +12,7 @@ name: adaptive_cartpole_pybullet
 seed: 42
 
 # Output directory
-output_dir: /common/users/dm1487/tripods/adaptive/outputs/adaptive_cartpole_pybullet/${now:%Y-%m-%d_%H-%M-%S}
+output_dir: /common/users/rm1838/adaptive_cartpole/outputs/adaptive_cartpole_pybullet/${now:%Y-%m-%d_%H-%M-%S}
 
 # Device
 device: cuda:0
@@ -34,21 +34,44 @@ test_ratio: 0.1     # 10% of training for testing
 # =====================================================================
 initial_train_size: 500    # Initial training trajectories
 n_epochs: 20               # Number of adaptive sampling epochs
-samples_per_epoch: 50      # New candidates per epoch
-d1_ratio: 0.5              # Fraction always added (calibration)
-warm_start: false          # If true, continue training from previous epoch's checkpoint
+samples_per_epoch: 50      # New candidates per epoch (for fixed strategy only)
+warm_start: true           # If true, continue training from previous epoch's checkpoint
+
+# Sampling Strategy: "fixed" or "balanced_uncertain"
+# - "fixed": Sample fixed number, add all to training
+# - "balanced_uncertain": Sample D1 random + D2 uncertain, total = adaptive_data_max
+sampling_strategy: balanced_uncertain
+
+# Balanced Uncertain Sampling Options (when sampling_strategy="balanced_uncertain")
+adaptive_data_max: 50      # Total samples to add per epoch (D1 + D2)
+d2_ratio: 0.5              # Fraction for D2 (uncertainty-filtered). 0=all random, 1=all filtered
+batch_size_sampling: 50    # Size of batches when searching for uncertain points in D2
+max_samples_per_epoch: 50000 # Safety cap on total candidates evaluated per epoch
 
 # =====================================================================
 # Conformal Prediction Configuration
 # =====================================================================
 conformal:
-  delta: 0.05              # Unknown region half-width
-  w: 0.9                   # Misclassification weight
+  delta: 0.05              # Unknown region half-width (used when optimize_mode="lambda")
+  w: 1.0                   # Misclassification weight (1.0 = only minimize errors, ignore unknown rate)
   alpha: 0.1               # 90% coverage guarantee
-  num_mc_samples: 10      # MC samples for probability estimation (fitting)
+  num_mc_samples: 10       # MC samples for probability estimation (fitting)
   num_mc_samples_eval: 10  # MC samples for full ROA evaluation (faster)
   attractor_radius: 0.1    # For classify_attractor()
-  calibration_ratio: 0.3   # Fraction of training labels for calibration (rest for λ optimization)
+  calibration_ratio: 0.3   # Fraction of training labels for calibration
+
+  # Optimization mode: "lambda" or "delta"
+  # - "lambda": Optimize λ* with fixed δ (find best decision boundary)
+  # - "delta": Optimize δ* with fixed λ=0.5 (find best uncertainty width)
+  optimize_mode: delta
+
+  # Lambda optimization (when optimize_mode="lambda")
+  lambda_grid_size: 100    # Number of grid points for λ search
+
+  # Delta optimization (when optimize_mode="delta")
+  delta_grid_size: 100     # Number of grid points for δ search
+  delta_min: 0.05          # Minimum δ value
+  delta_max: 0.45          # Maximum δ value
 
 # =====================================================================
 # Flow Matcher Training Configuration
@@ -81,7 +104,7 @@ trainer:
     - _target_: lightning.pytorch.callbacks.EarlyStopping
       monitor: val_loss
       mode: min
-      patience: 500
+      patience: 20
       verbose: true
 
 # Flow matching specific settings
@@ -124,7 +147,7 @@ scheduler:
 # System (CartPole)
 system:
   _target_: src.systems.cartpole.CartPoleSystem
-  bounds_file: /common/users/dm1487/arcmg_datasets/cartpole/new_cartpole_data_bounds.pkl
+  bounds_file: /common/users/rm1838/adaptive_cartpole/data/cartpole_data_bounds.pkl
 
 # Hydra
 hydra:

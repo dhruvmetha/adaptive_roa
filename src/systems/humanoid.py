@@ -24,7 +24,7 @@ class HumanoidSystem(DynamicalSystem):
     """
 
     def __init__(self,
-                 bounds_file: str = "/common/users/dm1487/arcmg_datasets/humanoid_get_up/humanoid_data_bounds.pkl"):
+                 bounds_file: str = "/common/users/rm1838/arcmg_datasets/humanoid_get_up/humanoid_data_bounds.pkl"):
         """
         Initialize Humanoid system
 

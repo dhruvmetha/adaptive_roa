@@ -11,8 +11,8 @@ system:
 
 # Checkpoint to evaluate
 checkpoint:
-  # path: /common/home/dm1487/robotics_research/tripods/olympics-classifier/outputs/cartpole_latent_conditional_fm/2025-10-27_08-30-03  # Auto-find latest if null
-  path: /common/home/dm1487/robotics_research/tripods/olympics-classifier/outputs/cartpole_latent_conditional_fm/2025-10-27_10-13-42  # Auto-find latest if null
+  # path: /common/home/rm1838/robotics_research/tripods/olympics-classifier/outputs/cartpole_latent_conditional_fm/2025-10-27_08-30-03  # Auto-find latest if null
+  path: /common/home/rm1838/robotics_research/tripods/olympics-classifier/outputs/cartpole_latent_conditional_fm/2025-10-27_10-13-42  # Auto-find latest if null
   auto_find: true  # Search for latest checkpoint
   base_name: cartpole_latent_conditional_fm  # Used for auto-finding
 

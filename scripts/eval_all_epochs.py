@@ -142,7 +142,7 @@ def compute_metrics(success_rate: np.ndarray, labels: np.ndarray,
 
 def main():
     # Configuration
-    base_dir = Path("/common/users/dm1487/tripods/adaptive/outputs/adaptive_cartpole_pybullet/2025-12-05_10-52-57")
+    base_dir = Path("/common/users/rm1838/tripods/adaptive/outputs/adaptive_cartpole_pybullet/2025-12-05_10-52-57")
     data_file = "/common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/roa_labels.txt"
     attractor_radius = 0.2
     num_mc_samples = 10

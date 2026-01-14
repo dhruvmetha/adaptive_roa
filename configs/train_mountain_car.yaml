@@ -1,6 +1,11 @@
 # Mountain Car Latent Conditional Flow Matching (Facebook FM)
 # Uses: ℝ² manifold (pure Euclidean), GeodesicProbPath, RiemannianODESolver
 
+# User-specific paths (loaded from .env file via resolvers)
+net_id: ${net_id:}
+user_base: /common/users/${net_id}
+arcmg_datasets: ${user_base}/arcmg_datasets
+
 defaults:
   - system: mountain_car
   - _self_
@@ -33,9 +38,9 @@ model:
 # Data: Mountain Car endpoint dataset
 data:
   _target_: src.data.mountain_car_endpoint_data.MountainCarEndpointDataModule
-  data_file: /common/users/rm1838/arcmg_datasets/mountain_car/incremental_endpoint_dataset/train_100_endpoint_dataset.txt
-  validation_file: /common/users/rm1838/arcmg_datasets/mountain_car/incremental_endpoint_dataset/val_endpoint_dataset.txt
-  test_file: /common/users/rm1838/arcmg_datasets/mountain_car/incremental_endpoint_dataset/test_endpoint_dataset.txt
+  data_file: ${arcmg_datasets}/mountain_car/incremental_endpoint_dataset/train_100_endpoint_dataset.txt
+  validation_file: ${arcmg_datasets}/mountain_car/incremental_endpoint_dataset/val_endpoint_dataset.txt
+  test_file: ${arcmg_datasets}/mountain_car/incremental_endpoint_dataset/test_endpoint_dataset.txt
   batch_size: ${batch_size}
   val_batch_size: ${val_batch_size}
   num_workers: ${num_workers}

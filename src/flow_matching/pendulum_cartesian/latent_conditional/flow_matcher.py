@@ -316,7 +316,7 @@ class PendulumCartesianLatentConditionalFlowMatcher(BaseFlowMatcher):
             if hydra_config and "system" in hydra_config:
                 system_config = hydra_config["system"]
                 print(f"   Using system config from Hydra config")
-                bounds_file = system_config.get("bounds_file", "/common/users/rm1838/arcmg_datasets/pendulum_cartesian/pendulum_cartesian_data_bounds.pkl")
+                bounds_file = system_config.get("bounds_file", "get_arcmg_path()/pendulum_cartesian/pendulum_cartesian_data_bounds.pkl")
                 use_dynamic_bounds = system_config.get("use_dynamic_bounds", True)
                 print(f"   bounds_file: {bounds_file}")
                 print(f"   use_dynamic_bounds: {use_dynamic_bounds}")

@@ -144,12 +144,29 @@ def get_user_path(*parts: str) -> str:
 
     Example:
         get_user_path("arcmg_datasets", "cartpole")
-        # Returns: /common/users/rm1838/arcmg_datasets/cartpole
+        # Returns: /common/users/{net_id}/arcmg_datasets/cartpole
     """
     config = get_env_config()
     user_base = config.get("USER_BASE", "/common/users")
     net_id = get_net_id()
     return str(Path(user_base) / net_id / Path(*parts))
+
+
+def get_arcmg_path(*parts: str) -> str:
+    """
+    Construct a path under the user's arcmg_datasets directory.
+
+    Args:
+        *parts: Path components to join after /common/users/{NET_ID}/arcmg_datasets/
+
+    Returns:
+        Full path string
+
+    Example:
+        get_arcmg_path("cartpole", "data_bounds.pkl")
+        # Returns: /common/users/{net_id}/arcmg_datasets/cartpole/data_bounds.pkl
+    """
+    return get_user_path("arcmg_datasets", *parts)
 
 
 def get_project_path(*parts: str) -> str:

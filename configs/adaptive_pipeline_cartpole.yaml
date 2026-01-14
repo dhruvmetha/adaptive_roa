@@ -1,3 +1,8 @@
+# User-specific paths (loaded from .env file via resolvers)
+net_id: ${net_id:}
+user_base: /common/users/${net_id}
+arcmg_datasets: ${user_base}/arcmg_datasets
+
 # Adaptive Sampling Pipeline for CartPole
 # =====================================================================
 # Combines conformal prediction with flow matching for efficient
@@ -15,7 +20,7 @@ seed: 42
 
 # Initial data
 initial_data:
-  trajectory_file: /common/users/rm1838/arcmg_datasets/cartpole_pybullet/incremental_endpoint_dataset/train_1000_endpoint_dataset.txt
+  trajectory_file: ${arcmg_datasets}/cartpole_pybullet/incremental_endpoint_dataset/train_1000_endpoint_dataset.txt
 
 # Device configuration
 device: cuda:0

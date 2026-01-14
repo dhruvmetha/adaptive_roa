@@ -1,3 +1,8 @@
+# User-specific paths (loaded from .env file via resolvers)
+net_id: ${net_id:}
+user_base: /common/users/${net_id}
+arcmg_datasets: ${user_base}/arcmg_datasets
+
 # CartPole ROA Evaluation Configuration
 # Evaluates trained LCFM model on labeled ROA data
 
@@ -11,8 +16,7 @@ system:
 
 # Checkpoint to evaluate
 checkpoint:
-  # path: /common/home/rm1838/robotics_research/tripods/olympics-classifier/outputs/cartpole_latent_conditional_fm/2025-10-27_08-30-03  # Auto-find latest if null
-  path: /common/home/rm1838/robotics_research/tripods/olympics-classifier/outputs/cartpole_latent_conditional_fm/2025-10-27_10-13-42  # Auto-find latest if null
+  path: null  # Set path to checkpoint or use auto_find
   auto_find: true  # Search for latest checkpoint
   base_name: cartpole_latent_conditional_fm  # Used for auto-finding
 

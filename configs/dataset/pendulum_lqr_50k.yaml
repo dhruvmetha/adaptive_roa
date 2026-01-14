@@ -1,5 +1,5 @@
 # @package _global_
 # Pendulum LQR 50k dataset paths
 
-data_dirs: /common/users/rm1838/arcmg_datasets/pendulum_lqr/pendulum_lqr_50k
-dest_dir: /common/users/rm1838/arcmg_datasets/pendulum_lqr/pendulum_lqr_50k/endpoint_dataset
+data_dirs: ${arcmg_datasets}/pendulum_lqr/pendulum_lqr_50k
+dest_dir: ${arcmg_datasets}/pendulum_lqr/pendulum_lqr_50k/endpoint_dataset

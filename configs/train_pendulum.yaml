@@ -1,6 +1,11 @@
 # Pendulum Latent Conditional Flow Matching (Facebook FM)
 # Uses: S¹×ℝ manifold, GeodesicProbPath, RiemannianODESolver
 
+# User-specific paths (loaded from .env file via resolvers)
+net_id: ${net_id:}
+user_base: /common/users/${net_id}
+arcmg_datasets: ${user_base}/arcmg_datasets
+
 defaults:
   - system: pendulum
   - _self_
@@ -32,7 +37,7 @@ model:
 # Data: Pendulum endpoint dataset
 data:
   _target_: src.data.endpoint_data.EndpointDataModule
-  data_file: /common/users/rm1838/arcmg_datasets/pendulum_lqr/incremental_endpoint_dataset/train_100_endpoint_dataset.txt
+  data_file: ${arcmg_datasets}/pendulum_lqr/incremental_endpoint_dataset/train_100_endpoint_dataset.txt
   batch_size: ${batch_size}
   val_batch_size: ${val_batch_size}
   num_workers: ${num_workers}

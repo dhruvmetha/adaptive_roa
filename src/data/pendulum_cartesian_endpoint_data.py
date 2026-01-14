@@ -9,10 +9,12 @@ import os
 import lightning.pytorch as pl
 import random
 
+from src.utils.env_config import get_arcmg_path
+
 
 class PendulumCartesianEndpointDataset(Dataset):
     def __init__(self, data_file: str,
-                 bounds_file: str = "/common/users/rm1838/arcmg_datasets/pendulum_cartesian/pendulum_cartesian_data_bounds.pkl"):
+                 bounds_file: str = None):
         """
         Dataset for Pendulum Cartesian endpoint pairs (start_state, end_state)
         Handles 4D Pendulum Cartesian state (pure Euclidean manifold)
@@ -23,6 +25,8 @@ class PendulumCartesianEndpointDataset(Dataset):
             data_file: Path to endpoint dataset file
             bounds_file: Path to pickle file with actual data bounds
         """
+        if bounds_file is None:
+            bounds_file = get_arcmg_path("pendulum_cartesian", "pendulum_cartesian_data_bounds.pkl")
         self.bounds_file = bounds_file
 
         # Load the endpoint data
@@ -59,7 +63,7 @@ class PendulumCartesianEndpointDataModule(pl.LightningDataModule):
     def __init__(self, data_file: str, validation_file: str, test_file: str,
                  batch_size: int = 64, val_batch_size: Optional[int] = None,
                  num_workers: int = 4, pin_memory: bool = True,
-                 bounds_file: str = "/common/users/rm1838/arcmg_datasets/pendulum_cartesian/pendulum_cartesian_data_bounds.pkl"):
+                 bounds_file: str = None):
         """
         Pendulum Cartesian Endpoint Data Module with separate train/val/test files
 
@@ -74,6 +78,8 @@ class PendulumCartesianEndpointDataModule(pl.LightningDataModule):
             bounds_file: Path to pickle file with actual data bounds
         """
         super().__init__()
+        if bounds_file is None:
+            bounds_file = get_arcmg_path("pendulum_cartesian", "pendulum_cartesian_data_bounds.pkl")
         self.data_file = data_file
         self.validation_file = validation_file
         self.test_file = test_file

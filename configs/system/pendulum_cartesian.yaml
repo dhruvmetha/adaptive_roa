@@ -1,4 +1,4 @@
 # Pendulum Cartesian System Configuration
 _target_: src.systems.pendulum_cartesian.PendulumCartesianSystem
-bounds_file: /common/users/rm1838/arcmg_datasets/pendulum_cartesian/pendulum_cartesian_data_bounds.pkl
+bounds_file: ${arcmg_datasets}/pendulum_cartesian/pendulum_cartesian_data_bounds.pkl
 use_dynamic_bounds: true

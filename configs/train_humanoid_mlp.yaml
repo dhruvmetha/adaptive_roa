@@ -1,5 +1,10 @@
 # Humanoid Baseline Training Configuration
 
+# User-specific paths (loaded from .env file via resolvers)
+net_id: ${net_id:}
+user_base: /common/users/${net_id}
+arcmg_datasets: ${user_base}/arcmg_datasets
+
 defaults:
   - model: classification/mlp
   - system: humanoid
@@ -12,7 +17,7 @@ checkpoint_path: null
 
 # System override to use actual bounds
 system:
-  bounds_file: /common/users/rm1838/arcmg_datasets/humanoid_get_up/humanoid_data_bounds.pkl
+  bounds_file: ${arcmg_datasets}/humanoid_get_up/humanoid_data_bounds.pkl
   use_dynamic_bounds: true
 
 # Data configuration

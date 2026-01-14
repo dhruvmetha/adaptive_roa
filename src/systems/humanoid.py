@@ -6,6 +6,7 @@ import numpy as np
 import pickle
 from pathlib import Path
 from src.systems.base import DynamicalSystem, ManifoldComponent
+from src.utils.env_config import get_arcmg_path
 from typing import List, Dict, Tuple
 
 
@@ -24,13 +25,15 @@ class HumanoidSystem(DynamicalSystem):
     """
 
     def __init__(self,
-                 bounds_file: str = "/common/users/rm1838/arcmg_datasets/humanoid_get_up/humanoid_data_bounds.pkl"):
+                 bounds_file: str = None):
         """
         Initialize Humanoid system
 
         Args:
             bounds_file: Path to pickle file containing actual data bounds
         """
+        if bounds_file is None:
+            bounds_file = get_arcmg_path("humanoid_get_up", "humanoid_data_bounds.pkl")
         if not Path(bounds_file).exists():
             raise FileNotFoundError(f"Humanoid bounds file not found: {bounds_file}")
 

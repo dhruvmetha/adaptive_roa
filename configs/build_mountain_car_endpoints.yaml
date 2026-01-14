@@ -1,3 +1,8 @@
+# User-specific paths (loaded from .env file via resolvers)
+net_id: ${net_id:}
+user_base: /common/users/${net_id}
+arcmg_datasets: ${user_base}/arcmg_datasets
+
 # =====================================================================
 # Mountain Car Endpoint Dataset Builder Configuration
 # =====================================================================
@@ -26,7 +31,7 @@ defaults:
 # Trajectory data paths (Mountain Car power 0.0008 variant)
 data_dirs: /common/users/shared/pracsys/genMoPlan/data_trajectories/mountain_car_power_0p0008/trajectories
 shuffled_idxs_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/mountain_car_power_0p0008/shuffled_indices.txt
-dest_dir: /common/users/rm1838/arcmg_datasets/mountain_car/endpoint_dataset
+dest_dir: ${arcmg_datasets}/mountain_car/endpoint_dataset
 
 # Processing range (slicing shuffled_indices.txt)
 # 24,000 total trajectories: 80% train (19,200), 10% val (2,400), 10% test (2,400)

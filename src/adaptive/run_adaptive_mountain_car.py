@@ -492,7 +492,7 @@ def train_flow_matcher(
         batch_size=cfg.get('batch_size', 64),
         val_batch_size=cfg.get('val_batch_size', 2048),
         num_workers=cfg.get('num_workers', 4),
-        bounds_file=cfg.system.get('bounds_file', '/common/users/dm1487/arcmg_datasets/mountain_car/mountain_car_data_bounds.pkl'),
+        bounds_file=cfg.system.get('bounds_file'),
     )
 
     # Instantiate model

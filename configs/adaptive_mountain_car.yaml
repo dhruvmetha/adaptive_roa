@@ -153,7 +153,7 @@ scheduler:
 # System (Mountain Car)
 system:
   _target_: src.systems.mountain_car.MountainCarSystem
-  bounds_file: /common/users/rm1838/adaptive_cartpole/data/mountain_car_data_bounds.pkl
+  bounds_file: ${project_base}/data/mountain_car_data_bounds.pkl
 
 # Hydra
 hydra:

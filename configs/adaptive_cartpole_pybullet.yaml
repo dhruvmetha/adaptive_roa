@@ -11,8 +11,15 @@ defaults:
 name: adaptive_cartpole_pybullet
 seed: 42
 
-# Output directory
-output_dir: /common/users/dm1487/tripods/adaptive/outputs/adaptive_cartpole_pybullet/${now:%Y-%m-%d_%H-%M-%S}
+# User-specific paths (loaded from .env file via resolvers)
+# To customize: create .env file with NET_ID=your_netid
+net_id: ${net_id:}
+user_base: /common/users/${net_id}
+project_base: ${user_base}/adaptive_cartpole
+shared_data_base: /common/users/shared/pracsys/genMoPlan/data_trajectories
+
+# Output  directory
+output_dir: ${project_base}/outputs/adaptive_cartpole_pybullet/${now:%Y-%m-%d_%H-%M-%S}
 
 # Device
 device: cuda:0
@@ -21,9 +28,9 @@ device: cuda:0
 # Data Source Configuration
 # =====================================================================
 data_source:
-  trajectories_dir: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/trajectories
-  shuffled_indices_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/shuffled_indices.txt
-  roa_labels_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/roa_labels.txt
+  trajectories_dir: ${shared_data_base}/cartpole_pybullet/trajectories
+  shuffled_indices_file: ${shared_data_base}/cartpole_pybullet/shuffled_indices.txt
+  roa_labels_file: ${shared_data_base}/cartpole_pybullet/roa_labels.txt
 
 # Dataset splits (val/test are subsets of training with overlap)
 val_ratio: 0.1      # 10% of training for validation
@@ -32,8 +39,8 @@ test_ratio: 0.1     # 10% of training for testing
 # =====================================================================
 # Adaptive Sampling Configuration
 # =====================================================================
-initial_train_size: 50    # Initial training trajectories
-n_epochs: 50               # Number of adaptive sampling epochs
+initial_train_size: 1000    # Initial training trajectories
+n_epochs: 1               # Number of adaptive sampling epochs
 samples_per_epoch: 50      # New candidates per epoch (for fixed strategy only)
 warm_start: true           # If true, continue training from previous epoch's checkpoint
 
@@ -44,7 +51,7 @@ sampling_strategy: balanced_uncertain
 
 # Balanced Uncertain Sampling Options (when sampling_strategy="balanced_uncertain")
 adaptive_data_max: 50      # Total samples to add per epoch (D1 + D2)
-d2_ratio: 0.0              # Fraction for D2 (uncertainty-filtered). 0=all random, 1=all filtered
+d2_ratio: 0.5              # Fraction for D2 (uncertainty-filtered). 0=all random, 1=all filtered
 batch_size_sampling: 50    # Size of batches when searching for uncertain points in D2
 max_samples_per_epoch: 50000 # Safety cap on total candidates evaluated per epoch
 
@@ -57,7 +64,7 @@ conformal:
   alpha: 0.1               # 90% coverage guarantee
   num_mc_samples: 10       # MC samples for probability estimation (fitting)
   num_mc_samples_eval: 10  # MC samples for full ROA evaluation (faster)
-  attractor_radius: 0.2    # For classify_attractor()
+  attractor_radius: 0.1    # For classify_attractor()
   calibration_ratio: 0.3   # Fraction of training labels for calibration
 
   # Optimization mode: "lambda" or "delta"
@@ -88,7 +95,7 @@ latent_dim: 2
 
 # Trainer: PyTorch Lightning
 trainer:
-  max_epochs: 500
+  max_epochs: 2000
   accelerator: gpu
   devices: 1
   precision: 32
@@ -152,7 +159,7 @@ scheduler:
 # System (CartPole)
 system:
   _target_: src.systems.cartpole.CartPoleSystem
-  bounds_file: /common/users/dm1487/arcmg_datasets/cartpole/new_cartpole_data_bounds.pkl
+  bounds_file: ${project_base}/data/cartpole_data_bounds.pkl
 
 # Hydra
 hydra:

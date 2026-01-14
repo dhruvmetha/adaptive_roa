@@ -31,10 +31,10 @@ model:
 # Data: Humanoid endpoint dataset
 data:
   _target_: src.data.humanoid_endpoint_data.HumanoidEndpointDataModule
-  data_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/incremental_endpoint_dataset/train.txt
-  validation_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/incremental_endpoint_dataset/validation.txt
-  test_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/incremental_endpoint_dataset/test.txt
-  bounds_file: /common/users/dm1487/arcmg_datasets/humanoid_get_up/humanoid_data_bounds.pkl
+  data_file: /common/users/rm1838/arcmg_datasets/humanoid_get_up/incremental_endpoint_dataset/train.txt
+  validation_file: /common/users/rm1838/arcmg_datasets/humanoid_get_up/incremental_endpoint_dataset/validation.txt
+  test_file: /common/users/rm1838/arcmg_datasets/humanoid_get_up/incremental_endpoint_dataset/test.txt
+  bounds_file: /common/users/rm1838/arcmg_datasets/humanoid_get_up/humanoid_data_bounds.pkl
   batch_size: ${batch_size}
   val_batch_size: ${val_batch_size}
   num_workers: ${num_workers}

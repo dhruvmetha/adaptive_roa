@@ -10,8 +10,6 @@ This script tests:
 5. Inference capability
 """
 import torch
-import sys
-sys.path.append('/common/home/dm1487/robotics_research/tripods/olympics-classifier/flow_matching')
 
 from src.utils.fb_manifolds import PendulumManifold
 from flow_matching.path import GeodesicProbPath

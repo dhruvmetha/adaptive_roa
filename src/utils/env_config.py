@@ -1,0 +1,200 @@
+"""
+Environment configuration utilities for adaptive_cartpole.
+
+Loads user-specific paths from .env file so that the codebase can work
+across different users without hardcoding netIDs.
+
+Usage:
+    from src.utils.env_config import get_env_config, get_path
+
+    # Get the full config
+    config = get_env_config()
+
+    # Get interpolated paths
+    project_base = get_path("PROJECT_BASE")
+    dataset_path = get_path("ARCMG_DATASETS_BASE")
+"""
+
+import os
+from pathlib import Path
+from typing import Optional
+from functools import lru_cache
+
+
+def _find_project_root() -> Path:
+    """Find the project root by looking for .env or .git."""
+    current = Path(__file__).resolve()
+    for parent in [current] + list(current.parents):
+        if (parent / ".env").exists() or (parent / ".git").exists():
+            return parent
+    # Fallback to src's parent
+    return Path(__file__).resolve().parent.parent.parent
+
+
+def _load_dotenv(env_path: Path) -> dict:
+    """
+    Simple .env file loader (no external dependencies).
+    Handles basic variable interpolation like ${NET_ID}.
+    """
+    env_vars = {}
+    if not env_path.exists():
+        return env_vars
+
+    with open(env_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            # Skip comments and empty lines
+            if not line or line.startswith("#"):
+                continue
+            # Parse key=value
+            if "=" in line:
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip()
+                # Remove quotes if present
+                if (value.startswith('"') and value.endswith('"')) or \
+                   (value.startswith("'") and value.endswith("'")):
+                    value = value[1:-1]
+                env_vars[key] = value
+
+    # Now interpolate variables
+    def interpolate(s: str, vars_dict: dict) -> str:
+        """Replace ${VAR} with actual values."""
+        import re
+        pattern = r'\$\{([^}]+)\}'
+
+        def replacer(match):
+            var_name = match.group(1)
+            # First check our loaded vars, then OS env
+            return vars_dict.get(var_name, os.environ.get(var_name, match.group(0)))
+
+        # Keep interpolating until no more changes (handles nested refs)
+        prev = None
+        while prev != s:
+            prev = s
+            s = re.sub(pattern, replacer, s)
+        return s
+
+    # Interpolate all values
+    interpolated = {}
+    for key, value in env_vars.items():
+        interpolated[key] = interpolate(value, env_vars)
+
+    return interpolated
+
+
+@lru_cache(maxsize=1)
+def get_env_config() -> dict:
+    """
+    Load and return the environment configuration.
+
+    Loads from .env file in project root. Results are cached.
+
+    Returns:
+        Dictionary with environment variables and their interpolated values.
+    """
+    project_root = _find_project_root()
+    env_path = project_root / ".env"
+
+    config = _load_dotenv(env_path)
+
+    # Also add some computed defaults if not present
+    if "NET_ID" not in config:
+        # Try to get from OS environment or fall back to current user
+        config["NET_ID"] = os.environ.get("NET_ID", os.environ.get("USER", "unknown"))
+
+    if "USER_BASE" not in config:
+        config["USER_BASE"] = "/common/users"
+
+    if "PROJECT_BASE" not in config:
+        config["PROJECT_BASE"] = str(project_root)
+
+    return config
+
+
+def get_path(key: str, default: Optional[str] = None) -> str:
+    """
+    Get a path from the environment configuration.
+
+    Args:
+        key: The environment variable name (e.g., "PROJECT_BASE", "ARCMG_DATASETS_BASE")
+        default: Default value if key not found
+
+    Returns:
+        The interpolated path string
+    """
+    config = get_env_config()
+    return config.get(key, default or "")
+
+
+def get_net_id() -> str:
+    """Get the current user's netID from environment config."""
+    return get_env_config().get("NET_ID", os.environ.get("USER", "unknown"))
+
+
+def get_user_path(*parts: str) -> str:
+    """
+    Construct a path under the user's directory.
+
+    Args:
+        *parts: Path components to join after /common/users/{NET_ID}/
+
+    Returns:
+        Full path string
+
+    Example:
+        get_user_path("arcmg_datasets", "cartpole")
+        # Returns: /common/users/rm1838/arcmg_datasets/cartpole
+    """
+    config = get_env_config()
+    user_base = config.get("USER_BASE", "/common/users")
+    net_id = get_net_id()
+    return str(Path(user_base) / net_id / Path(*parts))
+
+
+def get_project_path(*parts: str) -> str:
+    """
+    Construct a path relative to the project root.
+
+    Args:
+        *parts: Path components to join after project root
+
+    Returns:
+        Full path string
+    """
+    config = get_env_config()
+    project_base = config.get("PROJECT_BASE", str(_find_project_root()))
+    return str(Path(project_base) / Path(*parts)) if parts else project_base
+
+
+def get_shared_data_path(*parts: str) -> str:
+    """
+    Construct a path under the shared data directory.
+
+    Args:
+        *parts: Path components to join after shared data base
+
+    Returns:
+        Full path string
+    """
+    config = get_env_config()
+    shared_base = config.get("SHARED_DATA_BASE", "/common/users/shared/pracsys/genMoPlan/data_trajectories")
+    return str(Path(shared_base) / Path(*parts)) if parts else shared_base
+
+
+# Convenience function for Hydra config resolvers
+def resolve_user_path(relative_path: str) -> str:
+    """
+    Resolve a path that contains ${NET_ID} placeholder.
+
+    This can be registered as a Hydra resolver:
+        OmegaConf.register_new_resolver("user_path", resolve_user_path)
+
+    Args:
+        relative_path: Path with ${NET_ID} placeholders
+
+    Returns:
+        Path with NET_ID replaced
+    """
+    net_id = get_net_id()
+    return relative_path.replace("${NET_ID}", net_id)

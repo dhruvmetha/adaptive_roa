@@ -41,10 +41,10 @@ This project implements flow matching models for **endpoint prediction** on dyna
 
 ```bash
 # Activate the environment
-conda activate /common/users/dm1487/envs/arcmg
+conda activate /common/users/rm1838/envs/arcmg
 
 # Navigate to project directory
-cd /common/home/dm1487/robotics_research/tripods/olympics-classifier
+cd /common/home/rm1838/robotics_research/tripods/olympics-classifier
 ```
 
 ### **Training**
@@ -231,7 +231,7 @@ torchmetrics
 # Located at: flow_matching/
 
 # Environment
-conda activate /common/users/dm1487/envs/arcmg
+conda activate /common/users/rm1838/envs/arcmg
 ```
 
 ---

@@ -17,7 +17,7 @@ defaults:
 # Trajectory data paths
 data_dirs: /common/users/shared/pracsys/genMoPlan/data_trajectories/pendulum_cartesian_50k/trajectories
 shuffled_idxs_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/pendulum_cartesian_50k/shuffled_indices.txt
-dest_dir: /common/users/dm1487/arcmg_datasets/pendulum_cartesian/incremental_endpoint_dataset
+dest_dir: /common/users/rm1838/arcmg_datasets/pendulum_cartesian/incremental_endpoint_dataset
 
 # Processing range (slicing shuffled_indices.txt)
 start: 0      # Start index

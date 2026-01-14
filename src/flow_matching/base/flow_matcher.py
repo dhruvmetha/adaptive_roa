@@ -8,13 +8,11 @@ from torchmetrics import MeanMetric
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 import hydra
-import sys
-sys.path.append('/common/home/dm1487/robotics_research/tripods/olympics-classifier/flow_matching')
 
-from flow_matching.path import GeodesicProbPath
-from flow_matching.path.scheduler import CondOTScheduler
-from flow_matching.solver import RiemannianODESolver
-from flow_matching.utils import ModelWrapper
+from fb_fm.path import GeodesicProbPath
+from fb_fm.path.scheduler import CondOTScheduler
+from fb_fm.solver import RiemannianODESolver
+from fb_fm.utils import ModelWrapper
 
 from .config import FlowMatchingConfig
 

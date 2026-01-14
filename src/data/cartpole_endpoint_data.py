@@ -8,11 +8,12 @@ from tqdm import tqdm
 import os
 import lightning.pytorch as pl
 import random
+from src.utils.env_config import get_project_path
 
 
 class CartPoleEndpointDataset(Dataset):
     def __init__(self, data_file: str,
-                 bounds_file: str = "/common/users/dm1487/arcmg_datasets/cartpole/cartpole_data_bounds.pkl"):
+                 bounds_file: str = None):
         """
         Dataset for cartpole endpoint pairs (start_state, end_state)
         Handles 4D cartpole state with proper embedding for circular angle
@@ -21,8 +22,11 @@ class CartPoleEndpointDataset(Dataset):
 
         Args:
             data_file: Path to endpoint dataset file
-            bounds_file: Path to pickle file with actual data bounds
+            bounds_file: Path to pickle file with actual data bounds.
+                        If None, uses default path based on NET_ID from .env
         """
+        if bounds_file is None:
+            bounds_file = get_project_path("data", "cartpole_data_bounds.pkl")
         self.bounds_file = bounds_file
         # self._load_bounds()
 
@@ -102,7 +106,7 @@ class CartPoleEndpointDataModule(pl.LightningDataModule):
     def __init__(self, data_file: str, validation_file: str, test_file: str,
                  batch_size: int = 64, val_batch_size: Optional[int] = None,
                  num_workers: int = 4, pin_memory: bool = True,
-                 bounds_file: str = "/common/users/dm1487/arcmg_datasets/cartpole/cartpole_data_bounds.pkl"):
+                 bounds_file: str = None):
         """
         CartPole Endpoint Data Module with separate train/val/test files
 
@@ -114,8 +118,11 @@ class CartPoleEndpointDataModule(pl.LightningDataModule):
             val_batch_size: Batch size for validation/test data loaders (defaults to batch_size if None)
             num_workers: Number of workers for data loading
             pin_memory: Whether to pin memory for data loaders
-            bounds_file: Path to pickle file with actual data bounds
+            bounds_file: Path to pickle file with actual data bounds.
+                        If None, uses default path based on NET_ID from .env
         """
+        if bounds_file is None:
+            bounds_file = get_project_path("data", "cartpole_data_bounds.pkl")
         super().__init__()
         self.data_file = data_file
         self.validation_file = validation_file

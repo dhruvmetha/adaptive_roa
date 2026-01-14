@@ -7,3 +7,9 @@ attractor_analysis*
 *.png
 *.npz
 *.txt
+
+# Environment files (user-specific, should not be committed)
+.env
+.env.local
+.env.*
+!.env.example

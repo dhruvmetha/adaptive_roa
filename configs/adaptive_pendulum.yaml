@@ -11,8 +11,14 @@ defaults:
 name: adaptive_pendulum
 seed: 42
 
+# User-specific paths (loaded from .env file via resolvers)
+net_id: ${net_id:}
+user_base: /common/users/${net_id}
+project_base: ${user_base}/adaptive_cartpole
+shared_data_base: /common/users/shared/pracsys/genMoPlan/data_trajectories
+
 # Output directory
-output_dir: /common/users/dm1487/tripods/adaptive/outputs/adaptive_pendulum/${now:%Y-%m-%d_%H-%M-%S}
+output_dir: ${project_base}/outputs/adaptive_pendulum/${now:%Y-%m-%d_%H-%M-%S}
 
 # Device
 device: cuda:0
@@ -21,9 +27,9 @@ device: cuda:0
 # Data Source Configuration
 # =====================================================================
 data_source:
-  trajectories_dir: /common/users/shared/pracsys/genMoPlan/data_trajectories/pendulum_lqr_50k/trajectories
-  shuffled_indices_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/pendulum_lqr_50k/shuffled_indices.txt
-  roa_labels_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/pendulum_lqr_50k/roa_labels.txt
+  trajectories_dir: ${shared_data_base}/pendulum_lqr_50k/trajectories
+  shuffled_indices_file: ${shared_data_base}/pendulum_lqr_50k/shuffled_indices.txt
+  roa_labels_file: ${shared_data_base}/pendulum_lqr_50k/roa_labels.txt
 
 # Dataset splits (val/test are subsets of training with overlap)
 val_ratio: 0.1      # 10% of training for validation

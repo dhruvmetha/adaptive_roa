@@ -54,7 +54,7 @@ print(f"  [2] x_dot:     [{bounds_data['bounds']['x_dot']['min']:.4f}, {bounds_d
 print(f"  [3] theta_dot: [{bounds_data['bounds']['theta_dot']['min']:.4f}, {bounds_data['bounds']['theta_dot']['max']:.4f}] rad/s")
 
 # Save to pickle
-output_path = Path("/common/users/dm1487/arcmg_datasets/cartpole/cartpole_data_bounds.pkl")
+output_path = Path("/common/users/rm1838/adaptive_cartpole/data/cartpole_data_bounds.pkl")
 output_path.parent.mkdir(parents=True, exist_ok=True)
 
 with open(output_path, 'wb') as f:

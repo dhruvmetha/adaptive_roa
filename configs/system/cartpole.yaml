@@ -13,4 +13,5 @@
 _target_: src.systems.cartpole.CartPoleSystem
 
 # Data bounds configuration
-bounds_file: /common/users/dm1487/arcmg_datasets/cartpole/new_cartpole_data_bounds.pkl
+# Uses project_base from parent config (set via net_id resolver)
+bounds_file: ${project_base}/data/cartpole_data_bounds.pkl

@@ -14,10 +14,8 @@ Key design decisions:
 """
 import torch
 from torch import Tensor
-import sys
 import math
-sys.path.append('/common/home/dm1487/robotics_research/tripods/olympics-classifier/flow_matching')
-from flow_matching.utils.manifolds import Manifold
+from fb_fm.utils.manifolds import Manifold
 
 
 # flat torus
@@ -190,6 +188,116 @@ class CartPoleManifold(Manifold):
     def proju(self, x: Tensor, u: Tensor) -> Tensor:
         """Project vector onto tangent space (identity for ℝ²×S¹×ℝ)"""
         return u
+
+
+class HumanoidManifold(Manifold):
+    """
+    ℝ³⁴ × S² × ℝ³⁰ manifold for Humanoid system (67-dimensional state)
+
+    Manifold structure:
+    - Euclidean(34): First 34 dimensions (indices 0-33)
+    - Sphere(3): Next 3 dimensions (indices 34-36) - 3D unit vector on S²
+    - Euclidean(30): Last 30 dimensions (indices 37-66)
+
+    Note: S² (2-sphere) is the unit sphere in ℝ³, i.e., points x where ||x|| = 1
+    """
+
+    def expmap(self, x: Tensor, u: Tensor) -> Tensor:
+        """
+        Exponential map: transport from x along tangent vector u
+
+        Args:
+            x: Point on manifold [B, 67]
+            u: Tangent vector [B, 67]
+
+        Returns:
+            Transported point [B, 67]
+        """
+        # Extract components
+        euclidean1 = x[..., :34]       # [B, 34] ℝ³⁴
+        sphere = x[..., 34:37]          # [B, 3]  S²
+        euclidean2 = x[..., 37:]        # [B, 30] ℝ³⁰
+
+        u_euclidean1 = u[..., :34]
+        u_sphere = u[..., 34:37]
+        u_euclidean2 = u[..., 37:]
+
+        # Euclidean components: standard addition
+        new_euclidean1 = euclidean1 + u_euclidean1
+        new_euclidean2 = euclidean2 + u_euclidean2
+
+        # S² component: exponential map on sphere
+        # exp_x(u) = cos(||u||)x + sin(||u||)(u/||u||)
+        u_norm = torch.norm(u_sphere, dim=-1, keepdim=True).clamp(min=1e-8)
+        new_sphere = torch.cos(u_norm) * sphere + torch.sin(u_norm) * (u_sphere / u_norm)
+        # Project back to sphere to handle numerical errors
+        new_sphere = new_sphere / torch.norm(new_sphere, dim=-1, keepdim=True).clamp(min=1e-8)
+
+        return torch.cat([new_euclidean1, new_sphere, new_euclidean2], dim=-1)
+
+    def logmap(self, x: Tensor, y: Tensor) -> Tensor:
+        """
+        Logarithmic map: tangent vector from x to y
+
+        Args:
+            x: Source point [B, 67]
+            y: Target point [B, 67]
+
+        Returns:
+            Tangent vector [B, 67] from x to y
+        """
+        # Extract components
+        x_euclidean1, x_sphere, x_euclidean2 = x[..., :34], x[..., 34:37], x[..., 37:]
+        y_euclidean1, y_sphere, y_euclidean2 = y[..., :34], y[..., 34:37], y[..., 37:]
+
+        # Euclidean components: standard difference
+        delta_euclidean1 = y_euclidean1 - x_euclidean1
+        delta_euclidean2 = y_euclidean2 - x_euclidean2
+
+        # S² component: logarithmic map on sphere
+        # log_x(y) = arccos(<x,y>) * (y - <x,y>x) / ||y - <x,y>x||
+        dot = torch.sum(x_sphere * y_sphere, dim=-1, keepdim=True).clamp(-1.0, 1.0)
+        angle = torch.acos(dot)
+        # Handle near-zero angles
+        residual = y_sphere - dot * x_sphere
+        residual_norm = torch.norm(residual, dim=-1, keepdim=True).clamp(min=1e-8)
+        # When angle is near zero, use first-order approximation
+        small_angle = angle < 1e-4
+        delta_sphere = torch.where(
+            small_angle,
+            residual,  # First-order approximation for small angles
+            (angle / residual_norm) * residual
+        )
+
+        return torch.cat([delta_euclidean1, delta_sphere, delta_euclidean2], dim=-1)
+
+    def projx(self, x: Tensor) -> Tensor:
+        """Project point onto manifold (project sphere component to unit sphere)"""
+        euclidean1 = x[..., :34]
+        sphere = x[..., 34:37]
+        euclidean2 = x[..., 37:]
+
+        # Project sphere to unit sphere
+        sphere_normalized = sphere / torch.norm(sphere, dim=-1, keepdim=True).clamp(min=1e-8)
+
+        return torch.cat([euclidean1, sphere_normalized, euclidean2], dim=-1)
+
+    def proju(self, x: Tensor, u: Tensor) -> Tensor:
+        """Project vector onto tangent space (project sphere component to tangent plane)"""
+        # For Euclidean components, identity
+        u_euclidean1 = u[..., :34]
+        u_sphere = u[..., 34:37]
+        u_euclidean2 = u[..., 37:]
+
+        # Get the point on sphere
+        sphere = x[..., 34:37]
+        sphere_normalized = sphere / torch.norm(sphere, dim=-1, keepdim=True).clamp(min=1e-8)
+
+        # Project u_sphere to tangent plane: u - <u, x>x
+        dot = torch.sum(u_sphere * sphere_normalized, dim=-1, keepdim=True)
+        u_sphere_projected = u_sphere - dot * sphere_normalized
+
+        return torch.cat([u_euclidean1, u_sphere_projected, u_euclidean2], dim=-1)
 
 
 # ============================================================================

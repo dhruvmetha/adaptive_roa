@@ -13,8 +13,18 @@ Usage:
     python src/adaptive/run_adaptive_pendulum.py
     python src/adaptive/run_adaptive_pendulum.py --config-name=adaptive_pendulum
 """
+import os
 import hydra
 from omegaconf import DictConfig, OmegaConf
+
+# Register custom Hydra resolvers for environment-based paths
+from src.utils.env_config import get_net_id, get_env_config
+
+# Register resolvers before Hydra processes configs
+if not OmegaConf.has_resolver("net_id"):
+    OmegaConf.register_new_resolver("net_id", lambda: get_net_id())
+if not OmegaConf.has_resolver("env"):
+    OmegaConf.register_new_resolver("env", lambda key, default="": os.environ.get(key, get_env_config().get(key, default)))
 import torch
 import numpy as np
 from pathlib import Path

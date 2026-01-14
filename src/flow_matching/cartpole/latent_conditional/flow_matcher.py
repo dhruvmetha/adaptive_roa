@@ -8,19 +8,16 @@ import torch.nn as nn
 from typing import Dict, Optional, Tuple
 import lightning.pytorch as pl
 from torchmetrics import MeanMetric
-import sys
-sys.path.append('/common/home/dm1487/robotics_research/tripods/olympics-classifier/flow_matching')
 
-from flow_matching.path import GeodesicProbPath
-from flow_matching.path.scheduler import CondOTScheduler
-from flow_matching.solver import RiemannianODESolver
-from flow_matching.utils import ModelWrapper
+from fb_fm.path import GeodesicProbPath
+from fb_fm.path.scheduler import CondOTScheduler
+from fb_fm.solver import RiemannianODESolver
+from fb_fm.utils import ModelWrapper
+from fb_fm.utils.manifolds import Product, FlatTorus, Euclidean
 
 from src.flow_matching.base.flow_matcher import BaseFlowMatcher
 from src.systems.base import DynamicalSystem
-from src.utils.fb_manifolds import CartPoleManifold
-
-from flow_matching.utils.manifolds import Product, FlatTorus, Euclidean
+from src.utils.env_config import get_project_path
 
 
 class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
@@ -68,8 +65,8 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
 
     def _create_manifold(self):
         """Create ℝ²×S¹×ℝ manifold for CartPole"""
+        # Use Product manifold from fb_fm: (x, θ, ẋ, θ̇) where θ is on FlatTorus
         return Product(input_dim=4, manifolds=[(Euclidean(), 1), (FlatTorus(), 1), (Euclidean(), 2)])
-        # return Product(input_dim=4, manifolds=[(Euclidean(), 4)])
 
     def _get_start_states(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """Extract start states from batch"""
@@ -334,8 +331,9 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
             if hydra_config and "system" in hydra_config:
                 system_config = hydra_config["system"]
                 print(f"   Using system config from Hydra config")
-                # Extract bounds configuration
-                bounds_file = system_config.get("bounds_file", "/common/users/dm1487/arcmg_datasets/cartpole/cartpole_data_bounds.pkl")
+                # Extract bounds configuration (use env-based default if not specified)
+                default_bounds = get_project_path("data", "cartpole_data_bounds.pkl")
+                bounds_file = system_config.get("bounds_file", default_bounds)
                 print(f"   bounds_file: {bounds_file}")
                 system = CartPoleSystem(bounds_file=bounds_file)
             else:

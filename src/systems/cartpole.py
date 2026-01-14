@@ -7,6 +7,7 @@ import pickle
 from pathlib import Path
 from src.systems.base import DynamicalSystem, ManifoldComponent
 from typing import List, Dict, Tuple
+from src.utils.env_config import get_project_path
 
 
 class CartPoleSystem(DynamicalSystem):
@@ -19,15 +20,19 @@ class CartPoleSystem(DynamicalSystem):
     - ẋ ∈ ℝ (cart velocity, normalized to [-1, 1])
     - θ̇ ∈ ℝ (pole angular velocity, normalized to [-1, 1])
     """
-    
+
     def __init__(self,
-                 bounds_file: str = "/common/users/dm1487/arcmg_datasets/cartpole/cartpole_data_bounds.pkl"):
+                 bounds_file: str = None):
         """
         Initialize CartPole system
 
         Args:
-            bounds_file: Path to pickle file containing actual data bounds
+            bounds_file: Path to pickle file containing actual data bounds.
+                        If None, uses default path based on NET_ID from .env
         """
+        if bounds_file is None:
+            bounds_file = get_project_path("data", "cartpole_data_bounds.pkl")
+
         if not Path(bounds_file).exists():
             raise FileNotFoundError(f"CartPole bounds file not found: {bounds_file}")
 

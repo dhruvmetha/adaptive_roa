@@ -119,13 +119,24 @@ class ConformalPredictor:
         # Step 1: Estimate probabilities for training set
         if verbose:
             print(f"\n[1/4] Estimating probabilities for training set ({self.config.num_mc_samples} MC samples)...")
-        p_train, _, _ = self.prob_estimator.estimate(X_train)
+        p_train_success, p_train_failure, _ = self.prob_estimator.estimate(X_train)
+
+        # Determine if we should use two-probability mode (for CartPole)
+        # Use two-prob mode if system has 4D state (CartPole) or config specifies it
+        use_two_prob = getattr(self.config, 'use_two_prob_mode', False)
+        if hasattr(self.system, 'state_dim'):
+            use_two_prob = self.system.state_dim == 4  # CartPole has 4D state
+
+        p_failure_for_opt = p_train_failure if use_two_prob else None
 
         # Step 2: Optimize λ* or δ* depending on mode
         if optimize_mode == "delta":
             if verbose:
-                print(f"[2/4] Optimizing δ* via grid search with fixed λ=0.5 ({self.config.delta_grid_size} points)...")
-            self.lambda_star, self.delta_star, opt_info = self.lambda_optimizer.optimize(p_train, y_train)
+                mode_str = "two-probability" if use_two_prob else "single-probability"
+                print(f"[2/4] Optimizing δ* via grid search with fixed λ=0.5 ({self.config.delta_grid_size} points, {mode_str} mode)...")
+            self.lambda_star, self.delta_star, opt_info = self.lambda_optimizer.optimize(
+                p_train_success, y_train, p_failure_for_opt
+            )
             if verbose:
                 print(f"      → λ = {self.lambda_star:.4f} (fixed)")
                 print(f"      → δ* = {self.delta_star:.4f}")
@@ -134,14 +145,20 @@ class ConformalPredictor:
                 print(f"      → Unknown rate = {opt_info['best_unknown_rate']:.2%}")
         else:
             if verbose:
-                print(f"[2/4] Optimizing λ* via grid search with fixed δ={self.config.delta} ({self.config.lambda_grid_size} points)...")
-            self.lambda_star, self.delta_star, opt_info = self.lambda_optimizer.optimize(p_train, y_train)
+                mode_str = "two-probability" if use_two_prob else "single-probability"
+                print(f"[2/4] Optimizing λ* via grid search with fixed δ={self.config.delta} ({self.config.lambda_grid_size} points, {mode_str} mode)...")
+            self.lambda_star, self.delta_star, opt_info = self.lambda_optimizer.optimize(
+                p_train_success, y_train, p_failure_for_opt
+            )
             if verbose:
                 print(f"      → λ* = {self.lambda_star:.4f}")
                 print(f"      → δ = {self.delta_star:.4f} (fixed)")
                 print(f"      → Best loss = {opt_info['best_loss']:.4f}")
                 print(f"      → Misclass rate = {opt_info['best_misclass_rate']:.2%}")
                 print(f"      → Unknown rate = {opt_info['best_unknown_rate']:.2%}")
+
+        # Store whether we're using two-prob mode
+        self.use_two_prob = use_two_prob
 
         # Step 3: Estimate probabilities for calibration set
         if verbose:
@@ -164,6 +181,7 @@ class ConformalPredictor:
             'n_cal': len(y_cal),
             'optimization_info': opt_info,
             'optimize_mode': optimize_mode,
+            'use_two_prob': use_two_prob,
         }
 
         if verbose:
@@ -176,7 +194,7 @@ class ConformalPredictor:
     def predict(
         self,
         X: Union[torch.Tensor, np.ndarray]
-    ) -> Tuple[List[Set[int]], np.ndarray]:
+    ) -> Tuple[List[Set[int]], np.ndarray, np.ndarray]:
         """
         Make predictions with coverage guarantees.
 
@@ -187,19 +205,21 @@ class ConformalPredictor:
             Tuple of:
                 prediction_sets: List of N prediction sets (each subset of {-1, 0, 1})
                 p_success: [N] array of estimated p(success|x)
+                p_failure: [N] array of estimated p(failure|x)
         """
         if self.lambda_star is None or self.q_hat is None:
             raise RuntimeError("ConformalPredictor must be fit before predicting")
 
         # Estimate probabilities
-        p_success, _, _ = self.prob_estimator.estimate(X)
+        p_success, p_failure, _ = self.prob_estimator.estimate(X)
 
-        # Get prediction sets
+        # Get prediction sets (for now, use existing calibrator)
+        # TODO: Update calibrator for two-prob mode if needed
         prediction_sets = self.calibrator.get_prediction_sets_batch(
             p_success, self.lambda_star, self.q_hat, self.delta_star
         )
 
-        return prediction_sets, p_success
+        return prediction_sets, p_success, p_failure
 
     def select_uncertain(
         self,
@@ -261,7 +281,7 @@ class ConformalPredictor:
             y_true = y_true.cpu().numpy()
 
         # Get predictions
-        prediction_sets, p_success = self.predict(X)
+        prediction_sets, p_success, p_failure = self.predict(X)
 
         n = len(y_true)
 
@@ -349,6 +369,45 @@ class ConformalPredictor:
 
         return metrics
 
+    def predict_labels(
+        self,
+        X: Union[torch.Tensor, np.ndarray]
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Predict labels using two-probability mode for CartPole.
+
+        Uses:
+        - SUCCESS: success_rate > λ+δ
+        - FAILURE: (1 - failure_rate) < λ-δ
+        - SEPARATRIX: neither condition met
+
+        Args:
+            X: [N, state_dim] states to predict
+
+        Returns:
+            Tuple of:
+                pred_labels: [N] array of predicted labels (-1, 0, or 1)
+                p_success: [N] array of estimated p(success|x)
+                p_failure: [N] array of estimated p(failure|x)
+        """
+        if self.lambda_star is None:
+            raise RuntimeError("ConformalPredictor must be fit before predicting")
+
+        # Estimate probabilities
+        p_success, p_failure, _ = self.prob_estimator.estimate(X)
+
+        # Use two-prob mode if applicable
+        if getattr(self, 'use_two_prob', False):
+            pred_labels = self.lambda_optimizer.get_prediction_regions_batch_two_prob(
+                p_success, p_failure, self.lambda_star, self.delta_star
+            )
+        else:
+            pred_labels = self.lambda_optimizer.get_prediction_regions_batch(
+                p_success, self.lambda_star, self.delta_star
+            )
+
+        return pred_labels, p_success, p_failure
+
     def get_state(self) -> Dict:
         """Get current state of the predictor (for saving)."""
         return {
@@ -356,6 +415,7 @@ class ConformalPredictor:
             'delta_star': self.delta_star,
             'q_hat': self.q_hat,
             'fit_info': self.fit_info,
+            'use_two_prob': getattr(self, 'use_two_prob', False),
             'config': {
                 'delta': self.config.delta,
                 'w': self.config.w,
@@ -372,3 +432,4 @@ class ConformalPredictor:
         self.delta_star = state.get('delta_star', self.config.delta)
         self.q_hat = state['q_hat']
         self.fit_info = state.get('fit_info')
+        self.use_two_prob = state.get('use_two_prob', False)

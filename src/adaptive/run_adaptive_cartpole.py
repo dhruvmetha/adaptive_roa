@@ -45,6 +45,7 @@ def plot_cartpole_roa_projections(
     delta: float,
     output_file: str,
     title: str = "CartPole ROA Phase Space Projections",
+    failure_rate: np.ndarray = None,
 ):
     """
     Plot the Region of Attraction (ROA) for CartPole as 2D projections.
@@ -63,15 +64,24 @@ def plot_cartpole_roa_projections(
         delta: Unknown region half-width
         output_file: Path to save the plot
         title: Plot title
+        failure_rate: [N] array of p(failure) from MC sampling (for two-prob mode)
     """
     fig, axes = plt.subplots(2, 4, figsize=(20, 10))
 
     # State ordering: (x, θ, ẋ, θ̇) at indices 0, 1, 2, 3
 
-    # Classify based on lambda* +/- delta
+    # Classify based on two-probability mode
     pred_labels = np.zeros(len(success_rate))
-    pred_labels[success_rate > lambda_star + delta] = 1   # Success
-    pred_labels[success_rate < lambda_star - delta] = -1  # Failure
+    upper = lambda_star + delta
+    lower = lambda_star - delta
+    pred_labels[success_rate > upper] = 1   # Success: p_success > λ+δ
+    if failure_rate is not None:
+        # Two-probability mode: (1 - failure_rate) < λ-δ
+        failure_mask = ((1 - failure_rate) < lower) & (pred_labels != 1)
+        pred_labels[failure_mask] = -1
+    else:
+        # Single-probability mode (fallback)
+        pred_labels[success_rate < lower] = -1  # Failure
 
     # Create color arrays
     pred_colors = np.array(['gold'] * len(pred_labels))
@@ -149,7 +159,9 @@ def plot_cartpole_roa_projections(
     axes[0, 0].legend(handles=legend_elements, loc='upper right', fontsize=8)
     axes[1, 0].legend(handles=legend_elements, loc='upper right', fontsize=8)
 
-    plt.suptitle(f'{title}\n(λ*={lambda_star:.3f}, δ={delta:.3f}) | '
+    mode_str = "two-prob" if failure_rate is not None else "single-prob"
+    threshold = lambda_star + delta
+    plt.suptitle(f'{title}\n({mode_str} mode, threshold={threshold:.3f}) | '
                  f'Pred: S={n_pred_success}, F={n_pred_failure}, Sep={n_pred_sep} | '
                  f'GT: S={n_gt_success}, F={n_gt_failure}',
                  fontsize=12, fontweight='bold')
@@ -220,11 +232,11 @@ def plot_cartpole_probability_heatmap(
 
         if col == 3:  # Add colorbar to last plot
             cbar = plt.colorbar(scatter, ax=ax, label='p(success)')
+            # In two-prob mode, only λ+δ is used as threshold
             cbar.ax.axhline(y=lambda_star + delta, color='black', linestyle='--', linewidth=1)
-            cbar.ax.axhline(y=lambda_star - delta, color='black', linestyle='--', linewidth=1)
             cbar.ax.axhline(y=lambda_star, color='black', linestyle='-', linewidth=0.5)
 
-    plt.suptitle(f'{title}\n(λ*={lambda_star:.3f}, bounds: [{lambda_star-delta:.3f}, {lambda_star+delta:.3f}])',
+    plt.suptitle(f'{title}\n(two-prob mode: success if p_success > {lambda_star+delta:.3f}, failure if p_failure > {lambda_star+delta:.3f})',
                  fontsize=12, fontweight='bold')
     plt.tight_layout()
     plt.savefig(output_file, dpi=150, bbox_inches='tight')
@@ -234,12 +246,36 @@ def plot_cartpole_probability_heatmap(
 
 
 def compute_metrics_at_threshold(success_rate: np.ndarray, y_all: np.ndarray,
-                                  success_thresh: float, failure_thresh: float) -> Dict:
-    """Helper to compute metrics at given thresholds."""
+                                  success_thresh: float, failure_thresh: float,
+                                  failure_rate: np.ndarray = None,
+                                  two_prob_mode: bool = False) -> Dict:
+    """Helper to compute metrics at given thresholds.
+
+    Args:
+        success_rate: [N] array of p(success|x)
+        y_all: [N] array of ground truth labels
+        success_thresh: Threshold for predicting success (λ+δ)
+        failure_thresh: Threshold for predicting failure (λ-δ)
+        failure_rate: [N] array of p(failure|x) - required for two_prob_mode
+        two_prob_mode: If True, uses two-probability prediction:
+            - SUCCESS: success_rate > success_thresh (λ+δ)
+            - FAILURE: (1 - failure_rate) < failure_thresh (λ-δ)
+    """
     n_total = len(y_all)
     pred_labels = np.zeros(n_total)
-    pred_labels[success_rate > success_thresh] = 1
-    pred_labels[success_rate < failure_thresh] = -1
+
+    if two_prob_mode and failure_rate is not None:
+        # Two-probability mode:
+        # SUCCESS: success_rate > λ+δ
+        # FAILURE: (1 - failure_rate) < λ-δ
+        pred_labels[success_rate > success_thresh] = 1
+        # Only mark as failure if not already success
+        failure_mask = ((1 - failure_rate) < failure_thresh) & (pred_labels != 1)
+        pred_labels[failure_mask] = -1
+    else:
+        # Single probability mode (original)
+        pred_labels[success_rate > success_thresh] = 1
+        pred_labels[success_rate < failure_thresh] = -1
 
     n_uncertain = np.sum(pred_labels == 0)
     separatrix_pct = n_uncertain / n_total
@@ -354,31 +390,36 @@ def evaluate_full_roa_fast(
                 attractor_labels = system.classify_attractor(pred, attractor_radius).cpu().numpy()
                 is_success[batch_start:batch_end, sample_idx] = attractor_labels
 
-    # Compute success rate per point (p_success = fraction of samples reaching success attractor)
+    # Compute success and failure rates per point
     success_rate = (is_success == 1).sum(axis=1) / num_mc_samples
+    failure_rate = (is_success == -1).sum(axis=1) / num_mc_samples
 
-    # Compute metrics for BOTH threshold schemes
-    # 1. λ*±δ from conformal prediction
+    # Compute metrics for BOTH threshold schemes using TWO-PROBABILITY mode
+    # 1. λ*±δ from conformal prediction (two-prob: both use λ+δ threshold)
     metrics_conformal = compute_metrics_at_threshold(
         success_rate, y_all,
         success_thresh=lambda_star + delta,
-        failure_thresh=lambda_star - delta
+        failure_thresh=lambda_star - delta,  # Not used in two_prob_mode
+        failure_rate=failure_rate,
+        two_prob_mode=True
     )
 
-    # 2. Fixed 0.4/0.6 thresholds (classic approach)
+    # 2. Fixed threshold (two-prob mode)
     metrics_fixed = compute_metrics_at_threshold(
         success_rate, y_all,
         success_thresh=0.6,
-        failure_thresh=0.4
+        failure_thresh=0.4,
+        failure_rate=failure_rate,
+        two_prob_mode=True
     )
 
     if verbose:
         print(f"\n{'='*60}")
-        print("METRICS WITH λ*±δ THRESHOLDS (from conformal prediction)")
+        print("METRICS WITH λ*±δ THRESHOLDS (two-probability mode)")
         print(f"{'='*60}")
         print(f"λ*={lambda_star:.4f}, δ={delta:.4f}")
-        print(f"  Success if p > {lambda_star + delta:.4f}")
-        print(f"  Failure if p < {lambda_star - delta:.4f}")
+        print(f"  Success if success_rate > {lambda_star + delta:.4f}")
+        print(f"  Failure if (1 - failure_rate) < {lambda_star - delta:.4f}")
         print(f"Separatrix %:    {metrics_conformal['separatrix_pct']:.2%}")
         print(f"Confident:       {metrics_conformal['n_confident']} predictions")
         print(f"Accuracy:        {metrics_conformal['accuracy']:.2%}")
@@ -388,10 +429,10 @@ def evaluate_full_roa_fast(
         print(f"Specificity:     {metrics_conformal['specificity']:.2%}")
 
         print(f"\n{'='*60}")
-        print("METRICS WITH FIXED 0.4/0.6 THRESHOLDS")
+        print("METRICS WITH FIXED THRESHOLDS (two-probability mode)")
         print(f"{'='*60}")
-        print(f"  Success if p > 0.6")
-        print(f"  Failure if p < 0.4")
+        print(f"  Success if success_rate > 0.6")
+        print(f"  Failure if (1 - failure_rate) < 0.4")
         print(f"Separatrix %:    {metrics_fixed['separatrix_pct']:.2%}")
         print(f"Confident:       {metrics_fixed['n_confident']} predictions")
         print(f"Accuracy:        {metrics_fixed['accuracy']:.2%}")
@@ -430,14 +471,16 @@ def evaluate_full_roa_fast(
         np.savez(
             npz_file,
             start_states=X_all,           # [N, 4] - (x, θ, ẋ, θ̇)
-            probabilities=success_rate,   # [N] - p_success (probability of reaching success attractor)
+            success_rate=success_rate,    # [N] - p_success (probability of reaching success attractor)
+            failure_rate=failure_rate,    # [N] - p_failure (probability of reaching failure state)
+            probabilities=success_rate,   # [N] - backward compatibility alias
             true_labels=y_all,            # [N] - ground truth labels (1=success, -1=failure)
             lambda_star=lambda_star,
             delta=delta
         )
         if verbose:
             print(f"Saved per-point data to: {npz_file}")
-            print(f"  Arrays: start_states [{X_all.shape}], probabilities [{success_rate.shape}], true_labels [{y_all.shape}]")
+            print(f"  Arrays: start_states [{X_all.shape}], success_rate [{success_rate.shape}], failure_rate [{failure_rate.shape}], true_labels [{y_all.shape}]")
 
         # Generate ROA phase space projection plots
         phase_space_file = output_file.replace('.json', '_roa_projections.png')
@@ -448,7 +491,8 @@ def evaluate_full_roa_fast(
             lambda_star=lambda_star,
             delta=delta,
             output_file=phase_space_file,
-            title="CartPole ROA - Epoch Evaluation"
+            title="CartPole ROA - Epoch Evaluation",
+            failure_rate=failure_rate
         )
 
         # Generate probability heatmap

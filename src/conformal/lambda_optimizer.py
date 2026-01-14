@@ -4,10 +4,72 @@ Lambda/Delta Optimizer for Conformal Prediction.
 Finds the optimal decision boundary via grid search:
 - Mode "lambda": Optimize λ* with fixed δ
 - Mode "delta": Optimize δ* with fixed λ=0.5
+
+Decision rules:
+- "one_sided": Uses only p_success (default, for pendulum/mountain car)
+- "two_sided": Uses both p_success and p_failure (for CartPole)
 """
 import numpy as np
-from typing import Tuple
+from typing import Tuple, Optional
 from src.conformal.config import ConformalConfig
+
+
+# =============================================================================
+# Decision Rule Functions
+# =============================================================================
+
+def apply_one_sided_rule(
+    p_success: np.ndarray,
+    p_failure: Optional[np.ndarray],
+    lambda_star: float,
+    delta: float
+) -> np.ndarray:
+    """
+    One-sided decision rule using only p_success.
+    
+    - SUCCESS if p_success > λ + δ
+    - FAILURE if p_success < λ - δ
+    - UNKNOWN otherwise
+    
+    Used for systems where failure is simply "not success" (pendulum, mountain car).
+    """
+    n = len(p_success)
+    pred = np.zeros(n)
+    pred[p_success > lambda_star + delta] = 1
+    pred[p_success < lambda_star - delta] = -1
+    return pred
+
+
+def apply_two_sided_rule(
+    p_success: np.ndarray,
+    p_failure: np.ndarray,
+    lambda_star: float,
+    delta: float
+) -> np.ndarray:
+    """
+    Two-sided decision rule using both p_success and p_failure.
+    
+    - SUCCESS if p_success > λ + δ
+    - FAILURE if (1 - p_failure) < λ - δ  (equivalently p_failure > 1 - (λ - δ))
+    - UNKNOWN otherwise
+    - If both conditions trigger, treat as UNKNOWN (rare edge case)
+    
+    Used for systems with explicit failure conditions (CartPole).
+    """
+    n = len(p_success)
+    pred = np.zeros(n)
+    
+    success_thresh = lambda_star + delta
+    failure_thresh = lambda_star - delta  # threshold for (1 - p_f)
+    
+    pred[p_success > success_thresh] = 1
+    pred[(1.0 - p_failure) < failure_thresh] = -1
+    
+    # If both trigger, treat as unknown
+    both = (p_success > success_thresh) & ((1.0 - p_failure) < failure_thresh)
+    pred[both] = 0
+    
+    return pred
 
 
 class LambdaOptimizer:
@@ -17,11 +79,15 @@ class LambdaOptimizer:
     Two modes:
     1. optimize_mode="lambda": Find λ* with fixed δ
        - Search λ ∈ [δ, 1-δ]
-       - Decision: p < λ-δ → FAILURE, p > λ+δ → SUCCESS
 
     2. optimize_mode="delta": Find δ* with fixed λ=0.5
        - Search δ ∈ [delta_min, delta_max]
-       - Decision: p < 0.5-δ → FAILURE, p > 0.5+δ → SUCCESS
+
+    Two decision rules (config.decision_rule):
+    1. "one_sided": Uses only p_success
+       - SUCCESS if p_s > λ+δ, FAILURE if p_s < λ-δ
+    2. "two_sided": Uses both p_success and p_failure
+       - SUCCESS if p_s > λ+δ, FAILURE if (1-p_f) < λ-δ
 
     Loss function:
         Loss = w × MisclassificationRate + (1-w) × UnknownRate
@@ -42,7 +108,8 @@ class LambdaOptimizer:
     def optimize(
         self,
         p_success: np.ndarray,
-        y_true: np.ndarray
+        y_true: np.ndarray,
+        p_failure: Optional[np.ndarray] = None
     ) -> Tuple[float, float, dict]:
         """
         Find optimal parameters via grid search based on optimize_mode.
@@ -50,6 +117,7 @@ class LambdaOptimizer:
         Args:
             p_success: [N] array of estimated p(success|x) for training states
             y_true: [N] array of true labels (-1 for failure, 1 for success)
+            p_failure: [N] array of estimated p(failure|x). Required if decision_rule="two_sided".
 
         Returns:
             Tuple of:
@@ -57,15 +125,24 @@ class LambdaOptimizer:
                 delta_star: Optimal δ (config.delta if mode="lambda")
                 info: Dict with optimization details
         """
+        # Validate p_failure for two_sided rule
+        if self.config.decision_rule == "two_sided" and p_failure is None:
+            raise ValueError("p_failure is required when decision_rule='two_sided'")
+        
+        # Default p_failure to zeros for one_sided (unused but allows uniform code)
+        if p_failure is None:
+            p_failure = np.zeros_like(p_success)
+        
         if self.config.optimize_mode == "delta":
-            return self.optimize_delta(p_success, y_true)
+            return self.optimize_delta(p_success, y_true, p_failure)
         else:
-            return self.optimize_lambda(p_success, y_true)
+            return self.optimize_lambda(p_success, y_true, p_failure)
 
     def optimize_lambda(
         self,
         p_success: np.ndarray,
-        y_true: np.ndarray
+        y_true: np.ndarray,
+        p_failure: np.ndarray
     ) -> Tuple[float, float, dict]:
         """
         Find optimal λ* via grid search.
@@ -76,6 +153,7 @@ class LambdaOptimizer:
         Args:
             p_success: [N] array of estimated p(success|x) for training states
             y_true: [N] array of true labels (-1 for failure, 1 for success)
+            p_failure: [N] array of estimated p(failure|x) for training states
 
         Returns:
             Tuple of:
@@ -85,14 +163,18 @@ class LambdaOptimizer:
         delta = self.config.delta
         w = self.config.w
         grid_size = self.config.lambda_grid_size
+        decision_rule = self.config.decision_rule
 
         # Grid search over λ ∈ [δ, 1-δ]
         # We need λ-δ ≥ 0 and λ+δ ≤ 1, so λ ∈ [δ, 1-δ]
         lambdas = np.linspace(delta, 1 - delta, grid_size)
 
         # Debug: print distribution of inputs
+        print(f"      [λ Debug] decision_rule: {decision_rule}")
         print(f"      [λ Debug] y_true distribution: {np.sum(y_true == 1)} success, {np.sum(y_true == -1)} failure")
         print(f"      [λ Debug] p_success stats: min={p_success.min():.4f}, max={p_success.max():.4f}, mean={p_success.mean():.4f}, median={np.median(p_success):.4f}")
+        if decision_rule == "two_sided":
+            print(f"      [λ Debug] p_failure stats: min={p_failure.min():.4f}, max={p_failure.max():.4f}, mean={p_failure.mean():.4f}, median={np.median(p_failure):.4f}")
 
         best_lambda = 0.5
         best_loss = float('inf')
@@ -103,21 +185,13 @@ class LambdaOptimizer:
         n_samples = len(y_true)
 
         for lam in lambdas:
-            # Classify each point based on current λ
-            lower = lam - delta
-            upper = lam + delta
+            # Apply decision rule based on config
+            if decision_rule == "two_sided":
+                predictions = apply_two_sided_rule(p_success, p_failure, lam, delta)
+            else:
+                predictions = apply_one_sided_rule(p_success, p_failure, lam, delta)
 
-            predictions = np.zeros(n_samples)
-            unknown_mask = np.zeros(n_samples, dtype=bool)
-
-            for i in range(n_samples):
-                if p_success[i] < lower:
-                    predictions[i] = -1  # FAILURE
-                elif p_success[i] > upper:
-                    predictions[i] = 1   # SUCCESS
-                else:
-                    predictions[i] = 0   # UNKNOWN
-                    unknown_mask[i] = True
+            unknown_mask = predictions == 0
 
             # Count misclassifications (only among confident predictions)
             confident_mask = ~unknown_mask
@@ -146,6 +220,7 @@ class LambdaOptimizer:
 
         info = {
             'optimize_mode': 'lambda',
+            'decision_rule': decision_rule,
             'lambdas': lambdas,
             'losses': np.array(losses),
             'misclass_rates': np.array(misclass_rates),
@@ -161,7 +236,8 @@ class LambdaOptimizer:
     def optimize_delta(
         self,
         p_success: np.ndarray,
-        y_true: np.ndarray
+        y_true: np.ndarray,
+        p_failure: np.ndarray
     ) -> Tuple[float, float, dict]:
         """
         Find optimal δ* via grid search with fixed λ=0.5.
@@ -172,6 +248,7 @@ class LambdaOptimizer:
         Args:
             p_success: [N] array of estimated p(success|x) for training states
             y_true: [N] array of true labels (-1 for failure, 1 for success)
+            p_failure: [N] array of estimated p(failure|x) for training states
 
         Returns:
             Tuple of:
@@ -184,14 +261,17 @@ class LambdaOptimizer:
         grid_size = self.config.delta_grid_size
         delta_min = self.config.delta_min
         delta_max = self.config.delta_max
+        decision_rule = self.config.decision_rule
 
         # Grid search over δ ∈ [delta_min, delta_max]
         deltas = np.linspace(delta_min, delta_max, grid_size)
 
         # Debug: print distribution of inputs
-        print(f"      [δ Debug] Optimizing δ with fixed λ=0.5")
+        print(f"      [δ Debug] Optimizing δ with fixed λ=0.5, decision_rule={decision_rule}")
         print(f"      [δ Debug] y_true distribution: {np.sum(y_true == 1)} success, {np.sum(y_true == -1)} failure")
         print(f"      [δ Debug] p_success stats: min={p_success.min():.4f}, max={p_success.max():.4f}, mean={p_success.mean():.4f}, median={np.median(p_success):.4f}")
+        if decision_rule == "two_sided":
+            print(f"      [δ Debug] p_failure stats: min={p_failure.min():.4f}, max={p_failure.max():.4f}, mean={p_failure.mean():.4f}, median={np.median(p_failure):.4f}")
 
         best_delta = 0.05
         best_loss = float('inf')
@@ -202,21 +282,13 @@ class LambdaOptimizer:
         n_samples = len(y_true)
 
         for delta in deltas:
-            # Classify each point based on λ=0.5 and current δ
-            lower = lam - delta
-            upper = lam + delta
+            # Apply decision rule based on config
+            if decision_rule == "two_sided":
+                predictions = apply_two_sided_rule(p_success, p_failure, lam, delta)
+            else:
+                predictions = apply_one_sided_rule(p_success, p_failure, lam, delta)
 
-            predictions = np.zeros(n_samples)
-            unknown_mask = np.zeros(n_samples, dtype=bool)
-
-            for i in range(n_samples):
-                if p_success[i] < lower:
-                    predictions[i] = -1  # FAILURE
-                elif p_success[i] > upper:
-                    predictions[i] = 1   # SUCCESS
-                else:
-                    predictions[i] = 0   # UNKNOWN
-                    unknown_mask[i] = True
+            unknown_mask = predictions == 0
 
             # Count misclassifications (only among confident predictions)
             confident_mask = ~unknown_mask
@@ -245,6 +317,7 @@ class LambdaOptimizer:
 
         info = {
             'optimize_mode': 'delta',
+            'decision_rule': decision_rule,
             'deltas': deltas,
             'losses': np.array(losses),
             'misclass_rates': np.array(misclass_rates),

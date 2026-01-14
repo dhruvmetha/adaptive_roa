@@ -70,6 +70,7 @@ class BalancedUncertainSampler:
         prob_estimator,
         lambda_star: float,
         delta_star: float,
+        decision_rule: str = "one_sided",
         verbose: bool = True
     ) -> BalancedSamplingResult:
         """
@@ -79,6 +80,7 @@ class BalancedUncertainSampler:
             prob_estimator: ProbabilityEstimator to estimate p(success|x)
             lambda_star: Decision boundary from conformal prediction
             delta_star: Uncertainty half-width from conformal prediction
+            decision_rule: "one_sided" (p_s only) or "two_sided" (p_s and p_f)
             verbose: Print progress
 
         Returns:
@@ -119,8 +121,9 @@ class BalancedUncertainSampler:
             )
 
         # Step 2: Sample D2 (uncertainty-filtered)
-        d2_indices = []
-        certain_discarded = 0
+        # Track both uncertain and certain samples from D2 search
+        d2_indices = []          # Uncertain samples → added as D2
+        certain_indices = []     # Certain samples → used for compensation if D2 falls short
         n_truncated = 0
 
         if n_d2_target > 0:
@@ -149,11 +152,11 @@ class BalancedUncertainSampler:
 
                 # Classify batch
                 uncertain_from_batch, certain_from_batch = self._classify_candidates(
-                    batch_states, batch_indices, prob_estimator, lambda_star, delta_star
+                    batch_states, batch_indices, prob_estimator, lambda_star, delta_star, decision_rule
                 )
 
                 d2_indices.extend(uncertain_from_batch)
-                certain_discarded += len(certain_from_batch)
+                certain_indices.extend(certain_from_batch)  # Keep certain for potential compensation
 
                 if verbose:
                     print(f"    Batch {n_batches}: {len(batch_indices)} sampled, "
@@ -167,18 +170,36 @@ class BalancedUncertainSampler:
                 if verbose:
                     print(f"    Truncated D2 to {n_d2_target} (discarded {n_truncated} extra uncertain)")
 
+        # Step 3: Compensate with certain samples if D2 fell short
+        d2_shortfall = n_d2_target - len(d2_indices)
+        extra_d1_indices = []
+        
+        if d2_shortfall > 0 and len(certain_indices) > 0:
+            # Use certain samples we already evaluated as extra D1
+            n_to_add = min(d2_shortfall, len(certain_indices))
+            extra_d1_indices = certain_indices[:n_to_add]
+            
+            if verbose:
+                print(f"    D2 shortfall: {d2_shortfall}. Using {len(extra_d1_indices)} certain samples as extra D1.")
+        
+        n_certain_discarded = len(certain_indices) - len(extra_d1_indices)
+
+        # Combine original D1 + extra D1 (from certain samples)
+        all_d1_indices = list(d1_indices) + extra_d1_indices
+
         # Final summary
-        total_added = len(d1_indices) + len(d2_indices)
+        total_added = len(all_d1_indices) + len(d2_indices)
         if verbose:
-            print(f"    FINAL: D1={len(d1_indices)}, D2={len(d2_indices)}, Total={total_added}")
-            print(f"    Evaluated={n_total_sampled} candidates, Discarded={certain_discarded} certain, Batches={n_batches}")
+            print(f"    FINAL: D1={len(all_d1_indices)} (original={len(d1_indices)}, from_certain={len(extra_d1_indices)}), "
+                  f"D2={len(d2_indices)} (uncertain), Total={total_added}")
+            print(f"    Evaluated={n_total_sampled} candidates, Discarded={n_certain_discarded} certain, Batches={n_batches}")
 
         return BalancedSamplingResult(
-            d1_indices=list(d1_indices),
+            d1_indices=all_d1_indices,
             d2_indices=d2_indices,
             n_total_sampled=n_total_sampled,
             n_batches=n_batches,
-            n_discarded_certain=certain_discarded,
+            n_discarded_certain=n_certain_discarded,
             n_truncated=n_truncated
         )
 
@@ -188,7 +209,8 @@ class BalancedUncertainSampler:
         indices: List[int],
         prob_estimator,
         lambda_star: float,
-        delta_star: float
+        delta_star: float,
+        decision_rule: str = "one_sided"
     ) -> Tuple[List[int], List[int]]:
         """
         Classify candidates as uncertain or certain using flow matcher.
@@ -199,6 +221,7 @@ class BalancedUncertainSampler:
             prob_estimator: ProbabilityEstimator to estimate p(success|x)
             lambda_star: Decision boundary
             delta_star: Uncertainty half-width
+            decision_rule: "one_sided" (p_s only) or "two_sided" (p_s and p_f)
 
         Returns:
             Tuple of (uncertain_indices, certain_indices)
@@ -206,20 +229,35 @@ class BalancedUncertainSampler:
         if len(states) == 0:
             return [], []
 
-        # Estimate p(success|x) for all candidates
-        p_success, _, _ = prob_estimator.estimate(states)
-
-        # Classify based on decision boundaries
-        lower = lambda_star - delta_star
-        upper = lambda_star + delta_star
+        # Estimate probabilities for all candidates
+        p_success, p_failure, _ = prob_estimator.estimate(states)
 
         uncertain_indices = []
         certain_indices = []
 
-        for i, idx in enumerate(indices):
-            if lower <= p_success[i] <= upper:
-                uncertain_indices.append(idx)
-            else:
-                certain_indices.append(idx)
+        if decision_rule == "two_sided":
+            # Two-sided: use both p_s and p_f
+            # Success if p_s > λ+δ, Failure if (1-p_f) < λ-δ, else uncertain
+            success_thresh = lambda_star + delta_star
+            failure_thresh = lambda_star - delta_star  # threshold on (1-p_f)
+
+            for i, idx in enumerate(indices):
+                is_success = p_success[i] > success_thresh
+                is_failure = (1.0 - p_failure[i]) < failure_thresh
+                
+                if is_success or is_failure:
+                    certain_indices.append(idx)
+                else:
+                    uncertain_indices.append(idx)
+        else:
+            # One-sided: only use p_s
+            lower = lambda_star - delta_star
+            upper = lambda_star + delta_star
+
+            for i, idx in enumerate(indices):
+                if lower <= p_success[i] <= upper:
+                    uncertain_indices.append(idx)
+                else:
+                    certain_indices.append(idx)
 
         return uncertain_indices, certain_indices

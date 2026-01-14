@@ -824,7 +824,7 @@ def main(cfg: DictConfig):
             # Evaluate D2 for uncertainty
             if len(d2_indices) > 0:
                 print(f"\n[7] Evaluating D2 for uncertain points...")
-                uncertain_mask, uncertain_idx, p_success = conformal_predictor.select_uncertain(d2_states)
+                uncertain_mask, uncertain_idx, p_success, _ = conformal_predictor.select_uncertain(d2_states)
 
                 n_uncertain = np.sum(uncertain_mask)
                 n_confident = len(d2_indices) - n_uncertain

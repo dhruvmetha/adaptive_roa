@@ -107,6 +107,7 @@ class ConformalPredictor:
             y_cal = y_cal.cpu().numpy()
 
         optimize_mode = self.config.optimize_mode
+        decision_rule = self.config.decision_rule
 
         if verbose:
             print("=" * 60)
@@ -115,17 +116,23 @@ class ConformalPredictor:
             print(f"Training set: {len(y_train)} points")
             print(f"Calibration set: {len(y_cal)} points")
             print(f"Optimization mode: {optimize_mode}")
+            print(f"Decision rule: {decision_rule}")
 
         # Step 1: Estimate probabilities for training set
         if verbose:
             print(f"\n[1/4] Estimating probabilities for training set ({self.config.num_mc_samples} MC samples)...")
-        p_train, _, _ = self.prob_estimator.estimate(X_train)
+        p_train_success, p_train_failure, _ = self.prob_estimator.estimate(X_train)
 
         # Step 2: Optimize λ* or δ* depending on mode
+        # Pass p_failure for two_sided decision rule (CartPole), None for one_sided (pendulum)
+        p_failure_for_opt = p_train_failure if decision_rule == "two_sided" else None
+        
         if optimize_mode == "delta":
             if verbose:
                 print(f"[2/4] Optimizing δ* via grid search with fixed λ=0.5 ({self.config.delta_grid_size} points)...")
-            self.lambda_star, self.delta_star, opt_info = self.lambda_optimizer.optimize(p_train, y_train)
+            self.lambda_star, self.delta_star, opt_info = self.lambda_optimizer.optimize(
+                p_train_success, y_train, p_failure=p_failure_for_opt
+            )
             if verbose:
                 print(f"      → λ = {self.lambda_star:.4f} (fixed)")
                 print(f"      → δ* = {self.delta_star:.4f}")
@@ -135,7 +142,9 @@ class ConformalPredictor:
         else:
             if verbose:
                 print(f"[2/4] Optimizing λ* via grid search with fixed δ={self.config.delta} ({self.config.lambda_grid_size} points)...")
-            self.lambda_star, self.delta_star, opt_info = self.lambda_optimizer.optimize(p_train, y_train)
+            self.lambda_star, self.delta_star, opt_info = self.lambda_optimizer.optimize(
+                p_train_success, y_train, p_failure=p_failure_for_opt
+            )
             if verbose:
                 print(f"      → λ* = {self.lambda_star:.4f}")
                 print(f"      → δ = {self.delta_star:.4f} (fixed)")
@@ -146,12 +155,17 @@ class ConformalPredictor:
         # Step 3: Estimate probabilities for calibration set
         if verbose:
             print(f"[3/4] Estimating probabilities for calibration set...")
-        p_cal, _, _ = self.prob_estimator.estimate(X_cal)
+        p_cal_success, p_cal_failure, _ = self.prob_estimator.estimate(X_cal)
 
         # Step 4: Calibrate q_hat
+        # Pass p_failure for two_sided decision rule (CartPole), None for one_sided (pendulum)
+        p_failure_for_cal = p_cal_failure if decision_rule == "two_sided" else None
+        
         if verbose:
             print(f"[4/4] Calibrating q_hat (α={self.config.alpha}, coverage={1-self.config.alpha:.0%})...")
-        self.q_hat = self.calibrator.calibrate(p_cal, y_cal, self.lambda_star, self.delta_star)
+        self.q_hat = self.calibrator.calibrate(
+            p_cal_success, y_cal, self.lambda_star, self.delta_star, p_failure_for_cal
+        )
         if verbose:
             print(f"      → q_hat = {self.q_hat:.4f}")
 
@@ -164,6 +178,7 @@ class ConformalPredictor:
             'n_cal': len(y_cal),
             'optimization_info': opt_info,
             'optimize_mode': optimize_mode,
+            'decision_rule': decision_rule,
         }
 
         if verbose:
@@ -176,7 +191,7 @@ class ConformalPredictor:
     def predict(
         self,
         X: Union[torch.Tensor, np.ndarray]
-    ) -> Tuple[List[Set[int]], np.ndarray]:
+    ) -> Tuple[List[Set[int]], np.ndarray, np.ndarray]:
         """
         Make predictions with coverage guarantees.
 
@@ -187,24 +202,28 @@ class ConformalPredictor:
             Tuple of:
                 prediction_sets: List of N prediction sets (each subset of {-1, 0, 1})
                 p_success: [N] array of estimated p(success|x)
+                p_failure: [N] array of estimated p(failure|x)
         """
         if self.lambda_star is None or self.q_hat is None:
             raise RuntimeError("ConformalPredictor must be fit before predicting")
 
         # Estimate probabilities
-        p_success, _, _ = self.prob_estimator.estimate(X)
+        p_success, p_failure, _ = self.prob_estimator.estimate(X)
+
+        # Pass p_failure for two_sided decision rule
+        p_failure_for_cal = p_failure if self.config.decision_rule == "two_sided" else None
 
         # Get prediction sets
         prediction_sets = self.calibrator.get_prediction_sets_batch(
-            p_success, self.lambda_star, self.q_hat, self.delta_star
+            p_success, self.lambda_star, self.q_hat, self.delta_star, p_failure_for_cal
         )
 
-        return prediction_sets, p_success
+        return prediction_sets, p_success, p_failure
 
     def select_uncertain(
         self,
         X: Union[torch.Tensor, np.ndarray]
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Select uncertain points that need simulation.
 
@@ -219,21 +238,25 @@ class ConformalPredictor:
                 uncertain_mask: [N] boolean array (True = uncertain)
                 uncertain_indices: Indices of uncertain points
                 p_success: [N] array of estimated p(success|x)
+                p_failure: [N] array of estimated p(failure|x)
         """
         if self.lambda_star is None or self.q_hat is None:
             raise RuntimeError("ConformalPredictor must be fit before selecting")
 
         # Estimate probabilities
-        p_success, _, _ = self.prob_estimator.estimate(X)
+        p_success, p_failure, _ = self.prob_estimator.estimate(X)
+
+        # Pass p_failure for two_sided decision rule
+        p_failure_for_cal = p_failure if self.config.decision_rule == "two_sided" else None
 
         # Get uncertainty mask
         uncertain_mask = self.calibrator.get_uncertain_mask(
-            p_success, self.lambda_star, self.q_hat, self.delta_star
+            p_success, self.lambda_star, self.q_hat, self.delta_star, p_failure_for_cal
         )
 
         uncertain_indices = np.where(uncertain_mask)[0]
 
-        return uncertain_mask, uncertain_indices, p_success
+        return uncertain_mask, uncertain_indices, p_success, p_failure
 
     def evaluate(
         self,
@@ -261,7 +284,7 @@ class ConformalPredictor:
             y_true = y_true.cpu().numpy()
 
         # Get predictions
-        prediction_sets, p_success = self.predict(X)
+        prediction_sets, p_success, p_failure = self.predict(X)
 
         n = len(y_true)
 
@@ -363,6 +386,7 @@ class ConformalPredictor:
                 'num_mc_samples': self.config.num_mc_samples,
                 'attractor_radius': self.config.attractor_radius,
                 'optimize_mode': self.config.optimize_mode,
+                'decision_rule': self.config.decision_rule,
             }
         }
 

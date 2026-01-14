@@ -27,6 +27,9 @@ class ConformalConfig:
                          to determine if endpoint is in attractor basin.
         optimize_mode: Either "lambda" (optimize λ with fixed δ) or
                       "delta" (optimize δ with fixed λ=0.5).
+        decision_rule: Either "one_sided" (uses only p_success) or
+                      "two_sided" (uses both p_success and p_failure).
+                      Use "two_sided" for systems with explicit failure conditions (e.g. CartPole).
         lambda_grid_size: Number of grid points for searching optimal λ*.
         delta_grid_size: Number of grid points for searching optimal δ*.
         delta_min: Minimum δ value for grid search (when optimize_mode="delta").
@@ -49,6 +52,9 @@ class ConformalConfig:
     # Optimization mode: "lambda" or "delta"
     optimize_mode: str = "lambda"
 
+    # Decision rule: "one_sided" (p_success only) or "two_sided" (p_success and p_failure)
+    decision_rule: str = "one_sided"
+
     # Lambda optimization (when optimize_mode="lambda")
     lambda_grid_size: int = 100
 
@@ -66,6 +72,7 @@ class ConformalConfig:
         assert self.mc_batch_size > 0, f"mc_batch_size must be positive, got {self.mc_batch_size}"
         assert self.attractor_radius > 0, f"attractor_radius must be positive, got {self.attractor_radius}"
         assert self.optimize_mode in ["lambda", "delta"], f"optimize_mode must be 'lambda' or 'delta', got {self.optimize_mode}"
+        assert self.decision_rule in ["one_sided", "two_sided"], f"decision_rule must be 'one_sided' or 'two_sided', got {self.decision_rule}"
         assert self.lambda_grid_size > 1, f"lambda_grid_size must be > 1, got {self.lambda_grid_size}"
         assert self.delta_grid_size > 1, f"delta_grid_size must be > 1, got {self.delta_grid_size}"
         assert 0 < self.delta_min < self.delta_max < 0.5, f"delta_min/max must be in (0, 0.5) with min < max"

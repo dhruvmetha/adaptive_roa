@@ -235,7 +235,7 @@ def plot_cartpole_probability_heatmap(
 
 def compute_metrics_at_threshold(success_rate: np.ndarray, y_all: np.ndarray,
                                   success_thresh: float, failure_thresh: float) -> Dict:
-    """Helper to compute metrics at given thresholds."""
+    """Helper to compute metrics at given thresholds (p_success only, old style)."""
     n_total = len(y_all)
     pred_labels = np.zeros(n_total)
     pred_labels[success_rate > success_thresh] = 1
@@ -276,6 +276,146 @@ def compute_metrics_at_threshold(success_rate: np.ndarray, y_all: np.ndarray,
     }
 
 
+def compute_metrics_notebook_style(p_success: np.ndarray, p_failure: np.ndarray, 
+                                   y_all: np.ndarray, threshold: float = 0.6) -> Dict:
+    """
+    Compute metrics using notebook-style evaluation (separate success/failure thresholds).
+    
+    Decision rule (like notebooks/cartpole_eval.ipynb):
+    - SUCCESS if p_success > threshold (e.g., 0.6)
+    - FAILURE if p_failure > threshold (e.g., 0.6)
+    - SEPARATRIX otherwise
+    
+    This properly handles CartPole's three-way classification where:
+    - p_success + p_failure + p_separatrix = 1
+    - A point can have low p_success without being failure (high p_separatrix)
+    
+    Args:
+        p_success: [N] array of P(MC label == 1)
+        p_failure: [N] array of P(MC label == -1)
+        y_all: [N] ground truth labels (-1=failure, 1=success)
+        threshold: Confidence threshold (default 0.6)
+        
+    Returns:
+        Dict with evaluation metrics
+    """
+    n_total = len(y_all)
+    
+    # Notebook-style classification: use BOTH p_success and p_failure
+    pred_labels = np.zeros(n_total)  # Default: separatrix/unknown
+    pred_labels[p_success > threshold] = 1   # Success if p_s > threshold
+    pred_labels[p_failure > threshold] = -1  # Failure if p_f > threshold
+    
+    # Handle edge case: if both p_success > threshold and p_failure > threshold
+    # This is a confusing/uncertain situation - treat as separatrix
+    both_high = (p_success > threshold) & (p_failure > threshold)
+    pred_labels[both_high] = 0  # Separatrix
+    
+    n_uncertain = np.sum(pred_labels == 0)
+    separatrix_pct = n_uncertain / n_total
+    
+    confident_mask = pred_labels != 0
+    n_confident = np.sum(confident_mask)
+    
+    y_pred_conf = pred_labels[confident_mask]
+    y_true_conf = y_all[confident_mask]
+    
+    tp = int(np.sum((y_pred_conf == 1) & (y_true_conf == 1)))
+    tn = int(np.sum((y_pred_conf == -1) & (y_true_conf == -1)))
+    fp = int(np.sum((y_pred_conf == 1) & (y_true_conf == -1)))
+    fn = int(np.sum((y_pred_conf == -1) & (y_true_conf == 1)))
+    
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+    accuracy = (tp + tn) / n_confident if n_confident > 0 else 0.0
+    
+    return {
+        'n_confident': int(n_confident),
+        'n_uncertain': int(n_uncertain),
+        'separatrix_pct': float(separatrix_pct),
+        'accuracy': float(accuracy),
+        'precision': float(precision),
+        'recall': float(recall),
+        'specificity': float(specificity),
+        'f1': float(f1),
+        'tp': tp, 'tn': tn, 'fp': fp, 'fn': fn,
+        'threshold': float(threshold),
+        'n_pred_success': int(np.sum(pred_labels == 1)),
+        'n_pred_failure': int(np.sum(pred_labels == -1)),
+        'n_pred_separatrix': int(n_uncertain),
+    }
+
+
+def compute_metrics_lambda_delta_cartpole(
+    p_success: np.ndarray,
+    p_failure: np.ndarray,
+    y_all: np.ndarray,
+    lambda_star: float,
+    delta: float,
+) -> Dict:
+    """
+    CartPole-specific λ/δ evaluation using BOTH p_success and p_failure.
+
+    Decision rule:
+      - SUCCESS if p_success > λ + δ
+      - FAILURE if (1 - p_failure) < λ - δ   (equivalently p_failure > 1 - (λ - δ))
+      - SEPARATRIX otherwise
+
+    This differs from the legacy p_success-only rule and avoids treating
+    low p_success (due to high separatrix probability) as failure.
+    """
+    n_total = len(y_all)
+
+    success_thresh = float(lambda_star + delta)
+    failure_thresh_one_minus_pf = float(lambda_star - delta)
+
+    pred_labels = np.zeros(n_total)  # Default: separatrix/unknown
+    pred_labels[p_success > success_thresh] = 1
+    pred_labels[(1.0 - p_failure) < failure_thresh_one_minus_pf] = -1
+
+    # If both conditions trigger, treat as separatrix/unknown (rare but possible numerically)
+    both = (p_success > success_thresh) & ((1.0 - p_failure) < failure_thresh_one_minus_pf)
+    pred_labels[both] = 0
+
+    n_uncertain = int(np.sum(pred_labels == 0))
+    separatrix_pct = n_uncertain / n_total
+
+    confident_mask = pred_labels != 0
+    n_confident = int(np.sum(confident_mask))
+
+    y_pred_conf = pred_labels[confident_mask]
+    y_true_conf = y_all[confident_mask]
+
+    tp = int(np.sum((y_pred_conf == 1) & (y_true_conf == 1)))
+    tn = int(np.sum((y_pred_conf == -1) & (y_true_conf == -1)))
+    fp = int(np.sum((y_pred_conf == 1) & (y_true_conf == -1)))
+    fn = int(np.sum((y_pred_conf == -1) & (y_true_conf == 1)))
+
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+    accuracy = (tp + tn) / n_confident if n_confident > 0 else 0.0
+
+    return {
+        'n_confident': int(n_confident),
+        'n_uncertain': int(n_uncertain),
+        'separatrix_pct': float(separatrix_pct),
+        'accuracy': float(accuracy),
+        'precision': float(precision),
+        'recall': float(recall),
+        'specificity': float(specificity),
+        'f1': float(f1),
+        'tp': tp, 'tn': tn, 'fp': fp, 'fn': fn,
+        'lambda_star': float(lambda_star),
+        'delta': float(delta),
+        'success_threshold': float(success_thresh),
+        'failure_threshold_one_minus_pfailure': float(failure_thresh_one_minus_pf),
+    }
+
+
 def evaluate_full_roa_fast(
     flow_matcher,
     system,
@@ -296,8 +436,8 @@ def evaluate_full_roa_fast(
     Processes 2048 points at a time with num_mc_samples forward passes.
 
     Saves per-point data and computes metrics for BOTH threshold schemes:
-    1. λ*±δ from conformal prediction
-    2. Fixed 0.4/0.6 thresholds
+    1. λ*±δ from conformal prediction (using p_success only)
+    2. Notebook-style: success if p_s > 0.6, failure if p_f > 0.6
 
     Args:
         flow_matcher: Trained flow matcher model
@@ -336,12 +476,13 @@ def evaluate_full_roa_fast(
         print(f"  Success (y=1): {np.sum(y_all == 1)}")
         print(f"  Failure (y=-1): {np.sum(y_all == -1)}")
         print(f"MC samples: {num_mc_samples}, batch_size: {batch_size}")
+        print(f"Attractor radius: {attractor_radius}")
 
     # Convert to tensor
     X_tensor = torch.from_numpy(X_all).float().to(device)
 
-    # Collect success counts for each point
-    is_success = np.zeros((n_total, num_mc_samples))
+    # Collect MC labels for each point (stores -1, 0, 1 for each sample)
+    mc_labels = np.zeros((n_total, num_mc_samples), dtype=np.int8)
 
     flow_matcher.eval()
     with torch.no_grad():
@@ -352,33 +493,42 @@ def evaluate_full_roa_fast(
             for sample_idx in range(num_mc_samples):
                 pred = flow_matcher.predict_endpoint(batch_inp)
                 attractor_labels = system.classify_attractor(pred, attractor_radius).cpu().numpy()
-                is_success[batch_start:batch_end, sample_idx] = attractor_labels
+                mc_labels[batch_start:batch_end, sample_idx] = attractor_labels
 
-    # Compute success rate per point (p_success = fraction of samples reaching success attractor)
-    success_rate = (is_success == 1).sum(axis=1) / num_mc_samples
+    # Compute probabilities for each class
+    p_success = (mc_labels == 1).sum(axis=1) / num_mc_samples   # P(label == 1)
+    p_failure = (mc_labels == -1).sum(axis=1) / num_mc_samples  # P(label == -1)
+    p_separatrix = (mc_labels == 0).sum(axis=1) / num_mc_samples  # P(label == 0)
+
+    if verbose:
+        print(f"\nMC probability statistics:")
+        print(f"  p_success:   mean={p_success.mean():.4f}, min={p_success.min():.4f}, max={p_success.max():.4f}")
+        print(f"  p_failure:   mean={p_failure.mean():.4f}, min={p_failure.min():.4f}, max={p_failure.max():.4f}")
+        print(f"  p_separatrix: mean={p_separatrix.mean():.4f}, min={p_separatrix.min():.4f}, max={p_separatrix.max():.4f}")
 
     # Compute metrics for BOTH threshold schemes
-    # 1. λ*±δ from conformal prediction
-    metrics_conformal = compute_metrics_at_threshold(
-        success_rate, y_all,
-        success_thresh=lambda_star + delta,
-        failure_thresh=lambda_star - delta
+    # 1. λ*±δ from conformal prediction (CartPole: uses BOTH p_success and p_failure)
+    metrics_conformal = compute_metrics_lambda_delta_cartpole(
+        p_success=p_success,
+        p_failure=p_failure,
+        y_all=y_all,
+        lambda_star=lambda_star,
+        delta=delta,
     )
 
-    # 2. Fixed 0.4/0.6 thresholds (classic approach)
-    metrics_fixed = compute_metrics_at_threshold(
-        success_rate, y_all,
-        success_thresh=0.6,
-        failure_thresh=0.4
+    # 2. Notebook-style: success if p_s > 0.6, failure if p_f > 0.6
+    metrics_notebook = compute_metrics_notebook_style(
+        p_success, p_failure, y_all,
+        threshold=0.6
     )
 
     if verbose:
         print(f"\n{'='*60}")
-        print("METRICS WITH λ*±δ THRESHOLDS (from conformal prediction)")
+        print("METRICS WITH λ*±δ THRESHOLDS (p_s AND p_f)")
         print(f"{'='*60}")
         print(f"λ*={lambda_star:.4f}, δ={delta:.4f}")
-        print(f"  Success if p > {lambda_star + delta:.4f}")
-        print(f"  Failure if p < {lambda_star - delta:.4f}")
+        print(f"  Success if p_success > {lambda_star + delta:.4f}")
+        print(f"  Failure if (1 - p_failure) < {lambda_star - delta:.4f}")
         print(f"Separatrix %:    {metrics_conformal['separatrix_pct']:.2%}")
         print(f"Confident:       {metrics_conformal['n_confident']} predictions")
         print(f"Accuracy:        {metrics_conformal['accuracy']:.2%}")
@@ -388,33 +538,36 @@ def evaluate_full_roa_fast(
         print(f"Specificity:     {metrics_conformal['specificity']:.2%}")
 
         print(f"\n{'='*60}")
-        print("METRICS WITH FIXED 0.4/0.6 THRESHOLDS")
+        print("METRICS WITH NOTEBOOK-STYLE THRESHOLDS (p_s AND p_f)")
         print(f"{'='*60}")
-        print(f"  Success if p > 0.6")
-        print(f"  Failure if p < 0.4")
-        print(f"Separatrix %:    {metrics_fixed['separatrix_pct']:.2%}")
-        print(f"Confident:       {metrics_fixed['n_confident']} predictions")
-        print(f"Accuracy:        {metrics_fixed['accuracy']:.2%}")
-        print(f"F1 Score:        {metrics_fixed['f1']:.2%}")
-        print(f"Precision:       {metrics_fixed['precision']:.2%}")
-        print(f"Recall:          {metrics_fixed['recall']:.2%}")
-        print(f"Specificity:     {metrics_fixed['specificity']:.2%}")
+        print(f"  Success if p_success > 0.6")
+        print(f"  Failure if p_failure > 0.6")
+        print(f"Separatrix %:    {metrics_notebook['separatrix_pct']:.2%}")
+        print(f"Confident:       {metrics_notebook['n_confident']} predictions")
+        print(f"  Pred success:  {metrics_notebook['n_pred_success']}")
+        print(f"  Pred failure:  {metrics_notebook['n_pred_failure']}")
+        print(f"Accuracy:        {metrics_notebook['accuracy']:.2%}")
+        print(f"F1 Score:        {metrics_notebook['f1']:.2%}")
+        print(f"Precision:       {metrics_notebook['precision']:.2%}")
+        print(f"Recall:          {metrics_notebook['recall']:.2%}")
+        print(f"Specificity:     {metrics_notebook['specificity']:.2%}")
 
     # Combine metrics
     metrics = {
         'n_total': n_total,
         'num_mc_samples': num_mc_samples,
+        'attractor_radius': float(attractor_radius),
         'lambda_star': float(lambda_star),
         'delta': float(delta),
         'conformal_thresholds': metrics_conformal,
-        'fixed_thresholds': metrics_fixed,
-        # Keep top-level metrics for backward compatibility (using conformal)
-        'separatrix_pct': metrics_conformal['separatrix_pct'],
-        'accuracy': metrics_conformal['accuracy'],
-        'precision': metrics_conformal['precision'],
-        'recall': metrics_conformal['recall'],
-        'specificity': metrics_conformal['specificity'],
-        'f1': metrics_conformal['f1'],
+        'notebook_thresholds': metrics_notebook,
+        # Keep top-level metrics for backward compatibility (using notebook-style now)
+        'separatrix_pct': metrics_notebook['separatrix_pct'],
+        'accuracy': metrics_notebook['accuracy'],
+        'precision': metrics_notebook['precision'],
+        'recall': metrics_notebook['recall'],
+        'specificity': metrics_notebook['specificity'],
+        'f1': metrics_notebook['f1'],
     }
 
     # Save to files if specified
@@ -425,25 +578,28 @@ def evaluate_full_roa_fast(
         if verbose:
             print(f"\nSaved metrics to: {output_file}")
 
-        # Save per-point data as NPZ for analysis
+        # Save per-point data as NPZ for analysis (now includes both p_s and p_f)
         npz_file = output_file.replace('.json', '_per_point.npz')
         np.savez(
             npz_file,
             start_states=X_all,           # [N, 4] - (x, θ, ẋ, θ̇)
-            probabilities=success_rate,   # [N] - p_success (probability of reaching success attractor)
+            p_success=p_success,          # [N] - P(MC label == 1)
+            p_failure=p_failure,          # [N] - P(MC label == -1)
+            p_separatrix=p_separatrix,    # [N] - P(MC label == 0)
             true_labels=y_all,            # [N] - ground truth labels (1=success, -1=failure)
             lambda_star=lambda_star,
-            delta=delta
+            delta=delta,
+            attractor_radius=attractor_radius
         )
         if verbose:
             print(f"Saved per-point data to: {npz_file}")
-            print(f"  Arrays: start_states [{X_all.shape}], probabilities [{success_rate.shape}], true_labels [{y_all.shape}]")
+            print(f"  Arrays: start_states [{X_all.shape}], p_success [{p_success.shape}], p_failure [{p_failure.shape}], true_labels [{y_all.shape}]")
 
         # Generate ROA phase space projection plots
         phase_space_file = output_file.replace('.json', '_roa_projections.png')
         plot_cartpole_roa_projections(
             start_states=X_all,
-            success_rate=success_rate,
+            success_rate=p_success,
             true_labels=y_all,
             lambda_star=lambda_star,
             delta=delta,
@@ -455,7 +611,7 @@ def evaluate_full_roa_fast(
         heatmap_file = output_file.replace('.json', '_roa_heatmap.png')
         plot_cartpole_probability_heatmap(
             start_states=X_all,
-            success_rate=success_rate,
+            success_rate=p_success,
             lambda_star=lambda_star,
             delta=delta,
             output_file=heatmap_file,
@@ -644,6 +800,8 @@ def main(cfg: DictConfig):
         attractor_radius=cfg.conformal.get('attractor_radius', 0.2),
         # Optimization mode: "lambda" or "delta"
         optimize_mode=cfg.conformal.get('optimize_mode', 'lambda'),
+        # Decision rule: "one_sided" (p_s only) or "two_sided" (p_s and p_f)
+        decision_rule=cfg.conformal.get('decision_rule', 'two_sided'),  # Default two_sided for CartPole
         lambda_grid_size=cfg.conformal.get('lambda_grid_size', 100),
         delta_grid_size=cfg.conformal.get('delta_grid_size', 100),
         delta_min=cfg.conformal.get('delta_min', 0.01),
@@ -777,11 +935,13 @@ def main(cfg: DictConfig):
                 max_samples=cfg.get('max_samples_per_epoch', 50000),
             )
 
-            # Sample epoch
+            # Sample epoch (use same decision_rule as conformal predictor)
+            decision_rule = cfg.conformal.get('decision_rule', 'two_sided')
             sample_result = balanced_sampler.sample_epoch(
                 prob_estimator=prob_estimator,
                 lambda_star=lambda_star,
                 delta_star=delta_star,
+                decision_rule=decision_rule,
                 verbose=True
             )
 
@@ -815,7 +975,7 @@ def main(cfg: DictConfig):
                 break
 
             # Split into D1 (calibration) and D2 (selection pool)
-            n_d1 = int(len(candidate_indices) * d1_ratio)
+            n_d1 = int(len(candidate_indices) * (1 - d2_ratio))
             d1_indices = candidate_indices[:n_d1]
             d2_indices = candidate_indices[n_d1:]
             d2_states = candidate_states[n_d1:]
@@ -829,7 +989,7 @@ def main(cfg: DictConfig):
             # Evaluate D2 for uncertainty
             if len(d2_indices) > 0:
                 print(f"\n[7] Evaluating D2 for uncertain points...")
-                uncertain_mask, uncertain_idx, p_success = conformal_predictor.select_uncertain(d2_states)
+                uncertain_mask, uncertain_idx, p_success, p_failure = conformal_predictor.select_uncertain(d2_states)
 
                 n_uncertain = np.sum(uncertain_mask)
                 n_confident = len(d2_indices) - n_uncertain
@@ -877,9 +1037,9 @@ def main(cfg: DictConfig):
         print(f"  λ* = {epoch_result['lambda_star']:.4f}, δ* = {epoch_result['delta_star']:.4f}, q_hat = {epoch_result['q_hat']:.4f}")
         print(f"  --- Full ROA (all {full_roa_metrics['n_total']} trajectories) ---")
         conf_m = full_roa_metrics['conformal_thresholds']
-        fixed_m = full_roa_metrics['fixed_thresholds']
+        notebook_m = full_roa_metrics['notebook_thresholds']
         print(f"  [λ*±δ] Sep%={conf_m['separatrix_pct']:.1%}, F1={conf_m['f1']:.2%}, Acc={conf_m['accuracy']:.2%}")
-        print(f"  [0.4/0.6] Sep%={fixed_m['separatrix_pct']:.1%}, F1={fixed_m['f1']:.2%}, Acc={fixed_m['accuracy']:.2%}")
+        print(f"  [Notebook p_s/p_f>0.6] Sep%={notebook_m['separatrix_pct']:.1%}, F1={notebook_m['f1']:.2%}, Acc={notebook_m['accuracy']:.2%}")
 
         # Save epoch results
         with open(epoch_output_dir / "results.json", 'w') as f:
@@ -930,10 +1090,10 @@ def main(cfg: DictConfig):
         print(f"  Separatrix %:  {first['conformal_thresholds']['separatrix_pct']:.2%} → {last['conformal_thresholds']['separatrix_pct']:.2%}")
         print(f"  F1 Score:      {first['conformal_thresholds']['f1']:.2%} → {last['conformal_thresholds']['f1']:.2%}")
         print(f"  Accuracy:      {first['conformal_thresholds']['accuracy']:.2%} → {last['conformal_thresholds']['accuracy']:.2%}")
-        print(f"\n  [Fixed 0.4/0.6 Thresholds]")
-        print(f"  Separatrix %:  {first['fixed_thresholds']['separatrix_pct']:.2%} → {last['fixed_thresholds']['separatrix_pct']:.2%}")
-        print(f"  F1 Score:      {first['fixed_thresholds']['f1']:.2%} → {last['fixed_thresholds']['f1']:.2%}")
-        print(f"  Accuracy:      {first['fixed_thresholds']['accuracy']:.2%} → {last['fixed_thresholds']['accuracy']:.2%}")
+        print(f"\n  [Notebook-Style Thresholds (p_s/p_f > 0.6)]")
+        print(f"  Separatrix %:  {first['notebook_thresholds']['separatrix_pct']:.2%} → {last['notebook_thresholds']['separatrix_pct']:.2%}")
+        print(f"  F1 Score:      {first['notebook_thresholds']['f1']:.2%} → {last['notebook_thresholds']['f1']:.2%}")
+        print(f"  Accuracy:      {first['notebook_thresholds']['accuracy']:.2%} → {last['notebook_thresholds']['accuracy']:.2%}")
         print(f"\n  λ*:            {epoch_results[0]['lambda_star']:.4f} → {epoch_results[-1]['lambda_star']:.4f}")
         print(f"  δ*:            {epoch_results[0]['delta_star']:.4f} → {epoch_results[-1]['delta_star']:.4f}")
         print(f"  q_hat:         {epoch_results[0]['q_hat']:.4f} → {epoch_results[-1]['q_hat']:.4f}")

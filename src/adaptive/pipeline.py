@@ -269,7 +269,7 @@ class AdaptiveSamplingPipeline:
         if verbose:
             print(f"\n[5] Evaluating D2 for uncertain points...")
 
-        uncertain_mask, uncertain_indices, p_success_D2 = self.conformal_predictor.select_uncertain(D2)
+        uncertain_mask, uncertain_indices, p_success_D2, _ = self.conformal_predictor.select_uncertain(D2)
         n_uncertain = np.sum(uncertain_mask)
         n_confident = len(D2) - n_uncertain
 

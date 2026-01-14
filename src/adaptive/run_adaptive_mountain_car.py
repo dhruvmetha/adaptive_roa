@@ -482,7 +482,7 @@ def train_flow_matcher(
         batch_size=cfg.get('batch_size', 64),
         val_batch_size=cfg.get('val_batch_size', 2048),
         num_workers=cfg.get('num_workers', 4),
-        bounds_file=cfg.system.get('bounds_file', '/common/users/rm1838/adaptive_cartpole/data/mountain_car_data_bounds.pkl'),
+        bounds_file=cfg.system.get('bounds_file', '/common/users/dm1487/arcmg_datasets/mountain_car/mountain_car_data_bounds.pkl'),
     )
 
     # Instantiate model
@@ -811,7 +811,7 @@ def main(cfg: DictConfig):
             # Evaluate D2 for uncertainty
             if len(d2_indices) > 0:
                 print(f"\n[7] Evaluating D2 for uncertain points...")
-                uncertain_mask, uncertain_idx, p_success = conformal_predictor.select_uncertain(d2_states)
+                uncertain_mask, uncertain_idx, p_success, _ = conformal_predictor.select_uncertain(d2_states)
 
                 n_uncertain = np.sum(uncertain_mask)
                 n_confident = len(d2_indices) - n_uncertain

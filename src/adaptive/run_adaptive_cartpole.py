@@ -467,10 +467,14 @@ def evaluate_full_roa_fast(
     """
     from tqdm import tqdm
 
-    # Get ALL start states and labels from roa_labels.txt
-    all_indices = list(range(data_source.n_trajectories))
-    X_all = data_source.get_start_states(all_indices)
-    y_all = data_source.get_labels(all_indices)
+    # Get ALL start states and labels from roa_labels.txt (full evaluation dataset)
+    if data_source.has_roa_labels():
+        X_all, y_all = data_source.get_roa_eval_data()
+    else:
+        # Fallback to shuffled data if no roa_labels (smaller eval set)
+        all_indices = list(range(data_source.n_trajectories))
+        X_all = data_source.get_start_states(all_indices)
+        y_all = data_source.get_labels(all_indices)
 
     n_total = len(y_all)
 
@@ -778,7 +782,10 @@ def main(cfg: DictConfig):
     data_source_config = TrajectoryDataSourceConfig(
         trajectories_dir=cfg.data_source.trajectories_dir,
         shuffled_indices_file=cfg.data_source.shuffled_indices_file,
-        roa_labels_file=cfg.data_source.roa_labels_file,
+        # Use shuffled_labels (aligned with shuffled_indices) for training
+        shuffled_labels_file=cfg.data_source.get('shuffled_labels_file', None),
+        # Use roa_labels for full ROA evaluation only
+        roa_labels_file=cfg.data_source.get('roa_labels_file', None),
     )
     data_source = TrajectoryDataSource(data_source_config)
 

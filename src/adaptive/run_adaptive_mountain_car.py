@@ -607,7 +607,10 @@ def main(cfg: DictConfig):
     data_source_config = TrajectoryDataSourceConfig(
         trajectories_dir=cfg.data_source.trajectories_dir,
         shuffled_indices_file=cfg.data_source.shuffled_indices_file,
-        roa_labels_file=cfg.data_source.roa_labels_file,
+        # Use shuffled_labels (aligned with shuffled_indices) for training
+        shuffled_labels_file=cfg.data_source.get('shuffled_labels_file', None),
+        # Use roa_labels for full ROA evaluation only
+        roa_labels_file=cfg.data_source.get('roa_labels_file', None),
     )
     data_source = TrajectoryDataSource(data_source_config)
 

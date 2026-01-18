@@ -26,9 +26,15 @@ device: cuda:0
 # =====================================================================
 # Data Source Configuration
 # =====================================================================
+# Shuffle variant (0-9) for cross-validation experiments
+shuffle_variant: 0
+
 data_source:
   trajectories_dir: ${shared_data_base}/pendulum_lqr_50k/trajectories
-  shuffled_indices_file: ${shared_data_base}/pendulum_lqr_50k/shuffled_indices.txt
+  # Shuffled indices and labels (aligned, for training)
+  shuffled_indices_file: ${shared_data_base}/pendulum_lqr_50k/train_test_splits/shuffled_indices_${shuffle_variant}.txt
+  shuffled_labels_file: ${shared_data_base}/pendulum_lqr_50k/train_test_splits/shuffled_labels_${shuffle_variant}.txt
+  # ROA labels (full dataset, for evaluation only)
   roa_labels_file: ${shared_data_base}/pendulum_lqr_50k/roa_labels.txt
 
 # Dataset splits (val/test are subsets of training with overlap)

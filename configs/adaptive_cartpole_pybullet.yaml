@@ -20,9 +20,14 @@ device: cuda:0
 # =====================================================================
 # Data Source Configuration
 # =====================================================================
+# Training data: shuffled_indices + shuffled_labels (20k, supports multiple seeds)
+# Full ROA evaluation: roa_labels.txt (all 116k trajectories)
 data_source:
   trajectories_dir: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/trajectories
-  shuffled_indices_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/shuffled_indices.txt
+  # Training subset (seed 0 - change X for different seeds)
+  shuffled_indices_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/train_test_splits/shuffled_indices_0.txt
+  shuffled_labels_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/train_test_splits/shuffled_labels_0.txt
+  # Full ROA evaluation (all trajectories)
   roa_labels_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/roa_labels.txt
 
 # Dataset splits (val/test are subsets of training with overlap)

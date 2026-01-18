@@ -419,7 +419,7 @@ def compute_metrics_lambda_delta_cartpole(
 def evaluate_full_roa_fast(
     flow_matcher,
     system,
-    data_source: TrajectoryDataSource,
+    roa_labels_file: str,
     num_mc_samples: int = 20,
     batch_size: int = 2048,
     lambda_star: float = None,
@@ -442,7 +442,7 @@ def evaluate_full_roa_fast(
     Args:
         flow_matcher: Trained flow matcher model
         system: System for classify_attractor
-        data_source: TrajectoryDataSource with all labels
+        roa_labels_file: Path to roa_labels.txt with all trajectories (format: x,θ,ẋ,θ̇,label)
         num_mc_samples: Number of MC samples per point
         batch_size: Batch size for GPU inference
         lambda_star: Optimized λ* from conformal prediction (if None, use 0.5)
@@ -457,10 +457,15 @@ def evaluate_full_roa_fast(
     """
     from tqdm import tqdm
 
-    # Get ALL start states and labels from roa_labels.txt
-    all_indices = list(range(data_source.n_trajectories))
-    X_all = data_source.get_start_states(all_indices)
-    y_all = data_source.get_labels(all_indices)
+    # Load ALL start states and labels directly from roa_labels.txt
+    # Format: x, θ, ẋ, θ̇, label (comma-separated, one trajectory per line)
+    data = np.loadtxt(roa_labels_file, delimiter=',')
+    X_all = data[:, :-1].astype(np.float32)  # First 4 columns are start state
+    raw_labels = data[:, -1].astype(int)      # Last column is label (0=fail, 1=success)
+
+    # Map external labels (0, 1) to internal format (-1, 1)
+    label_mapping = {0: -1, 1: 1}
+    y_all = np.array([label_mapping.get(l, 0) for l in raw_labels], dtype=np.int64)
 
     n_total = len(y_all)
 
@@ -765,10 +770,12 @@ def main(cfg: DictConfig):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Initialize trajectory data source
+    # Uses shuffled_labels_file for training labels (20k, matches shuffled_indices)
+    # roa_labels_file is used separately for full ROA evaluation (116k points)
     data_source_config = TrajectoryDataSourceConfig(
         trajectories_dir=cfg.data_source.trajectories_dir,
         shuffled_indices_file=cfg.data_source.shuffled_indices_file,
-        roa_labels_file=cfg.data_source.roa_labels_file,
+        shuffled_labels_file=cfg.data_source.shuffled_labels_file,
     )
     data_source = TrajectoryDataSource(data_source_config)
 
@@ -900,7 +907,7 @@ def main(cfg: DictConfig):
         full_roa_metrics = evaluate_full_roa_fast(
             flow_matcher=flow_matcher,
             system=system,
-            data_source=data_source,
+            roa_labels_file=cfg.data_source.roa_labels_file,
             num_mc_samples=num_mc_samples_eval,
             batch_size=cfg.get('val_batch_size', 2048),
             lambda_star=lambda_star,

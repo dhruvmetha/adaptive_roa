@@ -6,7 +6,7 @@
 # Used for three-way classification: SUCCESS / FAILURE / UNKNOWN
 # =====================================================================
 
-_target_: src.conformal.config.ConformalConfig
+_target_: adaptive_roa.conformal.config.ConformalConfig
 
 # Decision boundary parameters
 delta: 0.05                # Unknown region half-width [λ-δ, λ+δ] (used when optimize_mode="lambda")

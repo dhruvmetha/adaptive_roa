@@ -4,7 +4,7 @@
 
 # User-specific paths (loaded from .env file via resolvers)
 net_id: ${net_id:}
-user_base: /common/users/${net_id}
+user_base: ${exp_dir:}
 arcmg_datasets: ${user_base}/arcmg_datasets
 
 defaults:
@@ -20,12 +20,12 @@ num_workers: 4
 
 # Flow Matcher: Facebook FM version with automatic geodesics
 flow_matcher:
-  _target_: src.flow_matching.humanoid.latent_conditional.flow_matcher.HumanoidLatentConditionalFlowMatcher
+  _target_: adaptive_roa.flow_matching.humanoid.latent_conditional.flow_matcher.HumanoidLatentConditionalFlowMatcher
   # Note: system, model, optimizer, scheduler, config, latent_dim are passed by training script
 
 # Model: Latent Conditional UNet for Humanoid
 model:
-  _target_: src.model.universal_unet.UniversalUNet
+  _target_: adaptive_roa.model.universal_unet.UniversalUNet
   input_dim: 142               # embedded(67) + condition(67) + latent(8)
   output_dim: 67               # Velocity in tangent space (67-dim)
   time_embed_dim: 128          # Time embedding dimension
@@ -35,7 +35,7 @@ model:
 
 # Data: Humanoid endpoint dataset
 data:
-  _target_: src.data.humanoid_endpoint_data.HumanoidEndpointDataModule
+  _target_: adaptive_roa.data.humanoid_endpoint_data.HumanoidEndpointDataModule
   data_file: ${arcmg_datasets}/humanoid_get_up/incremental_endpoint_dataset/train.txt
   validation_file: ${arcmg_datasets}/humanoid_get_up/incremental_endpoint_dataset/validation.txt
   test_file: ${arcmg_datasets}/humanoid_get_up/incremental_endpoint_dataset/test.txt

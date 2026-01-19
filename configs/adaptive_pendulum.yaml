@@ -13,7 +13,7 @@ seed: 42
 
 # User-specific paths (loaded from .env file via resolvers)
 net_id: ${net_id:}
-user_base: /common/users/${net_id}
+user_base: ${exp_dir:}
 project_base: ${user_base}/adaptive_cartpole
 shared_data_base: /common/users/shared/pracsys/genMoPlan/data_trajectories
 
@@ -126,11 +126,11 @@ flow_matching:
 
 # Flow Matcher
 flow_matcher:
-  _target_: src.flow_matching.pendulum.latent_conditional.flow_matcher.PendulumLatentConditionalFlowMatcher
+  _target_: adaptive_roa.flow_matching.pendulum.latent_conditional.flow_matcher.PendulumLatentConditionalFlowMatcher
 
 # Model: Pendulum UNet (S^1 x R manifold)
 model:
-  _target_: src.model.pendulum_unet.PendulumUNet
+  _target_: adaptive_roa.model.pendulum_unet.PendulumUNet
   embedded_dim: 3              # (sin theta, cos theta, theta_dot_norm)
   latent_dim: ${latent_dim}
   condition_dim: 3             # Embedded start state
@@ -157,7 +157,7 @@ scheduler:
 
 # System (Pendulum)
 system:
-  _target_: src.systems.pendulum.PendulumSystem
+  _target_: adaptive_roa.systems.pendulum.PendulumSystem
 
 # Hydra
 hydra:

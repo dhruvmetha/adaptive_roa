@@ -9,10 +9,10 @@ controllable multi-modality in conditional flow matching models.
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from src.flow_matching.conditional.flow_matcher import ConditionalFlowMatcher
-from src.flow_matching.conditional.inference import ConditionalFlowMatchingInference
-from src.model.conditional_unet1d import ConditionalUNet1D
-from src.flow_matching.base.config import FlowMatchingConfig
+from adaptive_roa.flow_matching.conditional.flow_matcher import ConditionalFlowMatcher
+from adaptive_roa.flow_matching.conditional.inference import ConditionalFlowMatchingInference
+from adaptive_roa.model.conditional_unet1d import ConditionalUNet1D
+from adaptive_roa.flow_matching.base.config import FlowMatchingConfig
 
 def create_latent_conditional_model(latent_dim=8):
     """Create a conditional flow matching model with latent support"""

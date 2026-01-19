@@ -1,4 +1,4 @@
-_target_: src.model.cartpole_latent_conditional_unet1d.CartPoleLatentConditionalUNet1D
+_target_: adaptive_roa.model.cartpole_latent_conditional_unet1d.CartPoleLatentConditionalUNet1D
 
 # CartPole-specific dimensions
 embedded_dim: 5       # [x_norm, x_dot_norm, sin_theta, cos_theta, theta_dot_norm]  

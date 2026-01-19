@@ -15,10 +15,10 @@ import math
 from flow_matching.path import GeodesicProbPath
 from flow_matching.path.scheduler import CondOTScheduler
 
-from src.utils.fb_manifolds import CartPoleManifold
-from src.flow_matching.cartpole_latent_conditional.flow_matcher_fb import CartPoleLatentConditionalFlowMatcher
-from src.systems.cartpole_lcfm import CartPoleSystemLCFM
-from src.model.cartpole_latent_conditional_unet1d import CartPoleLatentConditionalUNet1D
+from adaptive_roa.utils.fb_manifolds import CartPoleManifold
+from adaptive_roa.flow_matching.cartpole_latent_conditional.flow_matcher_fb import CartPoleLatentConditionalFlowMatcher
+from adaptive_roa.systems.cartpole_lcfm import CartPoleSystemLCFM
+from adaptive_roa.model.cartpole_latent_conditional_unet1d import CartPoleLatentConditionalUNet1D
 
 
 def test_cartpole_manifold():

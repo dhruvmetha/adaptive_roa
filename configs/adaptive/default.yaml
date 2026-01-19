@@ -5,7 +5,7 @@
 # Parameters for the adaptive sampling loop
 # =====================================================================
 
-_target_: src.adaptive.pipeline.AdaptivePipelineConfig
+_target_: adaptive_roa.adaptive.pipeline.AdaptivePipelineConfig
 
 # Sampling parameters
 n_samples_per_epoch: 50     # New states to sample each epoch

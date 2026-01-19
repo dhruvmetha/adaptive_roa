@@ -6,7 +6,7 @@ seed: 42
 
 # System configuration
 system:
-  module: src.flow_matching.pendulum_cartesian.latent_conditional.flow_matcher
+  module: adaptive_roa.flow_matching.pendulum_cartesian.latent_conditional.flow_matcher
   class: PendulumCartesianLatentConditionalFlowMatcher
 
 # Checkpoint to evaluate

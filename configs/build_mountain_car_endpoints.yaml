@@ -1,6 +1,6 @@
 # User-specific paths (loaded from .env file via resolvers)
 net_id: ${net_id:}
-user_base: /common/users/${net_id}
+user_base: ${exp_dir:}
 arcmg_datasets: ${user_base}/arcmg_datasets
 
 # =====================================================================
@@ -10,17 +10,17 @@ arcmg_datasets: ${user_base}/arcmg_datasets
 #
 # Usage:
 #   # Train set (all states in trajectories → final state)
-#   python src/build_shuffled_endpoint_dataset.py \
+#   python adaptive_roa/build_shuffled_endpoint_dataset.py \
 #       --config-name=build_mountain_car_endpoints \
 #       increment=train start=0 end=19200 type=train
 #
 #   # Validation set
-#   python src/build_shuffled_endpoint_dataset.py \
+#   python adaptive_roa/build_shuffled_endpoint_dataset.py \
 #       --config-name=build_mountain_car_endpoints \
 #       increment=val start=19200 end=21600 type=val
 #
 #   # Test set (only first state → final state per trajectory)
-#   python src/build_shuffled_endpoint_dataset.py \
+#   python adaptive_roa/build_shuffled_endpoint_dataset.py \
 #       --config-name=build_mountain_car_endpoints \
 #       increment=test start=21600 end=24000 type=test
 # =====================================================================

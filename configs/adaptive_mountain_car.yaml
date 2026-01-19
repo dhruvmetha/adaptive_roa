@@ -13,7 +13,7 @@ seed: 42
 
 # User-specific paths (loaded from .env file via resolvers)
 net_id: ${net_id:}
-user_base: /common/users/${net_id}
+user_base: ${exp_dir:}
 project_base: ${user_base}/adaptive_cartpole
 shared_data_base: /common/users/shared/pracsys/genMoPlan/data_trajectories
 
@@ -127,11 +127,11 @@ flow_matching:
 
 # Flow Matcher
 flow_matcher:
-  _target_: src.flow_matching.mountain_car.latent_conditional.flow_matcher.MountainCarLatentConditionalFlowMatcher
+  _target_: adaptive_roa.flow_matching.mountain_car.latent_conditional.flow_matcher.MountainCarLatentConditionalFlowMatcher
 
 # Model: Mountain Car UNet (R^2 manifold - pure Euclidean)
 model:
-  _target_: src.model.mountain_car_unet.MountainCarUNet
+  _target_: adaptive_roa.model.mountain_car_unet.MountainCarUNet
   embedded_dim: 2              # (position_norm, velocity_norm) - pure Euclidean
   latent_dim: ${latent_dim}
   condition_dim: 2             # Embedded start state
@@ -158,8 +158,8 @@ scheduler:
 
 # System (Mountain Car)
 system:
-  _target_: src.systems.mountain_car.MountainCarSystem
-  bounds_file: ${project_base}/data/mountain_car_data_bounds.pkl
+  _target_: adaptive_roa.systems.mountain_car.MountainCarSystem
+  dataset_dir: /common/users/shared/pracsys/genMoPlan/data_trajectories/mountain_car_power_0p001
 
 # Hydra
 hydra:

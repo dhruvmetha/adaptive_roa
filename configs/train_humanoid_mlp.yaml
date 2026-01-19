@@ -2,7 +2,7 @@
 
 # User-specific paths (loaded from .env file via resolvers)
 net_id: ${net_id:}
-user_base: /common/users/${net_id}
+user_base: ${exp_dir:}
 arcmg_datasets: ${user_base}/arcmg_datasets
 
 defaults:

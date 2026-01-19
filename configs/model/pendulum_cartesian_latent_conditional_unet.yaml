@@ -1,5 +1,5 @@
 # Pendulum Cartesian UNet Configuration for Latent Conditional Flow Matching
-_target_: src.model.pendulum_cartesian_unet.PendulumCartesianUNet
+_target_: adaptive_roa.model.pendulum_cartesian_unet.PendulumCartesianUNet
 
 # Dimensions
 embedded_dim: 4        # Pendulum Cartesian state (x, y, vx, vy) - no embedding transformation

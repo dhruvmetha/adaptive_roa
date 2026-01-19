@@ -10,8 +10,7 @@
 # Goal: Navigate car to goal region at x = π/6 ≈ 0.524
 # =====================================================================
 
-_target_: src.systems.mountain_car.MountainCarSystem
+_target_: adaptive_roa.systems.mountain_car.MountainCarSystem
 
-# Data bounds configuration
-# Uses project_base from parent config (set via net_id resolver)
-bounds_file: ${project_base}/data/mountain_car_data_bounds.pkl
+# Dataset directory containing dataset_description.json with bounds
+dataset_dir: /common/users/shared/pracsys/genMoPlan/data_trajectories/mountain_car_power_0p001

@@ -13,3 +13,6 @@ attractor_analysis*
 .env.local
 .env.*
 !.env.example
+
+**/env/
+**/*.egg-info/

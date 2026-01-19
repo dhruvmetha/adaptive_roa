@@ -1,5 +1,5 @@
 # Configuration for Humanoid Latent Conditional UNet model
-_target_: src.model.universal_unet.UniversalUNet
+_target_: adaptive_roa.model.universal_unet.UniversalUNet
 
 # Humanoid-specific dimensions
 # Manifold: ℝ³⁴ × S² × ℝ³⁰ (67-dimensional state)

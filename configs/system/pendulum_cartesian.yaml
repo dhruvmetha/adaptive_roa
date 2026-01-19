@@ -1,4 +1,5 @@
 # Pendulum Cartesian System Configuration
-_target_: src.systems.pendulum_cartesian.PendulumCartesianSystem
-bounds_file: ${arcmg_datasets}/pendulum_cartesian/pendulum_cartesian_data_bounds.pkl
-use_dynamic_bounds: true
+_target_: adaptive_roa.systems.pendulum_cartesian.PendulumCartesianSystem
+
+# Dataset directory containing dataset_description.json with bounds
+dataset_dir: /common/users/shared/pracsys/genMoPlan/data_trajectories/pendulum_cartesian_50k

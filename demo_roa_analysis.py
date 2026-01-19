@@ -26,11 +26,11 @@ import torch
 import argparse
 from pathlib import Path
 
-from src.flow_matching.latent_conditional import LatentConditionalFlowMatcher, LatentConditionalFlowMatchingInference
-from src.systems.pendulum_lcfm import PendulumSystemLCFM
-from src.systems.pendulum_config import PendulumConfig
-from src.model.latent_conditional_unet1d import LatentConditionalUNet1D
-from src.visualization.attractor_analysis import AttractorBasinAnalyzer
+from adaptive_roa.flow_matching.latent_conditional import LatentConditionalFlowMatcher, LatentConditionalFlowMatchingInference
+from adaptive_roa.systems.pendulum_lcfm import PendulumSystemLCFM
+from adaptive_roa.systems.pendulum_config import PendulumConfig
+from adaptive_roa.model.latent_conditional_unet1d import LatentConditionalUNet1D
+from adaptive_roa.visualization.attractor_analysis import AttractorBasinAnalyzer
 
 
 def load_trained_model(checkpoint_path: str, device: str = "cuda"):

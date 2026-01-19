@@ -11,12 +11,12 @@ This script tests:
 """
 import torch
 
-from src.utils.fb_manifolds import PendulumManifold
+from adaptive_roa.utils.fb_manifolds import PendulumManifold
 from flow_matching.path import GeodesicProbPath
 from flow_matching.path.scheduler import CondOTScheduler
-from src.flow_matching.latent_conditional.flow_matcher_fb import LatentConditionalFlowMatcher
-from src.model.latent_conditional_unet1d import LatentConditionalUNet1D
-from src.systems.pendulum_lcfm import PendulumSystemLCFM
+from adaptive_roa.flow_matching.latent_conditional.flow_matcher_fb import LatentConditionalFlowMatcher
+from adaptive_roa.model.latent_conditional_unet1d import LatentConditionalUNet1D
+from adaptive_roa.systems.pendulum_lcfm import PendulumSystemLCFM
 import math
 
 

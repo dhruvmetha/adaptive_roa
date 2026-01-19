@@ -157,7 +157,7 @@ python src/flow_matching/evaluate_roa.py \
 ### Setup
 ```bash
 # Activate the required conda environment
-conda activate /common/users/rm1838/envs/arcmg
+mamba activate /common/home/st1122/Projects/adaptive_roa/env
 
 # Install the package in development mode
 pip install -e .
@@ -193,8 +193,8 @@ python src/flow_matching/evaluate_roa.py \
 ### Flow Matching Inference Usage
 ```python
 # Load trained models
-from src.flow_matching.pendulum.latent_conditional.flow_matcher import PendulumLatentConditionalFlowMatcher
-from src.flow_matching.cartpole.latent_conditional.flow_matcher import CartPoleLatentConditionalFlowMatcher
+from adaptive_roa.flow_matching.pendulum.latent_conditional.flow_matcher import PendulumLatentConditionalFlowMatcher
+from adaptive_roa.flow_matching.cartpole.latent_conditional.flow_matcher import CartPoleLatentConditionalFlowMatcher
 import torch
 
 # Pendulum (Latent Conditional)
@@ -222,8 +222,8 @@ endpoints_batch = cartpole_model.predict_endpoints_batch(start_states_cartpole, 
 ### Attractor Basin Analysis Usage
 ```python
 # Works with latent-conditional flow matching outputs
-from src.visualization.attractor_analysis import AttractorBasinAnalyzer
-from src.systems.pendulum_config import PendulumConfig
+from adaptive_roa.visualization.attractor_analysis import AttractorBasinAnalyzer
+from adaptive_roa.systems.pendulum_config import PendulumConfig
 
 # Initialize analyzer
 config = PendulumConfig()
@@ -242,8 +242,8 @@ analyzer.save_analysis_results("output_dir", results)
 
 ### Conformal Prediction Usage
 ```python
-from src.conformal import ConformalConfig, ConformalPredictor
-from src.systems.cartpole import CartPoleSystem
+from adaptive_roa.conformal import ConformalConfig, ConformalPredictor
+from adaptive_roa.systems.cartpole import CartPoleSystem
 
 # Setup
 flow_matcher = YourFlowMatcher.load_from_checkpoint("path/to/checkpoint")
@@ -263,10 +263,10 @@ uncertain_mask, indices, probs = predictor.select_uncertain(X_candidates)
 
 ### Adaptive Sampling Pipeline Usage
 ```python
-from src.conformal import ConformalConfig
-from src.adaptive import AdaptiveSamplingPipeline, AdaptivePipelineConfig
-from src.adaptive.simulator import PoolSimulator
-from src.systems.cartpole import CartPoleSystem
+from adaptive_roa.conformal import ConformalConfig
+from adaptive_roa.adaptive import AdaptiveSamplingPipeline, AdaptivePipelineConfig
+from adaptive_roa.adaptive.simulator import PoolSimulator
+from adaptive_roa.systems.cartpole import CartPoleSystem
 
 # Setup
 system = CartPoleSystem()

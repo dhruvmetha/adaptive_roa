@@ -11,7 +11,7 @@
 # Task: Get-up (humanoid standing from prone/supine position)
 # =====================================================================
 
-_target_: src.systems.humanoid.HumanoidSystem
+_target_: adaptive_roa.systems.humanoid.HumanoidSystem
 
 # Data bounds configuration (optional)
 bounds_file: null  # Set to path if you have precomputed bounds

@@ -6,12 +6,12 @@ CartPole evaluation script for two models:
 import numpy as np
 import torch
 from tqdm import tqdm
-from src.systems.cartpole import CartPoleSystem
-from src.flow_matching.cartpole.latent_conditional.flow_matcher import CartPoleLatentConditionalFlowMatcher
+from adaptive_roa.systems.cartpole import CartPoleSystem
+from adaptive_roa.flow_matching.cartpole.latent_conditional.flow_matcher import CartPoleLatentConditionalFlowMatcher
 
 # Data paths
-roa_file = "/common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/roa_labels.txt"
-bounds_file = "/common/users/rm1838/adaptive_cartpole/data/cartpole_data_bounds.pkl"
+dataset_dir = "/common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet"
+roa_file = f"{dataset_dir}/roa_labels.txt"
 
 # Model paths - direct checkpoint files
 models = {
@@ -31,7 +31,7 @@ def evaluate_model(model_name, ckpt_path):
     print(f"{'='*60}")
 
     # Load system
-    system = CartPoleSystem(bounds_file=bounds_file)
+    system = CartPoleSystem(dataset_dir=dataset_dir)
 
     # Load model
     flow_matcher = CartPoleLatentConditionalFlowMatcher.load_from_checkpoint(ckpt_path, device=device)

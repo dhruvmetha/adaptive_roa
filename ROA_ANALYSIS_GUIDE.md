@@ -98,14 +98,14 @@ results = run_deterministic_roa_analysis(
 ```python
 import torch
 from pathlib import Path
-from src.flow_matching.latent_conditional import (
+from adaptive_roa.flow_matching.latent_conditional import (
     LatentConditionalFlowMatcher,
     LatentConditionalFlowMatchingInference
 )
-from src.systems.pendulum_lcfm import PendulumSystemLCFM
-from src.systems.pendulum_config import PendulumConfig
-from src.model.latent_conditional_unet1d import LatentConditionalUNet1D
-from src.visualization.attractor_analysis import AttractorBasinAnalyzer
+from adaptive_roa.systems.pendulum_lcfm import PendulumSystemLCFM
+from adaptive_roa.systems.pendulum_config import PendulumConfig
+from adaptive_roa.model.latent_conditional_unet1d import LatentConditionalUNet1D
+from adaptive_roa.visualization.attractor_analysis import AttractorBasinAnalyzer
 
 # 1. Load model
 system = PendulumSystemLCFM()
@@ -302,7 +302,7 @@ entropy_grid = entropy.reshape(grid_shape)
 The inference wrapper is compatible with the existing `AttractorBasinAnalyzer`, so all existing evaluation tools work seamlessly:
 
 ```python
-from src.evaluation.evaluator import FlowMatchingEvaluator
+from adaptive_roa.evaluation.evaluator import FlowMatchingEvaluator
 
 evaluator = FlowMatchingEvaluator()
 # Works with the inference wrapper!

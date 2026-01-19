@@ -3,7 +3,7 @@
 
 # User-specific paths (loaded from .env file via resolvers)
 net_id: ${net_id:}
-user_base: /common/users/${net_id}
+user_base: ${exp_dir:}
 arcmg_datasets: ${user_base}/arcmg_datasets
 
 defaults:
@@ -20,12 +20,12 @@ latent_dim: 2
 
 # Flow Matcher: Facebook FM version with automatic geodesics
 flow_matcher:
-  _target_: src.flow_matching.mountain_car.latent_conditional.flow_matcher.MountainCarLatentConditionalFlowMatcher
+  _target_: adaptive_roa.flow_matching.mountain_car.latent_conditional.flow_matcher.MountainCarLatentConditionalFlowMatcher
   # Note: system, model, optimizer, scheduler, config, latent_dim are passed by training script
 
 # Model: Latent Conditional UNet for Mountain Car
 model:
-  _target_: src.model.mountain_car_unet.MountainCarUNet
+  _target_: adaptive_roa.model.mountain_car_unet.MountainCarUNet
   embedded_dim: 2              # (position_norm, velocity_norm) - pure Euclidean
   latent_dim: ${latent_dim}    # Gaussian latent variable
   condition_dim: 2             # Embedded start state
@@ -37,7 +37,7 @@ model:
 
 # Data: Mountain Car endpoint dataset
 data:
-  _target_: src.data.mountain_car_endpoint_data.MountainCarEndpointDataModule
+  _target_: adaptive_roa.data.mountain_car_endpoint_data.MountainCarEndpointDataModule
   data_file: ${arcmg_datasets}/mountain_car/incremental_endpoint_dataset/train_100_endpoint_dataset.txt
   validation_file: ${arcmg_datasets}/mountain_car/incremental_endpoint_dataset/val_endpoint_dataset.txt
   test_file: ${arcmg_datasets}/mountain_car/incremental_endpoint_dataset/test_endpoint_dataset.txt

@@ -24,13 +24,13 @@ def demo_cartpole_lcfm_inference():
     print("4. Analyze predictions vs ground truth")
     
     print("\n⚠️  Note: This demo requires a trained CartPole LCFM model.")
-    print("   Train first using: python src/flow_matching/cartpole_latent_conditional/train.py")
+    print("   Train first using: python adaptive_roa/flow_matching/cartpole_latent_conditional/train.py")
     
     # Show the intended usage pattern
     print("\n💻 Usage Pattern:")
     print("""
 # 1. Load trained model
-from src.flow_matching.cartpole_latent_conditional.inference import CartPoleLatentConditionalFlowMatchingInference
+from adaptive_roa.flow_matching.cartpole_latent_conditional.inference import CartPoleLatentConditionalFlowMatchingInference
 
 inferencer = CartPoleLatentConditionalFlowMatchingInference(
     folder_path="outputs/cartpole_latent_conditional_fm/2024-XX-XX_XX-XX-XX"
@@ -111,6 +111,6 @@ if __name__ == "__main__":
     
     print(f"\n🚀 Ready to train and test CartPole LCFM!")
     print(f"   Next steps:")
-    print(f"   1. Train: python src/flow_matching/cartpole_latent_conditional/train.py")
+    print(f"   1. Train: python adaptive_roa/flow_matching/cartpole_latent_conditional/train.py")
     print(f"   2. Test: Use the inference module on trained checkpoints")
     print(f"   3. Analyze: Compare predictions vs ground truth endpoints")

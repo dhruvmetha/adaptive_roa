@@ -86,7 +86,7 @@ flow_matching:
 
 # Model architecture
 model:
-  _target_: src.model.pendulum_unet.PendulumUNet
+  _target_: adaptive_roa.model.pendulum_unet.PendulumUNet
   embedded_dim: 3            # (sin θ, cos θ, θ̇_norm)
   output_dim: 2              # (dθ, dθ̇)
   latent_dim: 2
@@ -147,7 +147,7 @@ flow_matching:
 
 # Model architecture
 model:
-  _target_: src.model.cartpole_unet.CartPoleUNet
+  _target_: adaptive_roa.model.cartpole_unet.CartPoleUNet
   embedded_dim: 5            # (x_norm, sin θ, cos θ, ẋ_norm, θ̇_norm)
   output_dim: 4              # (dx, dθ, dẋ, dθ̇)
   latent_dim: 2
@@ -162,9 +162,9 @@ trainer:
 ```
 
 #### **Data Files**
-The CartPole system loads bounds automatically from:
+The CartPole system loads bounds automatically from `dataset_description.json`:
 ```
-/common/users/rm1838/arcmg_datasets/cartpole/cartpole_data_bounds.pkl
+/common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/dataset_description.json
 ```
 
 Training data:
@@ -275,7 +275,7 @@ Saved to `<system>_roa_evaluation/`:
 
 **Pendulum:**
 ```python
-from src.flow_matching.latent_conditional.flow_matcher_fb import PendulumLatentConditionalFlowMatcher
+from adaptive_roa.flow_matching.latent_conditional.flow_matcher_fb import PendulumLatentConditionalFlowMatcher
 
 # Load from training folder (auto-detects best checkpoint)
 model = PendulumLatentConditionalFlowMatcher.load_from_checkpoint(
@@ -290,7 +290,7 @@ model = PendulumLatentConditionalFlowMatcher.load_from_checkpoint(
 
 **CartPole (Latent Conditional):**
 ```python
-from src.flow_matching.cartpole.latent_conditional.flow_matcher import CartPoleLatentConditionalFlowMatcher
+from adaptive_roa.flow_matching.cartpole.latent_conditional.flow_matcher import CartPoleLatentConditionalFlowMatcher
 
 model = CartPoleLatentConditionalFlowMatcher.load_from_checkpoint(
     "outputs/cartpole_latent_conditional_fm/2025-10-13_18-45-32"
@@ -357,19 +357,19 @@ All config files are in `configs/`:
 ```yaml
 # System definition
 system:
-  _target_: src.systems.cartpole.CartPoleSystem
-  bounds_file: /path/to/bounds.pkl
+  _target_: adaptive_roa.systems.cartpole.CartPoleSystem
+  dataset_dir: /path/to/dataset  # Contains dataset_description.json
 
 # Data loading
 data:
-  _target_: src.data.cartpole_endpoint_data.CartPoleEndpointDataModule
+  _target_: adaptive_roa.data.cartpole_endpoint_data.CartPoleEndpointDataModule
   data_file: /path/to/train.txt
   validation_file: /path/to/val.txt
   batch_size: 256
 
 # Model architecture
 model:
-  _target_: src.model.cartpole_unet.CartPoleUNet
+  _target_: adaptive_roa.model.cartpole_unet.CartPoleUNet
   embedded_dim: 5
   output_dim: 4
   hidden_dims: [256, 512, 1024, 512, 256]
@@ -403,7 +403,7 @@ trainer:
       monitor: val_loss
       mode: min
       save_top_k: 3
-    - _target_: src.callbacks.validation_inference_callback.ValidationInferenceCallback
+    - _target_: adaptive_roa.callbacks.validation_inference_callback.ValidationInferenceCallback
       inference_frequency: 10
 ```
 
@@ -507,12 +507,12 @@ theta_wrapped = np.arctan2(np.sin(theta), np.cos(theta))
 
 #### **Missing Bounds File**
 
-**Symptom**: Warning about using default bounds
+**Symptom**: Warning about `dataset_description.json` not found
 
-**Solution**: Provide correct path to bounds pickle file:
+**Solution**: Provide correct path to dataset directory containing `dataset_description.json`:
 ```bash
 python train.py \
-    system.bounds_file=/path/to/your/cartpole_data_bounds.pkl
+    system.dataset_dir=/path/to/your/cartpole_dataset
 ```
 
 ### **Memory Issues**

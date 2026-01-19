@@ -1,5 +1,5 @@
 # Humanoid Endpoint Data Configuration
-_target_: src.data.humanoid_endpoint_data.HumanoidEndpointDataModule
+_target_: adaptive_roa.data.humanoid_endpoint_data.HumanoidEndpointDataModule
 
 # Dataset paths (will be populated after building shuffled dataset)
 data_file: ${arcmg_datasets}/humanoid_get_up/incremental_endpoint_dataset/train.txt

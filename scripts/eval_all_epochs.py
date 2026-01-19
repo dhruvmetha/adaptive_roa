@@ -13,8 +13,8 @@ from pathlib import Path
 from tqdm import tqdm
 import glob
 
-from src.flow_matching.cartpole.latent_conditional.flow_matcher import CartPoleLatentConditionalFlowMatcher
-from src.systems.cartpole import CartPoleSystem
+from adaptive_roa.flow_matching.cartpole.latent_conditional.flow_matcher import CartPoleLatentConditionalFlowMatcher
+from adaptive_roa.systems.cartpole import CartPoleSystem
 
 
 def load_roa_data(data_file: str):

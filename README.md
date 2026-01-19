@@ -73,7 +73,7 @@ python src/flow_matching/evaluate_roa.py \
 ### **Inference**
 
 ```python
-from src.flow_matching.cartpole.latent_conditional.flow_matcher import CartPoleLatentConditionalFlowMatcher
+from adaptive_roa.flow_matching.cartpole.latent_conditional.flow_matcher import CartPoleLatentConditionalFlowMatcher
 import torch
 
 # Load trained model

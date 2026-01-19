@@ -14,7 +14,7 @@ seed: 42
 # User-specific paths (loaded from .env file via resolvers)
 # To customize: create .env file with NET_ID=your_netid
 net_id: ${net_id:}
-user_base: /common/users/${net_id}
+user_base: ${exp_dir:}
 project_base: ${user_base}/adaptive_cartpole
 shared_data_base: /common/users/shared/pracsys/genMoPlan/data_trajectories
 
@@ -134,11 +134,11 @@ flow_matching:
 
 # Flow Matcher
 flow_matcher:
-  _target_: src.flow_matching.cartpole.latent_conditional.flow_matcher.CartPoleLatentConditionalFlowMatcher
+  _target_: adaptive_roa.flow_matching.cartpole.latent_conditional.flow_matcher.CartPoleLatentConditionalFlowMatcher
 
 # Model: CartPole UNet
 model:
-  _target_: src.model.cartpole_unet.CartPoleUNet
+  _target_: adaptive_roa.model.cartpole_unet.CartPoleUNet
   embedded_dim: 5              # (x_norm, sin θ, cos θ, ẋ_norm, θ̇_norm)
   latent_dim: ${latent_dim}
   condition_dim: 5             # Embedded start state
@@ -165,8 +165,8 @@ scheduler:
 
 # System (CartPole)
 system:
-  _target_: src.systems.cartpole.CartPoleSystem
-  bounds_file: ${project_base}/data/cartpole_data_bounds.pkl
+  _target_: adaptive_roa.systems.cartpole.CartPoleSystem
+  dataset_dir: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet
 
 # Hydra
 hydra:

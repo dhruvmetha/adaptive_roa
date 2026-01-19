@@ -10,8 +10,7 @@
 #   - θ̇ ∈ ℝ (pole angular velocity)
 # =====================================================================
 
-_target_: src.systems.cartpole.CartPoleSystem
+_target_: adaptive_roa.systems.cartpole.CartPoleSystem
 
-# Data bounds configuration
-# Uses project_base from parent config (set via net_id resolver)
-bounds_file: ${project_base}/data/cartpole_data_bounds.pkl
+# Dataset directory containing dataset_description.json with bounds
+dataset_dir: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet

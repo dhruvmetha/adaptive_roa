@@ -1,5 +1,5 @@
 # Configuration for Latent Conditional UNet1D model
-_target_: src.model.latent_conditional_unet1d.LatentConditionalUNet1D
+_target_: adaptive_roa.model.latent_conditional_unet1d.LatentConditionalUNet1D
 
 # Model architecture parameters
 embedded_dim: 3        # (sin θ, cos θ, θ̇)

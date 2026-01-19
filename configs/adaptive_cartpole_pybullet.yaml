@@ -11,24 +11,32 @@ defaults:
 name: adaptive_cartpole_pybullet
 seed: 42
 
+# =====================================================================
+# Data Source Configuration
+# =====================================================================
+# Training data: shuffled_indices + shuffled_labels (20k, supports seeds 0-9)
+# Full ROA evaluation: roa_labels.txt (all 116k trajectories)
+
+# Training index (0-9) - change this to use different shuffle seeds
+training_index: 0
+
 # Output directory
-output_dir: /common/users/dm1487/tripods/adaptive/outputs/adaptive_cartpole_pybullet/${now:%Y-%m-%d_%H-%M-%S}
+output_dir: /common/users/dm1487/tripods/adaptive/outputs/jan18/adaptive_cartpole_pybullet/training_index_${training_index}/${now:%Y-%m-%d_%H-%M-%S}
 
 # Device
 device: cuda:0
 
-# =====================================================================
-# Data Source Configuration
-# =====================================================================
-# Training data: shuffled_indices + shuffled_labels (20k, supports multiple seeds)
-# Full ROA evaluation: roa_labels.txt (all 116k trajectories)
+
+
 data_source:
-  trajectories_dir: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/trajectories
-  # Training subset (seed 0 - change X for different seeds)
-  shuffled_indices_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/train_test_splits/shuffled_indices_0.txt
-  shuffled_labels_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/train_test_splits/shuffled_labels_0.txt
+  base_dir: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet
+  trajectories_dir: ${data_source.base_dir}/trajectories
+  train_test_splits_dir: ${data_source.base_dir}/train_test_splits
+  # These are auto-constructed from training_index
+  shuffled_indices_file: ${data_source.train_test_splits_dir}/shuffled_indices_${training_index}.txt
+  shuffled_labels_file: ${data_source.train_test_splits_dir}/shuffled_labels_${training_index}.txt
   # Full ROA evaluation (all trajectories)
-  roa_labels_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/roa_labels.txt
+  roa_labels_file: ${data_source.base_dir}/roa_labels.txt
 
 # Dataset splits (val/test are subsets of training with overlap)
 val_ratio: 0.1      # 10% of training for validation
@@ -49,7 +57,7 @@ sampling_strategy: balanced_uncertain
 
 # Balanced Uncertain Sampling Options (when sampling_strategy="balanced_uncertain")
 adaptive_data_max: 50      # Total samples to add per epoch (D1 + D2)
-d2_ratio: 0.0              # Fraction for D2 (uncertainty-filtered). 0=all random, 1=all filtered
+d2_ratio: 0.5              # Fraction for D2 (uncertainty-filtered). 0=all random, 1=all filtered
 batch_size_sampling: 50    # Size of batches when searching for uncertain points in D2
 max_samples_per_epoch: 50000 # Safety cap on total candidates evaluated per epoch
 

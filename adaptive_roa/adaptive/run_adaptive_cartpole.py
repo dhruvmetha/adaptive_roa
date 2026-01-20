@@ -18,13 +18,17 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 
 # Register custom Hydra resolvers for environment-based paths
-from adaptive_roa.utils.env_config import get_net_id, get_exp_dir, get_env_config
+from adaptive_roa.utils.env_config import get_net_id, get_exp_dir, get_env_config, get_project_base, get_shared_data_base
 
 # Register resolvers before Hydra processes configs
 if not OmegaConf.has_resolver("net_id"):
     OmegaConf.register_new_resolver("net_id", lambda: get_net_id())
 if not OmegaConf.has_resolver("exp_dir"):
     OmegaConf.register_new_resolver("exp_dir", lambda: get_exp_dir())
+if not OmegaConf.has_resolver("project_base"):
+    OmegaConf.register_new_resolver("project_base", lambda: get_project_base())
+if not OmegaConf.has_resolver("shared_data_base"):
+    OmegaConf.register_new_resolver("shared_data_base", lambda: get_shared_data_base())
 if not OmegaConf.has_resolver("env"):
     OmegaConf.register_new_resolver("env", lambda key, default="": os.environ.get(key, get_env_config().get(key, default)))
 import torch
@@ -431,7 +435,7 @@ def compute_metrics_lambda_delta_cartpole(
 def evaluate_full_roa_fast(
     flow_matcher,
     system,
-    data_source: TrajectoryDataSource,
+    roa_labels_file: str,
     num_mc_samples: int = 20,
     batch_size: int = 2048,
     lambda_star: float = None,
@@ -454,7 +458,7 @@ def evaluate_full_roa_fast(
     Args:
         flow_matcher: Trained flow matcher model
         system: System for classify_attractor
-        data_source: TrajectoryDataSource with all labels
+        roa_labels_file: Path to roa_labels.txt (CSV: start_state..., label)
         num_mc_samples: Number of MC samples per point
         batch_size: Batch size for GPU inference
         lambda_star: Optimized λ* from conformal prediction (if None, use 0.5)
@@ -469,14 +473,14 @@ def evaluate_full_roa_fast(
     """
     from tqdm import tqdm
 
-    # Get ALL start states and labels from roa_labels.txt (full evaluation dataset)
-    if data_source.has_roa_labels():
-        X_all, y_all = data_source.get_roa_eval_data()
-    else:
-        # Fallback to shuffled data if no roa_labels (smaller eval set)
-        all_indices = list(range(data_source.n_trajectories))
-        X_all = data_source.get_start_states(all_indices)
-        y_all = data_source.get_labels(all_indices)
+    # Load ROA labels directly from file (not through data_source)
+    data = np.loadtxt(roa_labels_file, delimiter=',')
+    X_all = data[:, :-1].astype(np.float32)
+    raw_labels = data[:, -1].astype(int)
+
+    # Map external labels to internal format (0 → -1 failure, 1 → 1 success)
+    label_mapping = {0: -1, 1: 1}
+    y_all = np.array([label_mapping.get(l, 0) for l in raw_labels], dtype=np.int64)
 
     n_total = len(y_all)
 
@@ -919,7 +923,7 @@ def main(cfg: DictConfig):
         full_roa_metrics = evaluate_full_roa_fast(
             flow_matcher=flow_matcher,
             system=system,
-            data_source=data_source,
+            roa_labels_file=cfg.data_source.roa_labels_file,
             num_mc_samples=num_mc_samples_eval,
             batch_size=cfg.get('val_batch_size', 2048),
             lambda_star=lambda_star,

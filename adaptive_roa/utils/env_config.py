@@ -138,6 +138,28 @@ def get_exp_dir() -> str:
     return get_env_config().get("EXP_DIR", default)
 
 
+def get_project_base() -> str:
+    """
+    Get the project base directory from environment config.
+
+    This is where experiment outputs are saved.
+    Used by Hydra configs via ${project_base:} resolver.
+    """
+    default = str(_find_project_root())
+    return get_env_config().get("PROJECT_BASE", default)
+
+
+def get_shared_data_base() -> str:
+    """
+    Get the shared data base directory from environment config.
+
+    This is where shared trajectory data lives (read-only).
+    Used by Hydra configs via ${shared_data_base:} resolver.
+    """
+    default = "/common/users/shared/pracsys/genMoPlan/data_trajectories"
+    return get_env_config().get("SHARED_DATA_BASE", default)
+
+
 def get_user_path(*parts: str) -> str:
     """
     Construct a path under the user's directory.

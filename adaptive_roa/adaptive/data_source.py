@@ -43,15 +43,19 @@ class TrajectoryDataSource:
     - Individual trajectories by index
     - Batches of trajectories
     - Pre-computed labels (if available)
-    - Start states and end states
+    - Start states (on-demand from trajectory files)
 
     This is the "pool" of all available data that adaptive sampling draws from.
+
+    Note: ROA evaluation should load roa_labels.txt directly, not through this class.
+    This class focuses on training data management using shuffled_indices and
+    shuffled_labels files.
 
     Attributes:
         config: TrajectoryDataSourceConfig
         trajectory_files: List of trajectory file paths (ordered by shuffled index)
-        labels: Optional pre-computed labels from roa_labels.txt
-        start_states: Optional pre-computed start states from roa_labels.txt
+        labels: Optional pre-computed labels from shuffled_labels.txt
+        start_states: Optional pre-computed start states (None for on-demand loading)
         n_trajectories: Total number of trajectories available
     """
 
@@ -68,18 +72,14 @@ class TrajectoryDataSource:
         # Load shuffled indices → trajectory filenames
         self._load_shuffled_indices(config.shuffled_indices_file)
 
-        # Load labels - prefer shuffled_labels (aligned) over roa_labels (legacy)
+        # Load labels from shuffled_labels file (aligned with shuffled_indices)
         if config.shuffled_labels_file:
             self._load_shuffled_labels(config.shuffled_labels_file)
-        elif config.roa_labels_file:
-            # Legacy: load from roa_labels (only use for ROA evaluation, not training)
-            self._load_roa_labels(config.roa_labels_file)
         else:
             self.labels = None
 
         # Start states: always load on-demand from trajectory files
-        # (no longer cached from roa_labels.txt)
-        self._start_states_cache = {}
+        self.start_states = None
 
         print(f"TrajectoryDataSource initialized:")
         print(f"  Trajectories: {self.n_trajectories}")
@@ -114,36 +114,6 @@ class TrajectoryDataSource:
 
         assert len(self.labels) == self.n_trajectories, \
             f"Label count ({len(self.labels)}) != trajectory count ({self.n_trajectories})"
-
-    def _load_roa_labels(self, filepath: str):
-        """
-        Load ROA labels file (start_state, label per line).
-
-        WARNING: This is for ROA evaluation only. The rows are in original
-        trajectory order, NOT aligned with shuffled_indices. Do not use
-        for training with shuffled indices.
-        """
-        data = np.loadtxt(filepath, delimiter=',')
-
-        # Last column is label, rest is start state
-        # Store separately - these are for ROA eval, not training
-        self._roa_start_states = data[:, :-1].astype(np.float32)
-        raw_labels = data[:, -1].astype(int)
-
-        # Map external labels to internal format
-        self._roa_labels = np.array([
-            self.config.label_mapping.get(l, 0) for l in raw_labels
-        ], dtype=np.int64)
-
-        # For backward compatibility, also set self.labels if no shuffled_labels
-        # BUT only if sizes match (which they won't for shuffled case)
-        if len(self._roa_labels) == self.n_trajectories:
-            self.labels = self._roa_labels
-        else:
-            # Size mismatch - roa_labels is for full eval, not training
-            self.labels = None
-            print(f"  NOTE: roa_labels ({len(self._roa_labels)}) != shuffled_indices ({self.n_trajectories})")
-            print(f"        roa_labels will only be used for ROA evaluation")
 
     def load_trajectory(self, idx: int) -> np.ndarray:
         """
@@ -181,18 +151,12 @@ class TrajectoryDataSource:
         return [self.load_trajectory(idx) for idx in indices]
 
     def get_start_state(self, idx: int) -> np.ndarray:
-        """Get start state for trajectory idx (loaded from trajectory file)."""
-        # Check cache first
-        if idx in self._start_states_cache:
-            return self._start_states_cache[idx]
-
-        # Load from trajectory file
-        traj = self.load_trajectory(idx)
-        start_state = traj[0]
-
-        # Cache it
-        self._start_states_cache[idx] = start_state
-        return start_state
+        """Get start state for trajectory idx."""
+        if self.start_states is not None:
+            return self.start_states[idx]
+        else:
+            traj = self.load_trajectory(idx)
+            return traj[0]
 
     def get_end_state(self, idx: int) -> np.ndarray:
         """Get end state for trajectory idx."""
@@ -204,18 +168,21 @@ class TrajectoryDataSource:
         if self.labels is not None:
             return self.labels[idx]
         else:
-            raise ValueError("No labels loaded. Provide roa_labels_file in config.")
+            raise ValueError("No labels loaded. Provide shuffled_labels_file in config.")
 
     def get_start_states(self, indices: List[int]) -> np.ndarray:
-        """Get start states for multiple trajectories (loaded from trajectory files)."""
-        return np.array([self.get_start_state(i) for i in indices])
+        """Get start states for multiple trajectories."""
+        if self.start_states is not None:
+            return self.start_states[indices]
+        else:
+            return np.array([self.get_start_state(i) for i in indices])
 
     def get_labels(self, indices: List[int]) -> np.ndarray:
         """Get labels for multiple trajectories."""
         if self.labels is not None:
             return self.labels[indices]
         else:
-            raise ValueError("No labels loaded. Provide roa_labels_file in config.")
+            raise ValueError("No labels loaded. Provide shuffled_labels_file in config.")
 
     def get_endpoint_pair(self, idx: int) -> Tuple[np.ndarray, np.ndarray]:
         """
@@ -371,32 +338,3 @@ class TrajectoryDataSource:
             'n_separatrix': int(np.sum(labels == 0)),
             'success_rate': float(np.mean(labels == 1)),
         }
-
-    # =========================================================================
-    # ROA Evaluation Methods (use roa_labels.txt, NOT shuffled indices)
-    # =========================================================================
-
-    def has_roa_labels(self) -> bool:
-        """Check if ROA labels are loaded (for full evaluation)."""
-        return hasattr(self, '_roa_labels') and self._roa_labels is not None
-
-    def get_roa_eval_data(self) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Get full ROA evaluation data (start states and labels).
-
-        This uses roa_labels.txt which contains ALL trajectories in original order.
-        Use this for final ROA evaluation, NOT for training.
-
-        Returns:
-            Tuple of (start_states [N, dim], labels [N])
-        """
-        if not self.has_roa_labels():
-            raise ValueError("No roa_labels loaded. Provide roa_labels_file in config.")
-
-        return self._roa_start_states, self._roa_labels
-
-    def get_roa_eval_size(self) -> int:
-        """Get size of ROA evaluation dataset."""
-        if not self.has_roa_labels():
-            return 0
-        return len(self._roa_labels)

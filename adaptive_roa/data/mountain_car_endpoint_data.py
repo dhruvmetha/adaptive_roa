@@ -4,6 +4,7 @@ from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
 from typing import Optional
 import lightning.pytorch as pl
+from adaptive_roa.utils.env_config import get_shared_data_base
 
 
 class MountainCarEndpointDataset(Dataset):
@@ -21,7 +22,7 @@ class MountainCarEndpointDataset(Dataset):
                         If None, uses default path.
         """
         if dataset_dir is None:
-            dataset_dir = "/common/users/shared/pracsys/genMoPlan/data_trajectories/mountain_car_power_0p001"
+            dataset_dir = f"{get_shared_data_base()}/mountain_car_power_0p001"
         self.dataset_dir = Path(dataset_dir)
 
         # Load the endpoint data
@@ -75,7 +76,7 @@ class MountainCarEndpointDataModule(pl.LightningDataModule):
         """
         super().__init__()
         if dataset_dir is None:
-            dataset_dir = "/common/users/shared/pracsys/genMoPlan/data_trajectories/mountain_car_power_0p001"
+            dataset_dir = f"{get_shared_data_base()}/mountain_car_power_0p001"
         self.data_file = data_file
         self.validation_file = validation_file
         self.test_file = test_file

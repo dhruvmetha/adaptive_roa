@@ -6,6 +6,7 @@ import numpy as np
 import json
 from pathlib import Path
 from adaptive_roa.systems.base import DynamicalSystem, ManifoldComponent
+from adaptive_roa.utils.env_config import get_shared_data_base
 from typing import List, Dict, Tuple
 
 
@@ -30,15 +31,32 @@ class CartPoleSystem(DynamicalSystem):
                         If None, uses default path from environment.
         """
         if dataset_dir is None:
-            dataset_dir = "/common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet"
+            dataset_dir = f"{get_shared_data_base()}/cartpole_pybullet"
 
         dataset_dir = Path(dataset_dir)
         json_path = dataset_dir / "dataset_description.json"
+        trajectories_dir = dataset_dir / "trajectories"
 
-        if not json_path.exists():
-            raise FileNotFoundError(f"dataset_description.json not found in {dataset_dir}")
+        # Try loading from JSON first, fall back to computing from trajectories
+        bounds_loaded = False
 
-        self._load_bounds_from_json(json_path)
+        if json_path.exists():
+            try:
+                self._load_bounds_from_json(json_path)
+                bounds_loaded = True
+            except PermissionError:
+                print(f"Warning: Permission denied reading {json_path}")
+
+        if not bounds_loaded:
+            if trajectories_dir.exists():
+                print(f"Falling back to computing bounds from trajectory files...")
+                self._compute_bounds_from_trajectories(trajectories_dir)
+            else:
+                raise FileNotFoundError(
+                    f"Cannot load bounds: dataset_description.json not accessible and "
+                    f"trajectories directory not found at {trajectories_dir}"
+                )
+
         super().__init__()
 
     def _load_bounds_from_json(self, json_path: Path):
@@ -62,6 +80,19 @@ class CartPoleSystem(DynamicalSystem):
         print(f"  [1] Pole angle (θ): [{bounds['theta']['min']:.3f}, {bounds['theta']['max']:.3f}] -> WRAPPED to ±π")
         print(f"  [2] Cart velocity (ẋ): [{bounds['x_dot']['min']:.3f}, {bounds['x_dot']['max']:.3f}] -> limit: ±{self.velocity_limit:.3f}")
         print(f"  [3] Angular velocity (θ̇): [{bounds['theta_dot']['min']:.3f}, {bounds['theta_dot']['max']:.3f}] -> limit: ±{self.angular_velocity_limit:.3f}")
+
+    def _compute_bounds_from_trajectories(self, trajectories_dir: Path):
+        """Compute bounds from trajectory files as fallback when JSON is not accessible"""
+        from adaptive_roa.utils.bounds_from_trajectories import compute_cartpole_bounds
+
+        bounds_info = compute_cartpole_bounds(trajectories_dir, max_files=1000)
+
+        self.cart_limit = bounds_info['cart_limit']
+        self.velocity_limit = bounds_info['velocity_limit']
+        self.angle_limit = bounds_info['angle_limit']  # Always π
+        self.angular_velocity_limit = bounds_info['angular_velocity_limit']
+        self.achieved_bounds = bounds_info['achieved_bounds']
+        self.dataset_info = None  # Not available when computing from trajectories
     
     def define_manifold_structure(self) -> List[ManifoldComponent]:
         """

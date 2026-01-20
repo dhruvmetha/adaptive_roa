@@ -254,11 +254,20 @@ class PendulumCartesianLatentConditionalFlowMatcher(BaseFlowMatcher):
 
         print(f"🗂️  Training directory: {training_dir}")
 
-        # Load Hydra config
+        # Load Hydra config - check current dir and parent directories
+        # (adaptive loop stores .hydra in parent, not per-epoch directories)
         hydra_config = None
-        hydra_config_path = training_dir / ".hydra" / "config.yaml"
+        hydra_config_path = None
 
-        if hydra_config_path.exists():
+        search_dir = training_dir
+        for _ in range(3):  # Check up to 3 parent levels
+            candidate_path = search_dir / ".hydra" / "config.yaml"
+            if candidate_path.exists():
+                hydra_config_path = candidate_path
+                break
+            search_dir = search_dir.parent
+
+        if hydra_config_path:
             try:
                 print(f"📋 Loading Hydra config: {hydra_config_path}")
                 with open(hydra_config_path, 'r') as f:
@@ -268,7 +277,7 @@ class PendulumCartesianLatentConditionalFlowMatcher(BaseFlowMatcher):
                 print(f"⚠️  Warning: Could not load Hydra config: {e}")
                 hydra_config = None
         else:
-            print(f"⚠️  Hydra config not found at: {hydra_config_path}")
+            print(f"⚠️  Hydra config not found in {training_dir} or parent directories")
 
         # Load Lightning checkpoint
         print(f"📦 Loading Lightning checkpoint...")

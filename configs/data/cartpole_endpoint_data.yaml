@@ -5,4 +5,4 @@ test_file: ${arcmg_datasets}/cartpole/incremental_endpoint_dataset/test_endpoint
 batch_size: ${batch_size}
 num_workers: 4
 pin_memory: true
-dataset_dir: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet
+dataset_dir: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}/cartpole_pybullet

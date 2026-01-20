@@ -12,14 +12,13 @@ name: adaptive_cartpole_pybullet
 seed: 42
 
 # User-specific paths (loaded from .env file via resolvers)
-# To customize: create .env file with NET_ID=your_netid
-net_id: ${net_id:}
-user_base: ${exp_dir:}
-project_base: ${user_base}/adaptive_cartpole
-shared_data_base: /common/users/shared/pracsys/genMoPlan/data_trajectories
+# To customize: edit .env file with PROJECT_BASE and SHARED_DATA_BASE
+project_base: ${project_base:}
+shared_data_base: ${shared_data_base:}
 
 # Output  directory
-output_dir: ${project_base}/outputs/adaptive_cartpole_pybullet/${now:%Y-%m-%d_%H-%M-%S}
+training_index: 0
+output_dir: ${project_base}/${name}/outputs/init_size_${initial_train_size}_training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}/${now:%Y-%m-%d_%H-%M-%S}
 
 # Device
 device: cuda:0
@@ -27,17 +26,15 @@ device: cuda:0
 # =====================================================================
 # Data Source Configuration
 # =====================================================================
-# Shuffle variant (0-9) for cross-validation experiments
-# Each variant uses a different random ordering of the same trajectories
-shuffle_variant: 0
-
 data_source:
-  trajectories_dir: ${shared_data_base}/cartpole_pybullet/trajectories
+  base_dir: ${shared_data_base}/cartpole_pybullet
+  trajectories_dir: ${data_source.base_dir}/trajectories
+  train_test_splits_dir: ${data_source.base_dir}/train_test_splits
   # Shuffled indices and labels (aligned, for training)
-  shuffled_indices_file: ${shared_data_base}/cartpole_pybullet/train_test_splits/shuffled_indices_${shuffle_variant}.txt
-  shuffled_labels_file: ${shared_data_base}/cartpole_pybullet/train_test_splits/shuffled_labels_${shuffle_variant}.txt
+  shuffled_indices_file: ${data_source.train_test_splits_dir}/shuffled_indices_${training_index}.txt
+  shuffled_labels_file: ${data_source.train_test_splits_dir}/shuffled_labels_${training_index}.txt
   # ROA labels (full dataset, for evaluation only - NOT aligned with shuffled indices)
-  roa_labels_file: ${shared_data_base}/cartpole_pybullet/roa_labels.txt
+  roa_labels_file: ${data_source.base_dir}/roa_labels.txt
 
 # Dataset splits (val/test are subsets of training with overlap)
 val_ratio: 0.1      # 10% of training for validation
@@ -46,8 +43,8 @@ test_ratio: 0.1     # 10% of training for testing
 # =====================================================================
 # Adaptive Sampling Configuration
 # =====================================================================
-initial_train_size: 1000    # Initial training trajectories
-n_epochs: 1               # Number of adaptive sampling epochs
+initial_train_size: 50    # Initial training trajectories
+n_epochs: 50               # Number of adaptive sampling epochs
 samples_per_epoch: 50      # New candidates per epoch (for fixed strategy only)
 warm_start: true           # If true, continue training from previous epoch's checkpoint
 
@@ -102,7 +99,7 @@ latent_dim: 2
 
 # Trainer: PyTorch Lightning
 trainer:
-  max_epochs: 2000
+  max_epochs: 500
   accelerator: gpu
   devices: 1
   precision: 32
@@ -166,7 +163,7 @@ scheduler:
 # System (CartPole)
 system:
   _target_: adaptive_roa.systems.cartpole.CartPoleSystem
-  dataset_dir: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet
+  dataset_dir: ${shared_data_base}/cartpole_pybullet
 
 # Hydra
 hydra:

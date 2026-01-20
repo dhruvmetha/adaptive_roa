@@ -157,7 +157,7 @@ python src/flow_matching/evaluate_roa.py \
 ### Setup
 ```bash
 # Activate the required conda environment
-mamba activate /common/home/st1122/Projects/adaptive_roa/env
+conda activate /common/users/dm1487/envs/arcmg
 
 # Install the package in development mode
 pip install -e .

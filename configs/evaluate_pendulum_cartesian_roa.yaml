@@ -1,3 +1,6 @@
+# User-specific paths (loaded from .env file via resolvers)
+shared_data_base: ${shared_data_base:}
+
 # Pendulum Cartesian ROA Evaluation Configuration
 # Evaluates trained LCFM model on labeled ROA data
 
@@ -17,7 +20,7 @@ checkpoint:
 
 # Data: Labeled ROA data
 data:
-  file: /common/users/shared/pracsys/genMoPlan/data_trajectories/pendulum_cartesian_50k/roa_labels.txt
+  file: ${shared_data_base}/pendulum_cartesian_50k/roa_labels.txt
   format: "x,y,vx,vy,label"  # Comma-separated format
 
 # Evaluation settings

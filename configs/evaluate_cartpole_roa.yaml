@@ -1,7 +1,5 @@
 # User-specific paths (loaded from .env file via resolvers)
-net_id: ${net_id:}
-user_base: ${exp_dir:}
-arcmg_datasets: ${user_base}/arcmg_datasets
+shared_data_base: ${shared_data_base:}
 
 # CartPole ROA Evaluation Configuration
 # Evaluates trained LCFM model on labeled ROA data
@@ -22,7 +20,7 @@ checkpoint:
 
 # Data: Labeled ROA data
 data:
-  file: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/roa_labels.txt
+  file: ${shared_data_base}/cartpole_pybullet/roa_labels.txt
   format: "x,θ,ẋ,θ̇,label"  # Comma-separated format
 
 # Evaluation settings

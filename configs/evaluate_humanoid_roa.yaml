@@ -1,3 +1,6 @@
+# User-specific paths (loaded from .env file via resolvers)
+shared_data_base: ${shared_data_base:}
+
 # Humanoid ROA Evaluation Configuration
 # Evaluates trained Humanoid LCFM model on labeled ROA data (if available)
 # Or performs general endpoint prediction evaluation
@@ -19,7 +22,7 @@ checkpoint:
 # Data: Labeled ROA data (adjust path when available)
 # Note: This path is a placeholder - update with actual ROA labeled data
 data:
-  file: /common/users/shared/pracsys/genMoPlan/data_trajectories/humanoid_get_up/roa_labels.txt
+  file: ${shared_data_base}/humanoid_get_up/roa_labels.txt
   format: "67D state,label"  # 67-dimensional state + label
 
 # Evaluation settings

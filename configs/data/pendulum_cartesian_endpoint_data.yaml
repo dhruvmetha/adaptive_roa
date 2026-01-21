@@ -3,6 +3,6 @@ _target_: adaptive_roa.data.pendulum_cartesian_endpoint_data.PendulumCartesianEn
 data_file: ${arcmg_datasets}/pendulum_cartesian/train_endpoints.txt
 validation_file: ${arcmg_datasets}/pendulum_cartesian/val_endpoints.txt
 test_file: ${arcmg_datasets}/pendulum_cartesian/test_endpoints.txt
-dataset_dir: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}/pendulum_cartesian_50k
+dataset_dir: ${data_dir:/common/users/shared/pracsys/genMoPlan/data_trajectories}/pendulum_cartesian_50k
 num_workers: 4
 pin_memory: true

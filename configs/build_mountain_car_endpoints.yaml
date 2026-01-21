@@ -1,7 +1,7 @@
 # User-specific paths (loaded from .env file via resolvers)
-shared_data_base: ${shared_data_base:}
-project_base: ${project_base:}
-arcmg_datasets: ${project_base}/arcmg_datasets
+data_dir: ${data_dir:}
+exp_dir: ${exp_dir:}
+arcmg_datasets: ${exp_dir}/arcmg_datasets
 
 # =====================================================================
 # Mountain Car Endpoint Dataset Builder Configuration
@@ -29,8 +29,8 @@ defaults:
   - system: mountain_car
 
 # Trajectory data paths (Mountain Car power 0.0008 variant)
-data_dirs: ${shared_data_base}/mountain_car_power_0p0008/trajectories
-shuffled_idxs_file: ${shared_data_base}/mountain_car_power_0p0008/shuffled_indices.txt
+data_dirs: ${data_dir}/mountain_car_power_0p0008/trajectories
+shuffled_idxs_file: ${data_dir}/mountain_car_power_0p0008/shuffled_indices.txt
 dest_dir: ${arcmg_datasets}/mountain_car/endpoint_dataset
 
 # Processing range (slicing shuffled_indices.txt)

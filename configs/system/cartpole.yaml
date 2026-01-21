@@ -13,5 +13,5 @@
 _target_: adaptive_roa.systems.cartpole.CartPoleSystem
 
 # Dataset directory containing dataset_description.json with bounds
-# Default: use shared_data_base resolver if available, else hardcoded fallback
-dataset_dir: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}/cartpole_pybullet
+# Default: use data_dir resolver if available, else hardcoded fallback
+dataset_dir: ${data_dir:/common/users/shared/pracsys/genMoPlan/data_trajectories}/cartpole_pybullet

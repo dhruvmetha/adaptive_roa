@@ -11,8 +11,8 @@ Usage:
     config = get_env_config()
 
     # Get interpolated paths
-    project_base = get_path("PROJECT_BASE")
-    dataset_path = get_path("ARCMG_DATASETS_BASE")
+    exp_dir = get_path("EXP_DIR")
+    data_dir = get_path("DATA_DIR")
 """
 
 import os
@@ -106,8 +106,8 @@ def get_env_config() -> dict:
     if "USER_BASE" not in config:
         config["USER_BASE"] = "/common/users/shared/pracsys/genMoPlan/global_dynamics_experiments"
 
-    if "PROJECT_BASE" not in config:
-        config["PROJECT_BASE"] = str(project_root)
+    if "EXP_DIR" not in config:
+        config["EXP_DIR"] = str(project_root)
 
     return config
 
@@ -117,7 +117,7 @@ def get_path(key: str, default: Optional[str] = None) -> str:
     Get a path from the environment configuration.
 
     Args:
-        key: The environment variable name (e.g., "PROJECT_BASE", "ARCMG_DATASETS_BASE")
+        key: The environment variable name (e.g., "EXP_DIR", "DATA_DIR")
         default: Default value if key not found
 
     Returns:
@@ -133,31 +133,29 @@ def get_net_id() -> str:
 
 
 def get_exp_dir() -> str:
-    """Get the experiment directory from environment config."""
-    default = f"/common/users/{get_net_id()}"
+    """
+    Get the experiment output directory from environment config.
+
+    This is where experiment outputs are saved.
+    Used by Hydra configs via ${exp_dir:} resolver.
+    """
+    default = str(_find_project_root())
     return get_env_config().get("EXP_DIR", default)
 
 
-def get_project_base() -> str:
+
+
+def get_data_dir() -> str:
     """
-    Get the project base directory from environment config.
+    Get the data directory from environment config.
 
-    This is where experiment outputs are saved.
-    Used by Hydra configs via ${project_base:} resolver.
-    """
-    default = str(_find_project_root())
-    return get_env_config().get("PROJECT_BASE", default)
-
-
-def get_shared_data_base() -> str:
-    """
-    Get the shared data base directory from environment config.
-
-    This is where shared trajectory data lives (read-only).
-    Used by Hydra configs via ${shared_data_base:} resolver.
+    This is where trajectory data lives (read-only).
+    Used by Hydra configs via ${data_dir:} resolver.
     """
     default = "/common/users/shared/pracsys/genMoPlan/data_trajectories"
-    return get_env_config().get("SHARED_DATA_BASE", default)
+    return get_env_config().get("DATA_DIR", default)
+
+
 
 
 def get_user_path(*parts: str) -> str:
@@ -197,34 +195,38 @@ def get_arcmg_path(*parts: str) -> str:
     return get_user_path("arcmg_datasets", *parts)
 
 
-def get_project_path(*parts: str) -> str:
+def get_exp_path(*parts: str) -> str:
     """
-    Construct a path relative to the project root.
+    Construct a path relative to the experiment output directory.
 
     Args:
-        *parts: Path components to join after project root
+        *parts: Path components to join after experiment directory
 
     Returns:
         Full path string
     """
     config = get_env_config()
-    project_base = config.get("PROJECT_BASE", str(_find_project_root()))
-    return str(Path(project_base) / Path(*parts)) if parts else project_base
+    exp_dir = config.get("EXP_DIR", str(_find_project_root()))
+    return str(Path(exp_dir) / Path(*parts)) if parts else exp_dir
 
 
-def get_shared_data_path(*parts: str) -> str:
+
+
+def get_data_path(*parts: str) -> str:
     """
-    Construct a path under the shared data directory.
+    Construct a path under the data directory.
 
     Args:
-        *parts: Path components to join after shared data base
+        *parts: Path components to join after data directory
 
     Returns:
         Full path string
     """
     config = get_env_config()
-    shared_base = config.get("SHARED_DATA_BASE", "/common/users/shared/pracsys/genMoPlan/data_trajectories")
-    return str(Path(shared_base) / Path(*parts)) if parts else shared_base
+    data_dir = config.get("DATA_DIR", "/common/users/shared/pracsys/genMoPlan/data_trajectories")
+    return str(Path(data_dir) / Path(*parts)) if parts else data_dir
+
+
 
 
 # Convenience function for Hydra config resolvers

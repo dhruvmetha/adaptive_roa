@@ -6,7 +6,7 @@ import numpy as np
 import json
 from pathlib import Path
 from adaptive_roa.systems.base import DynamicalSystem, ManifoldComponent
-from adaptive_roa.utils.env_config import get_shared_data_base
+from adaptive_roa.utils.env_config import get_data_dir
 from typing import List, Dict, Tuple
 
 
@@ -36,7 +36,7 @@ class PendulumCartesianSystem(DynamicalSystem):
                         If None, uses default path.
         """
         if dataset_dir is None:
-            dataset_dir = f"{get_shared_data_base()}/pendulum_cartesian_50k"
+            dataset_dir = f"{get_data_dir()}/pendulum_cartesian_50k"
 
         dataset_dir = Path(dataset_dir)
         json_path = dataset_dir / "dataset_description.json"

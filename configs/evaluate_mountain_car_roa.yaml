@@ -1,5 +1,5 @@
 # User-specific paths (loaded from .env file via resolvers)
-shared_data_base: ${shared_data_base:}
+data_dir: ${data_dir:}
 
 # Mountain Car ROA Evaluation Configuration
 # Evaluates trained LCFM model on labeled ROA data
@@ -20,7 +20,7 @@ checkpoint:
 
 # Data: Eval states (start, end, label)
 data:
-  file: ${shared_data_base}/mountain_car_power_0p0008/eval_states.txt
+  file: ${data_dir}/mountain_car_power_0p0008/eval_states.txt
   format: "pos_s,vel_s,pos_e,vel_e,label"  # Comma-separated format
 
 # Evaluation settings

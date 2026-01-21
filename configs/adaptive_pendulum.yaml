@@ -12,13 +12,13 @@ name: adaptive_pendulum
 seed: 42
 
 # User-specific paths (loaded from .env file via resolvers)
-# To customize: edit .env file with PROJECT_BASE and SHARED_DATA_BASE
-project_base: ${project_base:}
-shared_data_base: ${shared_data_base:}
+# To customize: edit .env file with EXP_DIR and DATA_DIR
+exp_dir: ${exp_dir:}
+data_dir: ${data_dir:}
 
 # Output directory
 training_index: 0
-output_dir: ${project_base}/${name}/outputs/training_index_${training_index}/${now:%Y-%m-%d_%H-%M-%S}
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}/${now:%Y-%m-%d_%H-%M-%S}
 
 # Device
 device: cuda:0
@@ -30,12 +30,12 @@ device: cuda:0
 shuffle_variant: 0
 
 data_source:
-  trajectories_dir: ${shared_data_base}/pendulum_lqr_50k/trajectories
+  trajectories_dir: ${data_dir}/pendulum_lqr_50k/trajectories
   # Shuffled indices and labels (aligned, for training)
-  shuffled_indices_file: ${shared_data_base}/pendulum_lqr_50k/train_test_splits/shuffled_indices_${shuffle_variant}.txt
-  shuffled_labels_file: ${shared_data_base}/pendulum_lqr_50k/train_test_splits/shuffled_labels_${shuffle_variant}.txt
+  shuffled_indices_file: ${data_dir}/pendulum_lqr_50k/train_test_splits/shuffled_indices_${shuffle_variant}.txt
+  shuffled_labels_file: ${data_dir}/pendulum_lqr_50k/train_test_splits/shuffled_labels_${shuffle_variant}.txt
   # Eval states (full dataset with start, end, labels - for evaluation only)
-  eval_states_file: ${shared_data_base}/pendulum_lqr_50k/eval_states.txt
+  eval_states_file: ${data_dir}/pendulum_lqr_50k/eval_states.txt
 
 # Dataset splits (val/test are subsets of training with overlap)
 val_ratio: 0.1      # 10% of training for validation

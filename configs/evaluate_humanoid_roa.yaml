@@ -1,5 +1,5 @@
 # User-specific paths (loaded from .env file via resolvers)
-shared_data_base: ${shared_data_base:}
+data_dir: ${data_dir:}
 
 # Humanoid ROA Evaluation Configuration
 # Evaluates trained Humanoid LCFM model on labeled ROA data (if available)
@@ -22,7 +22,7 @@ checkpoint:
 # Data: Eval states (adjust path when available)
 # Note: This path is a placeholder - update with actual eval states data
 data:
-  file: ${shared_data_base}/humanoid_get_up/eval_states.txt
+  file: ${data_dir}/humanoid_get_up/eval_states.txt
   format: "67D start_state,67D end_state,label"  # 67-dimensional states + label
 
 # Evaluation settings

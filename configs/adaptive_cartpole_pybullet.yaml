@@ -12,13 +12,13 @@ name: adaptive_cartpole_pybullet
 seed: 42
 
 # User-specific paths (loaded from .env file via resolvers)
-# To customize: edit .env file with PROJECT_BASE and SHARED_DATA_BASE
-project_base: ${project_base:}
-shared_data_base: ${shared_data_base:}
+# To customize: edit .env file with EXP_DIR and DATA_DIR
+exp_dir: ${exp_dir:}
+data_dir: ${data_dir:}
 
 # Output  directory
 training_index: 0
-output_dir: ${project_base}/${name}/outputs/init_size_${initial_train_size}_training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}/${now:%Y-%m-%d_%H-%M-%S}
+output_dir: ${exp_dir}/${name}/outputs/init_size_${initial_train_size}_training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}/${now:%Y-%m-%d_%H-%M-%S}
 
 # Device
 device: cuda:0
@@ -27,7 +27,7 @@ device: cuda:0
 # Data Source Configuration
 # =====================================================================
 data_source:
-  base_dir: ${shared_data_base}/cartpole_pybullet
+  base_dir: ${data_dir}/cartpole_pybullet
   trajectories_dir: ${data_source.base_dir}/trajectories
   train_test_splits_dir: ${data_source.base_dir}/train_test_splits
   # Shuffled indices and labels (aligned, for training)
@@ -163,7 +163,7 @@ scheduler:
 # System (CartPole)
 system:
   _target_: adaptive_roa.systems.cartpole.CartPoleSystem
-  dataset_dir: ${shared_data_base}/cartpole_pybullet
+  dataset_dir: ${data_dir}/cartpole_pybullet
 
 # Hydra
 hydra:

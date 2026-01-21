@@ -2,4 +2,4 @@
 _target_: adaptive_roa.systems.pendulum_cartesian.PendulumCartesianSystem
 
 # Dataset directory containing dataset_description.json with bounds
-dataset_dir: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}/pendulum_cartesian_50k
+dataset_dir: ${data_dir:/common/users/shared/pracsys/genMoPlan/data_trajectories}/pendulum_cartesian_50k

@@ -1,5 +1,5 @@
 # User-specific paths (loaded from .env file via resolvers)
-shared_data_base: ${shared_data_base:}
+data_dir: ${data_dir:}
 
 # Pendulum Cartesian ROA Evaluation Configuration
 # Evaluates trained LCFM model on labeled ROA data
@@ -20,7 +20,7 @@ checkpoint:
 
 # Data: Eval states (start, end, label)
 data:
-  file: ${shared_data_base}/pendulum_cartesian_50k/eval_states.txt
+  file: ${data_dir}/pendulum_cartesian_50k/eval_states.txt
   format: "x_s,y_s,vx_s,vy_s,x_e,y_e,vx_e,vy_e,label"  # Comma-separated format
 
 # Evaluation settings

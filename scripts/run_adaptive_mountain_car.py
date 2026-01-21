@@ -18,17 +18,15 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 
 # Register custom Hydra resolvers for environment-based paths
-from adaptive_roa.utils.env_config import get_net_id, get_exp_dir, get_env_config, get_project_base, get_shared_data_base
+from adaptive_roa.utils.env_config import get_net_id, get_exp_dir, get_data_dir, get_env_config
 
 # Register resolvers before Hydra processes configs
 if not OmegaConf.has_resolver("net_id"):
     OmegaConf.register_new_resolver("net_id", lambda: get_net_id())
 if not OmegaConf.has_resolver("exp_dir"):
     OmegaConf.register_new_resolver("exp_dir", lambda: get_exp_dir())
-if not OmegaConf.has_resolver("project_base"):
-    OmegaConf.register_new_resolver("project_base", lambda: get_project_base())
-if not OmegaConf.has_resolver("shared_data_base"):
-    OmegaConf.register_new_resolver("shared_data_base", lambda: get_shared_data_base())
+if not OmegaConf.has_resolver("data_dir"):
+    OmegaConf.register_new_resolver("data_dir", lambda: get_data_dir())
 if not OmegaConf.has_resolver("env"):
     OmegaConf.register_new_resolver("env", lambda key, default="": os.environ.get(key, get_env_config().get(key, default)))
 import torch
@@ -626,7 +624,7 @@ def train_flow_matcher(
     return flow_matcher
 
 
-@hydra.main(config_path="../../configs", config_name="adaptive_mountain_car", version_base=None)
+@hydra.main(config_path="../configs", config_name="adaptive_mountain_car", version_base=None)
 def main(cfg: DictConfig):
     """Main adaptive sampling loop for Mountain Car."""
     print("=" * 70)

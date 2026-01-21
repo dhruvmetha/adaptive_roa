@@ -80,28 +80,20 @@ class PendulumCartesianLatentConditionalFlowMatcher(BaseFlowMatcher):
 
     def sample_noisy_input(self, batch_size: int, device: torch.device) -> torch.Tensor:
         """
-        Sample noisy input uniformly in ℝ⁴ space
+        Sample Gaussian noise in normalized space for ℝ⁴ manifold.
+
+        Returns noise directly in normalized space (no further normalization needed).
 
         Args:
             batch_size: Number of samples
             device: Device to create tensors on
 
         Returns:
-            Noisy states [batch_size, 4] as (x, y, vx, vy)
+            Noisy states [batch_size, 4] in normalized space
         """
-        # x ~ Uniform[-x_limit, +x_limit]
-        x = torch.rand(batch_size, 1, device=device) * (2 * self.system.x_limit) - self.system.x_limit
-
-        # y ~ Uniform[-y_limit, +y_limit]
-        y = torch.rand(batch_size, 1, device=device) * (2 * self.system.y_limit) - self.system.y_limit
-
-        # vx ~ Uniform[-vx_limit, +vx_limit]
-        vx = torch.rand(batch_size, 1, device=device) * (2 * self.system.vx_limit) - self.system.vx_limit
-
-        # vy ~ Uniform[-vy_limit, +vy_limit]
-        vy = torch.rand(batch_size, 1, device=device) * (2 * self.system.vy_limit) - self.system.vy_limit
-
-        return torch.cat([x, y, vx, vy], dim=1)
+        noisy_input = torch.randn(batch_size, 4, device=device)
+        noisy_input = self.manifold.projx(noisy_input)
+        return noisy_input
 
     # ===================================================================
     # REMOVED METHODS (now in base class or handled by Facebook FM):

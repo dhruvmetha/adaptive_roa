@@ -93,26 +93,21 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
 
     def sample_noisy_input(self, batch_size: int, device: torch.device) -> torch.Tensor:
         """
-        Sample noisy input uniformly in S¹ × ℝ space
+        Sample Gaussian noise in normalized space for S¹ × ℝ manifold.
+
+        Returns noise directly in normalized space (no further normalization needed).
+        Circular dimension (θ) is projected onto manifold.
 
         Args:
             batch_size: Number of samples
             device: Device to create tensors on
 
         Returns:
-            Noisy states [batch_size, 2] as (θ, θ̇) in raw coordinates
+            Noisy states [batch_size, 2] in normalized space
         """
-        # θ ~ Uniform[-π, π] for circular angle
-        theta_min = self.system.state_bounds["angle"][0]
-        theta_max = self.system.state_bounds["angle"][1]
-        theta = torch.rand(batch_size, 1, device=device) * (theta_max - theta_min) + theta_min
-
-        # θ̇ ~ Uniform[-2π, 2π] for angular velocity
-        vel_min = self.system.state_bounds["angular_velocity"][0]
-        vel_max = self.system.state_bounds["angular_velocity"][1]
-        theta_dot = torch.rand(batch_size, 1, device=device) * (vel_max - vel_min) + vel_min
-
-        return torch.cat([theta, theta_dot], dim=1)
+        noisy_input = torch.randn(batch_size, 2, device=device)
+        noisy_input = self.manifold.projx(noisy_input)
+        return noisy_input
 
     # ===================================================================
     # REMOVED METHODS (now in base class or handled by Facebook FM):

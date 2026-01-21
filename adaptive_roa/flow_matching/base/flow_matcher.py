@@ -219,14 +219,18 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
     @abstractmethod
     def sample_noisy_input(self, batch_size: int, device: torch.device) -> torch.Tensor:
         """
-        Sample noisy input in system's state space
+        Sample Gaussian noise directly in normalized space.
+
+        Returns noise that is ready to use without further normalization.
+        For manifolds with circular/spherical components, the noise should be
+        projected onto the manifold using self.manifold.projx().
 
         Args:
             batch_size: Number of samples
             device: Device to create tensors on
 
         Returns:
-            Noisy states [batch_size, state_dim]
+            Noisy states [batch_size, state_dim] in normalized space
         """
         pass
 
@@ -328,9 +332,8 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         if device is None:
             device = self.device
 
-        # Sample and normalize noisy inputs
-        x_noise = self.sample_noisy_input(batch_size, device)
-        x_noise_normalized = self.normalize_state(x_noise)
+        # Sample noisy inputs (already in normalized space)
+        x_noise_normalized = self.sample_noisy_input(batch_size, device)
 
         # Handle latent vectors
         if latent is None:

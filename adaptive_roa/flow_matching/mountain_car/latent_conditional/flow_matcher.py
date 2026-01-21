@@ -80,22 +80,20 @@ class MountainCarLatentConditionalFlowMatcher(BaseFlowMatcher):
 
     def sample_noisy_input(self, batch_size: int, device: torch.device) -> torch.Tensor:
         """
-        Sample noisy input uniformly in ℝ² space
+        Sample Gaussian noise in normalized space for ℝ² manifold.
+
+        Returns noise directly in normalized space (no further normalization needed).
 
         Args:
             batch_size: Number of samples
             device: Device to create tensors on
 
         Returns:
-            Noisy states [batch_size, 2] as (position, velocity)
+            Noisy states [batch_size, 2] in normalized space
         """
-        # position ~ Uniform[-position_limit, +position_limit]
-        position = torch.rand(batch_size, 1, device=device) * (2 * self.system.position_limit) - self.system.position_limit
-
-        # velocity ~ Uniform[-velocity_limit, +velocity_limit]
-        velocity = torch.rand(batch_size, 1, device=device) * (2 * self.system.velocity_limit) - self.system.velocity_limit
-
-        return torch.cat([position, velocity], dim=1)
+        noisy_input = torch.randn(batch_size, 2, device=device)
+        noisy_input = self.manifold.projx(noisy_input)
+        return noisy_input
 
     # ===================================================================
     # REMOVED METHODS (now in base class or handled by Facebook FM):

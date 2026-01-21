@@ -101,30 +101,21 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
 
     def sample_noisy_input(self, batch_size: int, device: torch.device) -> torch.Tensor:
         """
-        Sample noisy input uniformly in ℝ³⁴ × S² × ℝ³⁰ space
+        Sample Gaussian noise in normalized space for ℝ³⁴ × S² × ℝ³⁰ manifold.
 
-        For Euclidean components: sample uniformly within bounds
-        For Sphere component: sample uniformly on unit sphere
+        Returns noise directly in normalized space (no further normalization needed).
+        Sphere component (S²) is projected onto manifold.
 
         Args:
             batch_size: Number of samples
             device: Device to create tensors on
 
         Returns:
-            Noisy states [batch_size, 67]
+            Noisy states [batch_size, 67] in normalized space
         """
-        # First Euclidean block (dims 0-33): uniform in [-limit, +limit]
-        euclidean1 = torch.rand(batch_size, 34, device=device) * (2 * self.system.euclidean_limit) - self.system.euclidean_limit
-
-        # Sphere block (dims 34-36): uniform sampling on S² (unit sphere in ℝ³)
-        # Use normal distribution and normalize to get uniform distribution on sphere
-        sphere = torch.randn(batch_size, 3, device=device)
-        sphere = sphere / torch.norm(sphere, dim=1, keepdim=True)  # Normalize to unit vector
-
-        # Second Euclidean block (dims 37-66): uniform in [-limit, +limit]
-        euclidean2 = torch.rand(batch_size, 30, device=device) * (2 * self.system.euclidean_limit) - self.system.euclidean_limit
-
-        return torch.cat([euclidean1, sphere, euclidean2], dim=1)
+        noisy_input = torch.randn(batch_size, 67, device=device)
+        noisy_input = self.manifold.projx(noisy_input)
+        return noisy_input
 
     def normalize_state(self, state: torch.Tensor) -> torch.Tensor:
         """Delegate to system for normalization"""

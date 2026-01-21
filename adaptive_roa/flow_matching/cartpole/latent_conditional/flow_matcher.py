@@ -82,33 +82,20 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
 
     def sample_noisy_input(self, batch_size: int, device: torch.device) -> torch.Tensor:
         """
-        Sample noisy input uniformly in ℝ²×S¹×ℝ space
+        Sample Gaussian noise in normalized space for ℝ²×S¹×ℝ manifold.
+
+        Returns noise directly in normalized space (no further normalization needed).
+        Circular dimension (θ) is projected onto manifold.
 
         Args:
             batch_size: Number of samples
             device: Device to create tensors on
 
         Returns:
-            Noisy states [batch_size, 4] as (x, θ, ẋ, θ̇)
+            Noisy states [batch_size, 4] in normalized space
         """
-        # x ~ Uniform[-cart_limit, +cart_limit] (symmetric bounds)
-        # x = torch.rand(batch_size, 1, device=device) * (2 * self.system.cart_limit) - self.system.cart_limit
-
-        # # θ ~ Uniform[-π, π] (wrapped angle)
-        # theta = torch.rand(batch_size, 1, device=device) * (2 * torch.pi) - torch.pi
-
-        # # ẋ ~ Uniform[-velocity_limit, +velocity_limit] (symmetric bounds)
-        # x_dot = torch.rand(batch_size, 1, device=device) * (2 * self.system.velocity_limit) - self.system.velocity_limit
-
-        # # θ̇ ~ Uniform[-angular_velocity_limit, +angular_velocity_limit] (symmetric bounds)
-        # theta_dot = torch.rand(batch_size, 1, device=device) * (2 * self.system.angular_velocity_limit) - self.system.angular_velocity_limit
-        
-        # return torch.cat([x, theta, x_dot, theta_dot], dim=1)
-    
-        # gaussian noise
         noisy_input = torch.randn(batch_size, 4, device=device)
         noisy_input = self.manifold.projx(noisy_input)
-
         return noisy_input
 
     # ===================================================================

@@ -1,0 +1,16 @@
+# @package _global_.system
+# =====================================================================
+# Quadrotor 3D System Configuration
+# =====================================================================
+# Quadrotor 3D dynamics with ℝ³ × SO(3) × ℝ⁶ manifold structure
+# State: (x, y, z, qw, qx, qy, qz, ẋ, ẏ, ż, p, q, r) where:
+#   - (x, y, z) ∈ ℝ³ (position in world frame)
+#   - (qw, qx, qy, qz) ∈ SO(3) via unit quaternion (scalar-first)
+#   - (ẋ, ẏ, ż) ∈ ℝ³ (linear velocity in world frame)
+#   - (p, q, r) ∈ ℝ³ (angular velocity in body frame)
+# =====================================================================
+
+_target_: adaptive_roa.systems.quadrotor3d.Quadrotor3DSystem
+
+# Dataset directory containing dataset_description.json with bounds
+dataset_dir: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}/quadrotor3D_lqr

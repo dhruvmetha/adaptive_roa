@@ -19,11 +19,11 @@ checkpoint:
   auto_find: true  # Search for latest checkpoint in base_name directory
   base_name: humanoid_latent_conditional_fm  # Used for auto-finding
 
-# Data: Labeled ROA data (adjust path when available)
-# Note: This path is a placeholder - update with actual ROA labeled data
+# Data: Eval states (adjust path when available)
+# Note: This path is a placeholder - update with actual eval states data
 data:
-  file: ${shared_data_base}/humanoid_get_up/roa_labels.txt
-  format: "67D state,label"  # 67-dimensional state + label
+  file: ${shared_data_base}/humanoid_get_up/eval_states.txt
+  format: "67D start_state,67D end_state,label"  # 67-dimensional states + label
 
 # Evaluation settings
 evaluation:

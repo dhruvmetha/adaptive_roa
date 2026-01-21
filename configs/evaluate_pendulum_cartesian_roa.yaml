@@ -18,10 +18,10 @@ checkpoint:
   auto_find: true  # Search for latest checkpoint
   base_name: pendulum_cartesian_latent_conditional_fm  # Used for auto-finding
 
-# Data: Labeled ROA data
+# Data: Eval states (start, end, label)
 data:
-  file: ${shared_data_base}/pendulum_cartesian_50k/roa_labels.txt
-  format: "x,y,vx,vy,label"  # Comma-separated format
+  file: ${shared_data_base}/pendulum_cartesian_50k/eval_states.txt
+  format: "x_s,y_s,vx_s,vy_s,x_e,y_e,vx_e,vy_e,label"  # Comma-separated format
 
 # Evaluation settings
 evaluation:

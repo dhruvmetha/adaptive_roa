@@ -42,7 +42,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
 from lightning.pytorch.loggers import TensorBoardLogger
 from typing import Dict
 
-from adaptive_roa.adaptive.data_source import TrajectoryDataSource, TrajectoryDataSourceConfig
+from adaptive_roa.adaptive.data_source import TrajectoryDataSource, TrajectoryDataSourceConfig, load_eval_states
 from adaptive_roa.adaptive.dataset_builder import AdaptiveDatasetBuilder
 from adaptive_roa.adaptive.balanced_sampler import BalancedUncertainSampler
 from adaptive_roa.conformal import ConformalConfig, ConformalPredictor
@@ -435,7 +435,7 @@ def compute_metrics_lambda_delta_cartpole(
 def evaluate_full_roa_fast(
     flow_matcher,
     system,
-    roa_labels_file: str,
+    eval_states_file: str,
     num_mc_samples: int = 20,
     batch_size: int = 2048,
     lambda_star: float = None,
@@ -446,7 +446,7 @@ def evaluate_full_roa_fast(
     verbose: bool = True
 ) -> Dict:
     """
-    Fast batched evaluation on the ENTIRE roa_labels.txt dataset.
+    Fast batched evaluation on the ENTIRE eval_states.txt dataset.
 
     Uses direct batched inference instead of conformal predictor for speed.
     Processes 2048 points at a time with num_mc_samples forward passes.
@@ -458,7 +458,7 @@ def evaluate_full_roa_fast(
     Args:
         flow_matcher: Trained flow matcher model
         system: System for classify_attractor
-        roa_labels_file: Path to roa_labels.txt (CSV: start_state..., label)
+        eval_states_file: Path to eval_states.txt (CSV: start_state..., end_state..., label)
         num_mc_samples: Number of MC samples per point
         batch_size: Batch size for GPU inference
         lambda_star: Optimized λ* from conformal prediction (if None, use 0.5)
@@ -473,14 +473,8 @@ def evaluate_full_roa_fast(
     """
     from tqdm import tqdm
 
-    # Load ROA labels directly from file (not through data_source)
-    data = np.loadtxt(roa_labels_file, delimiter=',')
-    X_all = data[:, :-1].astype(np.float32)
-    raw_labels = data[:, -1].astype(int)
-
-    # Map external labels to internal format (0 → -1 failure, 1 → 1 success)
-    label_mapping = {0: -1, 1: 1}
-    y_all = np.array([label_mapping.get(l, 0) for l in raw_labels], dtype=np.int64)
+    # Load eval_states file (contains start_states, end_states, labels)
+    X_all, end_states_all, y_all = load_eval_states(eval_states_file)
 
     n_total = len(y_all)
 
@@ -498,11 +492,16 @@ def evaluate_full_roa_fast(
         print(f"MC samples: {num_mc_samples}, batch_size: {batch_size}")
         print(f"Attractor radius: {attractor_radius}")
 
-    # Convert to tensor
+    # Convert to tensors
     X_tensor = torch.from_numpy(X_all).float().to(device)
+    end_states_tensor = torch.from_numpy(end_states_all).float().to(device)
 
     # Collect MC labels for each point (stores -1, 0, 1 for each sample)
     mc_labels = np.zeros((n_total, num_mc_samples), dtype=np.int8)
+
+    # Collect predicted endpoints for endpoint error computation
+    # Store mean prediction per point (average across MC samples)
+    pred_endpoints_sum = np.zeros((n_total, end_states_all.shape[1]), dtype=np.float64)
 
     flow_matcher.eval()
     with torch.no_grad():
@@ -514,6 +513,19 @@ def evaluate_full_roa_fast(
                 pred = flow_matcher.predict_endpoint(batch_inp)
                 attractor_labels = system.classify_attractor(pred, attractor_radius).cpu().numpy()
                 mc_labels[batch_start:batch_end, sample_idx] = attractor_labels
+                # Accumulate predictions for mean endpoint computation
+                pred_endpoints_sum[batch_start:batch_end] += pred.cpu().numpy()
+
+    # Compute mean predicted endpoints
+    pred_endpoints_mean = pred_endpoints_sum / num_mc_samples
+
+    # Compute endpoint errors (predicted vs actual end states)
+    endpoint_errors = pred_endpoints_mean - end_states_all
+    endpoint_mae_per_dim = np.abs(endpoint_errors).mean(axis=0)
+    endpoint_mse_per_dim = (endpoint_errors ** 2).mean(axis=0)
+    endpoint_mae = np.abs(endpoint_errors).mean()
+    endpoint_mse = (endpoint_errors ** 2).mean()
+    endpoint_rmse = np.sqrt(endpoint_mse)
 
     # Compute probabilities for each class
     p_success = (mc_labels == 1).sum(axis=1) / num_mc_samples   # P(label == 1)
@@ -525,6 +537,16 @@ def evaluate_full_roa_fast(
         print(f"  p_success:   mean={p_success.mean():.4f}, min={p_success.min():.4f}, max={p_success.max():.4f}")
         print(f"  p_failure:   mean={p_failure.mean():.4f}, min={p_failure.min():.4f}, max={p_failure.max():.4f}")
         print(f"  p_separatrix: mean={p_separatrix.mean():.4f}, min={p_separatrix.min():.4f}, max={p_separatrix.max():.4f}")
+
+        print(f"\n{'='*60}")
+        print("ENDPOINT ERROR METRICS (predicted vs actual)")
+        print(f"{'='*60}")
+        print(f"Overall MAE:     {endpoint_mae:.6f}")
+        print(f"Overall MSE:     {endpoint_mse:.6f}")
+        print(f"Overall RMSE:    {endpoint_rmse:.6f}")
+        dim_names = ['x', 'θ', 'ẋ', 'θ̇']
+        for i, name in enumerate(dim_names):
+            print(f"  {name}: MAE={endpoint_mae_per_dim[i]:.6f}, MSE={endpoint_mse_per_dim[i]:.6f}")
 
     # Compute metrics for BOTH threshold schemes
     # 1. λ*±δ from conformal prediction (CartPole: uses BOTH p_success and p_failure)
@@ -588,6 +610,14 @@ def evaluate_full_roa_fast(
         'recall': metrics_notebook['recall'],
         'specificity': metrics_notebook['specificity'],
         'f1': metrics_notebook['f1'],
+        # Endpoint error metrics
+        'endpoint_errors': {
+            'mae': float(endpoint_mae),
+            'mse': float(endpoint_mse),
+            'rmse': float(endpoint_rmse),
+            'mae_per_dim': [float(x) for x in endpoint_mae_per_dim],
+            'mse_per_dim': [float(x) for x in endpoint_mse_per_dim],
+        },
     }
 
     # Save to files if specified
@@ -790,8 +820,8 @@ def main(cfg: DictConfig):
         shuffled_indices_file=cfg.data_source.shuffled_indices_file,
         # Use shuffled_labels (aligned with shuffled_indices) for training
         shuffled_labels_file=cfg.data_source.get('shuffled_labels_file', None),
-        # Use roa_labels for full ROA evaluation only
-        roa_labels_file=cfg.data_source.get('roa_labels_file', None),
+        # Use eval_states for full ROA evaluation (contains start, end, labels)
+        eval_states_file=cfg.data_source.get('eval_states_file', None),
     )
     data_source = TrajectoryDataSource(data_source_config)
 
@@ -910,20 +940,20 @@ def main(cfg: DictConfig):
         X_test, y_test = dataset_builder.get_test_labels()
         test_metrics = conformal_predictor.evaluate(X_test, y_test, verbose=True)
 
-        # Step 5b: Evaluate on FULL roa_labels.txt (fast batched)
+        # Step 5b: Evaluate on FULL eval_states.txt (fast batched)
         # Use λ* and δ* from conformal predictor for consistent classification
         num_mc_samples_eval = cfg.conformal.get('num_mc_samples_eval', 20)
         conformal_state = conformal_predictor.get_state()
         lambda_star = conformal_state['lambda_star']
         delta_star = conformal_state['delta_star']  # Use optimized delta (may differ from config if optimize_mode="delta")
 
-        print(f"\n[5] Evaluating on FULL roa_labels.txt ({num_mc_samples_eval} MC samples, fast batched)...")
+        print(f"\n[5] Evaluating on FULL eval_states.txt ({num_mc_samples_eval} MC samples, fast batched)...")
         print(f"    Using λ*={lambda_star:.4f} ± δ*={delta_star:.4f} from conformal prediction")
         full_roa_output_file = epoch_output_dir / "full_roa_evaluation.json"
         full_roa_metrics = evaluate_full_roa_fast(
             flow_matcher=flow_matcher,
             system=system,
-            roa_labels_file=cfg.data_source.roa_labels_file,
+            eval_states_file=cfg.data_source.eval_states_file,
             num_mc_samples=num_mc_samples_eval,
             batch_size=cfg.get('val_batch_size', 2048),
             lambda_star=lambda_star,
@@ -1046,7 +1076,7 @@ def main(cfg: DictConfig):
             'test_coverage': test_metrics['coverage'],
             'test_f1': test_metrics['f1'],
             'test_unknown_rate': test_metrics['unknown_rate'],
-            # Full ROA metrics (entire roa_labels.txt)
+            # Full ROA metrics (entire eval_states.txt)
             'full_roa': full_roa_metrics,
         }
         epoch_results.append(epoch_result)

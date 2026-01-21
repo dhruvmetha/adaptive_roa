@@ -70,16 +70,20 @@ class MountainCarSystem(DynamicalSystem):
 
         bounds = dataset_info['achieved_bounds']
 
-        self.position_limit = max(abs(bounds['position']['min']), abs(bounds['position']['max']))
-        self.velocity_limit = max(abs(bounds['velocity']['min']), abs(bounds['velocity']['max']))
+        # Support both old ('position'/'velocity') and new ('x'/'x_dot') key names
+        pos_key = 'position' if 'position' in bounds else 'x'
+        vel_key = 'velocity' if 'velocity' in bounds else 'x_dot'
+
+        self.position_limit = max(abs(bounds[pos_key]['min']), abs(bounds[pos_key]['max']))
+        self.velocity_limit = max(abs(bounds[vel_key]['min']), abs(bounds[vel_key]['max']))
 
         # Store the full dataset info for reference
         self.dataset_info = dataset_info
         self.achieved_bounds = bounds
 
         # Print in state vector order: [position, velocity]
-        print(f"  [0] Position: [{bounds['position']['min']:.3f}, {bounds['position']['max']:.3f}] -> limit: ±{self.position_limit:.3f}")
-        print(f"  [1] Velocity: [{bounds['velocity']['min']:.3f}, {bounds['velocity']['max']:.3f}] -> limit: ±{self.velocity_limit:.3f}")
+        print(f"  [0] Position: [{bounds[pos_key]['min']:.3f}, {bounds[pos_key]['max']:.3f}] -> limit: ±{self.position_limit:.3f}")
+        print(f"  [1] Velocity: [{bounds[vel_key]['min']:.3f}, {bounds[vel_key]['max']:.3f}] -> limit: ±{self.velocity_limit:.3f}")
 
     def _compute_bounds_from_trajectories(self, trajectories_dir: Path):
         """Compute bounds from trajectory files as fallback when JSON is not accessible"""

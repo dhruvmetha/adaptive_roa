@@ -17,11 +17,11 @@ from adaptive_roa.flow_matching.cartpole.latent_conditional.flow_matcher import 
 from adaptive_roa.systems.cartpole import CartPoleSystem
 
 
-def load_roa_data(data_file: str):
-    """Load ROA labels data (comma-separated: x,θ,ẋ,θ̇,label)"""
+def load_eval_states_data(data_file: str):
+    """Load eval_states data (comma-separated: x_s,θ_s,ẋ_s,θ̇_s,x_e,θ_e,ẋ_e,θ̇_e,label)"""
     data = np.loadtxt(data_file, delimiter=',')
-    states = data[:, :4]  # x, θ, ẋ, θ̇
-    labels = data[:, 4].astype(int)  # Ground truth labels
+    states = data[:, :4]  # Start states: x, θ, ẋ, θ̇
+    labels = data[:, -1].astype(int)  # Ground truth labels (last column)
     return states, labels
 
 
@@ -143,7 +143,7 @@ def compute_metrics(success_rate: np.ndarray, labels: np.ndarray,
 def main():
     # Configuration
     base_dir = Path("/common/users/rm1838/tripods/adaptive/outputs/adaptive_cartpole_pybullet/2025-12-05_10-52-57")
-    data_file = "/common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/roa_labels.txt"
+    data_file = "/common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/eval_states.txt"
     attractor_radius = 0.2
     num_mc_samples = 10
     batch_size = 2048
@@ -155,8 +155,8 @@ def main():
     print()
 
     # Load data
-    print("Loading ROA data...")
-    states, labels = load_roa_data(data_file)
+    print("Loading eval states data...")
+    states, labels = load_eval_states_data(data_file)
     print(f"  Loaded {len(states)} points")
     print(f"  Success: {(labels == 1).sum()}, Failure: {(labels == -1).sum()}, Sep: {(labels == 0).sum()}")
     print()

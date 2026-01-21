@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(squeue:*)",
+      "Bash(scontrol show:*)",
+      "Bash(sinfo:*)",
+      "Bash(du:*)",
+      "Bash(wc:*)",
+      "Bash(python:*)",
+      "Bash(source ~/.bashrc)",
+      "Bash(conda activate:*)",
+      "Bash(/common/users/rm1838/envs/arcmg/bin/python:*)",
+      "Bash(/usr/bin/python3:*)",
+      "Bash(nvidia-smi:*)",
+      "Bash(chmod:*)",
+      "Bash(bash scripts/run_test_experiments.sh:*)",
+      "Bash(/koko/system/anaconda/bin/conda env:*)",
+      "Bash(ls:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(kill:*)",
+      "Bash(pkill:*)",
+      "Bash(git pull:*)",
+      "Bash(tmux new-session:*)",
+      "Bash(tmux capture-pane:*)",
+      "Bash(tmux list-sessions:*)",
+      "Bash(echo:*)",
+      "Bash(tmux kill-session:*)",
+      "Bash(tmux send-keys:*)",
+      "Bash(tmux list-panes:*)",
+      "Bash(tmux list-windows:*)",
+      "Bash(export CUDA_VISIBLE_DEVICES=7:*)",
+      "Bash(/common/users/rm1838/miniforge3/envs/adaptive_roa/bin/python:*)",
+      "Bash(git stash:*)",
+      "Bash(head:*)"
+    ]
+  }
+}

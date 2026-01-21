@@ -1,7 +1,7 @@
 """
 Trajectory Data Source for Adaptive Sampling.
 
-Manages the mapping between roa_labels, shuffled_indices, and trajectory files.
+Manages the mapping between eval_states, shuffled_indices, and trajectory files.
 Provides efficient access to trajectory data by index.
 """
 import numpy as np
@@ -11,17 +11,75 @@ from typing import List, Tuple, Optional, Dict, Union
 from dataclasses import dataclass
 
 
+def load_eval_states(
+    filepath: str,
+    label_mapping: Optional[Dict[int, int]] = None
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Load eval_states.txt file containing start states, end states, and labels.
+
+    File format (comma-separated):
+    - Pendulum (2D state): θ_s, θ̇_s, θ_e, θ̇_e, label (5 columns)
+    - CartPole (4D state): x_s, θ_s, ẋ_s, θ̇_s, x_e, θ_e, ẋ_e, θ̇_e, label (9 columns)
+    - Mountain Car (2D state): pos_s, vel_s, pos_e, vel_e, label (5 columns)
+    - Pendulum Cartesian (4D state): x_s, y_s, vx_s, vy_s, x_e, y_e, vx_e, vy_e, label (9 columns)
+
+    The state dimension is automatically inferred from the number of columns:
+    - 5 columns → 2D state (pendulum, mountain car)
+    - 9 columns → 4D state (cartpole, pendulum cartesian)
+
+    Args:
+        filepath: Path to eval_states.txt file
+        label_mapping: Optional mapping from external labels (0/1) to internal format.
+                      Default: {0: -1, 1: 1} (0 → failure, 1 → success)
+
+    Returns:
+        Tuple of:
+            start_states: [N, state_dim] array of start states
+            end_states: [N, state_dim] array of end states
+            labels: [N] array of labels in internal format (-1 = failure, 1 = success)
+    """
+    if label_mapping is None:
+        label_mapping = {0: -1, 1: 1}
+
+    # Load data (comma-separated)
+    data = np.loadtxt(filepath, delimiter=',')
+
+    n_cols = data.shape[1]
+
+    # Infer state dimension from number of columns
+    # Format: [start_state..., end_state..., label]
+    # So: n_cols = 2 * state_dim + 1
+    state_dim = (n_cols - 1) // 2
+
+    if n_cols != 2 * state_dim + 1:
+        raise ValueError(
+            f"Invalid number of columns in eval_states file: {n_cols}. "
+            f"Expected 2*state_dim + 1 (e.g., 5 for 2D state, 9 for 4D state)"
+        )
+
+    # Extract components
+    start_states = data[:, :state_dim].astype(np.float32)
+    end_states = data[:, state_dim:2*state_dim].astype(np.float32)
+    raw_labels = data[:, -1].astype(int)
+
+    # Map labels to internal format
+    labels = np.array([label_mapping.get(l, 0) for l in raw_labels], dtype=np.int64)
+
+    return start_states, end_states, labels
+
+
 @dataclass
 class TrajectoryDataSourceConfig:
     """Configuration for trajectory data source."""
     trajectories_dir: str           # Base directory containing trajectory files
     shuffled_indices_file: str      # File mapping indices to trajectory filenames
 
-    # New: shuffled_labels_file aligned with shuffled_indices (for training)
+    # shuffled_labels_file aligned with shuffled_indices (for training)
     shuffled_labels_file: Optional[str] = None
 
-    # Legacy: roa_labels_file for full ROA evaluation only (not aligned with shuffled indices)
-    roa_labels_file: Optional[str] = None
+    # eval_states_file for full ROA evaluation (contains start, end, and labels)
+    eval_states_file: Optional[str] = None
 
     # Label mapping (external format → internal format)
     # External: 0 = failure, 1 = success (from labels files)
@@ -47,9 +105,9 @@ class TrajectoryDataSource:
 
     This is the "pool" of all available data that adaptive sampling draws from.
 
-    Note: ROA evaluation should load roa_labels.txt directly, not through this class.
-    This class focuses on training data management using shuffled_indices and
-    shuffled_labels files.
+    Note: For ROA evaluation, use the load_eval_states() function to load
+    eval_states.txt directly. This class focuses on training data management
+    using shuffled_indices and shuffled_labels files.
 
     Attributes:
         config: TrajectoryDataSourceConfig

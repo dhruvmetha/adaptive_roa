@@ -18,10 +18,10 @@ checkpoint:
   auto_find: true  # Search for latest checkpoint
   base_name: mountain_car_latent_conditional_fm  # Used for auto-finding
 
-# Data: Labeled ROA data
+# Data: Eval states (start, end, label)
 data:
-  file: ${shared_data_base}/mountain_car_power_0p0008/roa_labels.txt
-  format: "position,velocity,label"  # Comma-separated format
+  file: ${shared_data_base}/mountain_car_power_0p0008/eval_states.txt
+  format: "pos_s,vel_s,pos_e,vel_e,label"  # Comma-separated format
 
 # Evaluation settings
 evaluation:

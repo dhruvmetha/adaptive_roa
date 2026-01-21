@@ -11,7 +11,7 @@ from adaptive_roa.flow_matching.cartpole.latent_conditional.flow_matcher import 
 
 # Data paths
 dataset_dir = "/common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet"
-roa_file = f"{dataset_dir}/roa_labels.txt"
+eval_states_file = f"{dataset_dir}/eval_states.txt"
 
 # Model paths - direct checkpoint files
 models = {
@@ -36,19 +36,20 @@ def evaluate_model(model_name, ckpt_path):
     # Load model
     flow_matcher = CartPoleLatentConditionalFlowMatcher.load_from_checkpoint(ckpt_path, device=device)
 
-    # Load data
-    roa_data = np.loadtxt(roa_file, delimiter=",")
-    inp = torch.from_numpy(roa_data[:, :-1]).float().to(device)
-    labels = torch.from_numpy(roa_data[:, -1]).long().to(device)
+    # Load data (eval_states.txt format: x_s, θ_s, ẋ_s, θ̇_s, x_e, θ_e, ẋ_e, θ̇_e, label)
+    eval_data = np.loadtxt(eval_states_file, delimiter=",")
+    # Extract start states (first 4 columns) and labels (last column)
+    inp = torch.from_numpy(eval_data[:, :4]).float().to(device)
+    labels = torch.from_numpy(eval_data[:, -1]).long().to(device)
 
-    print(f"Total samples: {len(roa_data)}")
-    print(f"Success rate in data: {np.mean(roa_data[:, -1] == 1)*100:.2f}%")
+    print(f"Total samples: {len(eval_data)}")
+    print(f"Success rate in data: {np.mean(eval_data[:, -1] == 1)*100:.2f}%")
 
     # Run inference
-    is_success = np.zeros((len(roa_data), samples))
+    is_success = np.zeros((len(eval_data), samples))
 
-    for batch_start in tqdm(range(0, len(roa_data), batch_size), desc="Evaluating"):
-        batch_end = min(batch_start + batch_size, len(roa_data))
+    for batch_start in tqdm(range(0, len(eval_data), batch_size), desc="Evaluating"):
+        batch_end = min(batch_start + batch_size, len(eval_data))
         batch_inp = inp[batch_start:batch_end, :]
 
         for sample_idx in range(samples):
@@ -77,7 +78,7 @@ def evaluate_model(model_name, ckpt_path):
     recall = tp / (tp + fn) if tp + fn > 0 else 0
     f1 = 2 * precision * recall / (precision + recall) if precision + recall > 0 else 0
     specificity = tn / (tn + fp) if tn + fp > 0 else 0
-    sep_perc = sep_count / len(roa_data)
+    sep_perc = sep_count / len(eval_data)
 
     print(f"\n--- Results for {model_name} ---")
     print(f"Precision: {precision*100:.2f}%")

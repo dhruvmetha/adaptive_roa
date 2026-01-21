@@ -18,10 +18,10 @@ checkpoint:
   auto_find: true  # Search for latest checkpoint
   base_name: pendulum_latent_conditional_fm  # Used for auto-finding
 
-# Data: Labeled ROA data
+# Data: Eval states (start, end, label)
 data:
-  file: ${shared_data_base}/pendulum_lqr_50k/roa_labels_700k_DO_NOT_USE_DEATH_INSIDE.txt
-  format: "θ θ̇ label"  # Space-separated format
+  file: ${shared_data_base}/pendulum_lqr_50k/eval_states.txt
+  format: "θ_s,θ̇_s,θ_e,θ̇_e,label"  # Comma-separated format
 
 # Evaluation settings
 evaluation:

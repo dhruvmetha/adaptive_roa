@@ -33,8 +33,8 @@ data_source:
   # Shuffled indices and labels (aligned, for training)
   shuffled_indices_file: ${data_source.train_test_splits_dir}/shuffled_indices_${training_index}.txt
   shuffled_labels_file: ${data_source.train_test_splits_dir}/shuffled_labels_${training_index}.txt
-  # ROA labels (full dataset, for evaluation only - NOT aligned with shuffled indices)
-  roa_labels_file: ${data_source.base_dir}/roa_labels.txt
+  # Eval states (full dataset with start, end, labels - for evaluation only)
+  eval_states_file: ${data_source.base_dir}/eval_states.txt
 
 # Dataset splits (val/test are subsets of training with overlap)
 val_ratio: 0.1      # 10% of training for validation

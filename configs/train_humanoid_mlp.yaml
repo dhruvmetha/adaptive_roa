@@ -22,7 +22,7 @@ system:
 
 # Data configuration
 data:
-  file: /common/users/shared/pracsys/genMoPlan/data_trajectories/humanoid_get_up_slow_reach/roa_labels.txt
+  file: /common/users/shared/pracsys/genMoPlan/data_trajectories/humanoid_get_up_slow_reach/eval_states.txt
   batch_size: 64
   num_workers: 4
   # Slicing: [start_index, end_index]

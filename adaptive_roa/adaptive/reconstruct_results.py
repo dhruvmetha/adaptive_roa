@@ -34,6 +34,8 @@ import matplotlib.patches as mpatches
 import subprocess
 import shutil
 
+from adaptive_roa.adaptive.data_source import load_eval_states
+
 
 def load_hydra_config(results_dir: Path) -> Optional[Dict]:
     """
@@ -258,51 +260,20 @@ def evaluate_full_roa(
     return metrics, success_rate
 
 
-def load_roa_labels(roa_labels_file: str) -> Tuple[np.ndarray, np.ndarray]:
+def load_eval_states_for_reconstruction(eval_states_file: str) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Load ROA labels file.
+    Load eval_states file for reconstruction.
 
-    Supports both comma-separated and space-separated formats.
-    Converts labels to standard format: 1 (success), -1 (failure).
+    Uses load_eval_states() from data_source and returns only start_states and labels
+    (ignoring end_states which are not needed for evaluation).
 
-    Input label formats supported:
-    - 0/1 format: 0 = failure, 1 = success
-    - -1/1 format: -1 = failure, 1 = success (already standard)
+    Args:
+        eval_states_file: Path to eval_states.txt (CSV: start_state..., end_state..., label)
 
     Returns:
         Tuple of (start_states, labels) where labels are in {-1, 1} format
     """
-    # Try to detect delimiter by reading first line
-    with open(roa_labels_file, 'r') as f:
-        first_line = f.readline().strip()
-
-    if ',' in first_line:
-        delimiter = ','
-    else:
-        delimiter = None  # whitespace
-
-    data = np.loadtxt(roa_labels_file, delimiter=delimiter)
-
-    # Format: theta, theta_dot, label (or x, theta, x_dot, theta_dot, label for cartpole)
-    if data.shape[1] == 3:
-        # Pendulum: theta, theta_dot, label
-        start_states = data[:, :2]
-        labels = data[:, 2].astype(int)
-    elif data.shape[1] == 5:
-        # CartPole: x, theta, x_dot, theta_dot, label
-        start_states = data[:, :4]
-        labels = data[:, 4].astype(int)
-    else:
-        raise ValueError(f"Unexpected data shape: {data.shape}")
-
-    # Convert 0/1 format to -1/1 format if needed
-    # Check if labels are in 0/1 format (no -1 values and has 0 values)
-    unique_labels = np.unique(labels)
-    if 0 in unique_labels and -1 not in unique_labels:
-        # Convert: 0 -> -1 (failure), 1 -> 1 (success)
-        labels = np.where(labels == 0, -1, labels)
-        print(f"  Converted labels from 0/1 to -1/1 format")
-
+    start_states, end_states, labels = load_eval_states(eval_states_file)
     return start_states, labels
 
 
@@ -877,7 +848,7 @@ def reconstruct_epoch(
 def reconstruct_results(
     results_dir: Path,
     system_type: Optional[str] = None,
-    roa_labels_file: Optional[str] = None,
+    eval_states_file: Optional[str] = None,
     num_mc_samples: int = 20,
     batch_size: int = 2048,
     attractor_radius: float = 0.1,
@@ -893,7 +864,7 @@ def reconstruct_results(
     Args:
         results_dir: Path to adaptive run directory
         system_type: "pendulum" or "cartpole" (auto-detected from config if None)
-        roa_labels_file: Path to roa_labels.txt (auto-detected from config if None)
+        eval_states_file: Path to eval_states.txt (auto-detected from config if None)
         num_mc_samples: MC samples for evaluation
         batch_size: Batch size for inference
         attractor_radius: Radius for attractor classification
@@ -935,19 +906,19 @@ def reconstruct_results(
     # Get system and flow matcher class
     system, flow_matcher_class = get_system_and_flow_matcher(system_type)
 
-    # Determine roa_labels_file
-    if roa_labels_file is None:
+    # Determine eval_states_file
+    if eval_states_file is None:
         if cfg and 'data_source' in cfg:
-            roa_labels_file = cfg['data_source'].get('roa_labels_file')
+            eval_states_file = cfg['data_source'].get('eval_states_file')
 
-        if roa_labels_file is None:
-            raise ValueError("Could not find roa_labels_file in config. Please specify --roa_labels_file")
+        if eval_states_file is None:
+            raise ValueError("Could not find eval_states_file in config. Please specify --eval_states_file")
 
     if verbose:
-        print(f"ROA labels file: {roa_labels_file}")
+        print(f"Eval states file: {eval_states_file}")
 
-    # Load ROA labels
-    X_all, y_all = load_roa_labels(roa_labels_file)
+    # Load eval states (start_states, end_states, labels)
+    X_all, y_all = load_eval_states_for_reconstruction(eval_states_file)
     if verbose:
         print(f"Loaded {len(y_all)} points: {np.sum(y_all == 1)} success, {np.sum(y_all == -1)} failure")
 
@@ -987,7 +958,7 @@ def reconstruct_results(
         'final_stats': {
             'n_epochs_reconstructed': len(epoch_results),
             'system_type': system_type,
-            'roa_labels_file': str(roa_labels_file),
+            'eval_states_file': str(eval_states_file),
             'num_mc_samples': num_mc_samples,
         },
         'reconstructed': True,
@@ -1065,10 +1036,10 @@ Examples:
         help='System type (auto-detected from config if not specified)'
     )
     parser.add_argument(
-        '--roa_labels_file',
+        '--eval_states_file',
         type=str,
         default=None,
-        help='Path to roa_labels.txt (auto-detected from config if not specified)'
+        help='Path to eval_states.txt (auto-detected from config if not specified)'
     )
     parser.add_argument(
         '--num_mc_samples', '-n',
@@ -1122,7 +1093,7 @@ Examples:
     reconstruct_results(
         results_dir=Path(args.results_dir),
         system_type=args.system,
-        roa_labels_file=args.roa_labels_file,
+        eval_states_file=args.eval_states_file,
         num_mc_samples=args.num_mc_samples,
         batch_size=args.batch_size,
         attractor_radius=args.attractor_radius,

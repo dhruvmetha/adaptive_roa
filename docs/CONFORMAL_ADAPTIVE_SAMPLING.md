@@ -316,7 +316,7 @@ device: cuda:0
 data_source:
   trajectories_dir: /path/to/trajectories
   shuffled_indices_file: /path/to/shuffled_indices.txt
-  roa_labels_file: /path/to/roa_labels.txt
+  eval_states_file: /path/to/eval_states.txt
 
 # Dataset splits (val/test are subsets of training with overlap)
 val_ratio: 0.1              # 10% of training for FM validation
@@ -357,7 +357,7 @@ data_directory/
 │   ├── sequence_1.txt
 │   └── ...
 ├── shuffled_indices.txt    # Line i = filename for trajectory i
-└── roa_labels.txt          # Line i = "x,θ,ẋ,θ̇,label" for trajectory i
+└── eval_states.txt         # Line i = "start_state...,end_state...,label" for trajectory i
 ```
 
 ### TrajectoryDataSource
@@ -370,7 +370,7 @@ from src.adaptive import TrajectoryDataSource, TrajectoryDataSourceConfig
 config = TrajectoryDataSourceConfig(
     trajectories_dir="/path/to/trajectories",
     shuffled_indices_file="/path/to/shuffled_indices.txt",
-    roa_labels_file="/path/to/roa_labels.txt",  # Optional but recommended
+    eval_states_file="/path/to/eval_states.txt",  # Optional but recommended
 )
 data_source = TrajectoryDataSource(config)
 

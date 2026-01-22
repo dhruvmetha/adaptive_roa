@@ -402,6 +402,39 @@ def compute_metrics_notebook_style(p_success: np.ndarray, p_failure: np.ndarray,
     }
 
 
+def compute_geodesic_error_stats(errors: np.ndarray, mask: np.ndarray = None) -> Dict:
+    """
+    Compute mean, median, variance for geodesic errors (overall and per-dim).
+
+    Args:
+        errors: [N, D] array of geodesic distances per dimension
+        mask: Optional boolean mask to select a subset of points
+
+    Returns:
+        Dict with n_points, mean/median/variance (overall and per-dim)
+    """
+    if mask is not None:
+        errors = errors[mask]
+
+    if len(errors) == 0:
+        return {'n_points': 0}
+
+    # Overall stats: L2 norm across dimensions, then stats over samples
+    norms = np.linalg.norm(errors, axis=1)
+
+    return {
+        'n_points': int(len(errors)),
+        # Overall stats (L2 norm of geodesic error vector)
+        'mean': float(np.mean(norms)),
+        'median': float(np.median(norms)),
+        'variance': float(np.var(norms)),
+        # Per-dimension stats
+        'mean_per_dim': [float(x) for x in errors.mean(axis=0)],
+        'median_per_dim': [float(x) for x in np.median(errors, axis=0)],
+        'variance_per_dim': [float(x) for x in np.var(errors, axis=0)],
+    }
+
+
 def compute_metrics_lambda_delta_cartpole(
     p_success: np.ndarray,
     p_failure: np.ndarray,
@@ -579,18 +612,36 @@ def evaluate_full_roa_fast(
     # Compute mean predicted endpoints
     pred_endpoints_mean = pred_endpoints_sum / num_mc_samples
 
-    # Compute endpoint errors (predicted vs actual end states)
-    endpoint_errors = pred_endpoints_mean - end_states_all
-    endpoint_mae_per_dim = np.abs(endpoint_errors).mean(axis=0)
-    endpoint_mse_per_dim = (endpoint_errors ** 2).mean(axis=0)
-    endpoint_mae = np.abs(endpoint_errors).mean()
-    endpoint_mse = (endpoint_errors ** 2).mean()
-    endpoint_rmse = np.sqrt(endpoint_mse)
+    # Compute endpoint errors using manifold's geodesic distance
+    pred_tensor = torch.from_numpy(pred_endpoints_mean).float().to(device)
+    actual_tensor = torch.from_numpy(end_states_all).float().to(device)
+    geodesic_errors = flow_matcher.manifold.dist(pred_tensor, actual_tensor).cpu().numpy()
+
+    # Get component names for reporting
+    component_names = flow_matcher.get_manifold_component_names()
 
     # Compute probabilities for each class
     p_success = (mc_labels == 1).sum(axis=1) / num_mc_samples   # P(label == 1)
     p_failure = (mc_labels == -1).sum(axis=1) / num_mc_samples  # P(label == -1)
     p_invalid = (mc_labels == 0).sum(axis=1) / num_mc_samples   # P(label == 0)
+
+    # Classification masks using conformal thresholds (λ* ± δ)
+    success_thresh = lambda_star + delta
+    failure_thresh = lambda_star - delta
+
+    mask_invalid = p_invalid >= 0.5
+    mask_success = (p_success > success_thresh) & ~mask_invalid
+    mask_failure = ((1 - p_failure) < failure_thresh) & ~mask_invalid
+    mask_certain = mask_success | mask_failure
+    mask_uncertain = ~mask_invalid & ~mask_success & ~mask_failure
+
+    # Compute endpoint error stats for each category
+    error_stats_full = compute_geodesic_error_stats(geodesic_errors)
+    error_stats_certain = compute_geodesic_error_stats(geodesic_errors, mask_certain)
+    error_stats_certain_success = compute_geodesic_error_stats(geodesic_errors, mask_success)
+    error_stats_certain_failure = compute_geodesic_error_stats(geodesic_errors, mask_failure)
+    error_stats_uncertain = compute_geodesic_error_stats(geodesic_errors, mask_uncertain)
+    error_stats_invalid = compute_geodesic_error_stats(geodesic_errors, mask_invalid)
 
     if verbose:
         print(f"\nMC probability statistics:")
@@ -599,14 +650,22 @@ def evaluate_full_roa_fast(
         print(f"  p_invalid:   mean={p_invalid.mean():.4f}, min={p_invalid.min():.4f}, max={p_invalid.max():.4f}")
 
         print(f"\n{'='*60}")
-        print("ENDPOINT ERROR METRICS (predicted vs actual)")
+        print("GEODESIC ENDPOINT ERROR METRICS (predicted vs actual)")
         print(f"{'='*60}")
-        print(f"Overall MAE:     {endpoint_mae:.6f}")
-        print(f"Overall MSE:     {endpoint_mse:.6f}")
-        print(f"Overall RMSE:    {endpoint_rmse:.6f}")
-        dim_names = ['x', 'θ', 'ẋ', 'θ̇']
-        for i, name in enumerate(dim_names):
-            print(f"  {name}: MAE={endpoint_mae_per_dim[i]:.6f}, MSE={endpoint_mse_per_dim[i]:.6f}")
+        print(f"Component names: {component_names}")
+
+        for cat_name, stats in [("FULL", error_stats_full),
+                                 ("CERTAIN", error_stats_certain),
+                                 ("  CERTAIN_SUCCESS", error_stats_certain_success),
+                                 ("  CERTAIN_FAILURE", error_stats_certain_failure),
+                                 ("UNCERTAIN", error_stats_uncertain),
+                                 ("INVALID", error_stats_invalid)]:
+            print(f"\n  [{cat_name}] (n={stats['n_points']})")
+            if stats['n_points'] > 0:
+                print(f"    Overall: mean={stats['mean']:.6f}, median={stats['median']:.6f}, var={stats['variance']:.6f}")
+                print(f"    Per-dim mean:   {[f'{x:.4f}' for x in stats['mean_per_dim']]}")
+                print(f"    Per-dim median: {[f'{x:.4f}' for x in stats['median_per_dim']]}")
+                print(f"    Per-dim var:    {[f'{x:.4f}' for x in stats['variance_per_dim']]}")
 
     # Compute metrics for BOTH threshold schemes
     # 1. λ*±δ from conformal prediction (CartPole: uses BOTH p_success and p_failure)
@@ -674,13 +733,15 @@ def evaluate_full_roa_fast(
         'recall': metrics_notebook['recall'],
         'specificity': metrics_notebook['specificity'],
         'f1': metrics_notebook['f1'],
-        # Endpoint error metrics
+        # Endpoint error metrics (geodesic distances by category)
         'endpoint_errors': {
-            'mae': float(endpoint_mae),
-            'mse': float(endpoint_mse),
-            'rmse': float(endpoint_rmse),
-            'mae_per_dim': [float(x) for x in endpoint_mae_per_dim],
-            'mse_per_dim': [float(x) for x in endpoint_mse_per_dim],
+            'component_names': component_names,
+            'full': error_stats_full,
+            'certain': error_stats_certain,
+            'certain_success': error_stats_certain_success,
+            'certain_failure': error_stats_certain_failure,
+            'uncertain': error_stats_uncertain,
+            'invalid': error_stats_invalid,
         },
     }
 

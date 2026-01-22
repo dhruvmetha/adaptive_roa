@@ -19,6 +19,16 @@ from omegaconf import DictConfig, OmegaConf
 import torch
 import lightning.pytorch as pl
 
+# Register OmegaConf resolvers BEFORE Hydra loads config
+from adaptive_roa.utils.env_config import get_net_id, get_exp_dir, get_shared_data_base
+
+if not OmegaConf.has_resolver("net_id"):
+    OmegaConf.register_new_resolver("net_id", lambda default="": get_net_id() or default)
+if not OmegaConf.has_resolver("exp_dir"):
+    OmegaConf.register_new_resolver("exp_dir", lambda default="": get_exp_dir() or default)
+if not OmegaConf.has_resolver("shared_data_base"):
+    OmegaConf.register_new_resolver("shared_data_base", lambda default="": get_shared_data_base() or default)
+
 
 @hydra.main(version_base=None, config_path="../../../../configs", config_name="train_quadrotor3d")
 def main(cfg: DictConfig):

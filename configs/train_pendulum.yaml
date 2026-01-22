@@ -92,6 +92,7 @@ flow_matching:
   latent_dim: 2                    # Dimension of Gaussian latent variable
   num_integration_steps: 100       # Number of ODE integration steps for inference
   mae_val_frequency: 10            # Compute MAE validation every N epochs
+  use_loss_weights: false          # Weight loss by normalization limits (proportional)
 
 # Hydra output directory
 hydra:

@@ -270,5 +270,30 @@ class HumanoidSystem(DynamicalSystem):
         # No embedding needed - sphere is already in continuous 3D space
         return normalized_state
 
+    def get_loss_weights(self) -> torch.Tensor:
+        """
+        Get per-dimension loss weights for Humanoid (67D state).
+
+        State: ℝ³⁴ × S² × ℝ³⁰
+        - First 34 dims (Euclidean) → weight = euclidean_limit
+        - Next 3 dims (Sphere/S²) → weight = 1.0 (spherical)
+        - Last 30 dims (Euclidean) → weight = euclidean_limit
+
+        Returns:
+            torch.Tensor: 67D weights
+        """
+        weights = []
+
+        # First Euclidean block (34 dims)
+        weights.extend([self.euclidean_limit] * 34)
+
+        # Sphere block (3 dims) - unit weight for spherical
+        weights.extend([1.0] * 3)
+
+        # Second Euclidean block (30 dims)
+        weights.extend([self.euclidean_limit] * 30)
+
+        return torch.tensor(weights, dtype=torch.float32)
+
     def __repr__(self) -> str:
         return f"HumanoidSystem(ℝ³⁴ × S² × ℝ³⁰, euclidean_limit=±{self.euclidean_limit})"

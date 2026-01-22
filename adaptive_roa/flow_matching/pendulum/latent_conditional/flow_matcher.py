@@ -40,7 +40,8 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
                  scheduler,
                  model_config: Optional[dict] = None,
                  latent_dim: int = 2,
-                 mae_val_frequency: int = 10):
+                 mae_val_frequency: int = 10,
+                 use_loss_weights: bool = False):
         """
         Initialize latent conditional flow matcher with FB FM integration
 
@@ -52,8 +53,9 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
             model_config: Configuration dict
             latent_dim: Dimension of latent space
             mae_val_frequency: Compute MAE validation every N epochs
+            use_loss_weights: If True, weight loss by normalization limits
         """
-        super().__init__(system, model, optimizer, scheduler, model_config, latent_dim, mae_val_frequency)
+        super().__init__(system, model, optimizer, scheduler, model_config, latent_dim, mae_val_frequency, use_loss_weights)
 
         print("✅ Initialized Pendulum LCFM with Facebook Flow Matching:")
         print(f"   - Manifold: S¹×ℝ (FlatTorus × Euclidean)")

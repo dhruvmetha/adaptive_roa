@@ -308,5 +308,26 @@ class CartPoleSystem(DynamicalSystem):
 
         return torch.stack([x_norm, sin_theta, cos_theta, x_dot_norm, theta_dot_norm], dim=1)
 
+    def get_loss_weights(self) -> torch.Tensor:
+        """
+        Get per-dimension loss weights for CartPole (4D state).
+
+        State: (x, θ, ẋ, θ̇)
+        - x: cart position → weight = cart_limit
+        - θ: pole angle (SO2) → weight = 1.0 (circular)
+        - ẋ: cart velocity → weight = velocity_limit
+        - θ̇: angular velocity → weight = angular_velocity_limit
+
+        Returns:
+            torch.Tensor: 4D weights
+        """
+        weights = [
+            self.cart_limit,           # x (cart position)
+            1.0,                       # θ (pole angle, circular)
+            self.velocity_limit,       # ẋ (cart velocity)
+            self.angular_velocity_limit  # θ̇ (angular velocity)
+        ]
+        return torch.tensor(weights, dtype=torch.float32)
+
     def __repr__(self) -> str:
         return f"CartPoleSystemLCFM(ℝ² × S¹ × ℝ, limits=[{self.cart_limit}, {self.velocity_limit}, π, {self.angular_velocity_limit}])"

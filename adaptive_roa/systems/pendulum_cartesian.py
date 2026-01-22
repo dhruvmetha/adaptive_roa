@@ -283,5 +283,26 @@ class PendulumCartesianSystem(DynamicalSystem):
         # Pure Euclidean: no embedding transformation needed
         return normalized_state
 
+    def get_loss_weights(self) -> torch.Tensor:
+        """
+        Get per-dimension loss weights for Pendulum Cartesian (4D state).
+
+        State: (x, y, vx, vy) - all Euclidean
+        - x → weight = x_limit
+        - y → weight = y_limit
+        - vx → weight = vx_limit
+        - vy → weight = vy_limit
+
+        Returns:
+            torch.Tensor: 4D weights
+        """
+        weights = [
+            self.x_limit,   # x position
+            self.y_limit,   # y position
+            self.vx_limit,  # x velocity
+            self.vy_limit   # y velocity
+        ]
+        return torch.tensor(weights, dtype=torch.float32)
+
     def __repr__(self) -> str:
         return f"PendulumCartesianSystem(ℝ⁴, limits=[{self.x_limit}, {self.y_limit}, {self.vx_limit:.1f}, {self.vy_limit:.1f}], goal=(0, 1))"

@@ -350,6 +350,35 @@ class Quadrotor3DSystem(DynamicalSystem):
 
         return torch.cat([pos, quat_canon, vel], dim=1)
 
+    def get_loss_weights(self) -> torch.Tensor:
+        """
+        Get per-dimension loss weights for tangent space (12D).
+
+        Quadrotor3D has 13D state but 12D tangent space:
+        - Position (3D): weights from position limits
+        - Rotation (3D tangent for SO3): weight = 1.0 (no traditional limits)
+        - Linear velocity (3D): weights from velocity limits
+        - Angular velocity (3D): weights from angular velocity limits
+
+        Returns:
+            torch.Tensor: 12D weights for tangent space
+        """
+        # Position weights (3D)
+        z_scale = (self.z_max - self.z_min) / 2
+        position_weights = [self.x_limit, self.y_limit, z_scale]
+
+        # Rotation weights (3D tangent for SO3) - use 1.0 for circular
+        rotation_weights = [1.0, 1.0, 1.0]
+
+        # Linear velocity weights (3D)
+        linear_vel_weights = [self.x_dot_limit, self.y_dot_limit, self.z_dot_limit]
+
+        # Angular velocity weights (3D)
+        angular_vel_weights = [self.p_limit, self.q_limit, self.r_limit]
+
+        weights = position_weights + rotation_weights + linear_vel_weights + angular_vel_weights
+        return torch.tensor(weights, dtype=torch.float32)
+
     def __repr__(self) -> str:
         return (f"Quadrotor3DSystem(ℝ³ × SO(3) × ℝ⁶, "
                 f"pos_limits=[±{self.x_limit:.2f}, ±{self.y_limit:.2f}, {self.z_min:.2f}-{self.z_max:.2f}], "

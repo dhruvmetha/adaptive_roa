@@ -103,6 +103,37 @@ class DynamicalSystem(ABC):
 
         return indices
 
+    def get_loss_weights(self) -> torch.Tensor:
+        """
+        Get per-dimension loss weights based on normalization limits.
+
+        Returns weights proportional to the normalization limits for each dimension.
+        Dimensions with larger physical ranges get larger weights, emphasizing
+        their importance in the loss function.
+
+        For circular dimensions (SO2, SO3, Sphere), weight = 1.0 is used since
+        they don't have traditional "limits" (angles are in [-π, π], quaternions in [-1, 1]).
+
+        Override in subclasses for system-specific weight computation,
+        especially for systems with tangent space different from state space (e.g., SO3).
+
+        Returns:
+            torch.Tensor: Per-dimension weights [state_dim] or [tangent_dim]
+        """
+        weights = []
+
+        for comp in self._manifold_components:
+            if comp.manifold_type in ("SO2", "SO3", "Sphere"):
+                # Circular/spherical components: use unit weight
+                weights.extend([1.0] * comp.dim)
+            else:
+                # Real components: use the upper bound as weight
+                bounds = self._state_bounds.get(comp.name, (-1.0, 1.0))
+                limit = max(abs(bounds[0]), abs(bounds[1]))
+                weights.extend([limit] * comp.dim)
+
+        return torch.tensor(weights, dtype=torch.float32)
+
     def embed_state(self, state: torch.Tensor) -> torch.Tensor:
         """
         Embed raw state into neural network input space

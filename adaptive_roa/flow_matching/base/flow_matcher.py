@@ -102,7 +102,8 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
                  scheduler: Any,
                  model_config: Optional[FlowMatchingConfig] = None,
                  latent_dim: int = 2,
-                 mae_val_frequency: int = 10):
+                 mae_val_frequency: int = 10,
+                 use_loss_weights: bool = False):
         """
         Initialize base flow matcher
 
@@ -114,6 +115,7 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
             model_config: Flow matching configuration
             latent_dim: Dimension of latent variable z
             mae_val_frequency: Compute endpoint MAE every N epochs
+            use_loss_weights: If True, weight loss by normalization limits
         """
         super().__init__()
 
@@ -123,6 +125,7 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         self.config = model_config or FlowMatchingConfig()
         self.latent_dim = latent_dim
         self.mae_val_frequency = mae_val_frequency
+        self.use_loss_weights = use_loss_weights
 
         # Store optimizer and scheduler configs (will be instantiated in configure_optimizers)
         self.optimizer_config = optimizer
@@ -143,6 +146,14 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
             scheduler=CondOTScheduler(),
             manifold=self.manifold
         )
+
+        # Loss weights for weighted MSE (proportional to normalization limits)
+        if use_loss_weights:
+            loss_weights = self.system.get_loss_weights()
+            self.register_buffer('loss_weights', loss_weights)
+            print(f"📊 Loss weights enabled: {loss_weights.tolist()}")
+        else:
+            self.loss_weights = None
 
         # Save hyperparameters (exclude model and optimizer/scheduler to avoid pickle issues)
         self.save_hyperparameters(ignore=['model', 'optimizer', 'scheduler', 'system'])
@@ -605,7 +616,14 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         target_velocity = path_sample.dx_t
 
         # Compute MSE loss between predicted and target velocities
-        loss = nn.functional.mse_loss(predicted_velocity, target_velocity)
+        if self.use_loss_weights and self.loss_weights is not None:
+            # Weighted MSE: mean(weights * (pred - target)^2)
+            # weights shape: [tangent_dim], velocity shape: [batch, tangent_dim]
+            squared_error = (predicted_velocity - target_velocity) ** 2
+            weighted_error = self.loss_weights.unsqueeze(0) * squared_error
+            loss = weighted_error.mean()
+        else:
+            loss = nn.functional.mse_loss(predicted_velocity, target_velocity)
 
         return loss
 

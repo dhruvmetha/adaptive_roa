@@ -269,3 +269,23 @@ class PendulumSystem(DynamicalSystem):
             [B, 3] (sin θ, cos θ, θ̇)
         """
         return self.embed_state(state)
+
+    def get_loss_weights(self) -> torch.Tensor:
+        """
+        Get per-dimension loss weights for Pendulum (2D state).
+
+        State: (θ, θ̇)
+        - θ: angle (SO2) → weight = 1.0 (circular)
+        - θ̇: angular velocity → weight = angular_velocity_limit
+
+        Returns:
+            torch.Tensor: 2D weights
+        """
+        weights = [
+            1.0,                       # θ (angle, circular)
+            self.angular_velocity_limit  # θ̇ (angular velocity)
+        ]
+        return torch.tensor(weights, dtype=torch.float32)
+
+    def __repr__(self) -> str:
+        return f"PendulumSystem(S¹ × ℝ, limits=[π, {self.angular_velocity_limit}])"

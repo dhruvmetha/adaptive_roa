@@ -96,6 +96,7 @@ def main(cfg: DictConfig):
 
     # Flow matcher (e.g., LatentConditionalFlowMatcher or CartPoleLatentConditionalFlowMatcher)
     print("  🌊 Flow matcher...")
+    use_loss_weights = cfg.flow_matching.get('use_loss_weights', False)
     flow_matcher = hydra.utils.instantiate(
         cfg.flow_matcher,
         system=system,
@@ -105,6 +106,7 @@ def main(cfg: DictConfig):
         model_config=OmegaConf.to_container(cfg.model, resolve=True),
         latent_dim=cfg.flow_matching.latent_dim,
         mae_val_frequency=cfg.flow_matching.mae_val_frequency,
+        use_loss_weights=use_loss_weights,
         _recursive_=False
     )
     print(f"     ✅ {flow_matcher.__class__.__name__}")

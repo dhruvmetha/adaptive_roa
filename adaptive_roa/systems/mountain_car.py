@@ -261,5 +261,22 @@ class MountainCarSystem(DynamicalSystem):
         # Pure Euclidean: no embedding transformation needed
         return normalized_state
 
+    def get_loss_weights(self) -> torch.Tensor:
+        """
+        Get per-dimension loss weights for Mountain Car (2D state).
+
+        State: (position, velocity) - both Euclidean
+        - position → weight = position_limit
+        - velocity → weight = velocity_limit
+
+        Returns:
+            torch.Tensor: 2D weights
+        """
+        weights = [
+            self.position_limit,  # position
+            self.velocity_limit   # velocity
+        ]
+        return torch.tensor(weights, dtype=torch.float32)
+
     def __repr__(self) -> str:
         return f"MountainCarSystem(ℝ², limits=[{self.position_limit}, {self.velocity_limit}], goal={self.goal_center:.3f})"

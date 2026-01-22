@@ -38,7 +38,8 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
                  scheduler,
                  model_config: Optional[dict] = None,
                  latent_dim: int = 8,
-                 mae_val_frequency: int = 10):
+                 mae_val_frequency: int = 10,
+                 use_loss_weights: bool = False):
         """
         Initialize Humanoid latent conditional flow matcher with FB FM integration
 
@@ -50,8 +51,9 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
             model_config: Configuration dict
             latent_dim: Dimension of latent space (default: 8)
             mae_val_frequency: Compute MAE validation every N epochs
+            use_loss_weights: If True, weight loss by normalization limits
         """
-        super().__init__(system, model, optimizer, scheduler, model_config, latent_dim, mae_val_frequency)
+        super().__init__(system, model, optimizer, scheduler, model_config, latent_dim, mae_val_frequency, use_loss_weights)
 
         print("✅ Initialized Humanoid LCFM with Facebook Flow Matching:")
         print(f"   - Manifold: ℝ³⁴ × S² × ℝ³⁰ (Euclidean × Sphere × Euclidean)")

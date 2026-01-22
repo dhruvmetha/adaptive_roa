@@ -79,6 +79,38 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
         names = ["angle", "angular_velocity"]
         return names[dim_idx] if 0 <= dim_idx < len(names) else f"dim_{dim_idx}"
 
+    def get_manifold_component_names(self) -> list:
+        """
+        Get names for manifold distance components.
+
+        For Pendulum with S¹×ℝ:
+        - FlatTorus(1) returns 1 distance (geodesic angle distance)
+        - Euclidean(1) returns 1 distance (angular velocity)
+
+        Total: 2 components
+
+        Returns:
+            List of 2 component names
+        """
+        return ["angle_geodesic", "angular_velocity"]
+
+    def get_euclidean_groups(self) -> dict:
+        """
+        Define groups for Euclidean (L2) distance computation.
+
+        For Pendulum (2D state):
+        - Angle: index 0 (theta) - note: L2 is NOT proper circular distance
+        - Angular velocity: index 1 (theta_dot)
+
+        Returns:
+            Dictionary mapping group names to dimension indices
+        """
+        return {
+            "angle_L2": [0],           # Angle (for comparison, geodesic is better)
+            "angular_velocity_L2": [1], # Angular velocity
+            "full_state_L2": [0, 1],   # Full state L2 norm
+        }
+
     def normalize_state(self, state: torch.Tensor) -> torch.Tensor:
         """Delegate to system for normalization"""
         return self.system.normalize_state(state)

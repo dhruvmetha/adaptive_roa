@@ -80,6 +80,45 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         names = ["cart_position", "pole_angle", "cart_velocity", "angular_velocity"]
         return names[dim_idx] if 0 <= dim_idx < len(names) else f"dim_{dim_idx}"
 
+    def get_manifold_component_names(self) -> list:
+        """
+        Get names for manifold distance components.
+
+        For CartPole with ℝ×S¹×ℝ²:
+        - Euclidean(1) returns 1 distance (cart position)
+        - FlatTorus(1) returns 1 distance (geodesic angle distance)
+        - Euclidean(2) returns 2 distances (cart velocity, angular velocity)
+
+        Total: 4 components
+
+        Returns:
+            List of 4 component names
+        """
+        return ["cart_position", "pole_angle_geodesic", "cart_velocity", "angular_velocity"]
+
+    def get_euclidean_groups(self) -> dict:
+        """
+        Define groups for Euclidean (L2) distance computation.
+
+        For CartPole (4D state):
+        - Cart position: index 0 (x)
+        - Pole angle: index 1 (theta) - note: L2 is NOT proper circular distance
+        - Cart velocity: index 2 (x_dot)
+        - Angular velocity: index 3 (theta_dot)
+
+        Returns:
+            Dictionary mapping group names to dimension indices
+        """
+        return {
+            "cart_position_L2": [0],     # Cart position
+            "pole_angle_L2": [1],        # Pole angle (for comparison, geodesic is better)
+            "cart_velocity_L2": [2],     # Cart velocity
+            "angular_velocity_L2": [3],  # Angular velocity
+            "position_L2": [0, 1],       # Both position components
+            "velocity_L2": [2, 3],       # Both velocity components
+            "full_state_L2": [0, 1, 2, 3], # Full state L2 norm
+        }
+
     def sample_noisy_input(self, batch_size: int, device: torch.device) -> torch.Tensor:
         """
         Sample noisy input uniformly in ℝ²×S¹×ℝ space

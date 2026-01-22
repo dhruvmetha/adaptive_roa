@@ -115,6 +115,50 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
         ]
         return names[dim_idx] if 0 <= dim_idx < len(names) else f"dim_{dim_idx}"
 
+    def get_manifold_component_names(self) -> list:
+        """
+        Get names for manifold distance components.
+
+        For Quadrotor3D with ℝ³ × SO(3) × ℝ⁶:
+        - Euclidean(3) returns 3 distances (x, y, z)
+        - SO3 returns 1 distance (geodesic angle)
+        - Euclidean(6) returns 6 distances (velocities)
+
+        Total: 10 components (not 13, because SO3.dist returns single geodesic angle)
+
+        Returns:
+            List of 10 component names
+        """
+        return [
+            # Euclidean position (3 values)
+            "pos_x", "pos_y", "pos_z",
+            # SO3 geodesic angle (1 value - angular distance between quaternions)
+            "orientation_geodesic",
+            # Euclidean velocities (6 values)
+            "vel_x", "vel_y", "vel_z", "ang_p", "ang_q", "ang_r"
+        ]
+
+    def get_euclidean_groups(self) -> dict:
+        """
+        Define groups of state dimensions for Euclidean (L2) distance computation.
+
+        For Quadrotor3D (13D state):
+        - Position: indices 0-2 (x, y, z)
+        - Quaternion: indices 3-6 (qw, qx, qy, qz) - note: L2 norm is NOT geodesic
+        - Linear velocity: indices 7-9 (ẋ, ẏ, ż)
+        - Angular velocity: indices 10-12 (p, q, r)
+
+        Returns:
+            Dictionary mapping group names to dimension indices
+        """
+        return {
+            "position_L2": [0, 1, 2],           # Position (x, y, z)
+            "quaternion_L2": [3, 4, 5, 6],      # Quaternion (for comparison, but geodesic is better)
+            "linear_velocity_L2": [7, 8, 9],    # Linear velocity (ẋ, ẏ, ż)
+            "angular_velocity_L2": [10, 11, 12], # Angular velocity (p, q, r)
+            "full_state_L2": list(range(13)),   # Full state L2 norm
+        }
+
     def sample_noisy_input(self, batch_size: int, device: torch.device) -> torch.Tensor:
         """
         Sample noisy input uniformly in ℝ³ × SO(3) × ℝ⁶ space

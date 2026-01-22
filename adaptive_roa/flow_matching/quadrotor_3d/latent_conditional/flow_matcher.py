@@ -1,11 +1,18 @@
 """
 Quadrotor 3D Latent Conditional Flow Matching implementation using Facebook Flow Matching library
 
-Manifold: ℝ³ × SO(3) × ℝ⁶ (13-dimensional state with unit quaternion representation)
-- Position: ℝ³ (x, y, z)
+Manifold: ℝ³ × SO(3) × ℝ⁶
+- Representation dimension: 13D (3 position + 4 quaternion + 6 velocity)
+- Tangent dimension: 12D (3 position + 3 rotation + 6 velocity)
+
+State components:
+- Position: ℝ³ (x, y, z) - 3D representation, 3D tangent
 - Orientation: SO(3) via unit quaternion (qw, qx, qy, qz) - 4D representation, 3D tangent
-- Linear velocity: ℝ³ (ẋ, ẏ, ż)
-- Angular velocity: ℝ³ (p, q, r)
+- Linear velocity: ℝ³ (ẋ, ẏ, ż) - 3D representation, 3D tangent
+- Angular velocity: ℝ³ (p, q, r) - 3D representation, 3D tangent
+
+The model outputs 12D tangent velocities directly. FB FM's Product manifold with
+(SO3(), 4, 3) handles conversion between representation (13D) and tangent (12D) spaces.
 """
 import torch
 import torch.nn as nn
@@ -28,16 +35,19 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
     Quadrotor 3D Latent Conditional Flow Matching using Facebook FM:
     - Uses GeodesicProbPath for geodesic interpolation on ℝ³ × SO(3) × ℝ⁶
     - Uses RiemannianODESolver for manifold-aware ODE integration
-    - Neural net takes state x_t, time t, latent z, and start state condition
-    - Predicts velocity in tangent space
+    - Neural net takes embedded state x_t (13D), time t, latent z, and start condition
+    - Predicts velocity directly in 12D tangent space
 
-    Manifold structure:
-    - Euclidean(3): Position (x, y, z) - indices 0-2
-    - SO3(4, 3): Quaternion (qw, qx, qy, qz) - indices 3-6, 4D representation, 3D tangent
-    - Euclidean(6): Velocities (ẋ, ẏ, ż, p, q, r) - indices 7-12
+    Manifold structure (Product manifold):
+    - Euclidean(3): Position (x, y, z) - state indices 0-2, tangent indices 0-2
+    - SO3(4, 3): Quaternion (qw, qx, qy, qz) - state indices 3-6, tangent indices 3-5
+    - Euclidean(6): Velocities (ẋ, ẏ, ż, p, q, r) - state indices 7-12, tangent indices 6-11
 
-    The Product manifold is defined as:
-    Product(input_dim=13, manifolds=[(Euclidean(), 3), (SO3(), 4, 3), (Euclidean(), 6)])
+    Dimension summary:
+    - State/representation: 13D (3 + 4 + 6)
+    - Tangent/velocity: 12D (3 + 3 + 6)
+
+    The Product manifold handles conversion via logmap (13D→12D) and expmap (12D→13D).
     """
 
     def __init__(self,
@@ -64,7 +74,8 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
 
         print("✅ Initialized Quadrotor3D LCFM with Facebook Flow Matching:")
         print(f"   - Manifold: ℝ³ × SO(3) × ℝ⁶ (Euclidean × SO3 × Euclidean)")
-        print(f"   - State dimension: 13 (3 + 4 + 6)")
+        print(f"   - State dimension: 13D (3 pos + 4 quat + 6 vel)")
+        print(f"   - Tangent dimension: 12D (3 pos + 3 rot + 6 vel)")
         print(f"   - Path: GeodesicProbPath with CondOTScheduler")
         print(f"   - Latent dim: {latent_dim}")
         print(f"   - MAE validation frequency: every {mae_val_frequency} epochs")
@@ -148,6 +159,11 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
     def embed_state_for_model(self, normalized_state: torch.Tensor) -> torch.Tensor:
         """Delegate to system for embedding"""
         return self.system.embed_state_for_model(normalized_state)
+
+    # NOTE: compute_flow_loss is inherited from BaseFlowMatcher
+    # The base class handles the flow matching loss correctly for Product manifolds
+    # with mixed state/tangent dimensions. Model outputs 12D tangent velocity,
+    # which matches path_sample.dx_t (also 12D from logmap).
 
     def predict_endpoints_batch(self,
                                start_states: torch.Tensor,
@@ -350,13 +366,14 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
             print("✅ Restored Quadrotor3D system from checkpoint")
 
         # Create model architecture
+        # Note: output_dim=12 (tangent space), expmap converts to 13D state for integration
         model = Quadrotor3DUNet(
             embedded_dim=model_config.get('embedded_dim', 13),
             latent_dim=model_config.get('latent_dim', latent_dim),
             condition_dim=model_config.get('condition_dim', 13),
             time_emb_dim=model_config.get('time_emb_dim', 64),
             hidden_dims=model_config.get('hidden_dims', [512, 1024, 512]),
-            output_dim=model_config.get('output_dim', 13),
+            output_dim=model_config.get('output_dim', 12),  # 12D tangent velocity
             use_input_embeddings=model_config.get('use_input_embeddings', False),
             input_emb_dim=model_config.get('input_emb_dim', 128)
         )

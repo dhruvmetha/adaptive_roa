@@ -1,6 +1,7 @@
 # Quadrotor 3D Latent Conditional Flow Matching (Facebook FM)
 # Uses: ℝ³ × SO(3) × ℝ⁶ manifold, GeodesicProbPath, RiemannianODESolver
-# State: (x, y, z, qw, qx, qy, qz, ẋ, ẏ, ż, p, q, r) - 13D
+# State: (x, y, z, qw, qx, qy, qz, ẋ, ẏ, ż, p, q, r) - 13D representation
+# Tangent: 12D (3 position + 3 rotation + 6 velocity) - SO(3) has 3D tangent space
 
 defaults:
   - system: quadrotor3d
@@ -27,12 +28,12 @@ flow_matcher:
 # Model: Latent Conditional UNet for Quadrotor 3D
 model:
   _target_: adaptive_roa.model.quadrotor3d_unet.Quadrotor3DUNet
-  embedded_dim: 13               # Full 13D state (position + quaternion + velocities)
+  embedded_dim: 13               # 13D state (position + quaternion + velocities)
   latent_dim: ${latent_dim}      # Gaussian latent variable
   condition_dim: 13              # Embedded start state
   time_emb_dim: 64               # Time embedding dimension
-  hidden_dims: [512, 1024, 1024, 512]  # Larger network for 13D
-  output_dim: 13                 # Velocity in tangent space
+  hidden_dims: [512, 1024, 1024, 512]  # Larger network for 13D state
+  output_dim: 12                 # 12D tangent velocity (3 pos + 3 rot + 6 vel)
   use_input_embeddings: false
   input_emb_dim: 128
 

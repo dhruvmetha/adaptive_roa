@@ -183,28 +183,26 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
                                     predicted_endpoints: torch.Tensor,
                                     true_endpoints: torch.Tensor) -> torch.Tensor:
         """
-        Compute MAE per dimension using Facebook Product manifold geodesic distance
+        Compute MAE per state dimension using absolute differences.
 
-        The Product manifold correctly computes:
-        - Geodesic (circular) distance for S¹ components (e.g., angles)
-        - Euclidean distance for ℝ components (e.g., velocities)
+        This provides per-dimension error statistics that correspond directly
+        to each state component (x, y, z, qw, qx, qy, qz, etc.).
 
-        Example for pendulum (S¹×ℝ):
-        - θ=3.1 vs θ=-3.1 → distance ≈ 0.08 (wraps around, not 6.2!)
-        - θ̇=1.0 vs θ̇=2.0 → distance = 1.0 (Euclidean)
+        For circular/SO3 components, this gives component-wise errors which
+        may not reflect geodesic distance but are useful for debugging.
 
         Args:
             predicted_endpoints: Predicted endpoints [B, state_dim]
             true_endpoints: True endpoints [B, state_dim]
 
         Returns:
-            mae_per_dim: MAE for each dimension [state_dim]
+            mae_per_dim: MAE for each state dimension [state_dim]
         """
-        # Facebook Product manifold returns per-dimension distances
+        # Compute absolute difference per dimension
         # Shape: [batch_size, state_dim]
-        mae = self.manifold.dist(predicted_endpoints, true_endpoints)
+        abs_diff = torch.abs(predicted_endpoints - true_endpoints)
         # Average over batch → [state_dim]
-        return mae.mean(dim=0)
+        return abs_diff.mean(dim=0)
     
     @abstractmethod
     def _create_manifold(self):

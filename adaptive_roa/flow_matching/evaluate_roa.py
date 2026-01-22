@@ -260,30 +260,31 @@ def evaluate_probabilistic(flow_matcher,
                           attractor_radius: float,
                           confidence_threshold: float = 0.6) -> Dict[str, Any]:
     """
-    Probabilistic evaluation with three-way classification
+    Probabilistic evaluation with four-way classification
 
     Per-sample classification (system-specific):
         Pendulum:
             1: Endpoint in stable bottom attractor [0, 0] (success)
            -1: Endpoint in unstable top attractors (failure)
-            0: Endpoint in separatrix (not in any attractor)
+            0: Endpoint in separatrix (not in any attractor) - INVALID
 
         CartPole:
             1: Endpoint in balanced attractor [0, 0, 0, 0] (success)
            -1: Endpoint exceeded termination thresholds (failure - crashed)
-            0: Endpoint between attractor and failure (separatrix - uncertain)
+            0: Endpoint between attractor and failure (neither success nor failure) - INVALID
 
     Per-state aggregation (over num_samples):
+        Invalid (-2): ≥50% of samples land in invalid region (label=0) → EXCLUDED from metrics
         Success (1): ≥confidence_threshold of samples land in success attractor
         Failure (0): ≥confidence_threshold of samples land in failure attractor
-        Separatrix (-1): < confidence_threshold for both (uncertain/mixed) → EXCLUDED from metrics
+        Uncertain (-1): < confidence_threshold for both success/failure (multi-modal) → EXCLUDED from metrics
     """
     print(f"🔬 Running probabilistic evaluation ({num_samples} samples/state)...")
 
     device = next(flow_matcher.parameters()).device
     states_tensor = torch.from_numpy(states).float().to(device)
 
-    # Track counts for each class: [stable(1), unstable(-1), separatrix(0)]
+    # Track counts for each class: [stable(1), unstable(-1), invalid(0)]
     all_class_counts = []
     all_first_endpoints = []  # Store first sampled endpoint for each state
     num_batches = int(np.ceil(len(states) / batch_size))
@@ -293,7 +294,7 @@ def evaluate_probabilistic(flow_matcher,
         end_idx = min((i + 1) * batch_size, len(states))
         batch = states_tensor[start_idx:end_idx]
 
-        # Count for each class: [stable_count, unstable_count, separatrix_count]
+        # Count for each class: [stable_count, unstable_count, invalid_count]
         class_counts = torch.zeros((len(batch), 3), device=device)
         first_endpoints_batch = None
 
@@ -315,13 +316,13 @@ def evaluate_probabilistic(flow_matcher,
             if sample_idx == 0:
                 first_endpoints_batch = endpoints.cpu()
 
-            # Get three-way classification: 1 (stable), -1 (unstable), 0 (separatrix)
+            # Get three-way classification: 1 (stable), -1 (unstable), 0 (invalid)
             attractor_labels = flow_matcher.system.classify_attractor(endpoints, radius=attractor_radius)
 
             # Count each class
-            class_counts[:, 0] += (attractor_labels == 1).float()   # Stable
-            class_counts[:, 1] += (attractor_labels == -1).float()  # Unstable
-            class_counts[:, 2] += (attractor_labels == 0).float()   # Separatrix
+            class_counts[:, 0] += (attractor_labels == 1).float()   # Stable (success)
+            class_counts[:, 1] += (attractor_labels == -1).float()  # Unstable (failure)
+            class_counts[:, 2] += (attractor_labels == 0).float()   # Invalid (neither)
 
         all_class_counts.append(class_counts.cpu())
         all_first_endpoints.append(first_endpoints_batch)
@@ -332,55 +333,65 @@ def evaluate_probabilistic(flow_matcher,
     # Compute proportions
     p_stable = class_counts[:, 0] / num_samples      # Proportion landing in stable/success
     p_unstable = class_counts[:, 1] / num_samples    # Proportion landing in unstable/failure
-    p_separatrix = class_counts[:, 2] / num_samples  # Proportion landing in separatrix (pendulum only)
+    p_invalid = class_counts[:, 2] / num_samples     # Proportion landing in invalid region (label=0)
 
-    # Classify each state based on confidence threshold
-    # Strategy:
-    # - If ≥threshold of samples land in success attractor → label as success
-    # - If ≥threshold of samples land in failure attractor → label as failure
-    # - Otherwise (< threshold for both) → label as separatrix (uncertain)
+    # Two-step classification:
+    # Step 1: Identify INVALID points (p_invalid >= 0.5, majority of samples were invalid)
+    # Step 2: From remaining points, apply confidence threshold for success/failure
+    #         Points that don't meet threshold are UNCERTAIN (multi-modal)
 
-    predictions = np.full(len(states), -1, dtype=int)  # Initialize all as separatrix
+    # Initialize all as uncertain (-1)
+    predictions = np.full(len(states), -1, dtype=int)
 
-    # Assign success/failure based on confidence threshold
-    # Only label if we're confident (≥threshold agreement)
-    predictions[p_stable >= confidence_threshold] = 1      # Success: ≥threshold landed in stable/success attractor
-    predictions[p_unstable >= confidence_threshold] = 0    # Failure: ≥threshold landed in unstable/failure attractor
+    # Step 1: Mark invalid points (majority of MC samples were neither success nor failure)
+    is_invalid = p_invalid >= 0.5
+    predictions[is_invalid] = -2  # Mark invalid with -2
 
-    # States that remain -1 (separatrix):
-    # - p_stable < threshold AND p_unstable < threshold
-    # - These are uncertain states where predictions are split
+    # Step 2: For non-invalid points, apply confidence threshold
+    # Only consider points that are not invalid for success/failure classification
+    non_invalid_mask = ~is_invalid
 
-    # Mark for exclusion
-    is_separatrix = (predictions == -1)
+    # Among non-invalid points, classify based on confidence threshold
+    success_mask = non_invalid_mask & (p_stable >= confidence_threshold)
+    failure_mask = non_invalid_mask & (p_unstable >= confidence_threshold)
 
-    # Filter out separatrix points
-    valid_mask = ~is_separatrix
-    valid_states = states[valid_mask]
+    predictions[success_mask] = 1   # Success: ≥threshold landed in stable/success attractor
+    predictions[failure_mask] = 0   # Failure: ≥threshold landed in unstable/failure attractor
+
+    # Remaining non-invalid points with predictions == -1 are UNCERTAIN (multi-modal)
+    is_uncertain = (predictions == -1)
+
+    # Valid points are those that are neither invalid nor uncertain
+    valid_mask = ~is_invalid & ~is_uncertain
     valid_labels = labels[valid_mask]
     valid_predictions = predictions[valid_mask]
 
     # Report statistics
     n_total = len(states)
-    n_separatrix = is_separatrix.sum()
+    n_invalid = is_invalid.sum()
+    n_uncertain = is_uncertain.sum()
     n_valid = valid_mask.sum()
-    pct_separatrix = 100.0 * n_separatrix / n_total
+    pct_invalid = 100.0 * n_invalid / n_total
+    pct_uncertain = 100.0 * n_uncertain / n_total
 
     print(f"\n📊 Classification Summary:")
     print(f"   Total states: {n_total}")
-    print(f"   Separatrix (excluded): {n_separatrix} ({pct_separatrix:.1f}%)")
+    print(f"   Invalid (excluded, p_invalid >= 0.5): {n_invalid} ({pct_invalid:.1f}%)")
+    print(f"   Uncertain (excluded, multi-modal): {n_uncertain} ({pct_uncertain:.1f}%)")
     print(f"   Valid for evaluation: {n_valid} ({100.0 * n_valid / n_total:.1f}%)")
 
-    # Compute metrics only on valid (non-separatrix) states
+    # Compute metrics only on valid (non-invalid, non-uncertain) states
     if n_valid == 0:
-        print("\n⚠️  WARNING: All states classified as separatrix! Cannot compute metrics.")
+        print("\n⚠️  WARNING: All states classified as invalid or uncertain! Cannot compute metrics.")
         return {
             'predictions': predictions,
             'p_stable': p_stable,
             'p_unstable': p_unstable,
-            'p_separatrix': p_separatrix,
-            'separatrix_count': int(n_separatrix),
-            'separatrix_percentage': pct_separatrix,
+            'p_invalid': p_invalid,
+            'invalid_count': int(n_invalid),
+            'invalid_percentage': pct_invalid,
+            'uncertain_count': int(n_uncertain),
+            'uncertain_percentage': pct_uncertain,
             'valid_count': 0,
             'accuracy': 0.0,
             'precision': 0.0,
@@ -399,21 +410,25 @@ def evaluate_probabilistic(flow_matcher,
     auc = roc_auc_score(valid_labels, p_stable[valid_mask]) if len(np.unique(valid_labels)) > 1 else None
     fpr, tpr, thresholds = roc_curve(valid_labels, p_stable[valid_mask]) if len(np.unique(valid_labels)) > 1 else (None, None, None)
 
-    # Entropy based on stable vs unstable (excluding separatrix)
+    # Entropy based on stable vs unstable (excluding invalid and uncertain)
     p_stable_normalized = p_stable[valid_mask] / (p_stable[valid_mask] + p_unstable[valid_mask] + 1e-9)
     p_stable_clipped = np.clip(p_stable_normalized, 1e-7, 1 - 1e-7)
     entropy = -(p_stable_clipped * np.log(p_stable_clipped) +
                 (1 - p_stable_clipped) * np.log(1 - p_stable_clipped))
 
     return {
-        'predictions': predictions,
+        'predictions': predictions,  # 1=success, 0=failure, -1=uncertain, -2=invalid
         'endpoints': first_endpoints,  # First sampled endpoint for each state
         'valid_mask': valid_mask,
+        'is_invalid': is_invalid,
+        'is_uncertain': is_uncertain,
         'p_stable': p_stable,
         'p_unstable': p_unstable,
-        'p_separatrix': p_separatrix,
-        'separatrix_count': int(n_separatrix),
-        'separatrix_percentage': pct_separatrix,
+        'p_invalid': p_invalid,
+        'invalid_count': int(n_invalid),
+        'invalid_percentage': pct_invalid,
+        'uncertain_count': int(n_uncertain),
+        'uncertain_percentage': pct_uncertain,
         'valid_count': int(n_valid),
         'entropy': entropy,
         'accuracy': accuracy,
@@ -435,11 +450,13 @@ def print_results(results: Dict[str, Any], probabilistic: bool):
     print("📊 Evaluation Results")
     print("="*80)
 
-    # Show separatrix statistics if available
-    if 'separatrix_percentage' in results:
-        print(f"\n🔀 Separatrix Analysis:")
-        print(f"   States on separatrix: {results['separatrix_count']} ({results['separatrix_percentage']:.1f}%)")
-        print(f"   Valid for evaluation: {results['valid_count']}")
+    # Show invalid/uncertain statistics if available
+    if 'invalid_percentage' in results:
+        print(f"\n🔀 Exclusion Analysis:")
+        print(f"   Invalid (p_invalid >= 0.5):  {results['invalid_count']} ({results['invalid_percentage']:.1f}%)")
+        print(f"   Uncertain (multi-modal):     {results['uncertain_count']} ({results['uncertain_percentage']:.1f}%)")
+        print(f"   Total excluded:              {results['invalid_count'] + results['uncertain_count']} ({results['invalid_percentage'] + results['uncertain_percentage']:.1f}%)")
+        print(f"   Valid for evaluation:        {results['valid_count']}")
 
     print(f"\n📈 Performance Metrics (on valid states only):")
     print(f"   Accuracy:    {results['accuracy']:.4f} ({results['accuracy']*100:.2f}%)")
@@ -604,19 +621,20 @@ def save_plots(results: Dict[str, Any], states: np.ndarray, labels: np.ndarray,
     plt.close()
     print(f"   Saved: error_analysis.png")
 
-    # Three-way classification plot (success/failure/separatrix)
-    # In deterministic mode: only success/failure (no separatrix)
-    # In probabilistic mode: success/failure/separatrix (uncertain states)
+    # Four-way classification plot (success/failure/uncertain/invalid)
+    # In deterministic mode: only success/failure
+    # In probabilistic mode: success/failure/uncertain/invalid
     preds = results['predictions']
 
     if state_dim == 2:
         # Pendulum 2D
         fig, ax = plt.subplots(1, 1, figsize=(10, 8))
 
-        # Plot each category with different color
+        # Plot each category with different color/marker
         success_mask = preds == 1
         failure_mask = preds == 0
-        separatrix_mask = preds == -1
+        uncertain_mask = preds == -1
+        invalid_mask = preds == -2
 
         if success_mask.sum() > 0:
             ax.scatter(states[success_mask, 0], states[success_mask, 1],
@@ -624,13 +642,16 @@ def save_plots(results: Dict[str, Any], states: np.ndarray, labels: np.ndarray,
         if failure_mask.sum() > 0:
             ax.scatter(states[failure_mask, 0], states[failure_mask, 1],
                       c='red', alpha=0.5, s=15, label=f'Failure ({failure_mask.sum()})')
-        if separatrix_mask.sum() > 0:
-            ax.scatter(states[separatrix_mask, 0], states[separatrix_mask, 1],
-                      c='orange', alpha=0.7, s=20, marker='^', label=f'Separatrix ({separatrix_mask.sum()})')
+        if uncertain_mask.sum() > 0:
+            ax.scatter(states[uncertain_mask, 0], states[uncertain_mask, 1],
+                      c='orange', alpha=0.7, s=20, marker='^', label=f'Uncertain ({uncertain_mask.sum()})')
+        if invalid_mask.sum() > 0:
+            ax.scatter(states[invalid_mask, 0], states[invalid_mask, 1],
+                      c='gray', alpha=0.5, s=15, marker='s', label=f'Invalid ({invalid_mask.sum()})')
 
         ax.set_xlabel('Angle (rad)')
         ax.set_ylabel('Angular Velocity (rad/s)')
-        ax.set_title('State Space Classification (Success/Failure/Separatrix)')
+        ax.set_title('State Space Classification')
         ax.legend()
         ax.grid(alpha=0.3)
 
@@ -649,7 +670,8 @@ def save_plots(results: Dict[str, Any], states: np.ndarray, labels: np.ndarray,
 
         success_mask = preds == 1
         failure_mask = preds == 0
-        separatrix_mask = preds == -1
+        uncertain_mask = preds == -1
+        invalid_mask = preds == -2
 
         for idx, (i, j) in enumerate(dim_pairs):
             ax = axes_flat[idx]
@@ -660,9 +682,12 @@ def save_plots(results: Dict[str, Any], states: np.ndarray, labels: np.ndarray,
             if failure_mask.sum() > 0:
                 ax.scatter(states[failure_mask, i], states[failure_mask, j],
                           c='red', alpha=0.4, s=10, label=f'Failure ({failure_mask.sum()})')
-            if separatrix_mask.sum() > 0:
-                ax.scatter(states[separatrix_mask, i], states[separatrix_mask, j],
-                          c='orange', alpha=0.7, s=15, marker='^', label=f'Separatrix ({separatrix_mask.sum()})')
+            if uncertain_mask.sum() > 0:
+                ax.scatter(states[uncertain_mask, i], states[uncertain_mask, j],
+                          c='orange', alpha=0.7, s=15, marker='^', label=f'Uncertain ({uncertain_mask.sum()})')
+            if invalid_mask.sum() > 0:
+                ax.scatter(states[invalid_mask, i], states[invalid_mask, j],
+                          c='gray', alpha=0.5, s=10, marker='s', label=f'Invalid ({invalid_mask.sum()})')
 
             ax.set_xlabel(dim_names[i])
             ax.set_ylabel(dim_names[j])
@@ -671,7 +696,7 @@ def save_plots(results: Dict[str, Any], states: np.ndarray, labels: np.ndarray,
                 ax.legend()
             ax.grid(alpha=0.3)
 
-        plt.suptitle('State Space Classification (Success/Failure/Separatrix)', fontsize=14)
+        plt.suptitle('State Space Classification', fontsize=14)
         plt.tight_layout()
         plt.savefig(output_dir / 'state_space_classification.png', dpi=150)
         plt.close()

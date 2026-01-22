@@ -67,7 +67,7 @@ class ProbabilityEstimator:
             Tuple of:
                 p_success: [N] array of p(success|x) = count(label=1) / K
                 p_failure: [N] array of p(failure|x) = count(label=-1) / K
-                p_unknown: [N] array of p(separatrix|x) = count(label=0) / K
+                p_invalid: [N] array of p(invalid|x) = count(label=0) / K
         """
         # Convert to torch tensor if needed
         if isinstance(states, np.ndarray):
@@ -80,7 +80,7 @@ class ProbabilityEstimator:
         # Accumulators for each class
         success_counts = np.zeros(N)
         failure_counts = np.zeros(N)
-        separatrix_counts = np.zeros(N)
+        invalid_counts = np.zeros(N)
 
         # Process in batches for memory efficiency
         # We expand each state K times, so effective batch is N * K
@@ -150,14 +150,14 @@ class ProbabilityEstimator:
                 state_labels = labels[i].cpu().numpy()
                 success_counts[batch_start + i] = np.sum(state_labels == 1)
                 failure_counts[batch_start + i] = np.sum(state_labels == -1)
-                separatrix_counts[batch_start + i] = np.sum(state_labels == 0)
+                invalid_counts[batch_start + i] = np.sum(state_labels == 0)
 
         # Convert to probabilities
         p_success = success_counts / K
         p_failure = failure_counts / K
-        p_separatrix = separatrix_counts / K
+        p_invalid = invalid_counts / K
 
-        return p_success, p_failure, p_separatrix
+        return p_success, p_failure, p_invalid
 
     @torch.no_grad()
     def estimate_single(self, state: Union[torch.Tensor, np.ndarray]) -> Tuple[float, float, float]:
@@ -168,7 +168,7 @@ class ProbabilityEstimator:
             state: Single initial state [state_dim] or [1, state_dim]
 
         Returns:
-            Tuple of (p_success, p_failure, p_separatrix) as floats
+            Tuple of (p_success, p_failure, p_invalid) as floats
         """
         # Convert to torch tensor if needed
         if isinstance(state, np.ndarray):
@@ -178,5 +178,5 @@ class ProbabilityEstimator:
         if state.dim() == 1:
             state = state.unsqueeze(0)
 
-        p_success, p_failure, p_separatrix = self.estimate(state)
-        return float(p_success[0]), float(p_failure[0]), float(p_separatrix[0])
+        p_success, p_failure, p_invalid = self.estimate(state)
+        return float(p_success[0]), float(p_failure[0]), float(p_invalid[0])

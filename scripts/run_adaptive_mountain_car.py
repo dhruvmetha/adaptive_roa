@@ -232,18 +232,44 @@ def plot_roa_probability_heatmap(
 
 
 def compute_metrics_at_threshold(success_rate: np.ndarray, y_all: np.ndarray,
-                                  success_thresh: float, failure_thresh: float) -> Dict:
-    """Helper to compute metrics at given thresholds."""
+                                  success_thresh: float, failure_thresh: float,
+                                  p_invalid: np.ndarray = None) -> Dict:
+    """
+    Helper to compute metrics at given thresholds.
+
+    Two-step classification:
+    1. INVALID if p_invalid >= 0.5 (majority of MC samples were neither success nor failure)
+    2. From remaining points:
+       - SUCCESS if success_rate > success_thresh
+       - FAILURE if success_rate < failure_thresh
+       - UNCERTAIN otherwise (multi-modal)
+    """
     n_total = len(y_all)
-    pred_labels = np.zeros(n_total)
-    pred_labels[success_rate > success_thresh] = 1
-    pred_labels[success_rate < failure_thresh] = -1
 
-    n_uncertain = np.sum(pred_labels == 0)
-    separatrix_pct = n_uncertain / n_total
+    # Step 1: Identify invalid points (p_invalid >= 0.5)
+    if p_invalid is not None:
+        is_invalid = p_invalid >= 0.5
+        n_invalid = int(np.sum(is_invalid))
+    else:
+        is_invalid = np.zeros(n_total, dtype=bool)
+        n_invalid = 0
 
-    confident_mask = pred_labels != 0
-    n_confident = np.sum(confident_mask)
+    # Step 2: For non-invalid points, apply thresholds
+    # pred_labels: 1=success, -1=failure, 0=uncertain, -2=invalid
+    pred_labels = np.zeros(n_total)  # Default: uncertain
+    pred_labels[is_invalid] = -2  # Mark invalid
+
+    non_invalid = ~is_invalid
+    pred_labels[(success_rate > success_thresh) & non_invalid] = 1
+    pred_labels[(success_rate < failure_thresh) & non_invalid] = -1
+
+    n_uncertain = int(np.sum(pred_labels == 0))
+    invalid_pct = n_invalid / n_total
+    uncertain_pct = n_uncertain / n_total
+
+    # Valid predictions: success (1) or failure (-1)
+    confident_mask = (pred_labels == 1) | (pred_labels == -1)
+    n_confident = int(np.sum(confident_mask))
 
     y_pred_conf = pred_labels[confident_mask]
     y_true_conf = y_all[confident_mask]
@@ -261,8 +287,11 @@ def compute_metrics_at_threshold(success_rate: np.ndarray, y_all: np.ndarray,
 
     return {
         'n_confident': int(n_confident),
+        'n_invalid': int(n_invalid),
         'n_uncertain': int(n_uncertain),
-        'separatrix_pct': float(separatrix_pct),
+        'invalid_pct': float(invalid_pct),
+        'uncertain_pct': float(uncertain_pct),
+        'separatrix_pct': float(invalid_pct + uncertain_pct),  # backward compat
         'accuracy': float(accuracy),
         'precision': float(precision),
         'recall': float(recall),
@@ -368,22 +397,30 @@ def evaluate_full_roa_fast(
     endpoint_mse = (endpoint_errors ** 2).mean()
     endpoint_rmse = np.sqrt(endpoint_mse)
 
-    # Compute success rate per point (p_success = fraction of samples reaching success attractor)
-    success_rate = (is_success == 1).sum(axis=1) / num_mc_samples
+    # Compute probabilities per point
+    success_rate = (is_success == 1).sum(axis=1) / num_mc_samples   # p_success
+    p_invalid = (is_success == 0).sum(axis=1) / num_mc_samples      # p_invalid (label=0)
+
+    if verbose:
+        print(f"\nMC probability statistics:")
+        print(f"  p_success: mean={success_rate.mean():.4f}, min={success_rate.min():.4f}, max={success_rate.max():.4f}")
+        print(f"  p_invalid: mean={p_invalid.mean():.4f}, min={p_invalid.min():.4f}, max={p_invalid.max():.4f}")
 
     # Compute metrics for BOTH threshold schemes
     # 1. lambda* +/- delta from conformal prediction
     metrics_conformal = compute_metrics_at_threshold(
         success_rate, y_all,
         success_thresh=lambda_star + delta,
-        failure_thresh=lambda_star - delta
+        failure_thresh=lambda_star - delta,
+        p_invalid=p_invalid
     )
 
     # 2. Fixed 0.4/0.6 thresholds (classic approach)
     metrics_fixed = compute_metrics_at_threshold(
         success_rate, y_all,
         success_thresh=0.6,
-        failure_thresh=0.4
+        failure_thresh=0.4,
+        p_invalid=p_invalid
     )
 
     if verbose:
@@ -403,7 +440,8 @@ def evaluate_full_roa_fast(
         print(f"lambda*={lambda_star:.4f}, delta={delta:.4f}")
         print(f"  Success if p > {lambda_star + delta:.4f}")
         print(f"  Failure if p < {lambda_star - delta:.4f}")
-        print(f"Separatrix %:    {metrics_conformal['separatrix_pct']:.2%}")
+        print(f"Invalid %:       {metrics_conformal['invalid_pct']:.2%} (p_invalid >= 0.5)")
+        print(f"Uncertain %:     {metrics_conformal['uncertain_pct']:.2%} (multi-modal)")
         print(f"Confident:       {metrics_conformal['n_confident']} predictions")
         print(f"Accuracy:        {metrics_conformal['accuracy']:.2%}")
         print(f"F1 Score:        {metrics_conformal['f1']:.2%}")
@@ -416,7 +454,8 @@ def evaluate_full_roa_fast(
         print(f"{'='*60}")
         print(f"  Success if p > 0.6")
         print(f"  Failure if p < 0.4")
-        print(f"Separatrix %:    {metrics_fixed['separatrix_pct']:.2%}")
+        print(f"Invalid %:       {metrics_fixed['invalid_pct']:.2%} (p_invalid >= 0.5)")
+        print(f"Uncertain %:     {metrics_fixed['uncertain_pct']:.2%} (multi-modal)")
         print(f"Confident:       {metrics_fixed['n_confident']} predictions")
         print(f"Accuracy:        {metrics_fixed['accuracy']:.2%}")
         print(f"F1 Score:        {metrics_fixed['f1']:.2%}")

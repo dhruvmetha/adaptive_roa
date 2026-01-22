@@ -74,46 +74,71 @@ def evaluate_epoch(
                 attractor_labels = system.classify_attractor(pred, radius=attractor_radius).cpu().numpy()
                 is_success[batch_start:batch_end, sample_idx] = attractor_labels
 
-    # Compute success rate per point
-    success_rate = (is_success == 1).sum(axis=1) / num_mc_samples
+    # Compute probabilities per point
+    success_rate = (is_success == 1).sum(axis=1) / num_mc_samples   # p_success
+    p_invalid = (is_success == 0).sum(axis=1) / num_mc_samples      # p_invalid (label=0)
 
     # Compute metrics at fixed thresholds (0.4/0.6)
-    metrics = compute_metrics(success_rate, labels, success_thresh=0.6, failure_thresh=0.4)
+    metrics = compute_metrics(success_rate, labels, success_thresh=0.6, failure_thresh=0.4, p_invalid=p_invalid)
 
     return {
         'success_rate': success_rate,
+        'p_invalid': p_invalid,
         'metrics': metrics
     }
 
 
 def compute_metrics(success_rate: np.ndarray, labels: np.ndarray,
-                    success_thresh: float = 0.6, failure_thresh: float = 0.4) -> dict:
-    """Compute classification metrics at given thresholds"""
-    # Predictions: 1 if p > success_thresh, -1 if p < failure_thresh, 0 otherwise
-    pred_success = success_rate > success_thresh
-    pred_failure = success_rate < failure_thresh
-    pred_uncertain = ~pred_success & ~pred_failure
+                    success_thresh: float = 0.6, failure_thresh: float = 0.4,
+                    p_invalid: np.ndarray = None) -> dict:
+    """
+    Compute classification metrics at given thresholds.
 
-    # Ground truth: 1 = success, -1 = failure, 0 = separatrix
+    Two-step classification:
+    1. INVALID if p_invalid >= 0.5 (majority of MC samples were neither success nor failure)
+    2. From remaining points:
+       - SUCCESS if success_rate > success_thresh
+       - FAILURE if success_rate < failure_thresh
+       - UNCERTAIN otherwise (multi-modal)
+    """
+    n_total = len(labels)
+
+    # Step 1: Identify invalid points (p_invalid >= 0.5)
+    if p_invalid is not None:
+        is_invalid = p_invalid >= 0.5
+        n_invalid = int(np.sum(is_invalid))
+    else:
+        is_invalid = np.zeros(n_total, dtype=bool)
+        n_invalid = 0
+
+    # Step 2: For non-invalid points, apply thresholds
+    non_invalid = ~is_invalid
+    pred_success = (success_rate > success_thresh) & non_invalid
+    pred_failure = (success_rate < failure_thresh) & non_invalid
+    pred_uncertain = non_invalid & ~pred_success & ~pred_failure
+
+    # Ground truth: 1 = success, -1 = failure
     gt_success = labels == 1
     gt_failure = labels == -1
 
-    # Only evaluate on confident predictions (not uncertain)
-    confident_mask = ~pred_uncertain
-    n_confident = confident_mask.sum()
-    n_uncertain = pred_uncertain.sum()
+    # Only evaluate on confident predictions (not uncertain, not invalid)
+    confident_mask = pred_success | pred_failure
+    n_confident = int(confident_mask.sum())
+    n_uncertain = int(pred_uncertain.sum())
+    invalid_pct = n_invalid / n_total
+    uncertain_pct = n_uncertain / n_total
 
     if n_confident == 0:
         return {'error': 'No confident predictions'}
 
     # TP: predicted success AND ground truth success
-    tp = (pred_success & gt_success).sum()
+    tp = int((pred_success & gt_success).sum())
     # TN: predicted failure AND ground truth failure
-    tn = (pred_failure & gt_failure).sum()
+    tn = int((pred_failure & gt_failure).sum())
     # FP: predicted success BUT ground truth failure
-    fp = (pred_success & gt_failure).sum()
+    fp = int((pred_success & gt_failure).sum())
     # FN: predicted failure BUT ground truth success
-    fn = (pred_failure & gt_success).sum()
+    fn = int((pred_failure & gt_success).sum())
 
     # Metrics
     accuracy = (tp + tn) / n_confident if n_confident > 0 else 0
@@ -124,8 +149,11 @@ def compute_metrics(success_rate: np.ndarray, labels: np.ndarray,
 
     return {
         'n_confident': int(n_confident),
+        'n_invalid': int(n_invalid),
         'n_uncertain': int(n_uncertain),
-        'separatrix_pct': float(n_uncertain / len(labels)),
+        'invalid_pct': float(invalid_pct),
+        'uncertain_pct': float(uncertain_pct),
+        'separatrix_pct': float(invalid_pct + uncertain_pct),  # backward compat
         'accuracy': float(accuracy),
         'precision': float(precision),
         'recall': float(recall),

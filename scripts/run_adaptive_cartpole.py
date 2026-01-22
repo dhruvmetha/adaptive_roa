@@ -290,65 +290,104 @@ def compute_metrics_at_threshold(success_rate: np.ndarray, y_all: np.ndarray,
     }
 
 
-def compute_metrics_notebook_style(p_success: np.ndarray, p_failure: np.ndarray, 
-                                   y_all: np.ndarray, threshold: float = 0.6) -> Dict:
+def compute_metrics_notebook_style(p_success: np.ndarray, p_failure: np.ndarray,
+                                   y_all: np.ndarray, threshold: float = 0.6,
+                                   p_invalid: np.ndarray = None) -> Dict:
     """
     Compute metrics using notebook-style evaluation (separate success/failure thresholds).
-    
-    Decision rule (like notebooks/cartpole_eval.ipynb):
-    - SUCCESS if p_success > threshold (e.g., 0.6)
-    - FAILURE if p_failure > threshold (e.g., 0.6)
-    - SEPARATRIX otherwise
-    
+
+    Two-step classification:
+    1. INVALID if p_invalid >= 0.5 (majority of MC samples were neither success nor failure)
+    2. From remaining points:
+       - SUCCESS if p_success > threshold (e.g., 0.6)
+       - FAILURE if p_failure > threshold (e.g., 0.6)
+       - UNCERTAIN otherwise (multi-modal)
+
     This properly handles CartPole's three-way classification where:
-    - p_success + p_failure + p_separatrix = 1
-    - A point can have low p_success without being failure (high p_separatrix)
-    
+    - p_success + p_failure + p_invalid = 1
+    - A point can have low p_success without being failure (high p_invalid)
+
     Args:
         p_success: [N] array of P(MC label == 1)
         p_failure: [N] array of P(MC label == -1)
         y_all: [N] ground truth labels (-1=failure, 1=success)
         threshold: Confidence threshold (default 0.6)
-        
+        p_invalid: [N] array of P(MC label == 0), optional for backward compatibility
+
     Returns:
         Dict with evaluation metrics
     """
     n_total = len(y_all)
-    
-    # Notebook-style classification: use BOTH p_success and p_failure
-    pred_labels = np.zeros(n_total)  # Default: separatrix/unknown
-    pred_labels[p_success > threshold] = 1   # Success if p_s > threshold
-    pred_labels[p_failure > threshold] = -1  # Failure if p_f > threshold
-    
+
+    # Step 1: Identify invalid points (p_invalid >= 0.5)
+    if p_invalid is not None:
+        is_invalid = p_invalid >= 0.5
+        n_invalid = int(np.sum(is_invalid))
+    else:
+        is_invalid = np.zeros(n_total, dtype=bool)
+        n_invalid = 0
+
+    # Step 2: For non-invalid points, apply confidence threshold
+    # Initialize all as uncertain (-1 for uncertain, -2 for invalid)
+    pred_labels = np.full(n_total, -1)  # Default: uncertain
+    pred_labels[is_invalid] = -2  # Mark invalid
+
+    # Only classify non-invalid points
+    non_invalid = ~is_invalid
+    pred_labels[(p_success > threshold) & non_invalid] = 1   # Success
+    pred_labels[(p_failure > threshold) & non_invalid] = -1  # Failure (but not if already success)
+
     # Handle edge case: if both p_success > threshold and p_failure > threshold
-    # This is a confusing/uncertain situation - treat as separatrix
-    both_high = (p_success > threshold) & (p_failure > threshold)
-    pred_labels[both_high] = 0  # Separatrix
-    
-    n_uncertain = np.sum(pred_labels == 0)
-    separatrix_pct = n_uncertain / n_total
-    
-    confident_mask = pred_labels != 0
-    n_confident = np.sum(confident_mask)
-    
-    y_pred_conf = pred_labels[confident_mask]
+    # This is a confusing/uncertain situation - treat as uncertain
+    both_high = (p_success > threshold) & (p_failure > threshold) & non_invalid
+    pred_labels[both_high] = -1  # Uncertain
+
+    # Count categories
+    n_uncertain = int(np.sum(pred_labels == -1))
+    n_confident = int(np.sum((pred_labels == 1) | (pred_labels == 0)))  # success or failure predictions
+    # Note: pred_labels uses -1 for failure in ground truth but 0 for uncertain in old code
+    # Let me fix: success=1, failure should be marked differently
+
+    # Actually let's be clearer: 1=success, 0=failure prediction, -1=uncertain, -2=invalid
+    pred_labels = np.full(n_total, -1)  # Default: uncertain
+    pred_labels[is_invalid] = -2  # Mark invalid
+    pred_labels[(p_success > threshold) & non_invalid] = 1   # Success
+    pred_labels[(p_failure > threshold) & non_invalid] = 0   # Failure
+
+    # Handle edge case: if both thresholds met, mark as uncertain
+    both_high = (p_success > threshold) & (p_failure > threshold) & non_invalid
+    pred_labels[both_high] = -1  # Uncertain
+
+    n_uncertain = int(np.sum(pred_labels == -1))
+    invalid_pct = n_invalid / n_total
+    uncertain_pct = n_uncertain / n_total
+
+    # Valid predictions: success (1) or failure (0)
+    confident_mask = (pred_labels == 1) | (pred_labels == 0)
+    n_confident = int(np.sum(confident_mask))
+
+    # Map predictions to ground truth space: pred 1 -> 1, pred 0 -> -1
+    y_pred_conf = np.where(pred_labels[confident_mask] == 1, 1, -1)
     y_true_conf = y_all[confident_mask]
-    
+
     tp = int(np.sum((y_pred_conf == 1) & (y_true_conf == 1)))
     tn = int(np.sum((y_pred_conf == -1) & (y_true_conf == -1)))
     fp = int(np.sum((y_pred_conf == 1) & (y_true_conf == -1)))
     fn = int(np.sum((y_pred_conf == -1) & (y_true_conf == 1)))
-    
+
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
     specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
     accuracy = (tp + tn) / n_confident if n_confident > 0 else 0.0
-    
+
     return {
         'n_confident': int(n_confident),
+        'n_invalid': int(n_invalid),
         'n_uncertain': int(n_uncertain),
-        'separatrix_pct': float(separatrix_pct),
+        'invalid_pct': float(invalid_pct),
+        'uncertain_pct': float(uncertain_pct),
+        'separatrix_pct': float(invalid_pct + uncertain_pct),  # backward compat
         'accuracy': float(accuracy),
         'precision': float(precision),
         'recall': float(recall),
@@ -357,8 +396,9 @@ def compute_metrics_notebook_style(p_success: np.ndarray, p_failure: np.ndarray,
         'tp': tp, 'tn': tn, 'fp': fp, 'fn': fn,
         'threshold': float(threshold),
         'n_pred_success': int(np.sum(pred_labels == 1)),
-        'n_pred_failure': int(np.sum(pred_labels == -1)),
-        'n_pred_separatrix': int(n_uncertain),
+        'n_pred_failure': int(np.sum(pred_labels == 0)),
+        'n_pred_invalid': int(n_invalid),
+        'n_pred_uncertain': int(n_uncertain),
     }
 
 
@@ -368,38 +408,57 @@ def compute_metrics_lambda_delta_cartpole(
     y_all: np.ndarray,
     lambda_star: float,
     delta: float,
+    p_invalid: np.ndarray = None,
 ) -> Dict:
     """
     CartPole-specific λ/δ evaluation using BOTH p_success and p_failure.
 
-    Decision rule:
-      - SUCCESS if p_success > λ + δ
-      - FAILURE if (1 - p_failure) < λ - δ   (equivalently p_failure > 1 - (λ - δ))
-      - SEPARATRIX otherwise
+    Two-step classification:
+    1. INVALID if p_invalid >= 0.5 (majority of MC samples were neither success nor failure)
+    2. From remaining points:
+       - SUCCESS if p_success > λ + δ
+       - FAILURE if (1 - p_failure) < λ - δ   (equivalently p_failure > 1 - (λ - δ))
+       - UNCERTAIN otherwise (multi-modal)
 
     This differs from the legacy p_success-only rule and avoids treating
     low p_success (due to high separatrix probability) as failure.
     """
     n_total = len(y_all)
 
+    # Step 1: Identify invalid points (p_invalid >= 0.5)
+    if p_invalid is not None:
+        is_invalid = p_invalid >= 0.5
+        n_invalid = int(np.sum(is_invalid))
+    else:
+        is_invalid = np.zeros(n_total, dtype=bool)
+        n_invalid = 0
+
     success_thresh = float(lambda_star + delta)
     failure_thresh_one_minus_pf = float(lambda_star - delta)
 
-    pred_labels = np.zeros(n_total)  # Default: separatrix/unknown
-    pred_labels[p_success > success_thresh] = 1
-    pred_labels[(1.0 - p_failure) < failure_thresh_one_minus_pf] = -1
+    # Step 2: For non-invalid points, apply λ/δ thresholds
+    # pred_labels: 1=success, 0=failure, -1=uncertain, -2=invalid
+    pred_labels = np.full(n_total, -1)  # Default: uncertain
+    pred_labels[is_invalid] = -2  # Mark invalid
 
-    # If both conditions trigger, treat as separatrix/unknown (rare but possible numerically)
-    both = (p_success > success_thresh) & ((1.0 - p_failure) < failure_thresh_one_minus_pf)
-    pred_labels[both] = 0
+    non_invalid = ~is_invalid
+    pred_labels[(p_success > success_thresh) & non_invalid] = 1
+    pred_labels[((1.0 - p_failure) < failure_thresh_one_minus_pf) & non_invalid] = 0
 
-    n_uncertain = int(np.sum(pred_labels == 0))
-    separatrix_pct = n_uncertain / n_total
+    # If both conditions trigger, treat as uncertain (rare but possible numerically)
+    both = (p_success > success_thresh) & ((1.0 - p_failure) < failure_thresh_one_minus_pf) & non_invalid
+    pred_labels[both] = -1
 
-    confident_mask = pred_labels != 0
+    n_uncertain = int(np.sum(pred_labels == -1))
+    invalid_pct = n_invalid / n_total
+    uncertain_pct = n_uncertain / n_total
+
+    # Valid predictions: success (1) or failure (0)
+    confident_mask = (pred_labels == 1) | (pred_labels == 0)
     n_confident = int(np.sum(confident_mask))
 
-    y_pred_conf = pred_labels[confident_mask]
+    # Map predictions to ground truth space: pred 1 -> 1, pred 0 -> -1
+    y_pred_conf = np.where(pred_labels[confident_mask] == 1, 1, -1)
     y_true_conf = y_all[confident_mask]
 
     tp = int(np.sum((y_pred_conf == 1) & (y_true_conf == 1)))
@@ -415,8 +474,11 @@ def compute_metrics_lambda_delta_cartpole(
 
     return {
         'n_confident': int(n_confident),
+        'n_invalid': int(n_invalid),
         'n_uncertain': int(n_uncertain),
-        'separatrix_pct': float(separatrix_pct),
+        'invalid_pct': float(invalid_pct),
+        'uncertain_pct': float(uncertain_pct),
+        'separatrix_pct': float(invalid_pct + uncertain_pct),  # backward compat
         'accuracy': float(accuracy),
         'precision': float(precision),
         'recall': float(recall),
@@ -528,13 +590,13 @@ def evaluate_full_roa_fast(
     # Compute probabilities for each class
     p_success = (mc_labels == 1).sum(axis=1) / num_mc_samples   # P(label == 1)
     p_failure = (mc_labels == -1).sum(axis=1) / num_mc_samples  # P(label == -1)
-    p_separatrix = (mc_labels == 0).sum(axis=1) / num_mc_samples  # P(label == 0)
+    p_invalid = (mc_labels == 0).sum(axis=1) / num_mc_samples   # P(label == 0)
 
     if verbose:
         print(f"\nMC probability statistics:")
         print(f"  p_success:   mean={p_success.mean():.4f}, min={p_success.min():.4f}, max={p_success.max():.4f}")
         print(f"  p_failure:   mean={p_failure.mean():.4f}, min={p_failure.min():.4f}, max={p_failure.max():.4f}")
-        print(f"  p_separatrix: mean={p_separatrix.mean():.4f}, min={p_separatrix.min():.4f}, max={p_separatrix.max():.4f}")
+        print(f"  p_invalid:   mean={p_invalid.mean():.4f}, min={p_invalid.min():.4f}, max={p_invalid.max():.4f}")
 
         print(f"\n{'='*60}")
         print("ENDPOINT ERROR METRICS (predicted vs actual)")
@@ -554,12 +616,14 @@ def evaluate_full_roa_fast(
         y_all=y_all,
         lambda_star=lambda_star,
         delta=delta,
+        p_invalid=p_invalid,
     )
 
     # 2. Notebook-style: success if p_s > 0.6, failure if p_f > 0.6
     metrics_notebook = compute_metrics_notebook_style(
         p_success, p_failure, y_all,
-        threshold=0.6
+        threshold=0.6,
+        p_invalid=p_invalid,
     )
 
     if verbose:
@@ -569,7 +633,8 @@ def evaluate_full_roa_fast(
         print(f"λ*={lambda_star:.4f}, δ={delta:.4f}")
         print(f"  Success if p_success > {lambda_star + delta:.4f}")
         print(f"  Failure if (1 - p_failure) < {lambda_star - delta:.4f}")
-        print(f"Separatrix %:    {metrics_conformal['separatrix_pct']:.2%}")
+        print(f"Invalid %:       {metrics_conformal['invalid_pct']:.2%} (p_invalid >= 0.5)")
+        print(f"Uncertain %:     {metrics_conformal['uncertain_pct']:.2%} (multi-modal)")
         print(f"Confident:       {metrics_conformal['n_confident']} predictions")
         print(f"Accuracy:        {metrics_conformal['accuracy']:.2%}")
         print(f"F1 Score:        {metrics_conformal['f1']:.2%}")
@@ -582,7 +647,8 @@ def evaluate_full_roa_fast(
         print(f"{'='*60}")
         print(f"  Success if p_success > 0.6")
         print(f"  Failure if p_failure > 0.6")
-        print(f"Separatrix %:    {metrics_notebook['separatrix_pct']:.2%}")
+        print(f"Invalid %:       {metrics_notebook['invalid_pct']:.2%} (p_invalid >= 0.5)")
+        print(f"Uncertain %:     {metrics_notebook['uncertain_pct']:.2%} (multi-modal)")
         print(f"Confident:       {metrics_notebook['n_confident']} predictions")
         print(f"  Pred success:  {metrics_notebook['n_pred_success']}")
         print(f"  Pred failure:  {metrics_notebook['n_pred_failure']}")
@@ -633,7 +699,7 @@ def evaluate_full_roa_fast(
             start_states=X_all,           # [N, 4] - (x, θ, ẋ, θ̇)
             p_success=p_success,          # [N] - P(MC label == 1)
             p_failure=p_failure,          # [N] - P(MC label == -1)
-            p_separatrix=p_separatrix,    # [N] - P(MC label == 0)
+            p_invalid=p_invalid,          # [N] - P(MC label == 0)
             true_labels=y_all,            # [N] - ground truth labels (1=success, -1=failure)
             lambda_star=lambda_star,
             delta=delta,

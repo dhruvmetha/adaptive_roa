@@ -124,21 +124,46 @@ def compute_metrics_at_threshold(
     success_rate: np.ndarray,
     y_all: np.ndarray,
     success_thresh: float,
-    failure_thresh: float
+    failure_thresh: float,
+    p_invalid: np.ndarray = None
 ) -> Dict:
-    """Compute classification metrics at given probability thresholds."""
-    n_total = len(y_all)
-    pred_labels = np.zeros(n_total)
-    pred_labels[success_rate > success_thresh] = 1
-    pred_labels[success_rate < failure_thresh] = -1
+    """
+    Compute classification metrics at given probability thresholds.
 
-    n_uncertain = np.sum(pred_labels == 0)
-    separatrix_pct = n_uncertain / n_total
+    Two-step classification:
+    1. INVALID if p_invalid >= 0.5 (majority of MC samples were neither success nor failure)
+    2. From remaining points:
+       - SUCCESS if success_rate > success_thresh
+       - FAILURE if success_rate < failure_thresh
+       - UNCERTAIN otherwise (multi-modal)
+    """
+    n_total = len(y_all)
+
+    # Step 1: Identify invalid points (p_invalid >= 0.5)
+    if p_invalid is not None:
+        is_invalid = p_invalid >= 0.5
+        n_invalid = int(np.sum(is_invalid))
+    else:
+        is_invalid = np.zeros(n_total, dtype=bool)
+        n_invalid = 0
+
+    # Step 2: For non-invalid points, apply thresholds
+    # pred_labels: 1=success, -1=failure, 0=uncertain, -2=invalid
+    pred_labels = np.zeros(n_total)  # Default: uncertain
+    pred_labels[is_invalid] = -2  # Mark invalid
+
+    non_invalid = ~is_invalid
+    pred_labels[(success_rate > success_thresh) & non_invalid] = 1
+    pred_labels[(success_rate < failure_thresh) & non_invalid] = -1
+
+    n_uncertain = int(np.sum(pred_labels == 0))
+    invalid_pct = n_invalid / n_total
+    uncertain_pct = n_uncertain / n_total
 
     # Only evaluate on points where BOTH prediction and ground truth are confident
     # (excludes ground truth separatrix points with y=0)
-    confident_mask = (pred_labels != 0) & (y_all != 0)
-    n_confident = np.sum(confident_mask)
+    confident_mask = ((pred_labels == 1) | (pred_labels == -1)) & (y_all != 0)
+    n_confident = int(np.sum(confident_mask))
 
     y_pred_conf = pred_labels[confident_mask]
     y_true_conf = y_all[confident_mask]
@@ -158,8 +183,11 @@ def compute_metrics_at_threshold(
 
     return {
         'n_confident': int(n_confident),
+        'n_invalid': int(n_invalid),
         'n_uncertain': int(n_uncertain),
-        'separatrix_pct': float(separatrix_pct),
+        'invalid_pct': float(invalid_pct),
+        'uncertain_pct': float(uncertain_pct),
+        'separatrix_pct': float(invalid_pct + uncertain_pct),  # backward compat
         'accuracy': float(accuracy),
         'precision': float(precision),
         'recall': float(recall),
@@ -225,20 +253,23 @@ def evaluate_full_roa(
                 attractor_labels = system.classify_attractor(pred, attractor_radius).cpu().numpy()
                 is_success[batch_start:batch_end, sample_idx] = attractor_labels
 
-    # Compute success rate per point
-    success_rate = (is_success == 1).sum(axis=1) / num_mc_samples
+    # Compute probabilities per point
+    success_rate = (is_success == 1).sum(axis=1) / num_mc_samples   # p_success
+    p_invalid = (is_success == 0).sum(axis=1) / num_mc_samples      # p_invalid (label=0)
 
     # Compute metrics for BOTH threshold schemes
     metrics_conformal = compute_metrics_at_threshold(
         success_rate, y_all,
         success_thresh=lambda_star + delta,
-        failure_thresh=lambda_star - delta
+        failure_thresh=lambda_star - delta,
+        p_invalid=p_invalid
     )
 
     metrics_fixed = compute_metrics_at_threshold(
         success_rate, y_all,
         success_thresh=0.6,
-        failure_thresh=0.4
+        failure_thresh=0.4,
+        p_invalid=p_invalid
     )
 
     metrics = {

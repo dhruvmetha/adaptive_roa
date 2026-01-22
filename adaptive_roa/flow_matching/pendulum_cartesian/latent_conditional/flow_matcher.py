@@ -171,10 +171,22 @@ class PendulumCartesianLatentConditionalFlowMatcher(BaseFlowMatcher):
         """
         import torch
         import yaml
+        import os
         from pathlib import Path
         from omegaconf import OmegaConf
         from adaptive_roa.systems.pendulum_cartesian import PendulumCartesianSystem
         from adaptive_roa.model.pendulum_cartesian_unet import PendulumCartesianUNet
+        from adaptive_roa.utils.env_config import get_net_id, get_exp_dir, get_data_dir, get_env_config
+
+        # Register OmegaConf resolvers for Hydra config loading
+        if not OmegaConf.has_resolver("net_id"):
+            OmegaConf.register_new_resolver("net_id", lambda: get_net_id())
+        if not OmegaConf.has_resolver("exp_dir"):
+            OmegaConf.register_new_resolver("exp_dir", lambda: get_exp_dir())
+        if not OmegaConf.has_resolver("data_dir"):
+            OmegaConf.register_new_resolver("data_dir", lambda: get_data_dir())
+        if not OmegaConf.has_resolver("env"):
+            OmegaConf.register_new_resolver("env", lambda key, default="": os.environ.get(key, get_env_config().get(key, default)))
 
         # Determine device
         if device is None:
@@ -262,8 +274,10 @@ class PendulumCartesianLatentConditionalFlowMatcher(BaseFlowMatcher):
         if hydra_config_path:
             try:
                 print(f"📋 Loading Hydra config: {hydra_config_path}")
-                with open(hydra_config_path, 'r') as f:
-                    hydra_config = yaml.safe_load(f)
+                # Use OmegaConf to load and resolve interpolations (e.g., ${data_dir})
+                hydra_omega_config = OmegaConf.load(hydra_config_path)
+                # Resolve all interpolations and convert to plain dict
+                hydra_config = OmegaConf.to_container(hydra_omega_config, resolve=True)
                 print("✅ Hydra config loaded successfully")
             except Exception as e:
                 print(f"⚠️  Warning: Could not load Hydra config: {e}")

@@ -156,6 +156,20 @@ def get_data_dir() -> str:
     return get_env_config().get("DATA_DIR", default)
 
 
+def get_shared_data_base() -> str:
+    """
+    Get the shared data base directory.
+
+    This is the base directory for shared trajectory data.
+    Used by Hydra configs via ${shared_data_base:} resolver.
+
+    Returns:
+        Path to shared data base (default: /common/users/shared/pracsys/genMoPlan/data_trajectories)
+    """
+    default = "/common/users/shared/pracsys/genMoPlan/data_trajectories"
+    return get_env_config().get("SHARED_DATA_BASE", default)
+
+
 
 
 def get_user_path(*parts: str) -> str:

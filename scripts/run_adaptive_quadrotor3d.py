@@ -192,7 +192,7 @@ def plot_quadrotor3d_roa_projections(
     axes[0, 0].legend(handles=legend_elements, loc='upper right', fontsize=8)
     axes[1, 0].legend(handles=legend_elements, loc='upper right', fontsize=8)
 
-    plt.suptitle(f'{title}\n(lambda*={lambda_star:.3f}, delta={delta:.3f}) | '
+    plt.suptitle(f'{title}\n(λ*={lambda_star:.3f}, δ={delta:.3f}) | '
                  f'Pred: S={n_pred_success}, F={n_pred_failure}, Sep={n_pred_sep} | '
                  f'GT: S={n_gt_success}, F={n_gt_failure}, Sep={n_gt_sep}',
                  fontsize=12, fontweight='bold')
@@ -286,7 +286,7 @@ def plot_quadrotor3d_probability_heatmap(
             cbar.ax.axhline(y=lambda_star - delta, color='black', linestyle='--', linewidth=1)
             cbar.ax.axhline(y=lambda_star, color='black', linestyle='-', linewidth=0.5)
 
-    plt.suptitle(f'{title}\n(lambda*={lambda_star:.3f}, bounds: [{lambda_star-delta:.3f}, {lambda_star+delta:.3f}])',
+    plt.suptitle(f'{title}\n(λ*={lambda_star:.3f}, bounds: [{lambda_star-delta:.3f}, {lambda_star+delta:.3f}])',
                  fontsize=12, fontweight='bold')
     plt.tight_layout()
     plt.savefig(output_file, dpi=150, bbox_inches='tight')
@@ -1013,9 +1013,9 @@ def evaluate_full_roa_fast(
 
     if verbose:
         print(f"\n{'='*60}")
-        print("METRICS WITH lambda*+-delta THRESHOLDS (p_s AND p_f)")
+        print("METRICS WITH λ*±δ THRESHOLDS (p_s AND p_f)")
         print(f"{'='*60}")
-        print(f"lambda*={lambda_star:.4f}, delta={delta:.4f}")
+        print(f"λ*={lambda_star:.4f}, δ={delta:.4f}")
         print(f"  Success if p_success > {lambda_star + delta:.4f}")
         print(f"  Failure if (1 - p_failure) < {lambda_star - delta:.4f}")
         print(f"Invalid %:       {metrics_conformal['invalid_pct']:.2%} (p_invalid >= 0.5)")
@@ -1047,7 +1047,7 @@ def evaluate_full_roa_fast(
             print(f"\n{'='*60}")
             print("METRICS WITH q_hat CONFORMAL PREDICTION SETS")
             print(f"{'='*60}")
-            print(f"lambda*={lambda_star:.4f}, delta={delta:.4f}, q_hat={q_hat:.4f}")
+            print(f"λ*={lambda_star:.4f}, δ={delta:.4f}, q_hat={q_hat:.4f}")
             print(f"  Label in prediction set if non-conformity score <= q_hat")
             print(f"  Confident SUCCESS: prediction set == {{1}}")
             print(f"  Confident FAILURE: prediction set == {{-1}}")
@@ -1292,18 +1292,21 @@ def train_flow_matcher(
     if use_loss_weights:
         weight_type = "1+log(limit)" if use_log_loss_weights else "limit"
         print(f"   Loss weights: ENABLED ({weight_type})")
-    if not use_manifold:
-        print(f"   Manifold: DISABLED (using Euclidean R^13 with quaternion projection)")
+    print(f"   Use manifold: {use_manifold}")
+    print(f"   Clamp noise: {clamp_noise}")
+    print(f"   Noise scale: {noise_scale}")
+    print(f"   Zero latent: {zero_latent}")
+    print(f"   Latent dim: {cfg.flow_matching.latent_dim}")
 
     # Load weights from previous checkpoint if warm starting
     if resume_checkpoint and Path(resume_checkpoint).exists():
-        print(f"Warm start: Loading weights from {resume_checkpoint}")
+        print(f"🔥 Warm start: Loading weights from {resume_checkpoint}")
         checkpoint = torch.load(resume_checkpoint, map_location='cpu', weights_only=False)
         state_dict = checkpoint["state_dict"]
         # Load only model weights (not optimizer state)
         model_state_dict = {k.replace("model.", ""): v for k, v in state_dict.items() if k.startswith("model.")}
         flow_matcher.model.load_state_dict(model_state_dict)
-        print(f"   Loaded model weights ({len(model_state_dict)} tensors)")
+        print(f"   ✓ Loaded model weights ({len(model_state_dict)} tensors)")
 
     # Setup trainer
     checkpoint_dir = Path(output_dir) / "checkpoints"
@@ -1523,7 +1526,7 @@ def main(cfg: DictConfig):
         q_hat = conformal_state['q_hat']  # Calibration threshold for conformal prediction sets
 
         print(f"\n[5] Evaluating on FULL eval_states.txt ({num_mc_samples_eval} MC samples, fast batched)...")
-        print(f"    Using lambda*={lambda_star:.4f} +- delta*={delta_star:.4f}, q_hat={q_hat:.4f} from conformal prediction")
+        print(f"    Using λ*={lambda_star:.4f} ± δ*={delta_star:.4f}, q_hat={q_hat:.4f} from conformal prediction")
         full_roa_output_file = epoch_output_dir / "full_roa_evaluation.json"
         full_roa_metrics = evaluate_full_roa_fast(
             flow_matcher=flow_matcher,
@@ -1663,11 +1666,11 @@ def main(cfg: DictConfig):
         print(f"  Training trajectories: {epoch_result['train_trajectories']}")
         print(f"  Added this epoch: {len(d1_indices) + n_d2} (D1={len(d1_indices)}, D2={n_d2})")
         print(f"  Skipped (confident): {n_confident}")
-        print(f"  lambda* = {epoch_result['lambda_star']:.4f}, delta* = {epoch_result['delta_star']:.4f}, q_hat = {epoch_result['q_hat']:.4f}")
+        print(f"  λ* = {epoch_result['lambda_star']:.4f}, δ* = {epoch_result['delta_star']:.4f}, q_hat = {epoch_result['q_hat']:.4f}")
         print(f"  --- Full ROA (all {full_roa_metrics['n_total']} trajectories) ---")
         conf_m = full_roa_metrics['conformal_thresholds']
         notebook_m = full_roa_metrics['notebook_thresholds']
-        print(f"  [lambda*+-delta] Sep%={conf_m['separatrix_pct']:.1%}, F1={conf_m['f1']:.2%}, Acc={conf_m['accuracy']:.2%}")
+        print(f"  [λ*±δ] Sep%={conf_m['separatrix_pct']:.1%}, F1={conf_m['f1']:.2%}, Acc={conf_m['accuracy']:.2%}")
         print(f"  [Notebook p_s/p_f>0.6] Sep%={notebook_m['separatrix_pct']:.1%}, F1={notebook_m['f1']:.2%}, Acc={notebook_m['accuracy']:.2%}")
 
         # Save epoch results
@@ -1712,20 +1715,20 @@ def main(cfg: DictConfig):
     print(f"Available remaining: {stats['available_trajectories']} trajectories")
 
     if epoch_results:
-        print(f"\n--- Full ROA Metrics Progression (Initial -> Final) ---")
+        print(f"\n--- Full ROA Metrics Progression (Initial → Final) ---")
         first = epoch_results[0]['full_roa']
         last = epoch_results[-1]['full_roa']
-        print(f"\n  [lambda*+-delta* Thresholds]")
-        print(f"  Separatrix %:  {first['conformal_thresholds']['separatrix_pct']:.2%} -> {last['conformal_thresholds']['separatrix_pct']:.2%}")
-        print(f"  F1 Score:      {first['conformal_thresholds']['f1']:.2%} -> {last['conformal_thresholds']['f1']:.2%}")
-        print(f"  Accuracy:      {first['conformal_thresholds']['accuracy']:.2%} -> {last['conformal_thresholds']['accuracy']:.2%}")
+        print(f"\n  [λ*±δ* Thresholds]")
+        print(f"  Separatrix %:  {first['conformal_thresholds']['separatrix_pct']:.2%} → {last['conformal_thresholds']['separatrix_pct']:.2%}")
+        print(f"  F1 Score:      {first['conformal_thresholds']['f1']:.2%} → {last['conformal_thresholds']['f1']:.2%}")
+        print(f"  Accuracy:      {first['conformal_thresholds']['accuracy']:.2%} → {last['conformal_thresholds']['accuracy']:.2%}")
         print(f"\n  [Notebook-Style Thresholds (p_s/p_f > 0.6)]")
-        print(f"  Separatrix %:  {first['notebook_thresholds']['separatrix_pct']:.2%} -> {last['notebook_thresholds']['separatrix_pct']:.2%}")
-        print(f"  F1 Score:      {first['notebook_thresholds']['f1']:.2%} -> {last['notebook_thresholds']['f1']:.2%}")
-        print(f"  Accuracy:      {first['notebook_thresholds']['accuracy']:.2%} -> {last['notebook_thresholds']['accuracy']:.2%}")
-        print(f"\n  lambda*:            {epoch_results[0]['lambda_star']:.4f} -> {epoch_results[-1]['lambda_star']:.4f}")
-        print(f"  delta*:            {epoch_results[0]['delta_star']:.4f} -> {epoch_results[-1]['delta_star']:.4f}")
-        print(f"  q_hat:         {epoch_results[0]['q_hat']:.4f} -> {epoch_results[-1]['q_hat']:.4f}")
+        print(f"  Separatrix %:  {first['notebook_thresholds']['separatrix_pct']:.2%} → {last['notebook_thresholds']['separatrix_pct']:.2%}")
+        print(f"  F1 Score:      {first['notebook_thresholds']['f1']:.2%} → {last['notebook_thresholds']['f1']:.2%}")
+        print(f"  Accuracy:      {first['notebook_thresholds']['accuracy']:.2%} → {last['notebook_thresholds']['accuracy']:.2%}")
+        print(f"\n  λ*:            {epoch_results[0]['lambda_star']:.4f} → {epoch_results[-1]['lambda_star']:.4f}")
+        print(f"  δ*:            {epoch_results[0]['delta_star']:.4f} → {epoch_results[-1]['delta_star']:.4f}")
+        print(f"  q_hat:         {epoch_results[0]['q_hat']:.4f} → {epoch_results[-1]['q_hat']:.4f}")
 
     # Save final results
     with open(output_dir / "final_results.json", 'w') as f:

@@ -128,6 +128,7 @@ def main(cfg: DictConfig):
     if use_loss_weights:
         weight_type = "1+log(limit)" if use_log_loss_weights else "limit"
         print(f"        Loss weights: ENABLED ({weight_type})")
+    print(f"        Use manifold: {use_manifold}")
     print(f"        Clamp noise: {clamp_noise}")
     print(f"        Noise scale: {noise_scale}")
     print()

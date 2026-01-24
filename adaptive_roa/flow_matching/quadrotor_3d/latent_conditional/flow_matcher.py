@@ -92,12 +92,15 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
 
         super().__init__(system, model, optimizer, scheduler, model_config, latent_dim, mae_val_frequency, use_loss_weights, clamp_noise, zero_latent, val_error_log_file, noise_scale)
 
-        # Override loss weights for Euclidean mode (13D tangent instead of 12D)
-        if use_loss_weights and not use_manifold:
-            loss_weights_13d = self._get_euclidean_loss_weights()
-            self.register_buffer('loss_weights', loss_weights_13d)
-            weight_type = "1+log(limit)" if use_log_loss_weights else "limit"
-            print(f"📊 Loss weights (Euclidean 13D, {weight_type}): {loss_weights_13d.tolist()}")
+        # Override loss weights for Euclidean mode or log weights
+        # (13D tangent for Euclidean, 12D for manifold mode)
+        if use_loss_weights:
+            if use_log_loss_weights or not use_manifold:
+                loss_weights = self._get_euclidean_loss_weights()
+                self.register_buffer('loss_weights', loss_weights)
+                weight_type = "1+log(limit)" if use_log_loss_weights else "limit"
+                dim_str = "13D" if not use_manifold else "12D"
+                print(f"📊 Loss weights ({dim_str}, {weight_type}): {loss_weights.tolist()}")
 
         manifold_str = "ℝ³ × SO(3) × ℝ⁶" if use_manifold else "ℝ¹³ (Euclidean)"
         tangent_str = "12D (3 pos + 3 rot + 6 vel)" if use_manifold else "13D (all Euclidean)"
@@ -139,19 +142,25 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
 
     def _get_euclidean_loss_weights(self) -> torch.Tensor:
         """
-        Get 13D loss weights for Euclidean mode (all dimensions treated as Euclidean).
+        Get loss weights for tangent space dimensions.
 
-        When use_manifold=False, the tangent space is 13D (same as state space):
+        When use_manifold=False (Euclidean mode), tangent space is 13D:
         - Position (3D): weights from position limits
         - Quaternion (4D): weight = 1.0 for each component (unit quaternion range [-1, 1])
         - Linear velocity (3D): weights from velocity limits
         - Angular velocity (3D): weights from angular velocity limits
 
+        When use_manifold=True (manifold mode), tangent space is 12D:
+        - Position (3D): weights from position limits
+        - Rotation tangent (3D): weight = 1.0 (SO(3) tangent is bounded rotation vectors)
+        - Linear velocity (3D): weights from velocity limits
+        - Angular velocity (3D): weights from angular velocity limits
+
         If use_log_loss_weights=True, applies 1 + log(limit) transformation to compress
-        the weight range (e.g., from 39:1 to ~4.7:1 for angular velocity vs quaternion).
+        the weight range (e.g., from 39:1 to ~4.7:1 for angular velocity vs position).
 
         Returns:
-            torch.Tensor: 13D weights for Euclidean tangent space
+            torch.Tensor: 12D or 13D weights depending on manifold mode
         """
         system = self.system
 
@@ -159,23 +168,29 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
         z_scale = (system.z_max - system.z_min) / 2
         position_weights = [system.x_limit, system.y_limit, z_scale]
 
-        # Quaternion weights (4D) - each component is in [-1, 1], so weight = 1.0
-        quaternion_weights = [1.0, 1.0, 1.0, 1.0]
-
         # Linear velocity weights (3D)
         linear_vel_weights = [system.x_dot_limit, system.y_dot_limit, system.z_dot_limit]
 
         # Angular velocity weights (3D)
         angular_vel_weights = [system.p_limit, system.q_limit, system.r_limit]
 
-        weights = position_weights + quaternion_weights + linear_vel_weights + angular_vel_weights
+        if self.use_manifold:
+            # Manifold mode: 12D tangent space (3 pos + 3 rot + 6 vel)
+            # Rotation tangent space of SO(3) is 3D (angular velocity-like)
+            rotation_weights = [1.0, 1.0, 1.0]  # Bounded rotation vectors
+            weights = position_weights + rotation_weights + linear_vel_weights + angular_vel_weights
+        else:
+            # Euclidean mode: 13D tangent space (3 pos + 4 quat + 6 vel)
+            quaternion_weights = [1.0, 1.0, 1.0, 1.0]  # Unit quaternion range [-1, 1]
+            weights = position_weights + quaternion_weights + linear_vel_weights + angular_vel_weights
+
         weights_tensor = torch.tensor(weights, dtype=torch.float32)
 
         # Apply log transformation if enabled: 1 + log(limit)
         # This compresses the weight range while maintaining relative ordering
         # e.g., angular velocity (limit=39) goes from weight=39 to weight=1+log(39)≈4.67
         if self.use_log_loss_weights:
-            weights_tensor = 1.0 + torch.log(weights_tensor)
+            weights_tensor = 1.0 + torch.log(weights_tensor.clamp(min=1e-6))
 
         return weights_tensor
 

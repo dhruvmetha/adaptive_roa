@@ -41,7 +41,10 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
                  model_config: Optional[dict] = None,
                  latent_dim: int = 2,
                  mae_val_frequency: int = 10,
-                 use_loss_weights: bool = False):
+                 use_loss_weights: bool = False,
+                 clamp_noise: bool = True,
+                 zero_latent: bool = False,
+                 val_error_log_file: Optional[str] = None):
         """
         Initialize latent conditional flow matcher with FB FM integration
 
@@ -54,8 +57,11 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
             latent_dim: Dimension of latent space
             mae_val_frequency: Compute MAE validation every N epochs
             use_loss_weights: If True, weight loss by normalization limits
+            clamp_noise: If True, clamp noise to [-1, 1] to prevent ODE divergence
+            zero_latent: If True, use zero latent vectors instead of random sampling
+            val_error_log_file: Path to text file for logging validation errors
         """
-        super().__init__(system, model, optimizer, scheduler, model_config, latent_dim, mae_val_frequency, use_loss_weights)
+        super().__init__(system, model, optimizer, scheduler, model_config, latent_dim, mae_val_frequency, use_loss_weights, clamp_noise, zero_latent, val_error_log_file)
 
         print("✅ Initialized Pendulum LCFM with Facebook Flow Matching:")
         print(f"   - Manifold: S¹×ℝ (FlatTorus × Euclidean)")
@@ -131,6 +137,7 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
 
         Returns noise directly in normalized space (no further normalization needed).
         Circular dimension (θ) is projected onto manifold.
+        If self.clamp_noise is True, clamps to [-1, 1] to prevent ODE divergence.
 
         Args:
             batch_size: Number of samples
@@ -140,6 +147,8 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
             Noisy states [batch_size, 2] in normalized space
         """
         noisy_input = torch.randn(batch_size, 2, device=device)
+        if self.clamp_noise:
+            noisy_input = torch.clamp(noisy_input, -1.0, 1.0)
         noisy_input = self.manifold.projx(noisy_input)
         return noisy_input
 

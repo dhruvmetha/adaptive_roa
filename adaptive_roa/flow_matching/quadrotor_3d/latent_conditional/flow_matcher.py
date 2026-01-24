@@ -60,7 +60,10 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
                  mae_val_frequency: int = 10,
                  use_loss_weights: bool = False,
                  use_manifold: bool = True,
-                 use_log_loss_weights: bool = False):
+                 use_log_loss_weights: bool = False,
+                 clamp_noise: bool = True,
+                 zero_latent: bool = False,
+                 val_error_log_file: Optional[str] = None):
         """
         Initialize Quadrotor 3D latent conditional flow matcher with FB FM integration
 
@@ -77,12 +80,15 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
                          If False, use pure Euclidean R^13 with post-hoc quaternion projection
             use_log_loss_weights: If True and use_loss_weights=True, use 1+log(limit) instead of limit
                                   for more balanced weight ratios across dimensions
+            clamp_noise: If True, clamp noise to [-1, 1] to prevent ODE divergence
+            zero_latent: If True, use zero latent vectors instead of random sampling
+            val_error_log_file: Path to text file for logging validation errors
         """
         # Store use_manifold BEFORE calling super().__init__ because it calls _create_manifold()
         self.use_manifold = use_manifold
         self.use_log_loss_weights = use_log_loss_weights
 
-        super().__init__(system, model, optimizer, scheduler, model_config, latent_dim, mae_val_frequency, use_loss_weights)
+        super().__init__(system, model, optimizer, scheduler, model_config, latent_dim, mae_val_frequency, use_loss_weights, clamp_noise, zero_latent, val_error_log_file)
 
         # Override loss weights for Euclidean mode (13D tangent instead of 12D)
         if use_loss_weights and not use_manifold:
@@ -265,6 +271,9 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
         """
         Sample noisy input uniformly in ℝ³ × SO(3) × ℝ⁶ space
 
+        If self.clamp_noise is True, clamps position and velocity to [-1, 1]
+        to prevent ODE divergence. Quaternion is always normalized to unit sphere.
+
         Args:
             batch_size: Number of samples
             device: Device to create tensors on
@@ -272,11 +281,14 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
         Returns:
             Noisy states [batch_size, 13]
         """
-        # Position: Gaussian noise (will be projected by manifold if needed)
+        # Position: Gaussian noise, clamp if enabled
         position = torch.randn(batch_size, 3, device=device)
+        if self.clamp_noise:
+            position = torch.clamp(position, -1.0, 1.0)
 
         # Quaternion: uniform sampling on SO(3) via normalized Gaussian
         # Sample 4D Gaussian and normalize to get uniform distribution on unit quaternion sphere
+        # Note: No clamping needed - quaternion is always normalized to unit sphere
         quat = torch.randn(batch_size, 4, device=device)
         quat = quat / torch.norm(quat, dim=1, keepdim=True).clamp(min=1e-8)
         # Canonicalize: ensure qw >= 0
@@ -284,8 +296,10 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
         sign = torch.where(sign == 0, torch.ones_like(sign), sign)
         quat = quat * sign
 
-        # Velocities: Gaussian noise
+        # Velocities: Gaussian noise, clamp if enabled
         velocities = torch.randn(batch_size, 6, device=device)
+        if self.clamp_noise:
+            velocities = torch.clamp(velocities, -1.0, 1.0)
 
         noisy_input = torch.cat([position, quat, velocities], dim=1)
 
@@ -512,6 +526,22 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
             latent_dim = 4
             print(f"⚠️  Using default latent_dim: {latent_dim}")
 
+        # Extract use_manifold setting
+        # Check hparams first (if saved during training), then Hydra config
+        use_manifold = hparams.get("use_manifold")
+        if use_manifold is None and hydra_config:
+            use_manifold = hydra_config.get("flow_matching", {}).get("use_manifold", True)
+        if use_manifold is None:
+            use_manifold = True  # Default to manifold mode
+            print(f"⚠️  Using default use_manifold: {use_manifold}")
+        else:
+            print(f"📋 use_manifold: {use_manifold}")
+
+        # Determine output dimension based on manifold mode
+        # - use_manifold=True: SO(3) manifold → 12D tangent (3 pos + 3 rot + 6 vel)
+        # - use_manifold=False: Euclidean R^13 → 13D tangent (same as state dim)
+        model_output_dim = 12 if use_manifold else 13
+
         # Extract model config
         config_source = None
         if "model_config" in hparams:
@@ -554,14 +584,14 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
             print("✅ Restored Quadrotor3D system from checkpoint")
 
         # Create model architecture
-        # Note: output_dim=12 (tangent space), expmap converts to 13D state for integration
+        # Note: output_dim depends on use_manifold (12 for SO3, 13 for Euclidean)
         model = Quadrotor3DUNet(
             embedded_dim=model_config.get('embedded_dim', 13),
             latent_dim=model_config.get('latent_dim', latent_dim),
             condition_dim=model_config.get('condition_dim', 13),
             time_emb_dim=model_config.get('time_emb_dim', 64),
             hidden_dims=model_config.get('hidden_dims', [512, 1024, 512]),
-            output_dim=model_config.get('output_dim', 12),  # 12D tangent velocity
+            output_dim=model_output_dim,  # 12D for SO3, 13D for Euclidean
             use_input_embeddings=model_config.get('use_input_embeddings', False),
             input_emb_dim=model_config.get('input_emb_dim', 128)
         )
@@ -573,7 +603,8 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
             optimizer=None,
             scheduler=None,
             model_config=model_config,
-            latent_dim=latent_dim
+            latent_dim=latent_dim,
+            use_manifold=use_manifold
         )
 
         # Load model weights
@@ -591,11 +622,14 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
         flow_matcher.eval()
 
         # Success summary
+        manifold_str = "ℝ³ × SO(3) × ℝ⁶" if use_manifold else "ℝ¹³ (Euclidean)"
         print(f"\n✅ Model loaded successfully!")
         print(f"   Checkpoint: {checkpoint_path.name}")
         print(f"   Config sources: {'Hydra + Lightning' if hydra_config else 'Lightning only'}")
         print(f"   System: {type(system).__name__}")
         print(f"   Latent dim: {latent_dim}")
+        print(f"   Use manifold: {use_manifold} ({manifold_str})")
+        print(f"   Model output dim: {model_output_dim}")
         print(f"   Model architecture: {model_config.get('hidden_dims', 'unknown')}")
         print(f"   Total parameters: {sum(p.numel() for p in model.parameters()):,}")
         print(f"   Device: {device}")

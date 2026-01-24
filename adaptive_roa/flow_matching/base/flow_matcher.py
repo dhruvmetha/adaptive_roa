@@ -802,14 +802,17 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
                     start_states=start_states, num_steps=100, latent=None
                 )
 
-            # Compute absolute errors per dimension [B, state_dim]
-            abs_errors = torch.abs(predicted_endpoints - true_endpoints)
+            # Compute geodesic errors per dimension using manifold distance [B, state_dim]
+            # This properly handles circular/manifold components (e.g., angles on S¹, quaternions on SO(3))
+            pred_normalized = self.normalize_state(predicted_endpoints)
+            true_normalized = self.normalize_state(true_endpoints)
+            geodesic_errors = self.manifold.dist(pred_normalized, true_normalized)
 
             # Store for percentile computation at epoch end
-            self._val_abs_errors_buffer.append(abs_errors.detach().cpu())
+            self._val_abs_errors_buffer.append(geodesic_errors.detach().cpu())
 
             # Compute MAE per dimension (for backward compatibility with logging)
-            mae_per_dim = abs_errors.mean(dim=0)
+            mae_per_dim = geodesic_errors.mean(dim=0)
 
             # Update metrics
             for dim_idx in range(self.system.state_dim):

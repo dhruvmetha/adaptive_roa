@@ -90,6 +90,8 @@ def main(cfg: DictConfig):
     # Flow matcher (MountainCarLatentConditionalFlowMatcher)
     print("  🌊 Flow matcher...")
     use_loss_weights = cfg.flow_matching.get('use_loss_weights', False)
+    clamp_noise = cfg.flow_matching.get('clamp_noise', True)
+    zero_latent = cfg.flow_matching.get('zero_latent', False)
     flow_matcher = hydra.utils.instantiate(
         cfg.flow_matcher,
         system=system,
@@ -100,11 +102,14 @@ def main(cfg: DictConfig):
         latent_dim=cfg.flow_matching.latent_dim,
         mae_val_frequency=cfg.flow_matching.mae_val_frequency,
         use_loss_weights=use_loss_weights,
+        clamp_noise=clamp_noise,
+        zero_latent=zero_latent,
         _recursive_=False
     )
     print(f"     ✅ {flow_matcher.__class__.__name__}")
     if use_loss_weights:
         print(f"        Loss weights: ENABLED (proportional to normalization limits)")
+    print(f"        Clamp noise: {clamp_noise}")
     print()
 
     # Trainer

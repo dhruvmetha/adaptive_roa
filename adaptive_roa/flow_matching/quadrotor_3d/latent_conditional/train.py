@@ -104,6 +104,8 @@ def main(cfg: DictConfig):
     use_loss_weights = cfg.flow_matching.get('use_loss_weights', False)
     use_log_loss_weights = cfg.flow_matching.get('use_log_loss_weights', False)
     use_manifold = cfg.flow_matching.get('use_manifold', True)
+    clamp_noise = cfg.flow_matching.get('clamp_noise', True)
+    zero_latent = cfg.flow_matching.get('zero_latent', False)
     flow_matcher = hydra.utils.instantiate(
         cfg.flow_matcher,
         system=system,
@@ -116,12 +118,15 @@ def main(cfg: DictConfig):
         use_loss_weights=use_loss_weights,
         use_manifold=use_manifold,
         use_log_loss_weights=use_log_loss_weights,
+        clamp_noise=clamp_noise,
+        zero_latent=zero_latent,
         _recursive_=False
     )
     print(f"     ✅ {flow_matcher.__class__.__name__}")
     if use_loss_weights:
         weight_type = "1+log(limit)" if use_log_loss_weights else "limit"
         print(f"        Loss weights: ENABLED ({weight_type})")
+    print(f"        Clamp noise: {clamp_noise}")
     print()
 
     # Trainer

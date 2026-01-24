@@ -106,6 +106,8 @@ flow_matching:
   use_loss_weights: false            # Weight loss by normalization limits (proportional)
   use_log_loss_weights: false        # If true (with use_loss_weights=true), use 1+log(limit) for more balanced weights
   use_manifold: true                 # If true, use SO(3) manifold; if false, use Euclidean R^13
+  clamp_noise: true                  # Clamp noise to [-1, 1] to prevent ODE divergence during validation MAE
+  zero_latent: true                  # Use zero latent vectors instead of random sampling
 
 # Hydra output directory
 hydra:

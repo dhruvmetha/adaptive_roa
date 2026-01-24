@@ -128,6 +128,8 @@ flow_matching:
   latent_dim: ${latent_dim}
   num_integration_steps: 100       # ODE solver steps for inference
   mae_val_frequency: 10            # Compute MAE validation every N epochs
+  clamp_noise: true                # Clamp noise to [-1, 1] to prevent ODE divergence during validation MAE
+  zero_latent: true                # Use zero latent vectors instead of random sampling
 
 # Flow Matcher
 flow_matcher:

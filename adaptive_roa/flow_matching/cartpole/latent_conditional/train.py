@@ -97,6 +97,8 @@ def main(cfg: DictConfig):
     # Flow matcher (e.g., LatentConditionalFlowMatcher or CartPoleLatentConditionalFlowMatcher)
     print("  🌊 Flow matcher...")
     use_loss_weights = cfg.flow_matching.get('use_loss_weights', False)
+    use_manifold = cfg.flow_matching.get('use_manifold', True)
+    use_log_loss_weights = cfg.flow_matching.get('use_log_loss_weights', False)
     clamp_noise = cfg.flow_matching.get('clamp_noise', True)
     zero_latent = cfg.flow_matching.get('zero_latent', False)
     noise_scale = cfg.flow_matching.get('noise_scale', 1.0)
@@ -110,12 +112,18 @@ def main(cfg: DictConfig):
         latent_dim=cfg.flow_matching.latent_dim,
         mae_val_frequency=cfg.flow_matching.mae_val_frequency,
         use_loss_weights=use_loss_weights,
+        use_manifold=use_manifold,
+        use_log_loss_weights=use_log_loss_weights,
         clamp_noise=clamp_noise,
         zero_latent=zero_latent,
         noise_scale=noise_scale,
         _recursive_=False
     )
     print(f"     ✅ {flow_matcher.__class__.__name__}")
+    if use_loss_weights:
+        weight_type = "1+log(limit)" if use_log_loss_weights else "limit"
+        print(f"        Loss weights: ENABLED ({weight_type})")
+    print(f"        Use manifold: {use_manifold}")
     print(f"        Clamp noise: {clamp_noise}")
     print(f"        Noise scale: {noise_scale}")
     print()

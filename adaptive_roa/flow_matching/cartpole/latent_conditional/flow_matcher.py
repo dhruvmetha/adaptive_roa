@@ -40,9 +40,11 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
                  optimizer,
                  scheduler,
                  model_config: Optional[dict] = None,
-                 latent_dim: int = 2,
+                 latent_dim: int = 0,
                  mae_val_frequency: int = 10,
                  use_loss_weights: bool = False,
+                 use_manifold: bool = True,
+                 use_log_loss_weights: bool = False,
                  clamp_noise: bool = True,
                  zero_latent: bool = False,
                  val_error_log_file: Optional[str] = None,
@@ -59,23 +61,85 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
             latent_dim: Dimension of latent space
             mae_val_frequency: Compute MAE validation every N epochs
             use_loss_weights: If True, weight loss by normalization limits
+            use_manifold: If True, use S¹ manifold for angle; if False, use pure Euclidean ℝ⁴
+            use_log_loss_weights: If True and use_loss_weights=True, use 1+log(limit) for balanced weights
             clamp_noise: If True, clamp noise to [-1, 1] to prevent ODE divergence
             zero_latent: If True, use zero latent vectors instead of random sampling
             val_error_log_file: Path to text file for logging validation errors
             noise_scale: Scale factor for noise in sample_noisy_input (0-1, default 1.0)
         """
+        # Store use_manifold BEFORE calling super().__init__ because it calls _create_manifold()
+        self.use_manifold = use_manifold
+        self.use_log_loss_weights = use_log_loss_weights
+
         super().__init__(system, model, optimizer, scheduler, model_config, latent_dim, mae_val_frequency, use_loss_weights, clamp_noise, zero_latent, val_error_log_file, noise_scale)
 
+        # Override loss weights for Euclidean mode or log weights
+        if use_loss_weights:
+            if use_log_loss_weights or not use_manifold:
+                loss_weights_4d = self._get_euclidean_loss_weights()
+                self.register_buffer('loss_weights', loss_weights_4d)
+                weight_type = "1+log(limit)" if use_log_loss_weights else "limit"
+                print(f"📊 Loss weights (4D, {weight_type}): {loss_weights_4d.tolist()}")
+
+        manifold_str = "ℝ²×S¹×ℝ (Euclidean × FlatTorus × Euclidean)" if use_manifold else "ℝ⁴ (Euclidean)"
+
         print("✅ Initialized CartPole LCFM with Facebook Flow Matching:")
-        print(f"   - Manifold: ℝ²×S¹×ℝ (Euclidean × FlatTorus × Euclidean)")
+        print(f"   - Manifold: {manifold_str}")
         print(f"   - Path: GeodesicProbPath with CondOTScheduler")
         print(f"   - Latent dim: {latent_dim}")
         print(f"   - MAE validation frequency: every {mae_val_frequency} epochs")
+        print(f"   - Use manifold: {use_manifold}")
 
     def _create_manifold(self):
-        """Create ℝ²×S¹×ℝ manifold for CartPole"""
-        # Use Product manifold from flow_matching: (x, θ, ẋ, θ̇) where θ is on FlatTorus
-        return Product(input_dim=4, manifolds=[(Euclidean(), 1), (FlatTorus(), 1), (Euclidean(), 2)])
+        """
+        Create manifold for CartPole.
+
+        If use_manifold=True:
+            Product manifold ℝ²×S¹×ℝ
+            - Euclidean(1): Cart position (x)
+            - FlatTorus(1): Pole angle (θ) - circular
+            - Euclidean(2): Velocities (ẋ, θ̇)
+
+        If use_manifold=False:
+            Pure Euclidean ℝ⁴ (all dimensions treated as Euclidean)
+            Note: Angle wrapping done post-hoc if needed
+        """
+        if self.use_manifold:
+            return Product(input_dim=4, manifolds=[(Euclidean(), 1), (FlatTorus(), 1), (Euclidean(), 2)])
+        else:
+            # Pure Euclidean mode: all 4D treated as Euclidean
+            return Euclidean()
+
+    def _get_euclidean_loss_weights(self) -> torch.Tensor:
+        """
+        Get 4D loss weights for Euclidean mode or log-weighted mode.
+
+        Components:
+        - Cart position: weight from cart_limit
+        - Pole angle: weight = π (angle range)
+        - Cart velocity: weight from velocity_limit
+        - Angular velocity: weight from angular_velocity_limit
+
+        If use_log_loss_weights=True, applies 1 + log(limit) transformation.
+        """
+        import math
+
+        # Get limits from system
+        cart_limit = self.system.cart_limit
+        velocity_limit = self.system.velocity_limit
+        angular_velocity_limit = self.system.angular_velocity_limit
+        angle_limit = math.pi  # Angle is always in [-π, π]
+
+        limits = [cart_limit, angle_limit, velocity_limit, angular_velocity_limit]
+
+        if self.use_log_loss_weights:
+            # Apply 1 + log(limit) for more balanced weights
+            weights = [1.0 + math.log(limit) if limit > 1 else 1.0 for limit in limits]
+        else:
+            weights = limits
+
+        return torch.tensor(weights, dtype=torch.float32)
 
     def _get_start_states(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """Extract start states from batch"""
@@ -357,9 +421,9 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         # Extract latent_dim
         latent_dim = hparams.get("latent_dim")
         if latent_dim is None and hydra_config:
-            latent_dim = hydra_config.get("flow_matching", {}).get("latent_dim", 2)
+            latent_dim = hydra_config.get("flow_matching", {}).get("latent_dim", 0)
         if latent_dim is None:
-            latent_dim = 2
+            latent_dim = 0
             print(f"⚠️  Using default latent_dim: {latent_dim}")
 
         # Extract model config (try both 'model_config' and 'config' for backward compatibility)

@@ -165,20 +165,27 @@ class Quadrotor3DSystem(DynamicalSystem):
 
     def classify_attractor(self, state: torch.Tensor, radius: float = 0.05) -> torch.Tensor:
         """
-        Classify Quadrotor 3D states into success/failure categories
+        Classify Quadrotor 3D states into three categories based on termination conditions
 
-        Two-way classification:
+        Three-way classification:
         1. SUCCESS (label=1): Within radius of goal state
-        2. FAILURE (label=-1): Outside goal region
+        2. FAILURE (label=-1): Exceeded termination thresholds (system failed)
+        3. SEPARATRIX (label=0): Between attractor and failure (uncertain region)
+
+        Termination thresholds from dataset_description.json:
+        - Position: |x| > 1.8, |y| > 1.8, z < 0.1 or z > 3.0
+        - Linear velocity: |ẋ| > 3.0, |ẏ| > 3.0, |ż| > 3.0
+        - Angular velocity: |p| > 24.0, |q| > 24.0, |r| > 24.0
 
         Args:
-            state: States [B, 13]
+            state: States [B, 13] as (x, y, z, qw, qx, qy, qz, ẋ, ẏ, ż, p, q, r)
             radius: Attractor radius (default 0.05 from dataset)
 
         Returns:
             Integer tensor [B] with:
                  1: State in goal attractor (SUCCESS)
-                -1: State outside goal region (FAILURE)
+                -1: State exceeded termination thresholds (FAILURE)
+                 0: State between attractor and failure (SEPARATRIX)
         """
         if isinstance(state, np.ndarray):
             state = torch.from_numpy(state).float()
@@ -189,14 +196,38 @@ class Quadrotor3DSystem(DynamicalSystem):
         # Goal state
         goal = torch.tensor(self.attractors()[0], device=state.device, dtype=state.dtype)
 
-        # Compute Euclidean distance
+        # Compute Euclidean distance for attractor check
         dist = torch.norm(state - goal.unsqueeze(0), dim=1)
-
         in_attractor = dist < radius
 
-        # Binary classification
-        labels = torch.ones_like(in_attractor, dtype=torch.long) * -1
-        labels[in_attractor] = 1
+        # Check termination thresholds (with small margin for overshoot)
+        # Position: |x| > 1.8, |y| > 1.8, z < 0.1 or z > 3.0
+        x_failed = torch.abs(state[:, 0]) > 1.75
+        y_failed = torch.abs(state[:, 1]) > 1.75
+        z_low_failed = state[:, 2] < 0.15
+        z_high_failed = state[:, 2] > 2.95
+
+        # Linear velocity: |ẋ| > 3.0, |ẏ| > 3.0, |ż| > 3.0
+        xdot_failed = torch.abs(state[:, 7]) > 2.9
+        ydot_failed = torch.abs(state[:, 8]) > 2.9
+        zdot_failed = torch.abs(state[:, 9]) > 2.9
+
+        # Angular velocity: |p| > 24.0, |q| > 24.0, |r| > 24.0
+        p_failed = torch.abs(state[:, 10]) > 23.5
+        q_failed = torch.abs(state[:, 11]) > 23.5
+        r_failed = torch.abs(state[:, 12]) > 23.5
+
+        exceeded_thresholds = (x_failed | y_failed | z_low_failed | z_high_failed |
+                              xdot_failed | ydot_failed | zdot_failed |
+                              p_failed | q_failed | r_failed)
+
+        # Three-way classification:
+        # - If in attractor → SUCCESS (1)
+        # - Else if exceeded thresholds → FAILURE (-1)
+        # - Else → SEPARATRIX (0) - between attractor and failure
+        labels = torch.zeros_like(in_attractor, dtype=torch.long)  # Initialize as separatrix (0)
+        labels[in_attractor] = 1                                    # Mark successes
+        labels[exceeded_thresholds] = -1                           # Mark failures
 
         return labels
 

@@ -1,0 +1,175 @@
+# Adaptive Sampling Pipeline for Quadrotor 3D
+# =====================================================================
+# Uses pre-collected trajectory data with conformal prediction
+# to efficiently build training datasets for Quadrotor 3D (R^3 x SO(3) x R^6 manifold)
+# =====================================================================
+
+defaults:
+  - system: quadrotor3d
+  - _self_
+
+name: adaptive_quadrotor3d
+seed: 42
+
+# User-specific paths (loaded from .env file via resolvers)
+# To customize: edit .env file with EXP_DIR and DATA_DIR
+exp_dir: ${exp_dir:}
+shared_data: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}
+
+# Output directory
+training_index: 0
+output_dir: ${exp_dir}/${name}/outputs/init_size_${initial_train_size}_training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}/${now:%Y-%m-%d_%H-%M-%S}
+
+# Device
+device: cuda:0
+
+# =====================================================================
+# Data Source Configuration
+# =====================================================================
+data_source:
+  base_dir: ${shared_data}/quadrotor3D_lqr
+  trajectories_dir: ${data_source.base_dir}/trajectories
+  train_test_splits_dir: ${data_source.base_dir}/train_test_splits
+  # Shuffled indices and labels (aligned, for training)
+  shuffled_indices_file: ${data_source.train_test_splits_dir}/shuffled_indices_${training_index}.txt
+  shuffled_labels_file: ${data_source.train_test_splits_dir}/shuffled_labels_${training_index}.txt
+  # Eval states (full dataset with start, end, labels - for evaluation only)
+  eval_states_file: ${data_source.base_dir}/eval_states.txt
+
+# Dataset splits (val/test are subsets of training with overlap)
+val_ratio: 0.1      # 10% of training for validation
+test_ratio: 0.1     # 10% of training for testing
+
+# =====================================================================
+# Adaptive Sampling Configuration
+# =====================================================================
+initial_train_size: 50    # Initial training trajectories
+n_epochs: 50               # Number of adaptive sampling epochs
+samples_per_epoch: 50      # New candidates per epoch (for fixed strategy only)
+warm_start: true           # If true, continue training from previous epoch's checkpoint
+
+# Sampling Strategy: "fixed" or "balanced_uncertain"
+# - "fixed": Sample fixed number, add all to training
+# - "balanced_uncertain": Sample D1 random + D2 uncertain, total = adaptive_data_max
+sampling_strategy: balanced_uncertain
+
+# Balanced Uncertain Sampling Options (when sampling_strategy="balanced_uncertain")
+adaptive_data_max: 50      # Total samples to add per epoch (D1 + D2)
+d2_ratio: 0.5              # Fraction for D2 (uncertainty-filtered). 0=all random, 1=all filtered
+batch_size_sampling: 50    # Size of batches when searching for uncertain points in D2
+max_samples_per_epoch: 50000 # Safety cap on total candidates evaluated per epoch
+
+# =====================================================================
+# Conformal Prediction Configuration
+# =====================================================================
+conformal:
+  delta: 0.05              # Unknown region half-width (used when optimize_mode="lambda")
+  w: 1.0                   # Misclassification weight (1.0 = only minimize errors, ignore unknown rate)
+  alpha: 0.1               # 90% coverage guarantee
+  num_mc_samples: 10       # MC samples for probability estimation (fitting)
+  num_mc_samples_eval: 10  # MC samples for full ROA evaluation (faster)
+  attractor_radius: 0.05   # For classify_attractor() - matches dataset success threshold
+  calibration_ratio: 0.3   # Fraction of training labels for calibration
+
+  # Optimization mode: "lambda" or "delta"
+  # - "lambda": Optimize λ* with fixed δ (find best decision boundary)
+  # - "delta": Optimize δ* with fixed λ=0.5 (find best uncertainty width)
+  optimize_mode: delta
+
+  # Decision rule: "one_sided" or "two_sided"
+  # - "one_sided": Uses only p_success (for pendulum, mountain car)
+  # - "two_sided": Uses both p_success and p_failure (for 3-way classification)
+  decision_rule: two_sided
+
+  # Lambda optimization (when optimize_mode="lambda")
+  lambda_grid_size: 100    # Number of grid points for λ search
+
+  # Delta optimization (when optimize_mode="delta")
+  delta_grid_size: 100     # Number of grid points for δ search
+  delta_min: 0.05          # Minimum δ value
+  delta_max: 0.45          # Maximum δ value
+
+# =====================================================================
+# Flow Matcher Training Configuration
+# =====================================================================
+batch_size: 256
+val_batch_size: 2048
+num_workers: 4
+latent_dim: 4  # Larger latent dim for 13D state
+
+# Trainer: PyTorch Lightning
+trainer:
+  max_epochs: 500
+  accelerator: gpu
+  devices: 1
+  precision: 32
+  gradient_clip_val: 1.0
+  log_every_n_steps: 10
+  check_val_every_n_epoch: 1
+  enable_progress_bar: true
+  enable_model_summary: true
+  callbacks:
+    - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+      # dirpath: set dynamically per epoch in training script
+      monitor: val_loss
+      mode: min
+      save_top_k: 1
+      save_last: true
+      filename: "best-{epoch:02d}-{val_loss:.4f}"
+      auto_insert_metric_name: false
+    - _target_: lightning.pytorch.callbacks.EarlyStopping
+      monitor: val_loss
+      mode: min
+      patience: 2000
+      verbose: true
+
+# Flow matching specific settings
+flow_matching:
+  latent_dim: ${latent_dim}
+  num_integration_steps: 100       # ODE solver steps for inference
+  mae_val_frequency: 10            # Compute MAE validation every N epochs
+  use_loss_weights: false          # If true, weight loss by state limits (proportional)
+  use_log_loss_weights: false      # If true (with use_loss_weights=true), use 1+log(limit) for more balanced weights
+  use_manifold: true               # If true, use SO(3) manifold; if false, use Euclidean R^13
+  # NOTE: model.output_dim is auto-adjusted based on use_manifold (12 for SO3, 13 for Euclidean)
+
+# Flow Matcher
+flow_matcher:
+  _target_: adaptive_roa.flow_matching.quadrotor_3d.latent_conditional.flow_matcher.Quadrotor3DLatentConditionalFlowMatcher
+
+# Model: Quadrotor 3D UNet
+model:
+  _target_: adaptive_roa.model.quadrotor3d_unet.Quadrotor3DUNet
+  embedded_dim: 13               # (x, y, z, qw, qx, qy, qz, ẋ, ẏ, ż, p, q, r)
+  latent_dim: ${latent_dim}
+  condition_dim: 13              # Embedded start state
+  time_emb_dim: 64
+  hidden_dims: [512, 1024, 1024, 512]  # Larger network for 13D state
+  output_dim: 12                 # Velocity in tangent space (3 pos + 3 rot + 6 vel)
+  use_input_embeddings: false
+  input_emb_dim: 128
+
+# Optimizer
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 1e-3
+  weight_decay: 1e-5
+  betas: [0.9, 0.999]
+
+# Scheduler
+scheduler:
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  mode: min
+  factor: 0.5
+  patience: 10
+  min_lr: 1e-6
+
+# System (Quadrotor 3D)
+system:
+  _target_: adaptive_roa.systems.quadrotor3d.Quadrotor3DSystem
+  dataset_dir: ${shared_data}/quadrotor3D_lqr
+
+# Hydra
+hydra:
+  run:
+    dir: ${output_dir}

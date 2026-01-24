@@ -99,6 +99,7 @@ def main(cfg: DictConfig):
     use_loss_weights = cfg.flow_matching.get('use_loss_weights', False)
     clamp_noise = cfg.flow_matching.get('clamp_noise', True)
     zero_latent = cfg.flow_matching.get('zero_latent', False)
+    noise_scale = cfg.flow_matching.get('noise_scale', 1.0)
     flow_matcher = hydra.utils.instantiate(
         cfg.flow_matcher,
         system=system,
@@ -111,6 +112,7 @@ def main(cfg: DictConfig):
         use_loss_weights=use_loss_weights,
         clamp_noise=clamp_noise,
         zero_latent=zero_latent,
+        noise_scale=noise_scale,
         _recursive_=False
     )
     print(f"     ✅ {flow_matcher.__class__.__name__}")
@@ -119,6 +121,7 @@ def main(cfg: DictConfig):
     if use_loss_weights:
         print(f"        Loss weights: ENABLED (proportional to normalization limits)")
     print(f"        Clamp noise: {clamp_noise}")
+    print(f"        Noise scale: {noise_scale}")
     print()
 
     # Trainer

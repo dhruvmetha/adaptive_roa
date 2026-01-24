@@ -63,7 +63,8 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
                  use_log_loss_weights: bool = False,
                  clamp_noise: bool = True,
                  zero_latent: bool = False,
-                 val_error_log_file: Optional[str] = None):
+                 val_error_log_file: Optional[str] = None,
+                 noise_scale: float = 1.0):
         """
         Initialize Quadrotor 3D latent conditional flow matcher with FB FM integration
 
@@ -83,12 +84,13 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
             clamp_noise: If True, clamp noise to [-1, 1] to prevent ODE divergence
             zero_latent: If True, use zero latent vectors instead of random sampling
             val_error_log_file: Path to text file for logging validation errors
+            noise_scale: Scale factor for noise in sample_noisy_input (0-1, default 1.0)
         """
         # Store use_manifold BEFORE calling super().__init__ because it calls _create_manifold()
         self.use_manifold = use_manifold
         self.use_log_loss_weights = use_log_loss_weights
 
-        super().__init__(system, model, optimizer, scheduler, model_config, latent_dim, mae_val_frequency, use_loss_weights, clamp_noise, zero_latent, val_error_log_file)
+        super().__init__(system, model, optimizer, scheduler, model_config, latent_dim, mae_val_frequency, use_loss_weights, clamp_noise, zero_latent, val_error_log_file, noise_scale)
 
         # Override loss weights for Euclidean mode (13D tangent instead of 12D)
         if use_loss_weights and not use_manifold:
@@ -271,6 +273,7 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
         """
         Sample noisy input uniformly in ℝ³ × SO(3) × ℝ⁶ space
 
+        If self.noise_scale != 1.0, scales the noise to reduce variance.
         If self.clamp_noise is True, clamps position and velocity to [-1, 1]
         to prevent ODE divergence. Quaternion is always normalized to unit sphere.
 
@@ -281,23 +284,30 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
         Returns:
             Noisy states [batch_size, 13]
         """
-        # Position: Gaussian noise, clamp if enabled
+        # Position: Gaussian noise, scale and clamp if enabled
         position = torch.randn(batch_size, 3, device=device)
+        if self.noise_scale != 1.0:
+            position = position * self.noise_scale
         if self.clamp_noise:
             position = torch.clamp(position, -1.0, 1.0)
 
         # Quaternion: uniform sampling on SO(3) via normalized Gaussian
         # Sample 4D Gaussian and normalize to get uniform distribution on unit quaternion sphere
-        # Note: No clamping needed - quaternion is always normalized to unit sphere
+        # Note: noise_scale applied before normalization affects the distribution, but
+        # normalization ensures unit quaternion. No clamping needed.
         quat = torch.randn(batch_size, 4, device=device)
+        if self.noise_scale != 1.0:
+            quat = quat * self.noise_scale
         quat = quat / torch.norm(quat, dim=1, keepdim=True).clamp(min=1e-8)
         # Canonicalize: ensure qw >= 0
         sign = torch.sign(quat[:, 0:1])
         sign = torch.where(sign == 0, torch.ones_like(sign), sign)
         quat = quat * sign
 
-        # Velocities: Gaussian noise, clamp if enabled
+        # Velocities: Gaussian noise, scale and clamp if enabled
         velocities = torch.randn(batch_size, 6, device=device)
+        if self.noise_scale != 1.0:
+            velocities = velocities * self.noise_scale
         if self.clamp_noise:
             velocities = torch.clamp(velocities, -1.0, 1.0)
 

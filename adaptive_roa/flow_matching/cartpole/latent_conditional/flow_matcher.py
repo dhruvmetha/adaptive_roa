@@ -45,7 +45,8 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
                  use_loss_weights: bool = False,
                  clamp_noise: bool = True,
                  zero_latent: bool = False,
-                 val_error_log_file: Optional[str] = None):
+                 val_error_log_file: Optional[str] = None,
+                 noise_scale: float = 1.0):
         """
         Initialize CartPole latent conditional flow matcher with FB FM integration
 
@@ -61,8 +62,9 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
             clamp_noise: If True, clamp noise to [-1, 1] to prevent ODE divergence
             zero_latent: If True, use zero latent vectors instead of random sampling
             val_error_log_file: Path to text file for logging validation errors
+            noise_scale: Scale factor for noise in sample_noisy_input (0-1, default 1.0)
         """
-        super().__init__(system, model, optimizer, scheduler, model_config, latent_dim, mae_val_frequency, use_loss_weights, clamp_noise, zero_latent, val_error_log_file)
+        super().__init__(system, model, optimizer, scheduler, model_config, latent_dim, mae_val_frequency, use_loss_weights, clamp_noise, zero_latent, val_error_log_file, noise_scale)
 
         print("✅ Initialized CartPole LCFM with Facebook Flow Matching:")
         print(f"   - Manifold: ℝ²×S¹×ℝ (Euclidean × FlatTorus × Euclidean)")
@@ -133,6 +135,7 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
 
         Returns noise directly in normalized space (no further normalization needed).
         Circular dimension (θ) is projected onto manifold.
+        If self.noise_scale != 1.0, scales the noise to reduce variance.
         If self.clamp_noise is True, clamps to [-1, 1] to prevent ODE divergence.
 
         Args:
@@ -143,6 +146,8 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
             Noisy states [batch_size, 4] in normalized space
         """
         noisy_input = torch.randn(batch_size, 4, device=device)
+        if self.noise_scale != 1.0:
+            noisy_input = noisy_input * self.noise_scale
         if self.clamp_noise:
             noisy_input = torch.clamp(noisy_input, -1.0, 1.0)
         noisy_input = self.manifold.projx(noisy_input)

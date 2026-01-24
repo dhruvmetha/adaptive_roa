@@ -23,6 +23,15 @@ output_dir: ${exp_dir}/${name}/outputs/init_size_${initial_train_size}_training_
 # Device
 device: cuda:0
 
+use_loss_weights: false          # If true, weight loss by state limits (proportional)
+use_log_loss_weights: false 
+
+noise_scale: 1.0
+# noise_scale: 0.577
+
+use_manifold: true
+                 # Scale factor for initial noise (0-1), reduces variance when < 1
+
 # =====================================================================
 # Data Source Configuration
 # =====================================================================
@@ -43,10 +52,10 @@ test_ratio: 0.1     # 10% of training for testing
 # =====================================================================
 # Adaptive Sampling Configuration
 # =====================================================================
-initial_train_size: 50    # Initial training trajectories
-n_epochs: 50               # Number of adaptive sampling epochs
-samples_per_epoch: 50      # New candidates per epoch (for fixed strategy only)
-warm_start: true           # If true, continue training from previous epoch's checkpoint
+initial_train_size: 500    # Initial training trajectories
+n_epochs: 10              # Number of adaptive sampling epochs
+samples_per_epoch: 500      # New candidates per epoch (for fixed strategy only)
+warm_start: false           # If true, continue training from previous epoch's checkpoint
 
 # Sampling Strategy: "fixed" or "balanced_uncertain"
 # - "fixed": Sample fixed number, add all to training
@@ -55,7 +64,7 @@ sampling_strategy: balanced_uncertain
 
 # Balanced Uncertain Sampling Options (when sampling_strategy="balanced_uncertain")
 adaptive_data_max: 50      # Total samples to add per epoch (D1 + D2)
-d2_ratio: 0.5              # Fraction for D2 (uncertainty-filtered). 0=all random, 1=all filtered
+d2_ratio: 0              # Fraction for D2 (uncertainty-filtered). 0=all random, 1=all filtered
 batch_size_sampling: 50    # Size of batches when searching for uncertain points in D2
 max_samples_per_epoch: 50000 # Safety cap on total candidates evaluated per epoch
 
@@ -99,7 +108,7 @@ latent_dim: 4  # Larger latent dim for 13D state
 
 # Trainer: PyTorch Lightning
 trainer:
-  max_epochs: 1000
+  max_epochs: 2000
   accelerator: gpu
   devices: 1
   precision: 32
@@ -128,11 +137,12 @@ flow_matching:
   latent_dim: ${latent_dim}
   num_integration_steps: 100       # ODE solver steps for inference
   mae_val_frequency: 10            # Compute MAE validation every N epochs
-  use_loss_weights: false          # If true, weight loss by state limits (proportional)
-  use_log_loss_weights: false      # If true (with use_loss_weights=true), use 1+log(limit) for more balanced weights
-  use_manifold: true               # If true, use SO(3) manifold; if false, use Euclidean R^13
-  clamp_noise: true                # Clamp noise to [-1, 1] to prevent ODE divergence during validation MAE
+  use_loss_weights: ${use_loss_weights}          # If true, weight loss by state limits (proportional)
+  use_log_loss_weights: ${use_log_loss_weights}      # If true (with use_loss_weights=true), use 1+log(limit) for more balanced weights
+  use_manifold: ${use_manifold}               # If true, use SO(3) manifold; if false, use Euclidean R^13
+  clamp_noise: false                # Clamp noise to [-1, 1] to prevent ODE divergence during validation MAE
   zero_latent: true                # Use zero latent vectors instead of random sampling
+  noise_scale: ${noise_scale}                # Scale factor for initial noise (0-1), reduces variance when < 1
   # NOTE: model.output_dim is auto-adjusted based on use_manifold (12 for SO3, 13 for Euclidean)
 
 # Flow Matcher

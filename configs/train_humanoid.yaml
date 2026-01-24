@@ -99,6 +99,7 @@ flow_matching:
   use_loss_weights: false          # Weight loss by normalization limits (proportional)
   clamp_noise: true                # Clamp noise to [-1, 1] to prevent ODE divergence during validation MAE
   zero_latent: true                # Use zero latent vectors instead of random sampling
+  noise_scale: 1.0                 # Scale factor for initial noise (0-1), reduces variance when < 1
 
 # Hydra output directory
 hydra:

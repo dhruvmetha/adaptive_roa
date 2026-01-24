@@ -593,6 +593,7 @@ def train_flow_matcher(
     # Instantiate flow matcher
     clamp_noise = cfg.flow_matching.get('clamp_noise', True)
     zero_latent = cfg.flow_matching.get('zero_latent', False)
+    noise_scale = cfg.flow_matching.get('noise_scale', 1.0)
     flow_matcher = hydra.utils.instantiate(
         cfg.flow_matcher,
         system=system,
@@ -604,6 +605,7 @@ def train_flow_matcher(
         mae_val_frequency=cfg.flow_matching.mae_val_frequency,
         clamp_noise=clamp_noise,
         zero_latent=zero_latent,
+        noise_scale=noise_scale,
         val_error_log_file=val_error_log_file,
         _recursive_=False
     )

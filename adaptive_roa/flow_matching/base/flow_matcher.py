@@ -110,6 +110,7 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         clamp_noise: bool = True,
         zero_latent: bool = False,
         val_error_log_file: Optional[str] = None,
+        noise_scale: float = 1.0,
     ):
         """
         Initialize base flow matcher
@@ -126,6 +127,7 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
             clamp_noise: If True, clamp noise to [-1, 1] to prevent ODE divergence
             zero_latent: If True, use zero latent vectors instead of random sampling
             val_error_log_file: Path to text file for logging validation errors (None = no file logging)
+            noise_scale: Scale factor for noise in sample_noisy_input (0-1, default 1.0)
         """
         super().__init__()
 
@@ -139,6 +141,7 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         self.clamp_noise = clamp_noise
         self.zero_latent = zero_latent
         self.val_error_log_file = val_error_log_file
+        self.noise_scale = noise_scale
 
         # Store optimizer and scheduler configs (will be instantiated in configure_optimizers)
         self.optimizer_config = optimizer

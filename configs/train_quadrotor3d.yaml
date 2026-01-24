@@ -104,6 +104,8 @@ flow_matching:
   num_integration_steps: 100         # ODE solver steps for inference
   mae_val_frequency: 10              # Compute MAE validation every N epochs
   use_loss_weights: false            # Weight loss by normalization limits (proportional)
+  use_log_loss_weights: false        # If true (with use_loss_weights=true), use 1+log(limit) for more balanced weights
+  use_manifold: true                 # If true, use SO(3) manifold; if false, use Euclidean R^13
 
 # Hydra output directory
 hydra:

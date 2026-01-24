@@ -102,6 +102,8 @@ def main(cfg: DictConfig):
     # Flow matcher (Quadrotor3DLatentConditionalFlowMatcher)
     print("  🌊 Flow matcher...")
     use_loss_weights = cfg.flow_matching.get('use_loss_weights', False)
+    use_log_loss_weights = cfg.flow_matching.get('use_log_loss_weights', False)
+    use_manifold = cfg.flow_matching.get('use_manifold', True)
     flow_matcher = hydra.utils.instantiate(
         cfg.flow_matcher,
         system=system,
@@ -112,11 +114,14 @@ def main(cfg: DictConfig):
         latent_dim=cfg.flow_matching.latent_dim,
         mae_val_frequency=cfg.flow_matching.mae_val_frequency,
         use_loss_weights=use_loss_weights,
+        use_manifold=use_manifold,
+        use_log_loss_weights=use_log_loss_weights,
         _recursive_=False
     )
     print(f"     ✅ {flow_matcher.__class__.__name__}")
     if use_loss_weights:
-        print(f"        Loss weights: ENABLED (proportional to normalization limits)")
+        weight_type = "1+log(limit)" if use_log_loss_weights else "limit"
+        print(f"        Loss weights: ENABLED ({weight_type})")
     print()
 
     # Trainer

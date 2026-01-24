@@ -58,7 +58,9 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
                  model_config: Optional[dict] = None,
                  latent_dim: int = 4,
                  mae_val_frequency: int = 10,
-                 use_loss_weights: bool = False):
+                 use_loss_weights: bool = False,
+                 use_manifold: bool = True,
+                 use_log_loss_weights: bool = False):
         """
         Initialize Quadrotor 3D latent conditional flow matcher with FB FM integration
 
@@ -71,33 +73,131 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
             latent_dim: Dimension of latent space
             mae_val_frequency: Compute MAE validation every N epochs
             use_loss_weights: If True, weight loss by normalization limits
+            use_manifold: If True, use SO(3) manifold for quaternion;
+                         If False, use pure Euclidean R^13 with post-hoc quaternion projection
+            use_log_loss_weights: If True and use_loss_weights=True, use 1+log(limit) instead of limit
+                                  for more balanced weight ratios across dimensions
         """
+        # Store use_manifold BEFORE calling super().__init__ because it calls _create_manifold()
+        self.use_manifold = use_manifold
+        self.use_log_loss_weights = use_log_loss_weights
+
         super().__init__(system, model, optimizer, scheduler, model_config, latent_dim, mae_val_frequency, use_loss_weights)
 
+        # Override loss weights for Euclidean mode (13D tangent instead of 12D)
+        if use_loss_weights and not use_manifold:
+            loss_weights_13d = self._get_euclidean_loss_weights()
+            self.register_buffer('loss_weights', loss_weights_13d)
+            weight_type = "1+log(limit)" if use_log_loss_weights else "limit"
+            print(f"📊 Loss weights (Euclidean 13D, {weight_type}): {loss_weights_13d.tolist()}")
+
+        manifold_str = "ℝ³ × SO(3) × ℝ⁶" if use_manifold else "ℝ¹³ (Euclidean)"
+        tangent_str = "12D (3 pos + 3 rot + 6 vel)" if use_manifold else "13D (all Euclidean)"
+
         print("✅ Initialized Quadrotor3D LCFM with Facebook Flow Matching:")
-        print(f"   - Manifold: ℝ³ × SO(3) × ℝ⁶ (Euclidean × SO3 × Euclidean)")
+        print(f"   - Manifold: {manifold_str}")
         print(f"   - State dimension: 13D (3 pos + 4 quat + 6 vel)")
-        print(f"   - Tangent dimension: 12D (3 pos + 3 rot + 6 vel)")
+        print(f"   - Tangent dimension: {tangent_str}")
         print(f"   - Path: GeodesicProbPath with CondOTScheduler")
         print(f"   - Latent dim: {latent_dim}")
         print(f"   - MAE validation frequency: every {mae_val_frequency} epochs")
+        print(f"   - Use manifold: {use_manifold}")
 
     def _create_manifold(self):
         """
-        Create ℝ³ × SO(3) × ℝ⁶ manifold for Quadrotor 3D
+        Create manifold for Quadrotor 3D.
 
-        Product manifold structure:
-        - Euclidean(3): Position (x, y, z) - 3D
-        - SO3(4, 3): Quaternion representation - 4D state, 3D tangent
-        - Euclidean(6): Linear + Angular velocity - 6D
+        If use_manifold=True:
+            Product manifold ℝ³ × SO(3) × ℝ⁶
+            - Euclidean(3): Position (x, y, z) - 3D
+            - SO3(4, 3): Quaternion representation - 4D state, 3D tangent
+            - Euclidean(6): Linear + Angular velocity - 6D
+            Total: 13D state, 12D tangent (3 + 3 + 6)
 
-        Total: 13D state, 12D tangent (3 + 3 + 6)
+        If use_manifold=False:
+            Pure Euclidean ℝ¹³ (all dimensions treated as Euclidean)
+            Total: 13D state, 13D tangent
+            Note: Quaternion projection done post-hoc in predict_endpoint
         """
-        return Product(input_dim=13, manifolds=[
-            (Euclidean(), 3),      # Position (x, y, z)
-            (SO3(), 4, 3),         # Quaternion (qw, qx, qy, qz) - 4D representation, 3D tangent
-            (Euclidean(), 6)       # Velocities (ẋ, ẏ, ż, p, q, r)
-        ])
+        if self.use_manifold:
+            return Product(input_dim=13, manifolds=[
+                (Euclidean(), 3),      # Position (x, y, z)
+                (SO3(), 4, 3),         # Quaternion (qw, qx, qy, qz) - 4D representation, 3D tangent
+                (Euclidean(), 6)       # Velocities (ẋ, ẏ, ż, p, q, r)
+            ])
+        else:
+            # Pure Euclidean mode: all 13D treated as Euclidean
+            return Euclidean()
+
+    def _get_euclidean_loss_weights(self) -> torch.Tensor:
+        """
+        Get 13D loss weights for Euclidean mode (all dimensions treated as Euclidean).
+
+        When use_manifold=False, the tangent space is 13D (same as state space):
+        - Position (3D): weights from position limits
+        - Quaternion (4D): weight = 1.0 for each component (unit quaternion range [-1, 1])
+        - Linear velocity (3D): weights from velocity limits
+        - Angular velocity (3D): weights from angular velocity limits
+
+        If use_log_loss_weights=True, applies 1 + log(limit) transformation to compress
+        the weight range (e.g., from 39:1 to ~4.7:1 for angular velocity vs quaternion).
+
+        Returns:
+            torch.Tensor: 13D weights for Euclidean tangent space
+        """
+        system = self.system
+
+        # Position weights (3D)
+        z_scale = (system.z_max - system.z_min) / 2
+        position_weights = [system.x_limit, system.y_limit, z_scale]
+
+        # Quaternion weights (4D) - each component is in [-1, 1], so weight = 1.0
+        quaternion_weights = [1.0, 1.0, 1.0, 1.0]
+
+        # Linear velocity weights (3D)
+        linear_vel_weights = [system.x_dot_limit, system.y_dot_limit, system.z_dot_limit]
+
+        # Angular velocity weights (3D)
+        angular_vel_weights = [system.p_limit, system.q_limit, system.r_limit]
+
+        weights = position_weights + quaternion_weights + linear_vel_weights + angular_vel_weights
+        weights_tensor = torch.tensor(weights, dtype=torch.float32)
+
+        # Apply log transformation if enabled: 1 + log(limit)
+        # This compresses the weight range while maintaining relative ordering
+        # e.g., angular velocity (limit=39) goes from weight=39 to weight=1+log(39)≈4.67
+        if self.use_log_loss_weights:
+            weights_tensor = 1.0 + torch.log(weights_tensor)
+
+        return weights_tensor
+
+    def _project_quaternion(self, state: torch.Tensor) -> torch.Tensor:
+        """
+        Project quaternion components (indices 3-6) to unit norm.
+
+        Used when use_manifold=False to ensure valid quaternion after Euclidean integration.
+        Also canonicalizes to ensure qw >= 0.
+
+        Args:
+            state: State tensor [B, 13]
+
+        Returns:
+            State with normalized quaternion [B, 13]
+        """
+        result = state.clone()
+        quat = result[:, 3:7]
+
+        # Normalize to unit quaternion
+        quat_norm = quat.norm(dim=1, keepdim=True).clamp(min=1e-8)
+        quat_normalized = quat / quat_norm
+
+        # Canonicalize: ensure qw >= 0
+        sign = torch.sign(quat_normalized[:, 0:1])
+        sign = torch.where(sign == 0, torch.ones_like(sign), sign)
+        quat_normalized = quat_normalized * sign
+
+        result[:, 3:7] = quat_normalized
+        return result
 
     def _get_start_states(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """Extract start states from batch"""
@@ -210,6 +310,34 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
     # The base class handles the flow matching loss correctly for Product manifolds
     # with mixed state/tangent dimensions. Model outputs 12D tangent velocity,
     # which matches path_sample.dx_t (also 12D from logmap).
+
+    def predict_endpoint(self,
+                        start_states: torch.Tensor,
+                        num_steps: int = 100,
+                        latent: Optional[torch.Tensor] = None,
+                        method: str = "euler_riemannian") -> torch.Tensor:
+        """
+        Predict endpoints from start states.
+
+        Overrides base class to add quaternion projection when use_manifold=False.
+
+        Args:
+            start_states: Start states [B, state_dim] in raw coordinates
+            num_steps: Number of integration steps for ODE solving
+            latent: Optional latent vectors [B, latent_dim]. If None, will sample.
+            method: Integration method ("euler_riemannian", "euler", "rk4", "midpoint")
+
+        Returns:
+            Predicted endpoints [B, state_dim] in raw coordinates
+        """
+        # Call parent implementation
+        endpoints = super().predict_endpoint(start_states, num_steps, latent, method)
+
+        # When using Euclidean manifold, project quaternion to unit norm
+        if not self.use_manifold:
+            endpoints = self._project_quaternion(endpoints)
+
+        return endpoints
 
     def predict_endpoints_batch(self,
                                start_states: torch.Tensor,

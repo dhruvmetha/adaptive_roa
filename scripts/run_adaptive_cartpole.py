@@ -436,6 +436,58 @@ def compute_geodesic_error_stats(errors: np.ndarray, mask: np.ndarray = None) ->
     }
 
 
+def compute_hierarchical_error_stats(mc_errors: np.ndarray, mask: np.ndarray = None) -> Dict:
+    """
+    Compute hierarchical error statistics with all 16 combinations.
+
+    Two-level hierarchy:
+    - Level 1: For each start state, aggregate across MC samples (mean, median, P90, P99)
+    - Level 2: Aggregate across start states (mean, median, P90, P99)
+
+    Args:
+        mc_errors: [N, num_mc_samples] array of L2 norm errors per MC sample
+        mask: Optional boolean mask to select a subset of start states
+
+    Returns:
+        Dict with n_points and all 16 combinations of statistics
+    """
+    if mask is not None:
+        mc_errors = mc_errors[mask]
+
+    if len(mc_errors) == 0:
+        return {'n_points': 0}
+
+    n_points = len(mc_errors)
+
+    # Level 1: Per start state, aggregate across MC samples
+    per_state_mean = np.mean(mc_errors, axis=1)      # [N]
+    per_state_median = np.median(mc_errors, axis=1)  # [N]
+    per_state_p90 = np.percentile(mc_errors, 90, axis=1)  # [N]
+    per_state_p99 = np.percentile(mc_errors, 99, axis=1)  # [N]
+
+    level1_stats = {
+        'mean': per_state_mean,
+        'median': per_state_median,
+        'p90': per_state_p90,
+        'p99': per_state_p99,
+    }
+
+    # Level 2: Aggregate across start states
+    result = {'n_points': int(n_points)}
+
+    for l1_name, l1_arr in level1_stats.items():
+        # Mean over start states
+        result[f'mean_of_{l1_name}s'] = float(np.mean(l1_arr))
+        # Median over start states
+        result[f'median_of_{l1_name}s'] = float(np.median(l1_arr))
+        # P90 over start states
+        result[f'p90_of_{l1_name}s'] = float(np.percentile(l1_arr, 90))
+        # P99 over start states
+        result[f'p99_of_{l1_name}s'] = float(np.percentile(l1_arr, 99))
+
+    return result
+
+
 def compute_metrics_lambda_delta_cartpole(
     p_success: np.ndarray,
     p_failure: np.ndarray,
@@ -744,11 +796,15 @@ def evaluate_full_roa_fast(
     # Store mean prediction per point (average across MC samples)
     pred_endpoints_sum = np.zeros((n_total, end_states_all.shape[1]), dtype=np.float64)
 
+    # Store per-MC-sample errors for hierarchical statistics [N, num_mc_samples]
+    mc_errors = np.zeros((n_total, num_mc_samples), dtype=np.float32)
+
     flow_matcher.eval()
     with torch.no_grad():
         for batch_start in tqdm(range(0, n_total, batch_size), desc="Evaluating", disable=not verbose):
             batch_end = min(batch_start + batch_size, n_total)
             batch_inp = X_tensor[batch_start:batch_end]
+            batch_actual = end_states_tensor[batch_start:batch_end]
 
             for sample_idx in range(num_mc_samples):
                 pred = flow_matcher.predict_endpoint(batch_inp)
@@ -756,11 +812,14 @@ def evaluate_full_roa_fast(
                 mc_labels[batch_start:batch_end, sample_idx] = attractor_labels
                 # Accumulate predictions for mean endpoint computation
                 pred_endpoints_sum[batch_start:batch_end] += pred.cpu().numpy()
+                # Compute per-sample geodesic error (L2 norm across dimensions)
+                geodesic_dist = flow_matcher.manifold.dist(pred, batch_actual).cpu().numpy()
+                mc_errors[batch_start:batch_end, sample_idx] = np.linalg.norm(geodesic_dist, axis=1)
 
     # Compute mean predicted endpoints
     pred_endpoints_mean = pred_endpoints_sum / num_mc_samples
 
-    # Compute endpoint errors using manifold's geodesic distance
+    # Compute endpoint errors using manifold's geodesic distance (for legacy stats)
     pred_tensor = torch.from_numpy(pred_endpoints_mean).float().to(device)
     actual_tensor = torch.from_numpy(end_states_all).float().to(device)
     geodesic_errors = flow_matcher.manifold.dist(pred_tensor, actual_tensor).cpu().numpy()
@@ -783,13 +842,21 @@ def evaluate_full_roa_fast(
     mask_certain = mask_success | mask_failure
     mask_uncertain = ~mask_invalid & ~mask_success & ~mask_failure
 
-    # Compute endpoint error stats for each category
+    # Compute endpoint error stats for each category (legacy: using mean prediction)
     error_stats_full = compute_geodesic_error_stats(geodesic_errors)
     error_stats_certain = compute_geodesic_error_stats(geodesic_errors, mask_certain)
     error_stats_certain_success = compute_geodesic_error_stats(geodesic_errors, mask_success)
     error_stats_certain_failure = compute_geodesic_error_stats(geodesic_errors, mask_failure)
     error_stats_uncertain = compute_geodesic_error_stats(geodesic_errors, mask_uncertain)
     error_stats_invalid = compute_geodesic_error_stats(geodesic_errors, mask_invalid)
+
+    # Compute hierarchical error stats (all 16 combinations) for each category
+    hierarchical_stats_full = compute_hierarchical_error_stats(mc_errors)
+    hierarchical_stats_certain = compute_hierarchical_error_stats(mc_errors, mask_certain)
+    hierarchical_stats_certain_success = compute_hierarchical_error_stats(mc_errors, mask_success)
+    hierarchical_stats_certain_failure = compute_hierarchical_error_stats(mc_errors, mask_failure)
+    hierarchical_stats_uncertain = compute_hierarchical_error_stats(mc_errors, mask_uncertain)
+    hierarchical_stats_invalid = compute_hierarchical_error_stats(mc_errors, mask_invalid)
 
     if verbose:
         print(f"\nMC probability statistics:")
@@ -814,6 +881,28 @@ def evaluate_full_roa_fast(
                 print(f"    Per-dim mean:   {[f'{x:.4f}' for x in stats['mean_per_dim']]}")
                 print(f"    Per-dim median: {[f'{x:.4f}' for x in stats['median_per_dim']]}")
                 print(f"    Per-dim var:    {[f'{x:.4f}' for x in stats['variance_per_dim']]}")
+
+        print(f"\n{'='*60}")
+        print("HIERARCHICAL ERROR STATS (16 combinations: L1 over MC samples, L2 over start states)")
+        print(f"{'='*60}")
+
+        for cat_name, stats in [("FULL", hierarchical_stats_full),
+                                 ("CERTAIN", hierarchical_stats_certain),
+                                 ("  CERTAIN_SUCCESS", hierarchical_stats_certain_success),
+                                 ("  CERTAIN_FAILURE", hierarchical_stats_certain_failure),
+                                 ("UNCERTAIN", hierarchical_stats_uncertain),
+                                 ("INVALID", hierarchical_stats_invalid)]:
+            print(f"\n  [{cat_name}] (n={stats['n_points']})")
+            if stats['n_points'] > 0:
+                # Print in a table format for clarity
+                print(f"    {'L2/L1':<8} {'mean':>12} {'median':>12} {'p90':>12} {'p99':>12}")
+                print(f"    {'-'*56}")
+                for l2_agg in ['mean', 'median', 'p90', 'p99']:
+                    row = f"    {l2_agg:<8}"
+                    for l1_agg in ['mean', 'median', 'p90', 'p99']:
+                        key = f"{l2_agg}_of_{l1_agg}s"
+                        row += f" {stats[key]:>12.6f}"
+                    print(row)
 
     # Compute metrics for BOTH threshold schemes
     # 1. λ*±δ from conformal prediction (CartPole: uses BOTH p_success and p_failure)
@@ -876,6 +965,13 @@ def evaluate_full_roa_fast(
         error_stats_certain_failure_qhat = compute_geodesic_error_stats(geodesic_errors, mask_failure_qhat)
         error_stats_uncertain_qhat = compute_geodesic_error_stats(geodesic_errors, mask_uncertain_qhat)
         error_stats_invalid_qhat = compute_geodesic_error_stats(geodesic_errors, mask_invalid_qhat)
+
+        # Compute hierarchical error stats for q_hat-based classes
+        hierarchical_stats_certain_qhat = compute_hierarchical_error_stats(mc_errors, mask_certain_qhat)
+        hierarchical_stats_certain_success_qhat = compute_hierarchical_error_stats(mc_errors, mask_success_qhat)
+        hierarchical_stats_certain_failure_qhat = compute_hierarchical_error_stats(mc_errors, mask_failure_qhat)
+        hierarchical_stats_uncertain_qhat = compute_hierarchical_error_stats(mc_errors, mask_uncertain_qhat)
+        hierarchical_stats_invalid_qhat = compute_hierarchical_error_stats(mc_errors, mask_invalid_qhat)
     else:
         metrics_qhat_conformal = None
         error_stats_certain_qhat = None
@@ -883,6 +979,11 @@ def evaluate_full_roa_fast(
         error_stats_certain_failure_qhat = None
         error_stats_uncertain_qhat = None
         error_stats_invalid_qhat = None
+        hierarchical_stats_certain_qhat = None
+        hierarchical_stats_certain_success_qhat = None
+        hierarchical_stats_certain_failure_qhat = None
+        hierarchical_stats_uncertain_qhat = None
+        hierarchical_stats_invalid_qhat = None
 
     if verbose:
         print(f"\n{'='*60}")
@@ -955,6 +1056,27 @@ def evaluate_full_roa_fast(
                     print(f"    Per-dim median: {[f'{x:.4f}' for x in stats['median_per_dim']]}")
                     print(f"    Per-dim var:    {[f'{x:.4f}' for x in stats['variance_per_dim']]}")
 
+            # Print q_hat-based hierarchical error stats
+            print(f"\n{'='*60}")
+            print("HIERARCHICAL ERROR STATS (q_hat classification)")
+            print(f"{'='*60}")
+
+            for cat_name, stats in [("CERTAIN (q_hat)", hierarchical_stats_certain_qhat),
+                                     ("  CERTAIN_SUCCESS (q_hat)", hierarchical_stats_certain_success_qhat),
+                                     ("  CERTAIN_FAILURE (q_hat)", hierarchical_stats_certain_failure_qhat),
+                                     ("UNCERTAIN (q_hat)", hierarchical_stats_uncertain_qhat),
+                                     ("INVALID (q_hat)", hierarchical_stats_invalid_qhat)]:
+                print(f"\n  [{cat_name}] (n={stats['n_points']})")
+                if stats['n_points'] > 0:
+                    print(f"    {'L2/L1':<8} {'mean':>12} {'median':>12} {'p90':>12} {'p99':>12}")
+                    print(f"    {'-'*56}")
+                    for l2_agg in ['mean', 'median', 'p90', 'p99']:
+                        row = f"    {l2_agg:<8}"
+                        for l1_agg in ['mean', 'median', 'p90', 'p99']:
+                            key = f"{l2_agg}_of_{l1_agg}s"
+                            row += f" {stats[key]:>12.6f}"
+                        print(row)
+
     # Combine metrics
     metrics = {
         'n_total': n_total,
@@ -983,6 +1105,15 @@ def evaluate_full_roa_fast(
             'uncertain': error_stats_uncertain,
             'invalid': error_stats_invalid,
         },
+        # Hierarchical error metrics (16 combinations) - λ*±δ classification
+        'hierarchical_errors': {
+            'full': hierarchical_stats_full,
+            'certain': hierarchical_stats_certain,
+            'certain_success': hierarchical_stats_certain_success,
+            'certain_failure': hierarchical_stats_certain_failure,
+            'uncertain': hierarchical_stats_uncertain,
+            'invalid': hierarchical_stats_invalid,
+        },
         # Endpoint error metrics using q_hat-based classification
         'endpoint_errors_qhat': {
             'component_names': component_names,
@@ -992,6 +1123,15 @@ def evaluate_full_roa_fast(
             'certain_failure': error_stats_certain_failure_qhat,
             'uncertain': error_stats_uncertain_qhat,
             'invalid': error_stats_invalid_qhat,
+        } if q_hat is not None else None,
+        # Hierarchical error metrics using q_hat-based classification
+        'hierarchical_errors_qhat': {
+            'full': hierarchical_stats_full,  # Same as above (full dataset)
+            'certain': hierarchical_stats_certain_qhat,
+            'certain_success': hierarchical_stats_certain_success_qhat,
+            'certain_failure': hierarchical_stats_certain_failure_qhat,
+            'uncertain': hierarchical_stats_uncertain_qhat,
+            'invalid': hierarchical_stats_invalid_qhat,
         } if q_hat is not None else None,
     }
 
@@ -1052,7 +1192,8 @@ def train_flow_matcher(
     val_file: str,
     output_dir: str,
     max_epochs: int = 500,
-    resume_checkpoint: str = None
+    resume_checkpoint: str = None,
+    val_error_log_file: str = None
 ):
     """
     Train a flow matcher on the given dataset files.
@@ -1064,6 +1205,7 @@ def train_flow_matcher(
         output_dir: Directory for checkpoints and logs
         max_epochs: Maximum training epochs
         resume_checkpoint: Path to checkpoint to resume from (for warm start)
+        val_error_log_file: Path to text file for logging validation errors
 
     Returns:
         Trained flow matcher model
@@ -1085,6 +1227,8 @@ def train_flow_matcher(
     model = hydra.utils.instantiate(cfg.model)
 
     # Instantiate flow matcher (matching existing cartpole FM training)
+    clamp_noise = cfg.flow_matching.get('clamp_noise', True)
+    zero_latent = cfg.flow_matching.get('zero_latent', False)
     flow_matcher = hydra.utils.instantiate(
         cfg.flow_matcher,
         system=system,
@@ -1094,6 +1238,9 @@ def train_flow_matcher(
         model_config=OmegaConf.to_container(cfg.model, resolve=True),
         latent_dim=cfg.flow_matching.latent_dim,
         mae_val_frequency=cfg.flow_matching.mae_val_frequency,
+        clamp_noise=clamp_noise,
+        zero_latent=zero_latent,
+        val_error_log_file=val_error_log_file,
         _recursive_=False
     )
 
@@ -1274,6 +1421,7 @@ def main(cfg: DictConfig):
             output_dir=str(epoch_output_dir),
             max_epochs=cfg.trainer.get('max_epochs', 1000),
             resume_checkpoint=resume_ckpt,
+            val_error_log_file=str(epoch_output_dir / "validation_errors.txt"),
         )
         flow_matcher.eval()
         flow_matcher.to(device)

@@ -542,7 +542,8 @@ def train_flow_matcher(
     val_file: str,
     output_dir: str,
     max_epochs: int = 500,
-    resume_checkpoint: str = None
+    resume_checkpoint: str = None,
+    val_error_log_file: str = None
 ):
     """
     Train a flow matcher on the given dataset files.
@@ -554,6 +555,7 @@ def train_flow_matcher(
         output_dir: Directory for checkpoints and logs
         max_epochs: Maximum training epochs
         resume_checkpoint: Path to checkpoint to resume from (for warm start)
+        val_error_log_file: Path to text file for logging validation errors
 
     Returns:
         Trained flow matcher model
@@ -576,6 +578,8 @@ def train_flow_matcher(
     model = hydra.utils.instantiate(cfg.model)
 
     # Instantiate flow matcher
+    clamp_noise = cfg.flow_matching.get('clamp_noise', True)
+    zero_latent = cfg.flow_matching.get('zero_latent', False)
     flow_matcher = hydra.utils.instantiate(
         cfg.flow_matcher,
         system=system,
@@ -585,6 +589,9 @@ def train_flow_matcher(
         model_config=OmegaConf.to_container(cfg.model, resolve=True),
         latent_dim=cfg.flow_matching.latent_dim,
         mae_val_frequency=cfg.flow_matching.mae_val_frequency,
+        clamp_noise=clamp_noise,
+        zero_latent=zero_latent,
+        val_error_log_file=val_error_log_file,
         _recursive_=False
     )
 
@@ -761,6 +768,7 @@ def main(cfg: DictConfig):
             output_dir=str(epoch_output_dir),
             max_epochs=cfg.trainer.get('max_epochs', 1000),
             resume_checkpoint=resume_ckpt,
+            val_error_log_file=str(epoch_output_dir / "validation_errors.txt"),
         )
         flow_matcher.eval()
         flow_matcher.to(device)

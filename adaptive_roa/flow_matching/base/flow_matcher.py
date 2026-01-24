@@ -631,7 +631,7 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
                         start_states: torch.Tensor,
                         num_steps: int = 100,
                         latent: Optional[torch.Tensor] = None,
-                        method: str = "euler") -> torch.Tensor:
+                        method: str = "euler_riemannian") -> torch.Tensor:
         """
         Predict endpoints from start states using Facebook FM's RiemannianODESolver
 
@@ -644,7 +644,7 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
             start_states: Start states [B, state_dim] in raw coordinates
             num_steps: Number of integration steps for ODE solving
             latent: Optional latent vectors [B, latent_dim]. If None, will sample.
-            method: Integration method ("euler", "rk4", "midpoint")
+            method: Integration method ("euler_riemannian", "euler", "rk4", "midpoint")
 
         Returns:
             Predicted endpoints [B, state_dim] in raw coordinates

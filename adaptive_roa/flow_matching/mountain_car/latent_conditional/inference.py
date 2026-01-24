@@ -32,7 +32,7 @@ class MountainCarLatentConditionalInference:
             checkpoint_path: Path to trained checkpoint (if loading from file)
             flow_matcher: Pre-loaded flow matcher (if already in memory)
             num_integration_steps: Number of ODE integration steps
-            integration_method: Integration method ("euler", "rk4", "midpoint")
+            integration_method: Integration method ("euler_riemannian", "euler", "rk4", "midpoint")
         """
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.num_integration_steps = num_integration_steps

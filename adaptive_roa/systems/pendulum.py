@@ -32,29 +32,14 @@ class PendulumSystem(DynamicalSystem):
 
         dataset_dir = Path(dataset_dir)
         json_path = dataset_dir / "dataset_description.json"
-        trajectories_dir = dataset_dir / "trajectories"
 
-        # Try loading from JSON first, fall back to computing from trajectories
-        bounds_loaded = False
-
-        if json_path.exists():
-            try:
-                self._load_bounds_from_json(json_path)
-                bounds_loaded = True
-            except PermissionError:
-                print(f"Warning: Permission denied reading {json_path}")
-
-        if not bounds_loaded:
-            if trajectories_dir.exists():
-                print(f"Falling back to computing bounds from trajectory files...")
-                self._compute_bounds_from_trajectories(trajectories_dir)
-            else:
-                # Final fallback to default bounds
-                print(f"Warning: No accessible data source, using defaults")
-                self.angle_limit = math.pi
-                self.angular_velocity_limit = 2 * math.pi
-                self.dataset_info = None
-                self.achieved_bounds = None
+        # Load bounds from JSON - no fallback, error if not found
+        if not json_path.exists():
+            raise FileNotFoundError(
+                f"Cannot load bounds: dataset_description.json not found at {json_path}. "
+                f"Achieved bounds are required for consistent normalization."
+            )
+        self._load_bounds_from_json(json_path)
 
         super().__init__()
 

@@ -40,27 +40,14 @@ class PendulumCartesianSystem(DynamicalSystem):
 
         dataset_dir = Path(dataset_dir)
         json_path = dataset_dir / "dataset_description.json"
-        trajectories_dir = dataset_dir / "trajectories"
 
-        # Try loading from JSON first, fall back to computing from trajectories
-        bounds_loaded = False
-
-        if json_path.exists():
-            try:
-                self._load_bounds_from_json(json_path)
-                bounds_loaded = True
-            except PermissionError:
-                print(f"Warning: Permission denied reading {json_path}")
-
-        if not bounds_loaded:
-            if trajectories_dir.exists():
-                print(f"Falling back to computing bounds from trajectory files...")
-                self._compute_bounds_from_trajectories(trajectories_dir)
-            else:
-                raise FileNotFoundError(
-                    f"Cannot load bounds: dataset_description.json not accessible and "
-                    f"trajectories directory not found at {trajectories_dir}"
-                )
+        # Load bounds from JSON - no fallback, error if not found
+        if not json_path.exists():
+            raise FileNotFoundError(
+                f"Cannot load bounds: dataset_description.json not found at {json_path}. "
+                f"Achieved bounds are required for consistent normalization."
+            )
+        self._load_bounds_from_json(json_path)
 
         # Goal parameters (upright position)
         self.goal_position = np.array([0.0, 1.0, 0.0, 0.0])  # Top of circle (upright)

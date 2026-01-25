@@ -25,7 +25,7 @@ use_manifold: true               # If true, use S¹ manifold for angle; if false
 
 # Output  directory
 training_index: 0
-output_dir: ${exp_dir}/${name}/outputs/init_size_${initial_train_size}_training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}/${now:%Y-%m-%d_%H-%M-%S}
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}/${now:%Y-%m-%d_%H-%M-%S}
 
 # Device
 device: cuda:0
@@ -50,10 +50,10 @@ test_ratio: 0.1     # 10% of training for testing
 # =====================================================================
 # Adaptive Sampling Configuration
 # =====================================================================
-initial_train_size: 200    # Initial training trajectories
-n_epochs: 50               # Number of adaptive sampling epochs
-samples_per_epoch: 50      # New candidates per epoch (for fixed strategy only)
-warm_start: true           # If true, continue training from previous epoch's checkpoint
+initial_train_size: 100    # Initial training trajectories
+n_epochs: 10               # Number of adaptive sampling epochs
+samples_per_epoch: 100      # New candidates per epoch (for fixed strategy only)
+warm_start: false           # If true, continue training from previous epoch's checkpoint
 
 # Sampling Strategy: "fixed" or "balanced_uncertain"
 # - "fixed": Sample fixed number, add all to training
@@ -62,7 +62,7 @@ sampling_strategy: balanced_uncertain
 
 # Balanced Uncertain Sampling Options (when sampling_strategy="balanced_uncertain")
 adaptive_data_max: 50      # Total samples to add per epoch (D1 + D2)
-d2_ratio: 0.5              # Fraction for D2 (uncertainty-filtered). 0=all random, 1=all filtered
+d2_ratio: 0.5             # Fraction for D2 (uncertainty-filtered). 0=all random, 1=all filtered
 batch_size_sampling: 50    # Size of batches when searching for uncertain points in D2
 max_samples_per_epoch: 50000 # Safety cap on total candidates evaluated per epoch
 
@@ -99,14 +99,14 @@ conformal:
 # =====================================================================
 # Flow Matcher Training Configuration
 # =====================================================================
-batch_size: 512
+batch_size: 1024
 val_batch_size: 2048
 num_workers: 4
 latent_dim: 0
 
 # Trainer: PyTorch Lightning
 trainer:
-  max_epochs: 500
+  max_epochs: 2000
   accelerator: gpu
   devices: 1
   precision: 32

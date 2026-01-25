@@ -766,7 +766,9 @@ def main(cfg: DictConfig):
         print("=" * 70)
 
         # Step 1: Train flow matcher on current dataset
-        print(f"\n[1] Training flow matcher on {len(dataset_builder.train_split)} trajectories...")
+        # Capture training set size BEFORE adding new data (for accurate logging)
+        train_trajectories_this_epoch = len(dataset_builder.train_split)
+        print(f"\n[1] Training flow matcher on {train_trajectories_this_epoch} trajectories...")
         epoch_output_dir = output_dir / f"epoch_{epoch:03d}"
         epoch_output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -945,7 +947,7 @@ def main(cfg: DictConfig):
         # Record epoch results
         epoch_result = {
             'epoch': epoch,
-            'train_trajectories': len(dataset_builder.train_split),
+            'train_trajectories': train_trajectories_this_epoch,
             'n_d1_added': len(d1_indices),
             'n_d2_added': int(n_d2),
             'n_discarded_certain': int(n_confident),

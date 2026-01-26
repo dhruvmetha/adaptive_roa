@@ -27,7 +27,7 @@ use_manifold: true               # If true, use S¹ manifold for angle; if false
 
 # Output  directory
 training_index: 0
-output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_threshold_mode_${threshold_mode}/${now:%Y-%m-%d_%H-%M-%S}
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_threshold_mode_${threshold_mode}_adapt_iter_${n_epochs}/${now:%Y-%m-%d_%H-%M-%S}
 
 # Device
 device: cuda:0
@@ -71,12 +71,13 @@ max_samples_per_epoch: 50000 # Safety cap on total candidates evaluated per epoc
 # Conformal Prediction Configuration
 # =====================================================================
 conformal:
+  verbose: true            # Print detailed debug info (q_hat calibration, scores, etc.)
   delta: 0.05              # Unknown region half-width (used when optimize_mode="lambda")
   w: 0.9                   # Misclassification weight (1.0 = only minimize errors, ignore unknown rate)
   alpha: 0.1               # 90% coverage guarantee
   num_mc_samples: 10       # MC samples for probability estimation (fitting)
   num_mc_samples_eval: 10  # MC samples for full ROA evaluation (faster)
-  attractor_radius: 0.1    # For classify_attractor()
+  attractor_radius: 0.2    # For classify_attractor()
   # NOTE: calibration_ratio removed - q_hat is now calibrated on D1 samples (not training split)
 
   # Optimization mode: "lambda" or "delta"
@@ -117,7 +118,7 @@ latent_dim: 0
 
 # Trainer: PyTorch Lightning
 trainer:
-  max_epochs: 2000
+  max_epochs: 500
   accelerator: gpu
   devices: 1
   precision: 32

@@ -57,14 +57,13 @@ n_epochs: 10              # Number of adaptive sampling epochs
 samples_per_epoch: 500      # New candidates per epoch (for fixed strategy only)
 warm_start: false           # If true, continue training from previous epoch's checkpoint
 
-# Sampling Strategy: "fixed" or "balanced_uncertain"
-# - "fixed": Sample fixed number, add all to training
-# - "balanced_uncertain": Sample D1 random + D2 uncertain, total = adaptive_data_max
-sampling_strategy: balanced_uncertain
-
-# Balanced Uncertain Sampling Options (when sampling_strategy="balanced_uncertain")
-adaptive_data_max: 50      # Total samples to add per epoch (D1 + D2)
-d2_ratio: 0              # Fraction for D2 (uncertainty-filtered). 0=all random, 1=all filtered
+# D1/D2 Split for Adaptive Sampling
+# D1 = calibration set (random), used to calibrate q_hat
+# D2 = uncertain set, sampled using q_hat-based prediction sets
+d2_ratio: 0              # Fraction for D2 (uncertainty-filtered using q_hat).
+                          #   (1 - d2_ratio) = fraction for D1 (calibration, random)
+                          #   d2_ratio = fraction for D2 (uncertain sampling with q_hat)
+                          # Example: d2_ratio=0.75 → D1=25%, D2=75%
 batch_size_sampling: 50    # Size of batches when searching for uncertain points in D2
 max_samples_per_epoch: 50000 # Safety cap on total candidates evaluated per epoch
 
@@ -78,7 +77,7 @@ conformal:
   num_mc_samples: 10       # MC samples for probability estimation (fitting)
   num_mc_samples_eval: 10  # MC samples for full ROA evaluation (faster)
   attractor_radius: 0.05   # For classify_attractor() - matches dataset success threshold
-  calibration_ratio: 0.3   # Fraction of training labels for calibration
+  # NOTE: calibration_ratio removed - q_hat is now calibrated on D1 samples (not training split)
 
   # Optimization mode: "lambda" or "delta"
   # - "lambda": Optimize λ* with fixed δ (find best decision boundary)
@@ -89,6 +88,15 @@ conformal:
   # - "one_sided": Uses only p_success (for pendulum, mountain car)
   # - "two_sided": Uses both p_success and p_failure (for 3-way classification)
   decision_rule: two_sided
+
+  # Threshold mode: "dynamic" or "fixed"
+  # - "dynamic": Run optimization to find λ*/δ*, then calibrate q_hat
+  # - "fixed": Skip optimization, use fixed thresholds for q_hat calibration and sampling
+  threshold_mode: dynamic
+
+  # Fixed thresholds (only used when threshold_mode="fixed")
+  fixed_lambda_star: 0.5   # Fixed decision boundary
+  fixed_delta_star: 0.1    # Fixed uncertainty half-width
 
   # Lambda optimization (when optimize_mode="lambda")
   lambda_grid_size: 100    # Number of grid points for λ search

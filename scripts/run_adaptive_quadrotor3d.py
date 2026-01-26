@@ -44,7 +44,7 @@ from typing import Dict
 
 from adaptive_roa.adaptive.data_source import TrajectoryDataSource, TrajectoryDataSourceConfig, load_eval_states
 from adaptive_roa.adaptive.dataset_builder import AdaptiveDatasetBuilder
-from adaptive_roa.adaptive.balanced_sampler import BalancedUncertainSampler
+from adaptive_roa.adaptive.balanced_sampler import UncertainSampler
 from adaptive_roa.conformal import ConformalConfig, ConformalPredictor
 from adaptive_roa.conformal.probability_estimator import ProbabilityEstimator
 from adaptive_roa.conformal.calibrator import nonconformity_scores_batch_two_sided
@@ -1444,8 +1444,7 @@ def main(cfg: DictConfig):
 
     # Adaptive sampling loop
     n_epochs = cfg.get('n_epochs', 10)
-    samples_per_epoch = cfg.get('samples_per_epoch', 50)  # Legacy, used for fixed sampling
-    adaptive_data_max = cfg.get('adaptive_data_max', 50)  # Total samples per epoch (D1 + D2)
+    samples_per_epoch = cfg.get('samples_per_epoch', 50)  # Total samples per epoch (D1 + D2)
     d2_ratio = cfg.get('d2_ratio', 0.5)  # Fraction for uncertainty-filtered sampling
     warm_start = cfg.get('warm_start', False)
 
@@ -1487,8 +1486,8 @@ def main(cfg: DictConfig):
         if epoch_ckpts:
             previous_best_checkpoint = epoch_ckpts[0]
 
-        # Step 2: Create conformal predictor
-        print(f"\n[2] Creating conformal predictor...")
+        # Step 2: Create conformal predictor and optimize λ*/δ* on training data
+        print(f"\n[2] Creating conformal predictor and optimizing λ*/δ*...")
         conformal_predictor = ConformalPredictor(
             flow_matcher=flow_matcher,
             system=system,
@@ -1496,38 +1495,114 @@ def main(cfg: DictConfig):
             device=device,
         )
 
-        # Step 3: Get training labels for lambda optimization
+        # Get training labels for lambda/delta optimization
         X_train, y_train = dataset_builder.get_train_labels()
 
-        # Split training data for calibration
-        n_train = len(y_train)
-        cal_ratio = cfg.conformal.get('calibration_ratio', 0.3)
-        n_cal = int(n_train * cal_ratio)
-        perm = np.random.permutation(n_train)
-        cal_idx = perm[:n_cal]
-        train_idx = perm[n_cal:]
+        threshold_mode = cfg.conformal.get('threshold_mode', 'dynamic')
 
-        X_cal, y_cal = X_train[cal_idx], y_train[cal_idx]
-        X_opt, y_opt = X_train[train_idx], y_train[train_idx]
+        if threshold_mode == "fixed":
+            # Fixed mode: skip optimization, use fixed thresholds
+            fixed_lambda_star = cfg.conformal.get('fixed_lambda_star', 0.5)
+            fixed_delta_star = cfg.conformal.get('fixed_delta_star', 0.1)
+            conformal_predictor.lambda_star = fixed_lambda_star
+            conformal_predictor.delta_star = fixed_delta_star
+            print(f"    Using fixed thresholds: λ* = {fixed_lambda_star:.4f}, δ* = {fixed_delta_star:.4f}")
+        else:
+            # Dynamic mode: optimize λ*/δ* on ALL training data (no split)
+            lambda_star, delta_star, opt_info = conformal_predictor.optimize_thresholds(
+                X_train, y_train, verbose=True
+            )
 
-        # Step 4: Fit conformal predictor
-        print(f"\n[3] Fitting conformal predictor...")
-        conformal_predictor.fit(X_opt, y_opt, X_cal, y_cal, verbose=True)
+        lambda_star = conformal_predictor.lambda_star
+        delta_star = conformal_predictor.delta_star
+        print(f"    λ* = {lambda_star:.4f}, δ* = {delta_star:.4f}")
 
-        # Step 5: Evaluate on test set (subset of training)
-        print(f"\n[4] Evaluating on test set...")
+        # Step 3: Sample D1 (calibration set)
+        print(f"\n[3] Sampling D1 (calibration set)...")
+
+        # Compute target sizes
+        n_d1_target = int(samples_per_epoch * (1 - d2_ratio))
+        n_d2_target = samples_per_epoch - n_d1_target
+
+        # Sample D1 candidates (for calibration)
+        d1_states, d1_indices = dataset_builder.sample_candidates_without_marking(n_d1_target)
+
+        if len(d1_indices) == 0:
+            print("    No more trajectories available!")
+            break
+
+        # Get TRUE LABELS for D1 from shuffled_labels.txt
+        d1_labels = dataset_builder.data_source.get_labels(d1_indices)
+
+        # Mark D1 as USED and add to training
+        dataset_builder.mark_indices_as_used(d1_indices)
+        dataset_builder.add_to_training_balanced(d1_indices)
+
+        print(f"    D1: {len(d1_indices)} calibration points sampled and added to training")
+
+        # Step 4: Calibrate q_hat using D1
+        print(f"\n[4] Calibrating q_hat on D1...")
+        q_hat = conformal_predictor.calibrate_qhat(d1_states, d1_labels, verbose=True)
+        print(f"    q_hat = {q_hat:.4f}")
+
+        # Step 5: Sample D2 (uncertain) using q_hat
+        print(f"\n[5] Sampling D2 (uncertain) using q_hat...")
+
+        # Create probability estimator for uncertainty evaluation
+        prob_estimator = ProbabilityEstimator(
+            flow_matcher=flow_matcher,
+            system=system,
+            config=conformal_config,
+            device=device
+        )
+
+        # Create uncertain sampler
+        uncertain_sampler = UncertainSampler(
+            dataset_builder=dataset_builder,
+            target_count=n_d2_target,
+            batch_size=cfg.get('batch_size_sampling', 50),
+            max_candidates=cfg.get('max_samples_per_epoch', 50000),
+        )
+
+        # Sample D2 using q_hat-based classification
+        decision_rule = cfg.conformal.get('decision_rule', 'two_sided')
+        sample_result = uncertain_sampler.sample(
+            prob_estimator=prob_estimator,
+            calibrator=conformal_predictor.calibrator,
+            lambda_star=lambda_star,
+            delta_star=delta_star,
+            q_hat=q_hat,
+            decision_rule=decision_rule,
+            exclude=set(d1_indices),  # Don't re-sample D1
+            verbose=True
+        )
+
+        # D2 results
+        d2_indices = sample_result.uncertain_indices
+        n_d2 = len(d2_indices)
+        n_certain_discarded = sample_result.n_certain_discarded
+
+        # Mark D2 as used and add to training
+        if n_d2 > 0:
+            dataset_builder.mark_indices_as_used(d2_indices)
+            dataset_builder.add_to_training_balanced(d2_indices)
+
+        print(f"\n[6] Summary of sampling this epoch...")
+        print(f"    D1 (calibration): {len(d1_indices)} points (added)")
+        print(f"    D2 (uncertain):   {n_d2} points (added)")
+        print(f"    Total added:      {len(d1_indices) + n_d2}")
+        print(f"    Discarded (certain, stay in pool): {n_certain_discarded}")
+        print(f"    D2 candidates evaluated: {sample_result.n_candidates_evaluated} over {sample_result.n_batches} batches")
+
+        # Step 7: Evaluate on test set (subset of training)
+        print(f"\n[7] Evaluating on test set...")
         X_test, y_test = dataset_builder.get_test_labels()
         test_metrics = conformal_predictor.evaluate(X_test, y_test, verbose=True)
 
-        # Step 5b: Evaluate on FULL eval_states.txt (fast batched)
-        # Use lambda* and delta* from conformal predictor for consistent classification
+        # Step 8: Evaluate on FULL eval_states.txt (fast batched)
         num_mc_samples_eval = cfg.conformal.get('num_mc_samples_eval', 20)
-        conformal_state = conformal_predictor.get_state()
-        lambda_star = conformal_state['lambda_star']
-        delta_star = conformal_state['delta_star']  # Use optimized delta (may differ from config if optimize_mode="delta")
-        q_hat = conformal_state['q_hat']  # Calibration threshold for conformal prediction sets
 
-        print(f"\n[5] Evaluating on FULL eval_states.txt ({num_mc_samples_eval} MC samples, fast batched)...")
+        print(f"\n[8] Evaluating on FULL eval_states.txt ({num_mc_samples_eval} MC samples, fast batched)...")
         print(f"    Using λ*={lambda_star:.4f} ± δ*={delta_star:.4f}, q_hat={q_hat:.4f} from conformal prediction")
         full_roa_output_file = epoch_output_dir / "full_roa_evaluation.json"
         full_roa_metrics = evaluate_full_roa_fast(
@@ -1545,100 +1620,8 @@ def main(cfg: DictConfig):
             verbose=True
         )
 
-        # Step 6: Sample candidates based on strategy
-        sampling_strategy = cfg.get('sampling_strategy', 'fixed')
-
-        if sampling_strategy == 'balanced_uncertain':
-            # Balanced Uncertain Sampling: sample until |uncertain| == |D1|
-            print(f"\n[6] Balanced Uncertain Sampling...")
-
-            # Create probability estimator for uncertainty evaluation
-            prob_estimator = ProbabilityEstimator(
-                flow_matcher=flow_matcher,
-                system=system,
-                config=conformal_config,
-                device=device
-            )
-
-            # Create balanced sampler
-            balanced_sampler = BalancedUncertainSampler(
-                dataset_builder=dataset_builder,
-                adaptive_data_max=adaptive_data_max,
-                d2_ratio=d2_ratio,
-                batch_size=cfg.get('batch_size_sampling', 50),
-                max_samples=cfg.get('max_samples_per_epoch', 50000),
-            )
-
-            # Sample epoch (use same decision_rule as conformal predictor)
-            decision_rule = cfg.conformal.get('decision_rule', 'two_sided')
-            sample_result = balanced_sampler.sample_epoch(
-                prob_estimator=prob_estimator,
-                lambda_star=lambda_star,
-                delta_star=delta_star,
-                decision_rule=decision_rule,
-                verbose=True
-            )
-
-            if len(sample_result.d1_indices) == 0 and len(sample_result.d2_indices) == 0:
-                print("No more trajectories available!")
-                break
-
-            # Add D1 and D2 to training
-            d1_indices = sample_result.d1_indices
-            d2_indices = sample_result.d2_indices
-
-            print(f"\n[7] Adding to training...")
-            dataset_builder.add_to_training_balanced(d1_indices)
-            dataset_builder.add_to_training_balanced(d2_indices)
-
-            n_d2 = len(d2_indices)
-            n_confident = sample_result.n_discarded_certain
-            n_total_sampled = sample_result.n_total_sampled
-
-            print(f"    Added: D1={len(d1_indices)}, D2={n_d2}, Total={len(d1_indices) + n_d2}")
-            print(f"    Discarded (certain, stay in pool): {n_confident}")
-            print(f"    Total evaluated: {n_total_sampled} over {sample_result.n_batches} batches")
-
-        else:
-            # Fixed sampling (original behavior)
-            print(f"\n[6] Fixed Sampling: {samples_per_epoch} candidate trajectories...")
-            candidate_states, candidate_indices = dataset_builder.get_candidate_states(samples_per_epoch)
-
-            if len(candidate_indices) == 0:
-                print("No more trajectories available!")
-                break
-
-            # Split into D1 (calibration) and D2 (selection pool)
-            n_d1 = int(len(candidate_indices) * (1 - d2_ratio))
-            d1_indices = candidate_indices[:n_d1]
-            d2_indices = candidate_indices[n_d1:]
-            d2_states = candidate_states[n_d1:]
-
-            print(f"    D1 (always add): {len(d1_indices)} trajectories")
-            print(f"    D2 (selective): {len(d2_indices)} trajectories")
-
-            # Always add D1 to training
-            dataset_builder.add_selected_to_training(d1_indices)
-
-            # Evaluate D2 for uncertainty
-            if len(d2_indices) > 0:
-                print(f"\n[7] Evaluating D2 for uncertain points...")
-                uncertain_mask, uncertain_idx, p_success, p_failure = conformal_predictor.select_uncertain(d2_states)
-
-                n_uncertain = np.sum(uncertain_mask)
-                n_confident = len(d2_indices) - n_uncertain
-                print(f"    Uncertain: {n_uncertain} trajectories")
-                print(f"    Confident: {n_confident} trajectories (skipped)")
-
-                # Add only uncertain trajectories from D2
-                uncertain_traj_indices = [d2_indices[i] for i in range(len(d2_indices)) if uncertain_mask[i]]
-                dataset_builder.add_selected_to_training(uncertain_traj_indices)
-            else:
-                n_uncertain = 0
-                n_confident = 0
-
-        # Rebuild datasets with new data
-        print(f"\n[8] Rebuilding datasets...")
+        # Step 9: Rebuild datasets with new data
+        print(f"\n[9] Rebuilding datasets...")
         dataset_files = dataset_builder.build_all_datasets()
 
         # Record epoch results
@@ -1647,7 +1630,7 @@ def main(cfg: DictConfig):
             'train_trajectories': train_trajectories_this_epoch,
             'n_d1_added': len(d1_indices),
             'n_d2_added': int(n_d2),
-            'n_discarded_certain': int(n_confident),
+            'n_discarded_certain': int(n_certain_discarded),
             # Conformal parameters
             'lambda_star': float(conformal_predictor.lambda_star),
             'delta_star': float(conformal_predictor.delta_star),
@@ -1667,7 +1650,7 @@ def main(cfg: DictConfig):
         print("-" * 70)
         print(f"  Training trajectories: {epoch_result['train_trajectories']}")
         print(f"  Added this epoch: {len(d1_indices) + n_d2} (D1={len(d1_indices)}, D2={n_d2})")
-        print(f"  Skipped (confident): {n_confident}")
+        print(f"  Discarded (certain): {n_certain_discarded}")
         print(f"  λ* = {epoch_result['lambda_star']:.4f}, δ* = {epoch_result['delta_star']:.4f}, q_hat = {epoch_result['q_hat']:.4f}")
         print(f"  --- Full ROA (all {full_roa_metrics['n_total']} trajectories) ---")
         conf_m = full_roa_metrics['conformal_thresholds']

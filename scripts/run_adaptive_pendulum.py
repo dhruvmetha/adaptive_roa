@@ -42,9 +42,10 @@ from typing import Dict
 
 from adaptive_roa.adaptive.data_source import TrajectoryDataSource, TrajectoryDataSourceConfig, load_eval_states
 from adaptive_roa.adaptive.dataset_builder import AdaptiveDatasetBuilder
-from adaptive_roa.adaptive.balanced_sampler import BalancedUncertainSampler
+from adaptive_roa.adaptive.balanced_sampler import UncertainSampler
 from adaptive_roa.conformal import ConformalConfig, ConformalPredictor
 from adaptive_roa.conformal.probability_estimator import ProbabilityEstimator
+from adaptive_roa.conformal.calibrator import nonconformity_scores_batch_two_sided
 from adaptive_roa.data.pendulum_endpoint_data import PendulumEndpointDataModule
 
 import matplotlib.pyplot as plt
@@ -317,6 +318,409 @@ def compute_metrics_at_threshold(success_rate: np.ndarray, y_all: np.ndarray,
     }
 
 
+def compute_metrics_notebook_style(p_success: np.ndarray, p_failure: np.ndarray,
+                                   y_all: np.ndarray, threshold: float = 0.6,
+                                   p_invalid: np.ndarray = None) -> Dict:
+    """
+    Compute metrics using notebook-style evaluation (separate success/failure thresholds).
+
+    Two-step classification:
+    1. INVALID if p_invalid >= 0.5 (majority of MC samples were neither success nor failure)
+    2. From remaining points:
+       - SUCCESS if p_success > threshold (e.g., 0.6)
+       - FAILURE if p_failure > threshold (e.g., 0.6)
+       - UNCERTAIN otherwise (multi-modal)
+
+    For pendulum (2-class), p_failure = 1 - p_success typically, but we keep the
+    same interface as CartPole for consistency.
+
+    Args:
+        p_success: [N] array of P(MC label == 1)
+        p_failure: [N] array of P(MC label == -1)
+        y_all: [N] ground truth labels (-1=failure, 1=success)
+        threshold: Confidence threshold (default 0.6)
+        p_invalid: [N] array of P(MC label == 0), optional for backward compatibility
+
+    Returns:
+        Dict with evaluation metrics
+    """
+    n_total = len(y_all)
+
+    # Step 1: Identify invalid points (p_invalid >= 0.5)
+    if p_invalid is not None:
+        is_invalid = p_invalid >= 0.5
+        n_invalid = int(np.sum(is_invalid))
+    else:
+        is_invalid = np.zeros(n_total, dtype=bool)
+        n_invalid = 0
+
+    # Step 2: For non-invalid points, apply confidence threshold
+    # pred_labels: 1=success, 0=failure, -1=uncertain, -2=invalid
+    pred_labels = np.full(n_total, -1)  # Default: uncertain
+    pred_labels[is_invalid] = -2  # Mark invalid
+
+    # Only classify non-invalid points
+    non_invalid = ~is_invalid
+    pred_labels[(p_success > threshold) & non_invalid] = 1   # Success
+    pred_labels[(p_failure > threshold) & non_invalid] = 0   # Failure
+
+    # Handle edge case: if both thresholds met, mark as uncertain
+    both_high = (p_success > threshold) & (p_failure > threshold) & non_invalid
+    pred_labels[both_high] = -1  # Uncertain
+
+    n_uncertain = int(np.sum(pred_labels == -1))
+    invalid_pct = n_invalid / n_total
+    uncertain_pct = n_uncertain / n_total
+
+    # Valid predictions: success (1) or failure (0)
+    confident_mask = (pred_labels == 1) | (pred_labels == 0)
+    n_confident = int(np.sum(confident_mask))
+
+    # Map predictions to ground truth space: pred 1 -> 1, pred 0 -> -1
+    y_pred_conf = np.where(pred_labels[confident_mask] == 1, 1, -1)
+    y_true_conf = y_all[confident_mask]
+
+    tp = int(np.sum((y_pred_conf == 1) & (y_true_conf == 1)))
+    tn = int(np.sum((y_pred_conf == -1) & (y_true_conf == -1)))
+    fp = int(np.sum((y_pred_conf == 1) & (y_true_conf == -1)))
+    fn = int(np.sum((y_pred_conf == -1) & (y_true_conf == 1)))
+
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+    accuracy = (tp + tn) / n_confident if n_confident > 0 else 0.0
+
+    return {
+        'n_confident': int(n_confident),
+        'n_invalid': int(n_invalid),
+        'n_uncertain': int(n_uncertain),
+        'invalid_pct': float(invalid_pct),
+        'uncertain_pct': float(uncertain_pct),
+        'separatrix_pct': float(invalid_pct + uncertain_pct),  # backward compat
+        'accuracy': float(accuracy),
+        'precision': float(precision),
+        'recall': float(recall),
+        'specificity': float(specificity),
+        'f1': float(f1),
+        'tp': tp, 'tn': tn, 'fp': fp, 'fn': fn,
+        'threshold': float(threshold),
+        'n_pred_success': int(np.sum(pred_labels == 1)),
+        'n_pred_failure': int(np.sum(pred_labels == 0)),
+        'n_pred_invalid': int(n_invalid),
+        'n_pred_uncertain': int(n_uncertain),
+    }
+
+
+def compute_metrics_lambda_delta_pendulum(
+    p_success: np.ndarray,
+    y_all: np.ndarray,
+    lambda_star: float,
+    delta: float,
+    p_invalid: np.ndarray = None,
+) -> Dict:
+    """
+    Pendulum-specific λ/δ evaluation using one-sided rule (p_success only).
+
+    Two-step classification:
+    1. INVALID if p_invalid >= 0.5 (majority of MC samples were neither success nor failure)
+    2. From remaining points:
+       - SUCCESS if p_success > λ + δ
+       - FAILURE if p_success < λ - δ
+       - UNCERTAIN otherwise
+
+    This is the one-sided decision rule appropriate for 2-class pendulum.
+    """
+    n_total = len(y_all)
+
+    # Step 1: Identify invalid points (p_invalid >= 0.5)
+    if p_invalid is not None:
+        is_invalid = p_invalid >= 0.5
+        n_invalid = int(np.sum(is_invalid))
+    else:
+        is_invalid = np.zeros(n_total, dtype=bool)
+        n_invalid = 0
+
+    success_thresh = float(lambda_star + delta)
+    failure_thresh = float(lambda_star - delta)
+
+    # Step 2: For non-invalid points, apply λ/δ thresholds
+    # pred_labels: 1=success, 0=failure, -1=uncertain, -2=invalid
+    pred_labels = np.full(n_total, -1)  # Default: uncertain
+    pred_labels[is_invalid] = -2  # Mark invalid
+
+    non_invalid = ~is_invalid
+    pred_labels[(p_success > success_thresh) & non_invalid] = 1
+    pred_labels[(p_success < failure_thresh) & non_invalid] = 0
+
+    n_uncertain = int(np.sum(pred_labels == -1))
+    invalid_pct = n_invalid / n_total
+    uncertain_pct = n_uncertain / n_total
+
+    # Valid predictions: success (1) or failure (0)
+    confident_mask = (pred_labels == 1) | (pred_labels == 0)
+    n_confident = int(np.sum(confident_mask))
+
+    # Map predictions to ground truth space: pred 1 -> 1, pred 0 -> -1
+    y_pred_conf = np.where(pred_labels[confident_mask] == 1, 1, -1)
+    y_true_conf = y_all[confident_mask]
+
+    tp = int(np.sum((y_pred_conf == 1) & (y_true_conf == 1)))
+    tn = int(np.sum((y_pred_conf == -1) & (y_true_conf == -1)))
+    fp = int(np.sum((y_pred_conf == 1) & (y_true_conf == -1)))
+    fn = int(np.sum((y_pred_conf == -1) & (y_true_conf == 1)))
+
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+    accuracy = (tp + tn) / n_confident if n_confident > 0 else 0.0
+
+    return {
+        'n_confident': int(n_confident),
+        'n_invalid': int(n_invalid),
+        'n_uncertain': int(n_uncertain),
+        'invalid_pct': float(invalid_pct),
+        'uncertain_pct': float(uncertain_pct),
+        'separatrix_pct': float(invalid_pct + uncertain_pct),  # backward compat
+        'accuracy': float(accuracy),
+        'precision': float(precision),
+        'recall': float(recall),
+        'specificity': float(specificity),
+        'f1': float(f1),
+        'tp': tp, 'tn': tn, 'fp': fp, 'fn': fn,
+        'lambda_star': float(lambda_star),
+        'delta': float(delta),
+        'success_threshold': float(success_thresh),
+        'failure_threshold': float(failure_thresh),
+    }
+
+
+def compute_metrics_qhat_conformal(
+    p_success: np.ndarray,
+    p_failure: np.ndarray,
+    y_all: np.ndarray,
+    lambda_star: float,
+    delta: float,
+    q_hat: float,
+    p_invalid: np.ndarray = None,
+) -> Dict:
+    """
+    Compute metrics using q_hat-based conformal prediction sets.
+
+    This uses the calibrated q_hat threshold to construct prediction sets,
+    providing coverage guarantees. A label is included in the prediction set
+    if its non-conformity score is <= q_hat.
+
+    Classification:
+    1. INVALID if p_invalid >= 0.5
+    2. For non-invalid points, compute prediction sets:
+       - Confident SUCCESS: prediction set == {1}
+       - Confident FAILURE: prediction set == {-1}
+       - Uncertain: prediction set has multiple labels or is empty
+
+    Args:
+        p_success: [N] array of P(MC label == 1)
+        p_failure: [N] array of P(MC label == -1)
+        y_all: [N] ground truth labels (-1=failure, 1=success)
+        lambda_star: Optimal decision boundary from conformal prediction
+        delta: Uncertainty half-width
+        q_hat: Calibration threshold from conformal prediction
+        p_invalid: [N] array of P(MC label == 0), optional
+
+    Returns:
+        Dict with evaluation metrics including coverage
+    """
+    n_total = len(y_all)
+
+    # Step 1: Identify invalid points (p_invalid >= 0.5)
+    if p_invalid is not None:
+        is_invalid = p_invalid >= 0.5
+        n_invalid = int(np.sum(is_invalid))
+    else:
+        is_invalid = np.zeros(n_total, dtype=bool)
+        n_invalid = 0
+
+    # Step 2: Compute non-conformity scores for each candidate label
+    n = n_total
+    scores_success = nonconformity_scores_batch_two_sided(
+        p_success, p_failure, np.ones(n, dtype=int), lambda_star, delta
+    )
+    scores_failure = nonconformity_scores_batch_two_sided(
+        p_success, p_failure, -np.ones(n, dtype=int), lambda_star, delta
+    )
+    scores_unknown = nonconformity_scores_batch_two_sided(
+        p_success, p_failure, np.zeros(n, dtype=int), lambda_star, delta
+    )
+
+    # Step 3: Build prediction sets (label included if score <= q_hat)
+    in_set_success = scores_success <= q_hat  # [N] bool
+    in_set_failure = scores_failure <= q_hat  # [N] bool
+    in_set_unknown = scores_unknown <= q_hat  # [N] bool
+
+    # Prediction set sizes
+    set_sizes = in_set_success.astype(int) + in_set_failure.astype(int) + in_set_unknown.astype(int)
+
+    # Step 4: Classify based on prediction sets (for non-invalid points)
+    # pred_labels: 1=success, 0=failure, -1=uncertain, -2=invalid
+    pred_labels = np.full(n_total, -1)  # Default: uncertain
+    pred_labels[is_invalid] = -2  # Mark invalid
+
+    non_invalid = ~is_invalid
+
+    # Confident SUCCESS: only {1} in prediction set
+    confident_success = in_set_success & ~in_set_failure & ~in_set_unknown & non_invalid
+    pred_labels[confident_success] = 1
+
+    # Confident FAILURE: only {-1} in prediction set
+    confident_failure = ~in_set_success & in_set_failure & ~in_set_unknown & non_invalid
+    pred_labels[confident_failure] = 0  # Using 0 to represent failure prediction
+
+    # Everything else (multiple labels or empty set) remains uncertain (-1)
+
+    n_uncertain = int(np.sum(pred_labels == -1))
+    invalid_pct = n_invalid / n_total
+    uncertain_pct = n_uncertain / n_total
+
+    # Valid predictions: success (1) or failure (0)
+    confident_mask = (pred_labels == 1) | (pred_labels == 0)
+    n_confident = int(np.sum(confident_mask))
+
+    # Map predictions to ground truth space: pred 1 -> 1, pred 0 -> -1
+    y_pred_conf = np.where(pred_labels[confident_mask] == 1, 1, -1)
+    y_true_conf = y_all[confident_mask]
+
+    tp = int(np.sum((y_pred_conf == 1) & (y_true_conf == 1)))
+    tn = int(np.sum((y_pred_conf == -1) & (y_true_conf == -1)))
+    fp = int(np.sum((y_pred_conf == 1) & (y_true_conf == -1)))
+    fn = int(np.sum((y_pred_conf == -1) & (y_true_conf == 1)))
+
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+    accuracy = (tp + tn) / n_confident if n_confident > 0 else 0.0
+
+    # Compute coverage: fraction of points where true label is in prediction set
+    true_in_set = np.zeros(n_total, dtype=bool)
+    true_in_set[y_all == 1] = in_set_success[y_all == 1]
+    true_in_set[y_all == -1] = in_set_failure[y_all == -1]
+    # For y_all == 0 (if any), check in_set_unknown
+    true_in_set[y_all == 0] = in_set_unknown[y_all == 0]
+
+    coverage = np.mean(true_in_set)
+
+    # Average prediction set size (excluding invalid)
+    avg_set_size = np.mean(set_sizes[non_invalid]) if np.sum(non_invalid) > 0 else 0.0
+
+    return {
+        'n_confident': int(n_confident),
+        'n_invalid': int(n_invalid),
+        'n_uncertain': int(n_uncertain),
+        'invalid_pct': float(invalid_pct),
+        'uncertain_pct': float(uncertain_pct),
+        'separatrix_pct': float(invalid_pct + uncertain_pct),  # backward compat
+        'accuracy': float(accuracy),
+        'precision': float(precision),
+        'recall': float(recall),
+        'specificity': float(specificity),
+        'f1': float(f1),
+        'tp': tp, 'tn': tn, 'fp': fp, 'fn': fn,
+        'lambda_star': float(lambda_star),
+        'delta': float(delta),
+        'q_hat': float(q_hat),
+        'coverage': float(coverage),
+        'avg_set_size': float(avg_set_size),
+        'n_pred_success': int(np.sum(pred_labels == 1)),
+        'n_pred_failure': int(np.sum(pred_labels == 0)),
+    }
+
+
+def compute_geodesic_error_stats(errors: np.ndarray, mask: np.ndarray = None) -> Dict:
+    """
+    Compute mean, median, variance for geodesic errors (overall and per-dim).
+
+    Args:
+        errors: [N, D] array of geodesic distances per dimension
+        mask: Optional boolean mask to select a subset of points
+
+    Returns:
+        Dict with n_points, mean/median/variance (overall and per-dim)
+    """
+    if mask is not None:
+        errors = errors[mask]
+
+    if len(errors) == 0:
+        return {'n_points': 0}
+
+    # Overall stats: L2 norm across dimensions, then stats over samples
+    norms = np.linalg.norm(errors, axis=1)
+
+    return {
+        'n_points': int(len(errors)),
+        # Overall stats (L2 norm of geodesic error vector)
+        'mean': float(np.mean(norms)),
+        'median': float(np.median(norms)),
+        'variance': float(np.var(norms)),
+        # Per-dimension stats
+        'mean_per_dim': [float(x) for x in errors.mean(axis=0)],
+        'median_per_dim': [float(x) for x in np.median(errors, axis=0)],
+        'variance_per_dim': [float(x) for x in np.var(errors, axis=0)],
+    }
+
+
+def compute_hierarchical_error_stats(mc_errors: np.ndarray, mask: np.ndarray = None) -> Dict:
+    """
+    Compute hierarchical error statistics with all 16 combinations.
+
+    Two-level hierarchy:
+    - Level 1: For each start state, aggregate across MC samples (mean, median, P90, P99)
+    - Level 2: Aggregate across start states (mean, median, P90, P99)
+
+    Args:
+        mc_errors: [N, num_mc_samples] array of L2 norm errors per MC sample
+        mask: Optional boolean mask to select a subset of start states
+
+    Returns:
+        Dict with n_points and all 16 combinations of statistics
+    """
+    if mask is not None:
+        mc_errors = mc_errors[mask]
+
+    if len(mc_errors) == 0:
+        return {'n_points': 0}
+
+    n_points = len(mc_errors)
+
+    # Level 1: Per start state, aggregate across MC samples
+    per_state_mean = np.mean(mc_errors, axis=1)      # [N]
+    per_state_median = np.median(mc_errors, axis=1)  # [N]
+    per_state_p90 = np.percentile(mc_errors, 90, axis=1)  # [N]
+    per_state_p99 = np.percentile(mc_errors, 99, axis=1)  # [N]
+
+    level1_stats = {
+        'mean': per_state_mean,
+        'median': per_state_median,
+        'p90': per_state_p90,
+        'p99': per_state_p99,
+    }
+
+    # Level 2: Aggregate across start states
+    result = {'n_points': int(n_points)}
+
+    for l1_name, l1_arr in level1_stats.items():
+        # Mean over start states
+        result[f'mean_of_{l1_name}s'] = float(np.mean(l1_arr))
+        # Median over start states
+        result[f'median_of_{l1_name}s'] = float(np.median(l1_arr))
+        # P90 over start states
+        result[f'p90_of_{l1_name}s'] = float(np.percentile(l1_arr, 90))
+        # P99 over start states
+        result[f'p99_of_{l1_name}s'] = float(np.percentile(l1_arr, 99))
+
+    return result
+
+
 def evaluate_full_roa_fast(
     flow_matcher,
     system,
@@ -325,6 +729,7 @@ def evaluate_full_roa_fast(
     batch_size: int = 2048,
     lambda_star: float = None,
     delta: float = 0.05,
+    q_hat: float = None,
     attractor_radius: float = 0.1,
     device: str = 'cuda',
     output_file: str = None,
@@ -336,9 +741,10 @@ def evaluate_full_roa_fast(
     Uses direct batched inference instead of conformal predictor for speed.
     Processes batch_size points at a time with num_mc_samples forward passes.
 
-    Saves per-point data and computes metrics for BOTH threshold schemes:
-    1. lambda* +/- delta from conformal prediction
-    2. Fixed 0.4/0.6 thresholds
+    Saves per-point data and computes metrics for THREE threshold schemes:
+    1. λ*±δ from conformal prediction (one-sided, p_success only for pendulum)
+    2. Notebook-style: success if p_s > 0.6, failure if p_f > 0.6
+    3. q_hat conformal: uses calibrated q_hat to construct prediction sets (if q_hat provided)
 
     Args:
         flow_matcher: Trained flow matcher model
@@ -346,15 +752,16 @@ def evaluate_full_roa_fast(
         eval_states_file: Path to eval_states.txt (CSV: start_state..., end_state..., label)
         num_mc_samples: Number of MC samples per point
         batch_size: Batch size for GPU inference
-        lambda_star: Optimized lambda* from conformal prediction (if None, use 0.5)
+        lambda_star: Optimized λ* from conformal prediction (if None, use 0.5)
         delta: Unknown region half-width from conformal config
+        q_hat: Calibration threshold from conformal prediction (if None, skip q_hat-based eval)
         attractor_radius: Radius for attractor classification
         device: Device for inference
-        output_file: Optional path to save results JSON
+        output_file: Optional path to save results JSON (also saves .npz with same base name)
         verbose: Print results
 
     Returns:
-        Dict with evaluation metrics for both threshold schemes
+        Dict with evaluation metrics for all threshold schemes
     """
     from tqdm import tqdm
 
@@ -363,97 +770,227 @@ def evaluate_full_roa_fast(
 
     n_total = len(y_all)
 
-    # Default lambda* if not provided
+    # Default λ* if not provided
     if lambda_star is None:
         lambda_star = 0.5
 
     if verbose:
         print(f"\n{'='*60}")
-        print("FULL ROA EVALUATION (fast batched)")
+        print("FULL ROA EVALUATION (fast batched) - Pendulum")
         print(f"{'='*60}")
         print(f"Total trajectories: {n_total}")
         print(f"  Success (y=1): {np.sum(y_all == 1)}")
         print(f"  Failure (y=-1): {np.sum(y_all == -1)}")
+        print(f"  Separatrix (y=0): {np.sum(y_all == 0)}")
         print(f"MC samples: {num_mc_samples}, batch_size: {batch_size}")
+        print(f"Attractor radius: {attractor_radius}")
 
     # Convert to tensors
     X_tensor = torch.from_numpy(X_all).float().to(device)
     end_states_tensor = torch.from_numpy(end_states_all).float().to(device)
 
-    # Collect success counts for each point
-    is_success = np.zeros((n_total, num_mc_samples))
+    # Collect MC labels for each point (stores -1, 0, 1 for each sample)
+    mc_labels = np.zeros((n_total, num_mc_samples), dtype=np.int8)
 
     # Collect predicted endpoints for endpoint error computation
     # Store mean prediction per point (average across MC samples)
     pred_endpoints_sum = np.zeros((n_total, end_states_all.shape[1]), dtype=np.float64)
+
+    # Store per-MC-sample errors for hierarchical statistics [N, num_mc_samples]
+    mc_errors = np.zeros((n_total, num_mc_samples), dtype=np.float32)
 
     flow_matcher.eval()
     with torch.no_grad():
         for batch_start in tqdm(range(0, n_total, batch_size), desc="Evaluating", disable=not verbose):
             batch_end = min(batch_start + batch_size, n_total)
             batch_inp = X_tensor[batch_start:batch_end]
+            batch_actual = end_states_tensor[batch_start:batch_end]
 
             for sample_idx in range(num_mc_samples):
                 pred = flow_matcher.predict_endpoint(batch_inp)
                 attractor_labels = system.classify_attractor(pred, attractor_radius).cpu().numpy()
-                is_success[batch_start:batch_end, sample_idx] = attractor_labels
+                mc_labels[batch_start:batch_end, sample_idx] = attractor_labels
                 # Accumulate predictions for mean endpoint computation
                 pred_endpoints_sum[batch_start:batch_end] += pred.cpu().numpy()
+                # Compute per-sample geodesic error (L2 norm across dimensions)
+                geodesic_dist = flow_matcher.manifold.dist(pred, batch_actual).cpu().numpy()
+                mc_errors[batch_start:batch_end, sample_idx] = np.linalg.norm(geodesic_dist, axis=1)
 
     # Compute mean predicted endpoints
     pred_endpoints_mean = pred_endpoints_sum / num_mc_samples
 
-    # Compute endpoint errors (predicted vs actual end states)
-    endpoint_errors = pred_endpoints_mean - end_states_all
-    endpoint_mae_per_dim = np.abs(endpoint_errors).mean(axis=0)
-    endpoint_mse_per_dim = (endpoint_errors ** 2).mean(axis=0)
-    endpoint_mae = np.abs(endpoint_errors).mean()
-    endpoint_mse = (endpoint_errors ** 2).mean()
-    endpoint_rmse = np.sqrt(endpoint_mse)
+    # Compute endpoint errors using manifold's geodesic distance (for legacy stats)
+    pred_tensor = torch.from_numpy(pred_endpoints_mean).float().to(device)
+    actual_tensor = torch.from_numpy(end_states_all).float().to(device)
+    geodesic_errors = flow_matcher.manifold.dist(pred_tensor, actual_tensor).cpu().numpy()
 
-    # Compute probabilities per point
-    success_rate = (is_success == 1).sum(axis=1) / num_mc_samples   # p_success
-    p_invalid = (is_success == 0).sum(axis=1) / num_mc_samples      # p_invalid (label=0)
+    # Get component names for reporting
+    component_names = flow_matcher.get_manifold_component_names()
+
+    # Compute probabilities for each class
+    p_success = (mc_labels == 1).sum(axis=1) / num_mc_samples   # P(label == 1)
+    p_failure = (mc_labels == -1).sum(axis=1) / num_mc_samples  # P(label == -1)
+    p_invalid = (mc_labels == 0).sum(axis=1) / num_mc_samples   # P(label == 0)
+
+    # Classification masks using conformal thresholds (λ* ± δ) - one-sided for pendulum
+    success_thresh = lambda_star + delta
+    failure_thresh = lambda_star - delta
+
+    mask_invalid = p_invalid >= 0.5
+    mask_success = (p_success > success_thresh) & ~mask_invalid
+    mask_failure = (p_success < failure_thresh) & ~mask_invalid
+    mask_certain = mask_success | mask_failure
+    mask_uncertain = ~mask_invalid & ~mask_success & ~mask_failure
+
+    # Compute endpoint error stats for each category (legacy: using mean prediction)
+    error_stats_full = compute_geodesic_error_stats(geodesic_errors)
+    error_stats_certain = compute_geodesic_error_stats(geodesic_errors, mask_certain)
+    error_stats_certain_success = compute_geodesic_error_stats(geodesic_errors, mask_success)
+    error_stats_certain_failure = compute_geodesic_error_stats(geodesic_errors, mask_failure)
+    error_stats_uncertain = compute_geodesic_error_stats(geodesic_errors, mask_uncertain)
+    error_stats_invalid = compute_geodesic_error_stats(geodesic_errors, mask_invalid)
+
+    # Compute hierarchical error stats (all 16 combinations) for each category
+    hierarchical_stats_full = compute_hierarchical_error_stats(mc_errors)
+    hierarchical_stats_certain = compute_hierarchical_error_stats(mc_errors, mask_certain)
+    hierarchical_stats_certain_success = compute_hierarchical_error_stats(mc_errors, mask_success)
+    hierarchical_stats_certain_failure = compute_hierarchical_error_stats(mc_errors, mask_failure)
+    hierarchical_stats_uncertain = compute_hierarchical_error_stats(mc_errors, mask_uncertain)
+    hierarchical_stats_invalid = compute_hierarchical_error_stats(mc_errors, mask_invalid)
 
     if verbose:
         print(f"\nMC probability statistics:")
-        print(f"  p_success: mean={success_rate.mean():.4f}, min={success_rate.min():.4f}, max={success_rate.max():.4f}")
-        print(f"  p_invalid: mean={p_invalid.mean():.4f}, min={p_invalid.min():.4f}, max={p_invalid.max():.4f}")
+        print(f"  p_success:   mean={p_success.mean():.4f}, min={p_success.min():.4f}, max={p_success.max():.4f}")
+        print(f"  p_failure:   mean={p_failure.mean():.4f}, min={p_failure.min():.4f}, max={p_failure.max():.4f}")
+        print(f"  p_invalid:   mean={p_invalid.mean():.4f}, min={p_invalid.min():.4f}, max={p_invalid.max():.4f}")
 
-    # Compute metrics for BOTH threshold schemes
-    # 1. lambda* +/- delta from conformal prediction
-    metrics_conformal = compute_metrics_at_threshold(
-        success_rate, y_all,
-        success_thresh=lambda_star + delta,
-        failure_thresh=lambda_star - delta,
-        p_invalid=p_invalid
+        print(f"\n{'='*60}")
+        print("GEODESIC ENDPOINT ERROR METRICS (predicted vs actual)")
+        print(f"{'='*60}")
+        print(f"Component names: {component_names}")
+
+        for cat_name, stats in [("FULL", error_stats_full),
+                                 ("CERTAIN", error_stats_certain),
+                                 ("  CERTAIN_SUCCESS", error_stats_certain_success),
+                                 ("  CERTAIN_FAILURE", error_stats_certain_failure),
+                                 ("UNCERTAIN", error_stats_uncertain),
+                                 ("INVALID", error_stats_invalid)]:
+            print(f"\n  [{cat_name}] (n={stats['n_points']})")
+            if stats['n_points'] > 0:
+                print(f"    Overall: mean={stats['mean']:.6f}, median={stats['median']:.6f}, var={stats['variance']:.6f}")
+                print(f"    Per-dim mean:   {[f'{x:.4f}' for x in stats['mean_per_dim']]}")
+                print(f"    Per-dim median: {[f'{x:.4f}' for x in stats['median_per_dim']]}")
+                print(f"    Per-dim var:    {[f'{x:.4f}' for x in stats['variance_per_dim']]}")
+
+        print(f"\n{'='*60}")
+        print("HIERARCHICAL ERROR STATS (16 combinations: L1 over MC samples, L2 over start states)")
+        print(f"{'='*60}")
+
+        for cat_name, stats in [("FULL", hierarchical_stats_full),
+                                 ("CERTAIN", hierarchical_stats_certain),
+                                 ("  CERTAIN_SUCCESS", hierarchical_stats_certain_success),
+                                 ("  CERTAIN_FAILURE", hierarchical_stats_certain_failure),
+                                 ("UNCERTAIN", hierarchical_stats_uncertain),
+                                 ("INVALID", hierarchical_stats_invalid)]:
+            print(f"\n  [{cat_name}] (n={stats['n_points']})")
+            if stats['n_points'] > 0:
+                # Print in a table format for clarity
+                print(f"    {'L2/L1':<8} {'mean':>12} {'median':>12} {'p90':>12} {'p99':>12}")
+                print(f"    {'-'*56}")
+                for l2_agg in ['mean', 'median', 'p90', 'p99']:
+                    row = f"    {l2_agg:<8}"
+                    for l1_agg in ['mean', 'median', 'p90', 'p99']:
+                        key = f"{l2_agg}_of_{l1_agg}s"
+                        row += f" {stats[key]:>12.6f}"
+                    print(row)
+
+    # Compute metrics for THREE threshold schemes
+    # 1. λ*±δ from conformal prediction (one-sided for pendulum: p_success only)
+    metrics_conformal = compute_metrics_lambda_delta_pendulum(
+        p_success=p_success,
+        y_all=y_all,
+        lambda_star=lambda_star,
+        delta=delta,
+        p_invalid=p_invalid,
     )
 
-    # 2. Fixed 0.4/0.6 thresholds (classic approach)
-    metrics_fixed = compute_metrics_at_threshold(
-        success_rate, y_all,
-        success_thresh=0.6,
-        failure_thresh=0.4,
-        p_invalid=p_invalid
+    # 2. Notebook-style: success if p_s > 0.6, failure if p_f > 0.6
+    metrics_notebook = compute_metrics_notebook_style(
+        p_success, p_failure, y_all,
+        threshold=0.6,
+        p_invalid=p_invalid,
     )
+
+    # 3. q_hat-based conformal prediction sets (if q_hat provided)
+    if q_hat is not None:
+        metrics_qhat_conformal = compute_metrics_qhat_conformal(
+            p_success=p_success,
+            p_failure=p_failure,
+            y_all=y_all,
+            lambda_star=lambda_star,
+            delta=delta,
+            q_hat=q_hat,
+            p_invalid=p_invalid,
+        )
+
+        # Compute q_hat-based classification masks for geodesic error stats
+        # Recompute non-conformity scores to get prediction sets
+        n = len(y_all)
+        scores_success_qhat = nonconformity_scores_batch_two_sided(
+            p_success, p_failure, np.ones(n, dtype=int), lambda_star, delta
+        )
+        scores_failure_qhat = nonconformity_scores_batch_two_sided(
+            p_success, p_failure, -np.ones(n, dtype=int), lambda_star, delta
+        )
+        scores_unknown_qhat = nonconformity_scores_batch_two_sided(
+            p_success, p_failure, np.zeros(n, dtype=int), lambda_star, delta
+        )
+
+        # Build prediction set membership
+        in_set_success_qhat = scores_success_qhat <= q_hat
+        in_set_failure_qhat = scores_failure_qhat <= q_hat
+        in_set_unknown_qhat = scores_unknown_qhat <= q_hat
+
+        # Classification masks based on q_hat prediction sets
+        mask_invalid_qhat = p_invalid >= 0.5
+        mask_success_qhat = in_set_success_qhat & ~in_set_failure_qhat & ~in_set_unknown_qhat & ~mask_invalid_qhat
+        mask_failure_qhat = ~in_set_success_qhat & in_set_failure_qhat & ~in_set_unknown_qhat & ~mask_invalid_qhat
+        mask_certain_qhat = mask_success_qhat | mask_failure_qhat
+        mask_uncertain_qhat = ~mask_invalid_qhat & ~mask_success_qhat & ~mask_failure_qhat
+
+        # Compute geodesic error stats for q_hat-based classes
+        error_stats_certain_qhat = compute_geodesic_error_stats(geodesic_errors, mask_certain_qhat)
+        error_stats_certain_success_qhat = compute_geodesic_error_stats(geodesic_errors, mask_success_qhat)
+        error_stats_certain_failure_qhat = compute_geodesic_error_stats(geodesic_errors, mask_failure_qhat)
+        error_stats_uncertain_qhat = compute_geodesic_error_stats(geodesic_errors, mask_uncertain_qhat)
+        error_stats_invalid_qhat = compute_geodesic_error_stats(geodesic_errors, mask_invalid_qhat)
+
+        # Compute hierarchical error stats for q_hat-based classes
+        hierarchical_stats_certain_qhat = compute_hierarchical_error_stats(mc_errors, mask_certain_qhat)
+        hierarchical_stats_certain_success_qhat = compute_hierarchical_error_stats(mc_errors, mask_success_qhat)
+        hierarchical_stats_certain_failure_qhat = compute_hierarchical_error_stats(mc_errors, mask_failure_qhat)
+        hierarchical_stats_uncertain_qhat = compute_hierarchical_error_stats(mc_errors, mask_uncertain_qhat)
+        hierarchical_stats_invalid_qhat = compute_hierarchical_error_stats(mc_errors, mask_invalid_qhat)
+    else:
+        metrics_qhat_conformal = None
+        error_stats_certain_qhat = None
+        error_stats_certain_success_qhat = None
+        error_stats_certain_failure_qhat = None
+        error_stats_uncertain_qhat = None
+        error_stats_invalid_qhat = None
+        hierarchical_stats_certain_qhat = None
+        hierarchical_stats_certain_success_qhat = None
+        hierarchical_stats_certain_failure_qhat = None
+        hierarchical_stats_uncertain_qhat = None
+        hierarchical_stats_invalid_qhat = None
 
     if verbose:
         print(f"\n{'='*60}")
-        print("ENDPOINT ERROR METRICS (predicted vs actual)")
+        print("METRICS WITH λ*±δ THRESHOLDS (one-sided, p_success only)")
         print(f"{'='*60}")
-        print(f"Overall MAE:     {endpoint_mae:.6f}")
-        print(f"Overall MSE:     {endpoint_mse:.6f}")
-        print(f"Overall RMSE:    {endpoint_rmse:.6f}")
-        dim_names = ['θ', 'θ̇']
-        for i, name in enumerate(dim_names):
-            print(f"  {name}: MAE={endpoint_mae_per_dim[i]:.6f}, MSE={endpoint_mse_per_dim[i]:.6f}")
-
-        print(f"\n{'='*60}")
-        print("METRICS WITH lambda* +/- delta THRESHOLDS (from conformal prediction)")
-        print(f"{'='*60}")
-        print(f"lambda*={lambda_star:.4f}, delta={delta:.4f}")
-        print(f"  Success if p > {lambda_star + delta:.4f}")
-        print(f"  Failure if p < {lambda_star - delta:.4f}")
+        print(f"λ*={lambda_star:.4f}, δ={delta:.4f}")
+        print(f"  Success if p_success > {lambda_star + delta:.4f}")
+        print(f"  Failure if p_success < {lambda_star - delta:.4f}")
         print(f"Invalid %:       {metrics_conformal['invalid_pct']:.2%} (p_invalid >= 0.5)")
         print(f"Uncertain %:     {metrics_conformal['uncertain_pct']:.2%} (multi-modal)")
         print(f"Confident:       {metrics_conformal['n_confident']} predictions")
@@ -464,42 +1001,137 @@ def evaluate_full_roa_fast(
         print(f"Specificity:     {metrics_conformal['specificity']:.2%}")
 
         print(f"\n{'='*60}")
-        print("METRICS WITH FIXED 0.4/0.6 THRESHOLDS")
+        print("METRICS WITH NOTEBOOK-STYLE THRESHOLDS (p_s AND p_f)")
         print(f"{'='*60}")
-        print(f"  Success if p > 0.6")
-        print(f"  Failure if p < 0.4")
-        print(f"Invalid %:       {metrics_fixed['invalid_pct']:.2%} (p_invalid >= 0.5)")
-        print(f"Uncertain %:     {metrics_fixed['uncertain_pct']:.2%} (multi-modal)")
-        print(f"Confident:       {metrics_fixed['n_confident']} predictions")
-        print(f"Accuracy:        {metrics_fixed['accuracy']:.2%}")
-        print(f"F1 Score:        {metrics_fixed['f1']:.2%}")
-        print(f"Precision:       {metrics_fixed['precision']:.2%}")
-        print(f"Recall:          {metrics_fixed['recall']:.2%}")
-        print(f"Specificity:     {metrics_fixed['specificity']:.2%}")
+        print(f"  Success if p_success > 0.6")
+        print(f"  Failure if p_failure > 0.6")
+        print(f"Invalid %:       {metrics_notebook['invalid_pct']:.2%} (p_invalid >= 0.5)")
+        print(f"Uncertain %:     {metrics_notebook['uncertain_pct']:.2%} (multi-modal)")
+        print(f"Confident:       {metrics_notebook['n_confident']} predictions")
+        print(f"  Pred success:  {metrics_notebook['n_pred_success']}")
+        print(f"  Pred failure:  {metrics_notebook['n_pred_failure']}")
+        print(f"Accuracy:        {metrics_notebook['accuracy']:.2%}")
+        print(f"F1 Score:        {metrics_notebook['f1']:.2%}")
+        print(f"Precision:       {metrics_notebook['precision']:.2%}")
+        print(f"Recall:          {metrics_notebook['recall']:.2%}")
+        print(f"Specificity:     {metrics_notebook['specificity']:.2%}")
+
+        if metrics_qhat_conformal is not None:
+            print(f"\n{'='*60}")
+            print("METRICS WITH q_hat CONFORMAL PREDICTION SETS")
+            print(f"{'='*60}")
+            print(f"λ*={lambda_star:.4f}, δ={delta:.4f}, q_hat={q_hat:.4f}")
+            print(f"  Label in prediction set if non-conformity score <= q_hat")
+            print(f"  Confident SUCCESS: prediction set == {{1}}")
+            print(f"  Confident FAILURE: prediction set == {{-1}}")
+            print(f"Invalid %:       {metrics_qhat_conformal['invalid_pct']:.2%} (p_invalid >= 0.5)")
+            print(f"Uncertain %:     {metrics_qhat_conformal['uncertain_pct']:.2%} (multi-label prediction set)")
+            print(f"Confident:       {metrics_qhat_conformal['n_confident']} predictions")
+            print(f"  Pred success:  {metrics_qhat_conformal['n_pred_success']}")
+            print(f"  Pred failure:  {metrics_qhat_conformal['n_pred_failure']}")
+            print(f"Accuracy:        {metrics_qhat_conformal['accuracy']:.2%}")
+            print(f"F1 Score:        {metrics_qhat_conformal['f1']:.2%}")
+            print(f"Precision:       {metrics_qhat_conformal['precision']:.2%}")
+            print(f"Recall:          {metrics_qhat_conformal['recall']:.2%}")
+            print(f"Specificity:     {metrics_qhat_conformal['specificity']:.2%}")
+            print(f"Coverage:        {metrics_qhat_conformal['coverage']:.2%} (true label in pred set)")
+            print(f"Avg set size:    {metrics_qhat_conformal['avg_set_size']:.2f}")
+
+            # Print q_hat-based geodesic error stats
+            print(f"\n{'='*60}")
+            print("GEODESIC ENDPOINT ERROR METRICS (q_hat classification)")
+            print(f"{'='*60}")
+            print(f"Component names: {component_names}")
+
+            for cat_name, stats in [("CERTAIN (q_hat)", error_stats_certain_qhat),
+                                     ("  CERTAIN_SUCCESS (q_hat)", error_stats_certain_success_qhat),
+                                     ("  CERTAIN_FAILURE (q_hat)", error_stats_certain_failure_qhat),
+                                     ("UNCERTAIN (q_hat)", error_stats_uncertain_qhat),
+                                     ("INVALID (q_hat)", error_stats_invalid_qhat)]:
+                print(f"\n  [{cat_name}] (n={stats['n_points']})")
+                if stats['n_points'] > 0:
+                    print(f"    Overall: mean={stats['mean']:.6f}, median={stats['median']:.6f}, var={stats['variance']:.6f}")
+                    print(f"    Per-dim mean:   {[f'{x:.4f}' for x in stats['mean_per_dim']]}")
+                    print(f"    Per-dim median: {[f'{x:.4f}' for x in stats['median_per_dim']]}")
+                    print(f"    Per-dim var:    {[f'{x:.4f}' for x in stats['variance_per_dim']]}")
+
+            # Print q_hat-based hierarchical error stats
+            print(f"\n{'='*60}")
+            print("HIERARCHICAL ERROR STATS (q_hat classification)")
+            print(f"{'='*60}")
+
+            for cat_name, stats in [("CERTAIN (q_hat)", hierarchical_stats_certain_qhat),
+                                     ("  CERTAIN_SUCCESS (q_hat)", hierarchical_stats_certain_success_qhat),
+                                     ("  CERTAIN_FAILURE (q_hat)", hierarchical_stats_certain_failure_qhat),
+                                     ("UNCERTAIN (q_hat)", hierarchical_stats_uncertain_qhat),
+                                     ("INVALID (q_hat)", hierarchical_stats_invalid_qhat)]:
+                print(f"\n  [{cat_name}] (n={stats['n_points']})")
+                if stats['n_points'] > 0:
+                    print(f"    {'L2/L1':<8} {'mean':>12} {'median':>12} {'p90':>12} {'p99':>12}")
+                    print(f"    {'-'*56}")
+                    for l2_agg in ['mean', 'median', 'p90', 'p99']:
+                        row = f"    {l2_agg:<8}"
+                        for l1_agg in ['mean', 'median', 'p90', 'p99']:
+                            key = f"{l2_agg}_of_{l1_agg}s"
+                            row += f" {stats[key]:>12.6f}"
+                        print(row)
 
     # Combine metrics
     metrics = {
         'n_total': n_total,
         'num_mc_samples': num_mc_samples,
+        'attractor_radius': float(attractor_radius),
         'lambda_star': float(lambda_star),
         'delta': float(delta),
         'conformal_thresholds': metrics_conformal,
-        'fixed_thresholds': metrics_fixed,
-        # Keep top-level metrics for backward compatibility (using conformal)
-        'separatrix_pct': metrics_conformal['separatrix_pct'],
-        'accuracy': metrics_conformal['accuracy'],
-        'precision': metrics_conformal['precision'],
-        'recall': metrics_conformal['recall'],
-        'specificity': metrics_conformal['specificity'],
-        'f1': metrics_conformal['f1'],
-        # Endpoint error metrics
+        'notebook_thresholds': metrics_notebook,
+        'qhat_conformal_thresholds': metrics_qhat_conformal,
+        'q_hat': float(q_hat) if q_hat is not None else None,
+        # Keep top-level metrics for backward compatibility (using notebook-style now)
+        'separatrix_pct': metrics_notebook['separatrix_pct'],
+        'accuracy': metrics_notebook['accuracy'],
+        'precision': metrics_notebook['precision'],
+        'recall': metrics_notebook['recall'],
+        'specificity': metrics_notebook['specificity'],
+        'f1': metrics_notebook['f1'],
+        # Endpoint error metrics (geodesic distances by category) - λ*±δ classification
         'endpoint_errors': {
-            'mae': float(endpoint_mae),
-            'mse': float(endpoint_mse),
-            'rmse': float(endpoint_rmse),
-            'mae_per_dim': [float(x) for x in endpoint_mae_per_dim],
-            'mse_per_dim': [float(x) for x in endpoint_mse_per_dim],
+            'component_names': component_names,
+            'full': error_stats_full,
+            'certain': error_stats_certain,
+            'certain_success': error_stats_certain_success,
+            'certain_failure': error_stats_certain_failure,
+            'uncertain': error_stats_uncertain,
+            'invalid': error_stats_invalid,
         },
+        # Hierarchical error metrics (16 combinations) - λ*±δ classification
+        'hierarchical_errors': {
+            'full': hierarchical_stats_full,
+            'certain': hierarchical_stats_certain,
+            'certain_success': hierarchical_stats_certain_success,
+            'certain_failure': hierarchical_stats_certain_failure,
+            'uncertain': hierarchical_stats_uncertain,
+            'invalid': hierarchical_stats_invalid,
+        },
+        # Endpoint error metrics using q_hat-based classification
+        'endpoint_errors_qhat': {
+            'component_names': component_names,
+            'full': error_stats_full,  # Same as above (full dataset)
+            'certain': error_stats_certain_qhat,
+            'certain_success': error_stats_certain_success_qhat,
+            'certain_failure': error_stats_certain_failure_qhat,
+            'uncertain': error_stats_uncertain_qhat,
+            'invalid': error_stats_invalid_qhat,
+        } if q_hat is not None else None,
+        # Hierarchical error metrics using q_hat-based classification
+        'hierarchical_errors_qhat': {
+            'full': hierarchical_stats_full,  # Same as above (full dataset)
+            'certain': hierarchical_stats_certain_qhat,
+            'certain_success': hierarchical_stats_certain_success_qhat,
+            'certain_failure': hierarchical_stats_certain_failure_qhat,
+            'uncertain': hierarchical_stats_uncertain_qhat,
+            'invalid': hierarchical_stats_invalid_qhat,
+        } if q_hat is not None else None,
     }
 
     # Save to files if specified
@@ -510,37 +1142,40 @@ def evaluate_full_roa_fast(
         if verbose:
             print(f"\nSaved metrics to: {output_file}")
 
-        # Save per-point data as NPZ for analysis
+        # Save per-point data as NPZ for analysis (now includes both p_s and p_f)
         npz_file = output_file.replace('.json', '_per_point.npz')
         np.savez(
             npz_file,
             start_states=X_all,           # [N, 2] - (theta, theta_dot)
-            probabilities=success_rate,   # [N] - p_success
-            true_labels=y_all,            # [N] - ground truth labels
+            p_success=p_success,          # [N] - P(MC label == 1)
+            p_failure=p_failure,          # [N] - P(MC label == -1)
+            p_invalid=p_invalid,          # [N] - P(MC label == 0)
+            true_labels=y_all,            # [N] - ground truth labels (1=success, -1=failure)
             lambda_star=lambda_star,
-            delta=delta
+            delta=delta,
+            attractor_radius=attractor_radius
         )
         if verbose:
             print(f"Saved per-point data to: {npz_file}")
-            print(f"  Arrays: start_states [{X_all.shape}], probabilities [{success_rate.shape}], true_labels [{y_all.shape}]")
+            print(f"  Arrays: start_states [{X_all.shape}], p_success [{p_success.shape}], p_failure [{p_failure.shape}], true_labels [{y_all.shape}]")
 
         # Generate ROA phase space plots
         phase_space_file = output_file.replace('.json', '_roa_phase_space.png')
         plot_roa_phase_space(
             start_states=X_all,
-            success_rate=success_rate,
+            success_rate=p_success,
             true_labels=y_all,
             lambda_star=lambda_star,
             delta=delta,
             output_file=phase_space_file,
-            title=f"Pendulum ROA - Epoch Evaluation"
+            title="Pendulum ROA - Epoch Evaluation"
         )
 
         # Generate probability heatmap
         heatmap_file = output_file.replace('.json', '_roa_heatmap.png')
         plot_roa_probability_heatmap(
             start_states=X_all,
-            success_rate=success_rate,
+            success_rate=p_success,
             lambda_star=lambda_star,
             delta=delta,
             output_file=heatmap_file,
@@ -739,6 +1374,8 @@ def main(cfg: DictConfig):
         attractor_radius=cfg.conformal.get('attractor_radius', 0.1),
         # Optimization mode: "lambda" or "delta"
         optimize_mode=cfg.conformal.get('optimize_mode', 'lambda'),
+        # Decision rule: "one_sided" (p_s only) or "two_sided" (p_s and p_f)
+        decision_rule=cfg.conformal.get('decision_rule', 'one_sided'),  # Default one_sided for Pendulum
         lambda_grid_size=cfg.conformal.get('lambda_grid_size', 100),
         delta_grid_size=cfg.conformal.get('delta_grid_size', 100),
         delta_min=cfg.conformal.get('delta_min', 0.01),
@@ -752,8 +1389,7 @@ def main(cfg: DictConfig):
 
     # Adaptive sampling loop
     n_epochs = cfg.get('n_epochs', 10)
-    samples_per_epoch = cfg.get('samples_per_epoch', 50)  # Legacy, used for fixed sampling
-    adaptive_data_max = cfg.get('adaptive_data_max', 50)  # Total samples per epoch (D1 + D2)
+    samples_per_epoch = cfg.get('samples_per_epoch', 50)  # Total samples per epoch (D1 + D2)
     d2_ratio = cfg.get('d2_ratio', 0.5)  # Fraction for uncertainty-filtered sampling
     warm_start = cfg.get('warm_start', False)
 
@@ -795,8 +1431,8 @@ def main(cfg: DictConfig):
         if epoch_ckpts:
             previous_best_checkpoint = epoch_ckpts[0]
 
-        # Step 2: Create conformal predictor
-        print(f"\n[2] Creating conformal predictor...")
+        # Step 2: Create conformal predictor and optimize λ*/δ* on training data
+        print(f"\n[2] Creating conformal predictor and optimizing λ*/δ*...")
         conformal_predictor = ConformalPredictor(
             flow_matcher=flow_matcher,
             system=system,
@@ -804,37 +1440,115 @@ def main(cfg: DictConfig):
             device=device,
         )
 
-        # Step 3: Get training labels for lambda optimization
+        # Get training labels for lambda/delta optimization
         X_train, y_train = dataset_builder.get_train_labels()
 
-        # Split training data for calibration
-        n_train = len(y_train)
-        cal_ratio = cfg.conformal.get('calibration_ratio', 0.3)
-        n_cal = int(n_train * cal_ratio)
-        perm = np.random.permutation(n_train)
-        cal_idx = perm[:n_cal]
-        train_idx = perm[n_cal:]
+        threshold_mode = cfg.conformal.get('threshold_mode', 'dynamic')
 
-        X_cal, y_cal = X_train[cal_idx], y_train[cal_idx]
-        X_opt, y_opt = X_train[train_idx], y_train[train_idx]
+        if threshold_mode == "fixed":
+            # Fixed mode: skip optimization, use fixed thresholds
+            fixed_lambda_star = cfg.conformal.get('fixed_lambda_star', 0.5)
+            fixed_delta_star = cfg.conformal.get('fixed_delta_star', 0.1)
+            conformal_predictor.lambda_star = fixed_lambda_star
+            conformal_predictor.delta_star = fixed_delta_star
+            print(f"    Using fixed thresholds: λ* = {fixed_lambda_star:.4f}, δ* = {fixed_delta_star:.4f}")
+        else:
+            # Dynamic mode: optimize λ*/δ* on ALL training data (no split)
+            lambda_star, delta_star, opt_info = conformal_predictor.optimize_thresholds(
+                X_train, y_train, verbose=True
+            )
 
-        # Step 4: Fit conformal predictor
-        print(f"\n[3] Fitting conformal predictor...")
-        conformal_predictor.fit(X_opt, y_opt, X_cal, y_cal, verbose=True)
+        lambda_star = conformal_predictor.lambda_star
+        delta_star = conformal_predictor.delta_star
+        print(f"    λ* = {lambda_star:.4f}, δ* = {delta_star:.4f}")
 
-        # Step 5: Evaluate on test set (subset of training)
-        print(f"\n[4] Evaluating on test set...")
+        # Step 3: Sample D1 (calibration set)
+        print(f"\n[3] Sampling D1 (calibration set)...")
+
+        # Compute target sizes
+        n_d1_target = int(samples_per_epoch * (1 - d2_ratio))
+        n_d2_target = samples_per_epoch - n_d1_target
+
+        # Sample D1 candidates (for calibration)
+        d1_states, d1_indices = dataset_builder.sample_candidates_without_marking(n_d1_target)
+
+        if len(d1_indices) == 0:
+            print("    No more trajectories available!")
+            break
+
+        # Get TRUE LABELS for D1 from shuffled_labels.txt
+        d1_labels = dataset_builder.data_source.get_labels(d1_indices)
+
+        # Mark D1 as USED and add to training
+        dataset_builder.mark_indices_as_used(d1_indices)
+        dataset_builder.add_to_training_balanced(d1_indices)
+
+        print(f"    D1: {len(d1_indices)} calibration points sampled and added to training")
+
+        # Step 4: Calibrate q_hat using D1
+        print(f"\n[4] Calibrating q_hat on D1...")
+        q_hat = conformal_predictor.calibrate_qhat(d1_states, d1_labels, verbose=True)
+        print(f"    q_hat = {q_hat:.4f}")
+
+        # Step 5: Sample D2 (uncertain) using q_hat
+        print(f"\n[5] Sampling D2 (uncertain) using q_hat...")
+
+        # Create probability estimator for uncertainty evaluation
+        prob_estimator = ProbabilityEstimator(
+            flow_matcher=flow_matcher,
+            system=system,
+            config=conformal_config,
+            device=device
+        )
+
+        # Create uncertain sampler
+        uncertain_sampler = UncertainSampler(
+            dataset_builder=dataset_builder,
+            target_count=n_d2_target,
+            batch_size=cfg.get('batch_size_sampling', 50),
+            max_candidates=cfg.get('max_samples_per_epoch', 50000),
+        )
+
+        # Sample D2 using q_hat-based classification
+        decision_rule = cfg.conformal.get('decision_rule', 'one_sided')
+        sample_result = uncertain_sampler.sample(
+            prob_estimator=prob_estimator,
+            calibrator=conformal_predictor.calibrator,
+            lambda_star=lambda_star,
+            delta_star=delta_star,
+            q_hat=q_hat,
+            decision_rule=decision_rule,
+            exclude=set(d1_indices),  # Don't re-sample D1
+            verbose=True
+        )
+
+        # D2 results
+        d2_indices = sample_result.uncertain_indices
+        n_d2 = len(d2_indices)
+        n_certain_discarded = sample_result.n_certain_discarded
+
+        # Mark D2 as used and add to training
+        if n_d2 > 0:
+            dataset_builder.mark_indices_as_used(d2_indices)
+            dataset_builder.add_to_training_balanced(d2_indices)
+
+        print(f"\n[6] Summary of sampling this epoch...")
+        print(f"    D1 (calibration): {len(d1_indices)} points (added)")
+        print(f"    D2 (uncertain):   {n_d2} points (added)")
+        print(f"    Total added:      {len(d1_indices) + n_d2}")
+        print(f"    Discarded (certain, stay in pool): {n_certain_discarded}")
+        print(f"    D2 candidates evaluated: {sample_result.n_candidates_evaluated} over {sample_result.n_batches} batches")
+
+        # Step 7: Evaluate on test set (subset of training)
+        print(f"\n[7] Evaluating on test set...")
         X_test, y_test = dataset_builder.get_test_labels()
         test_metrics = conformal_predictor.evaluate(X_test, y_test, verbose=True)
 
-        # Step 5b: Evaluate on FULL eval_states.txt (fast batched)
+        # Step 8: Evaluate on FULL eval_states.txt (fast batched)
         num_mc_samples_eval = cfg.conformal.get('num_mc_samples_eval', 20)
-        conformal_state = conformal_predictor.get_state()
-        lambda_star = conformal_state['lambda_star']
-        delta_star = conformal_state['delta_star']  # Use optimized delta (may differ from config if optimize_mode="delta")
 
-        print(f"\n[5] Evaluating on FULL eval_states.txt ({num_mc_samples_eval} MC samples, fast batched)...")
-        print(f"    Using lambda*={lambda_star:.4f} +/- delta*={delta_star:.4f} from conformal prediction")
+        print(f"\n[8] Evaluating on FULL eval_states.txt ({num_mc_samples_eval} MC samples, fast batched)...")
+        print(f"    Using λ*={lambda_star:.4f} ± δ*={delta_star:.4f}, q_hat={q_hat:.4f} from conformal prediction")
         full_roa_output_file = epoch_output_dir / "full_roa_evaluation.json"
         full_roa_metrics = evaluate_full_roa_fast(
             flow_matcher=flow_matcher,
@@ -844,104 +1558,15 @@ def main(cfg: DictConfig):
             batch_size=cfg.get('val_batch_size', 2048),
             lambda_star=lambda_star,
             delta=delta_star,
+            q_hat=q_hat,
             attractor_radius=cfg.conformal.get('attractor_radius', 0.1),
             device=device,
             output_file=str(full_roa_output_file),
             verbose=True
         )
 
-        # Step 6: Sample candidates based on strategy
-        sampling_strategy = cfg.get('sampling_strategy', 'fixed')
-
-        if sampling_strategy == 'balanced_uncertain':
-            # Balanced Uncertain Sampling: sample until |uncertain| == |D1|
-            print(f"\n[6] Balanced Uncertain Sampling...")
-
-            # Create probability estimator for uncertainty evaluation
-            prob_estimator = ProbabilityEstimator(
-                flow_matcher=flow_matcher,
-                system=system,
-                config=conformal_config,
-                device=device
-            )
-
-            # Create balanced sampler
-            balanced_sampler = BalancedUncertainSampler(
-                dataset_builder=dataset_builder,
-                adaptive_data_max=adaptive_data_max,
-                d2_ratio=d2_ratio,
-                batch_size=cfg.get('batch_size_sampling', 50),
-                max_samples=cfg.get('max_samples_per_epoch', 50000),
-            )
-
-            # Sample epoch
-            sample_result = balanced_sampler.sample_epoch(
-                prob_estimator=prob_estimator,
-                lambda_star=lambda_star,
-                delta_star=delta_star,
-                verbose=True
-            )
-
-            if len(sample_result.d1_indices) == 0 and len(sample_result.d2_indices) == 0:
-                print("No more trajectories available!")
-                break
-
-            # Add D1 and D2 to training
-            d1_indices = sample_result.d1_indices
-            d2_indices = sample_result.d2_indices
-
-            print(f"\n[7] Adding to training...")
-            dataset_builder.add_to_training_balanced(d1_indices)
-            dataset_builder.add_to_training_balanced(d2_indices)
-
-            n_d2 = len(d2_indices)
-            n_confident = sample_result.n_discarded_certain
-            n_total_sampled = sample_result.n_total_sampled
-
-            print(f"    Added: D1={len(d1_indices)}, D2={n_d2}, Total={len(d1_indices) + n_d2}")
-            print(f"    Discarded (certain, stay in pool): {n_confident}")
-            print(f"    Total evaluated: {n_total_sampled} over {sample_result.n_batches} batches")
-
-        else:
-            # Fixed sampling (original behavior)
-            print(f"\n[6] Fixed Sampling: {samples_per_epoch} candidate trajectories...")
-            candidate_states, candidate_indices = dataset_builder.get_candidate_states(samples_per_epoch)
-
-            if len(candidate_indices) == 0:
-                print("No more trajectories available!")
-                break
-
-            # Split into D1 (calibration) and D2 (selection pool)
-            n_d1 = int(len(candidate_indices) * d1_ratio)
-            d1_indices = candidate_indices[:n_d1]
-            d2_indices = candidate_indices[n_d1:]
-            d2_states = candidate_states[n_d1:]
-
-            print(f"    D1 (always add): {len(d1_indices)} trajectories")
-            print(f"    D2 (selective): {len(d2_indices)} trajectories")
-
-            # Always add D1 to training
-            dataset_builder.add_selected_to_training(d1_indices)
-
-            # Evaluate D2 for uncertainty
-            if len(d2_indices) > 0:
-                print(f"\n[7] Evaluating D2 for uncertain points...")
-                uncertain_mask, uncertain_idx, p_success, _ = conformal_predictor.select_uncertain(d2_states)
-
-                n_uncertain = np.sum(uncertain_mask)
-                n_confident = len(d2_indices) - n_uncertain
-                print(f"    Uncertain: {n_uncertain} trajectories")
-                print(f"    Confident: {n_confident} trajectories (skipped)")
-
-                # Add only uncertain trajectories from D2
-                uncertain_traj_indices = [d2_indices[i] for i in range(len(d2_indices)) if uncertain_mask[i]]
-                dataset_builder.add_selected_to_training(uncertain_traj_indices)
-            else:
-                n_uncertain = 0
-                n_confident = 0
-
-        # Rebuild datasets with new data
-        print(f"\n[8] Rebuilding datasets...")
+        # Step 9: Rebuild datasets with new data
+        print(f"\n[9] Rebuilding datasets...")
         dataset_files = dataset_builder.build_all_datasets()
 
         # Record epoch results
@@ -950,7 +1575,7 @@ def main(cfg: DictConfig):
             'train_trajectories': train_trajectories_this_epoch,
             'n_d1_added': len(d1_indices),
             'n_d2_added': int(n_d2),
-            'n_discarded_certain': int(n_confident),
+            'n_discarded_certain': int(n_certain_discarded),
             # Conformal parameters
             'lambda_star': float(conformal_predictor.lambda_star),
             'delta_star': float(conformal_predictor.delta_star),
@@ -970,13 +1595,13 @@ def main(cfg: DictConfig):
         print("-" * 70)
         print(f"  Training trajectories: {epoch_result['train_trajectories']}")
         print(f"  Added this epoch: {len(d1_indices) + n_d2} (D1={len(d1_indices)}, D2={n_d2})")
-        print(f"  Skipped (confident): {n_confident}")
-        print(f"  lambda* = {epoch_result['lambda_star']:.4f}, delta* = {epoch_result['delta_star']:.4f}, q_hat = {epoch_result['q_hat']:.4f}")
+        print(f"  Discarded (certain): {n_certain_discarded}")
+        print(f"  λ* = {epoch_result['lambda_star']:.4f}, δ* = {epoch_result['delta_star']:.4f}, q_hat = {epoch_result['q_hat']:.4f}")
         print(f"  --- Full ROA (all {full_roa_metrics['n_total']} trajectories) ---")
         conf_m = full_roa_metrics['conformal_thresholds']
-        fixed_m = full_roa_metrics['fixed_thresholds']
-        print(f"  [lambda*+/-delta] Sep%={conf_m['separatrix_pct']:.1%}, F1={conf_m['f1']:.2%}, Acc={conf_m['accuracy']:.2%}")
-        print(f"  [0.4/0.6] Sep%={fixed_m['separatrix_pct']:.1%}, F1={fixed_m['f1']:.2%}, Acc={fixed_m['accuracy']:.2%}")
+        notebook_m = full_roa_metrics['notebook_thresholds']
+        print(f"  [λ*±δ] Sep%={conf_m['separatrix_pct']:.1%}, F1={conf_m['f1']:.2%}, Acc={conf_m['accuracy']:.2%}")
+        print(f"  [Notebook p_s/p_f>0.6] Sep%={notebook_m['separatrix_pct']:.1%}, F1={notebook_m['f1']:.2%}, Acc={notebook_m['accuracy']:.2%}")
 
         # Save epoch results
         with open(epoch_output_dir / "results.json", 'w') as f:
@@ -1020,20 +1645,20 @@ def main(cfg: DictConfig):
     print(f"Available remaining: {stats['available_trajectories']} trajectories")
 
     if epoch_results:
-        print(f"\n--- Full ROA Metrics Progression (Initial -> Final) ---")
+        print(f"\n--- Full ROA Metrics Progression (Initial → Final) ---")
         first = epoch_results[0]['full_roa']
         last = epoch_results[-1]['full_roa']
-        print(f"\n  [lambda*+/-delta* Thresholds]")
-        print(f"  Separatrix %:  {first['conformal_thresholds']['separatrix_pct']:.2%} -> {last['conformal_thresholds']['separatrix_pct']:.2%}")
-        print(f"  F1 Score:      {first['conformal_thresholds']['f1']:.2%} -> {last['conformal_thresholds']['f1']:.2%}")
-        print(f"  Accuracy:      {first['conformal_thresholds']['accuracy']:.2%} -> {last['conformal_thresholds']['accuracy']:.2%}")
-        print(f"\n  [Fixed 0.4/0.6 Thresholds]")
-        print(f"  Separatrix %:  {first['fixed_thresholds']['separatrix_pct']:.2%} -> {last['fixed_thresholds']['separatrix_pct']:.2%}")
-        print(f"  F1 Score:      {first['fixed_thresholds']['f1']:.2%} -> {last['fixed_thresholds']['f1']:.2%}")
-        print(f"  Accuracy:      {first['fixed_thresholds']['accuracy']:.2%} -> {last['fixed_thresholds']['accuracy']:.2%}")
-        print(f"\n  lambda*:       {epoch_results[0]['lambda_star']:.4f} -> {epoch_results[-1]['lambda_star']:.4f}")
-        print(f"  delta*:        {epoch_results[0]['delta_star']:.4f} -> {epoch_results[-1]['delta_star']:.4f}")
-        print(f"  q_hat:         {epoch_results[0]['q_hat']:.4f} -> {epoch_results[-1]['q_hat']:.4f}")
+        print(f"\n  [λ*±δ* Thresholds]")
+        print(f"  Separatrix %:  {first['conformal_thresholds']['separatrix_pct']:.2%} → {last['conformal_thresholds']['separatrix_pct']:.2%}")
+        print(f"  F1 Score:      {first['conformal_thresholds']['f1']:.2%} → {last['conformal_thresholds']['f1']:.2%}")
+        print(f"  Accuracy:      {first['conformal_thresholds']['accuracy']:.2%} → {last['conformal_thresholds']['accuracy']:.2%}")
+        print(f"\n  [Notebook-Style Thresholds (p_s/p_f > 0.6)]")
+        print(f"  Separatrix %:  {first['notebook_thresholds']['separatrix_pct']:.2%} → {last['notebook_thresholds']['separatrix_pct']:.2%}")
+        print(f"  F1 Score:      {first['notebook_thresholds']['f1']:.2%} → {last['notebook_thresholds']['f1']:.2%}")
+        print(f"  Accuracy:      {first['notebook_thresholds']['accuracy']:.2%} → {last['notebook_thresholds']['accuracy']:.2%}")
+        print(f"\n  λ*:            {epoch_results[0]['lambda_star']:.4f} → {epoch_results[-1]['lambda_star']:.4f}")
+        print(f"  δ*:            {epoch_results[0]['delta_star']:.4f} → {epoch_results[-1]['delta_star']:.4f}")
+        print(f"  q_hat:         {epoch_results[0]['q_hat']:.4f} → {epoch_results[-1]['q_hat']:.4f}")
 
     # Save final results
     with open(output_dir / "final_results.json", 'w') as f:

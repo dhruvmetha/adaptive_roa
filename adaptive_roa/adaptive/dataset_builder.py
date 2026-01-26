@@ -38,9 +38,10 @@ class AdaptiveDatasetBuilder:
     Tracks which trajectory indices are assigned to train/val/test splits.
     Builds endpoint dataset files on demand for flow matcher training.
 
-    Supports two sampling modes:
-    1. Sequential (default): Uses pointer, indices 0, 1, 2, ... in sequence
-    2. Balanced: Uses explicit "used" set, allows discarding without marking
+    Uses a set-based tracking approach (`used_indices`) that allows:
+    - Sampling candidates without permanently marking them
+    - Discarding "certain" points back to the pool
+    - Keeping only "uncertain" points for training
 
     Key responsibilities:
     - Manage train/val/test index splits
@@ -52,7 +53,6 @@ class AdaptiveDatasetBuilder:
         data_source: TrajectoryDataSource providing access to trajectory data
         train_split: Indices assigned to training
         output_dir: Directory for saving dataset files
-        next_available_idx: Pointer to next unused index in sequential order
         used_indices: Set of indices that have been added to training
     """
 
@@ -80,10 +80,7 @@ class AdaptiveDatasetBuilder:
         self.val_ratio = val_ratio
         self.test_ratio = test_ratio
 
-        # Sequential pointer - tracks next available index (for sequential mode)
-        self.next_available_idx = 0
-
-        # Explicit used set - tracks indices added to training (for balanced mode)
+        # Tracks indices added to training (used for sampling available candidates)
         self.used_indices: set = set()
 
         # All trajectories available for training (no reserved sets)
@@ -91,38 +88,6 @@ class AdaptiveDatasetBuilder:
 
         print(f"Total trajectories available: {self.max_train_idx}")
         print(f"Val/test will be {val_ratio:.0%}/{test_ratio:.0%} of training set (with overlap)")
-
-    def get_next_batch(self, n: int) -> List[int]:
-        """
-        Get next n trajectory indices in sequential order.
-
-        This is the PRIMARY method for getting new data. It maintains
-        the ordering from shuffled_indices.txt.
-
-        Args:
-            n: Number of trajectories to get
-
-        Returns:
-            List of trajectory indices (sequential from current pointer)
-        """
-        # Calculate how many we can actually get
-        remaining = self.max_train_idx - self.next_available_idx
-        n_actual = min(n, remaining)
-
-        if n_actual == 0:
-            print(f"WARNING: No more trajectories available for training!")
-            return []
-
-        if n_actual < n:
-            print(f"WARNING: Only {n_actual} trajectories remaining (requested {n})")
-
-        # Get sequential indices
-        indices = list(range(self.next_available_idx, self.next_available_idx + n_actual))
-
-        # Update pointer
-        self.next_available_idx += n_actual
-
-        return indices
 
     def add_to_training(self, indices: List[int]):
         """
@@ -238,8 +203,13 @@ class AdaptiveDatasetBuilder:
         Returns:
             List of trajectory indices
         """
-        indices = self.get_next_batch(n)
-        self.add_to_training(indices)
+        # Take first n indices (0, 1, 2, ..., n-1)
+        n_actual = min(n, self.max_train_idx)
+        if n_actual < n:
+            print(f"WARNING: Only {n_actual} trajectories available (requested {n})")
+
+        indices = list(range(n_actual))
+        self.add_to_training_balanced(indices)
         return indices
 
     def build_train_dataset(self, filename: str = "train_endpoint_dataset.txt") -> str:
@@ -374,7 +344,12 @@ class AdaptiveDatasetBuilder:
         """
         Get candidate start states from available pool for evaluation.
 
-        Uses sequential sampling to maintain the ordering from shuffled_indices.txt.
+        Takes the first n available (unused) indices, maintaining the
+        ordering from shuffled_indices.txt.
+
+        Note: This method does NOT mark indices as used. Call
+        mark_indices_as_used() or add_to_training_balanced() after
+        deciding which indices to keep.
 
         Args:
             n: Number of candidates to sample
@@ -382,12 +357,7 @@ class AdaptiveDatasetBuilder:
         Returns:
             Tuple of (start_states [n, dim], trajectory_indices)
         """
-        indices = self.get_next_batch(n)
-        if len(indices) == 0:
-            return np.array([]), []
-
-        starts = self.data_source.get_start_states(indices)
-        return starts, indices
+        return self.sample_candidates_without_marking(n)
 
     def add_selected_to_training(self, indices: List[int]):
         """
@@ -404,43 +374,32 @@ class AdaptiveDatasetBuilder:
         """Get current dataset statistics."""
         train_stats = self.data_source.get_statistics(list(self.train_split))
 
-        # Available = indices not in used_indices (for balanced mode)
-        available_balanced = self.get_n_available()
-        # Available = indices from next_available_idx (for sequential mode)
-        available_sequential = self.max_train_idx - self.next_available_idx
-
         return {
             'train_trajectories': len(self.train_split),
             'used_trajectories': len(self.used_indices),
-            'available_trajectories': available_balanced,
-            'available_sequential': available_sequential,
-            'next_available_idx': self.next_available_idx,
+            'available_trajectories': self.get_n_available(),
             'max_train_idx': self.max_train_idx,
             'train_success_rate': train_stats['success_rate'],
         }
 
     def save_state(self, filepath: str):
-        """Save current state (indices, pointer, and used set) to file."""
+        """Save current state (indices and used set) to file."""
         import json
         state = {
             'train_indices': list(self.train_split),
             'used_indices': list(self.used_indices),
-            'next_available_idx': self.next_available_idx,
             'max_train_idx': self.max_train_idx,
         }
         with open(filepath, 'w') as f:
             json.dump(state, f, indent=2)
 
     def load_state(self, filepath: str):
-        """Load state (indices, pointer, and used set) from file."""
+        """Load state (indices and used set) from file."""
         import json
         with open(filepath, 'r') as f:
             state = json.load(f)
 
         self.train_split = DatasetSplit(state['train_indices'])
-
-        # Restore sequential pointer
-        self.next_available_idx = state['next_available_idx']
         self.max_train_idx = state['max_train_idx']
 
         # Restore used indices set (with backward compatibility)

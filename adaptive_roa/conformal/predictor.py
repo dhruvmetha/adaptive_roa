@@ -73,6 +73,157 @@ class ConformalPredictor:
         self.q_hat: Optional[float] = None
         self.fit_info: Optional[Dict] = None
 
+    def optimize_thresholds(
+        self,
+        X_train: Union[torch.Tensor, np.ndarray],
+        y_train: Union[torch.Tensor, np.ndarray],
+        verbose: bool = True
+    ) -> Tuple[float, float, Dict]:
+        """
+        Optimize λ* and δ* on training data. NO q_hat calibration.
+
+        This is the first step of the new two-phase fitting:
+        1. optimize_thresholds() - find optimal λ*/δ* on training data
+        2. calibrate_qhat() - calibrate q_hat on separate calibration data (e.g., D1)
+
+        Args:
+            X_train: [N_train, state_dim] training states
+            y_train: [N_train] training labels (-1 or 1)
+            verbose: Print optimization progress
+
+        Returns:
+            Tuple of (lambda_star, delta_star, optimization_info)
+        """
+        # Convert to numpy if needed
+        if isinstance(y_train, torch.Tensor):
+            y_train = y_train.cpu().numpy()
+
+        optimize_mode = self.config.optimize_mode
+        decision_rule = self.config.decision_rule
+
+        if verbose:
+            print("=" * 60)
+            print("OPTIMIZING THRESHOLDS (λ*/δ*)")
+            print("=" * 60)
+            print(f"Training set: {len(y_train)} points")
+            print(f"Optimization mode: {optimize_mode}")
+            print(f"Decision rule: {decision_rule}")
+
+        # Step 1: Estimate probabilities for training set
+        if verbose:
+            print(f"\n[1/2] Estimating probabilities for training set ({self.config.num_mc_samples} MC samples)...")
+        p_train_success, p_train_failure, _ = self.prob_estimator.estimate(X_train)
+
+        # Step 2: Optimize λ* or δ* depending on mode
+        p_failure_for_opt = p_train_failure if decision_rule == "two_sided" else None
+
+        if optimize_mode == "delta":
+            if verbose:
+                print(f"[2/2] Optimizing δ* via grid search with fixed λ=0.5 ({self.config.delta_grid_size} points)...")
+            self.lambda_star, self.delta_star, opt_info = self.lambda_optimizer.optimize(
+                p_train_success, y_train, p_failure=p_failure_for_opt
+            )
+            if verbose:
+                print(f"      → λ = {self.lambda_star:.4f} (fixed)")
+                print(f"      → δ* = {self.delta_star:.4f}")
+                print(f"      → Best loss = {opt_info['best_loss']:.4f}")
+                print(f"      → Misclass rate = {opt_info['best_misclass_rate']:.2%}")
+                print(f"      → Unknown rate = {opt_info['best_unknown_rate']:.2%}")
+        else:
+            if verbose:
+                print(f"[2/2] Optimizing λ* via grid search with fixed δ={self.config.delta} ({self.config.lambda_grid_size} points)...")
+            self.lambda_star, self.delta_star, opt_info = self.lambda_optimizer.optimize(
+                p_train_success, y_train, p_failure=p_failure_for_opt
+            )
+            if verbose:
+                print(f"      → λ* = {self.lambda_star:.4f}")
+                print(f"      → δ = {self.delta_star:.4f} (fixed)")
+                print(f"      → Best loss = {opt_info['best_loss']:.4f}")
+                print(f"      → Misclass rate = {opt_info['best_misclass_rate']:.2%}")
+                print(f"      → Unknown rate = {opt_info['best_unknown_rate']:.2%}")
+
+        if verbose:
+            print("=" * 60)
+            print("THRESHOLD OPTIMIZATION COMPLETE (q_hat NOT yet calibrated)")
+            print("=" * 60)
+
+        return self.lambda_star, self.delta_star, opt_info
+
+    def calibrate_qhat(
+        self,
+        X_cal: Union[torch.Tensor, np.ndarray],
+        y_cal: Union[torch.Tensor, np.ndarray],
+        verbose: bool = True
+    ) -> float:
+        """
+        Calibrate q_hat on calibration data using stored λ*, δ*.
+
+        Must call optimize_thresholds() first to set λ* and δ*.
+
+        This is the second step of the new two-phase fitting:
+        1. optimize_thresholds() - find optimal λ*/δ* on training data
+        2. calibrate_qhat() - calibrate q_hat on separate calibration data (e.g., D1)
+
+        Args:
+            X_cal: [N_cal, state_dim] calibration states
+            y_cal: [N_cal] calibration labels (-1 or 1)
+            verbose: Print calibration progress
+
+        Returns:
+            q_hat (calibration threshold)
+        """
+        if self.lambda_star is None or self.delta_star is None:
+            raise RuntimeError("Must call optimize_thresholds() before calibrate_qhat()")
+
+        # Convert to numpy if needed
+        if isinstance(y_cal, torch.Tensor):
+            y_cal = y_cal.cpu().numpy()
+
+        decision_rule = self.config.decision_rule
+
+        if verbose:
+            print("=" * 60)
+            print("CALIBRATING q_hat")
+            print("=" * 60)
+            print(f"Calibration set: {len(y_cal)} points")
+            print(f"Using λ* = {self.lambda_star:.4f}, δ* = {self.delta_star:.4f}")
+            print(f"Decision rule: {decision_rule}")
+
+        # Step 1: Estimate probabilities for calibration set
+        if verbose:
+            print(f"\n[1/2] Estimating probabilities for calibration set ({self.config.num_mc_samples} MC samples)...")
+        p_cal_success, p_cal_failure, _ = self.prob_estimator.estimate(X_cal)
+
+        # Step 2: Calibrate q_hat
+        p_failure_for_cal = p_cal_failure if decision_rule == "two_sided" else None
+
+        if verbose:
+            print(f"[2/2] Calibrating q_hat (α={self.config.alpha}, coverage={1-self.config.alpha:.0%})...")
+        self.q_hat = self.calibrator.calibrate(
+            p_cal_success, y_cal, self.lambda_star, self.delta_star, p_failure_for_cal
+        )
+        if verbose:
+            print(f"      → q_hat = {self.q_hat:.4f}")
+
+        # Update fit_info
+        self.fit_info = {
+            'lambda_star': self.lambda_star,
+            'delta_star': self.delta_star,
+            'q_hat': self.q_hat,
+            'n_train': 0,  # Not tracked in two-phase approach
+            'n_cal': len(y_cal),
+            'optimization_info': None,  # Already done in optimize_thresholds()
+            'optimize_mode': self.config.optimize_mode,
+            'decision_rule': decision_rule,
+        }
+
+        if verbose:
+            print("=" * 60)
+            print("q_hat CALIBRATION COMPLETE")
+            print("=" * 60)
+
+        return self.q_hat
+
     def fit(
         self,
         X_train: Union[torch.Tensor, np.ndarray],
@@ -178,6 +329,84 @@ class ConformalPredictor:
             'n_cal': len(y_cal),
             'optimization_info': opt_info,
             'optimize_mode': optimize_mode,
+            'decision_rule': decision_rule,
+        }
+
+        if verbose:
+            print("=" * 60)
+            print("FITTING COMPLETE")
+            print("=" * 60)
+
+        return self.fit_info
+
+    def fit_with_fixed_thresholds(
+        self,
+        X_cal: Union[torch.Tensor, np.ndarray],
+        y_cal: Union[torch.Tensor, np.ndarray],
+        lambda_star: float,
+        delta_star: float,
+        verbose: bool = True
+    ) -> Dict:
+        """
+        Fit conformal predictor with fixed thresholds (skip optimization).
+
+        Only calibrates q_hat using the fixed λ* and δ* values.
+        Use this when you want to skip the threshold optimization step
+        and use predetermined thresholds.
+
+        Args:
+            X_cal: [N_cal, state_dim] calibration states
+            y_cal: [N_cal] calibration labels (-1 or 1)
+            lambda_star: Fixed decision boundary
+            delta_star: Fixed uncertainty half-width
+            verbose: Print fitting progress
+
+        Returns:
+            Dict with fitting information
+        """
+        if isinstance(y_cal, torch.Tensor):
+            y_cal = y_cal.cpu().numpy()
+
+        decision_rule = self.config.decision_rule
+
+        if verbose:
+            print("=" * 60)
+            print("FITTING WITH FIXED THRESHOLDS (no optimization)")
+            print("=" * 60)
+            print(f"Calibration set: {len(y_cal)} points")
+            print(f"Fixed λ* = {lambda_star:.4f}")
+            print(f"Fixed δ* = {delta_star:.4f}")
+            print(f"Decision rule: {decision_rule}")
+
+        # Set fixed thresholds
+        self.lambda_star = lambda_star
+        self.delta_star = delta_star
+
+        # Step 1: Estimate probabilities for calibration set
+        if verbose:
+            print(f"\n[1/2] Estimating probabilities for calibration set ({self.config.num_mc_samples} MC samples)...")
+        p_cal_success, p_cal_failure, _ = self.prob_estimator.estimate(X_cal)
+
+        # Step 2: Calibrate q_hat with fixed thresholds
+        p_failure_for_cal = p_cal_failure if decision_rule == "two_sided" else None
+
+        if verbose:
+            print(f"[2/2] Calibrating q_hat (α={self.config.alpha}, coverage={1-self.config.alpha:.0%})...")
+        self.q_hat = self.calibrator.calibrate(
+            p_cal_success, y_cal, self.lambda_star, self.delta_star, p_failure_for_cal
+        )
+        if verbose:
+            print(f"      → q_hat = {self.q_hat:.4f}")
+
+        # Store fit info
+        self.fit_info = {
+            'lambda_star': self.lambda_star,
+            'delta_star': self.delta_star,
+            'q_hat': self.q_hat,
+            'n_train': 0,  # No training data used (no optimization)
+            'n_cal': len(y_cal),
+            'optimization_info': None,  # No optimization performed
+            'optimize_mode': 'fixed',
             'decision_rule': decision_rule,
         }
 

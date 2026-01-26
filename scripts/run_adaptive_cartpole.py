@@ -1464,6 +1464,7 @@ def main(cfg: DictConfig):
         X_train, y_train = dataset_builder.get_train_labels()
 
         threshold_mode = cfg.conformal.get('threshold_mode', 'dynamic')
+        conformal_verbose = cfg.conformal.get('verbose', True)
 
         if threshold_mode == "fixed":
             # Fixed mode: skip optimization, use fixed thresholds
@@ -1475,7 +1476,7 @@ def main(cfg: DictConfig):
         else:
             # Dynamic mode: optimize λ*/δ* on ALL training data (no split)
             lambda_star, delta_star, opt_info = conformal_predictor.optimize_thresholds(
-                X_train, y_train, verbose=True
+                X_train, y_train, verbose=conformal_verbose
             )
 
         lambda_star = conformal_predictor.lambda_star
@@ -1507,7 +1508,7 @@ def main(cfg: DictConfig):
 
         # Step 4: Calibrate q_hat using D1
         print(f"\n[4] Calibrating q_hat on D1...")
-        q_hat = conformal_predictor.calibrate_qhat(d1_states, d1_labels, verbose=True)
+        q_hat = conformal_predictor.calibrate_qhat(d1_states, d1_labels, verbose=conformal_verbose)
         print(f"    q_hat = {q_hat:.4f}")
 
         # Step 5: Sample D2 (uncertain) using q_hat
@@ -1539,7 +1540,7 @@ def main(cfg: DictConfig):
             q_hat=q_hat,
             decision_rule=decision_rule,
             exclude=set(d1_indices),  # Don't re-sample D1
-            verbose=True
+            verbose=conformal_verbose
         )
 
         # D2 results
@@ -1562,7 +1563,7 @@ def main(cfg: DictConfig):
         # Step 7: Evaluate on test set (subset of training)
         print(f"\n[7] Evaluating on test set...")
         X_test, y_test = dataset_builder.get_test_labels()
-        test_metrics = conformal_predictor.evaluate(X_test, y_test, verbose=True)
+        test_metrics = conformal_predictor.evaluate(X_test, y_test, verbose=conformal_verbose)
 
         # Step 8: Evaluate on FULL eval_states.txt (fast batched)
         num_mc_samples_eval = cfg.conformal.get('num_mc_samples_eval', 20)
@@ -1582,7 +1583,7 @@ def main(cfg: DictConfig):
             attractor_radius=cfg.conformal.get('attractor_radius', 0.2),
             device=device,
             output_file=str(full_roa_output_file),
-            verbose=True
+            verbose=conformal_verbose
         )
 
         # Step 9: Rebuild datasets with new data

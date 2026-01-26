@@ -200,7 +200,8 @@ class ConformalPredictor:
         if verbose:
             print(f"[2/2] Calibrating q_hat (α={self.config.alpha}, coverage={1-self.config.alpha:.0%})...")
         self.q_hat = self.calibrator.calibrate(
-            p_cal_success, y_cal, self.lambda_star, self.delta_star, p_failure_for_cal
+            p_cal_success, y_cal, self.lambda_star, self.delta_star, p_failure_for_cal,
+            verbose=verbose
         )
         if verbose:
             print(f"      → q_hat = {self.q_hat:.4f}")
@@ -315,7 +316,8 @@ class ConformalPredictor:
         if verbose:
             print(f"[4/4] Calibrating q_hat (α={self.config.alpha}, coverage={1-self.config.alpha:.0%})...")
         self.q_hat = self.calibrator.calibrate(
-            p_cal_success, y_cal, self.lambda_star, self.delta_star, p_failure_for_cal
+            p_cal_success, y_cal, self.lambda_star, self.delta_star, p_failure_for_cal,
+            verbose=verbose
         )
         if verbose:
             print(f"      → q_hat = {self.q_hat:.4f}")
@@ -393,7 +395,8 @@ class ConformalPredictor:
         if verbose:
             print(f"[2/2] Calibrating q_hat (α={self.config.alpha}, coverage={1-self.config.alpha:.0%})...")
         self.q_hat = self.calibrator.calibrate(
-            p_cal_success, y_cal, self.lambda_star, self.delta_star, p_failure_for_cal
+            p_cal_success, y_cal, self.lambda_star, self.delta_star, p_failure_for_cal,
+            verbose=verbose
         )
         if verbose:
             print(f"      → q_hat = {self.q_hat:.4f}")

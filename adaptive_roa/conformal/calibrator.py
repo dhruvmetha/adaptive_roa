@@ -255,7 +255,8 @@ class Calibrator:
         y_true: np.ndarray,
         lambda_star: float,
         delta: float = None,
-        p_failure: Optional[np.ndarray] = None
+        p_failure: Optional[np.ndarray] = None,
+        verbose: bool = True
     ) -> float:
         """
         Compute calibration threshold q_hat from calibration set.
@@ -269,6 +270,7 @@ class Calibrator:
             lambda_star: Optimal decision boundary (from lambda optimizer)
             delta: Uncertainty half-width (uses config.delta if None)
             p_failure: [N] array of estimated p(failure|x), required for two_sided
+            verbose: Print debug information
 
         Returns:
             q_hat: Calibration threshold. Prediction sets include labels
@@ -276,6 +278,8 @@ class Calibrator:
         """
         n = len(y_true)
         alpha = self.config.alpha
+        if delta is None:
+            delta = self.config.delta
 
         # Compute non-conformity score for each calibration point using TRUE label
         scores = self.non_conformity_scores_batch(
@@ -288,6 +292,40 @@ class Calibrator:
         quantile_level = min(quantile_level, 1.0)  # Cap at 1.0
 
         q_hat = np.quantile(scores, quantile_level)
+
+        if verbose:
+            # Label distribution
+            n_success = np.sum(y_true == 1)
+            n_failure = np.sum(y_true == -1)
+            n_unknown = np.sum(y_true == 0)
+
+            print(f"\n    [q_hat calibration debug]")
+            print(f"    Decision rule: {self.decision_rule}")
+            print(f"    Calibration set size: n={n}")
+            print(f"    Label distribution: SUCCESS={n_success}, FAILURE={n_failure}, UNKNOWN={n_unknown}")
+            print(f"    Parameters: λ*={lambda_star:.4f}, δ={delta:.4f}, α={alpha:.2f}")
+            if self.decision_rule == "two_sided":
+                u = lambda_star + delta
+                v = 1 - lambda_star + delta
+                print(f"    Thresholds: u(success)={u:.4f}, v(failure)={v:.4f}")
+            print(f"    p_success: min={p_success.min():.4f}, max={p_success.max():.4f}, mean={p_success.mean():.4f}")
+            if p_failure is not None:
+                print(f"    p_failure: min={p_failure.min():.4f}, max={p_failure.max():.4f}, mean={p_failure.mean():.4f}")
+            print(f"    Scores: min={scores.min():.4f}, max={scores.max():.4f}, mean={scores.mean():.4f}, median={np.median(scores):.4f}")
+            print(f"    Score percentiles: 25%={np.percentile(scores, 25):.4f}, 50%={np.percentile(scores, 50):.4f}, 75%={np.percentile(scores, 75):.4f}, 90%={np.percentile(scores, 90):.4f}")
+            print(f"    Quantile level: (1-{alpha})*({n}+1)/{n} = {quantile_level:.4f}")
+            print(f"    >>> q_hat = {q_hat:.4f}")
+
+            # Print individual scores with labels and probabilities
+            print(f"\n    [Per-point scores]")
+            print(f"    {'idx':>4} {'label':>7} {'p_s':>6} {'p_f':>6} {'score':>7}")
+            print(f"    {'-'*34}")
+            sorted_indices = np.argsort(scores)[::-1]  # Sort by score descending
+            for i in sorted_indices:
+                label_str = {1: 'SUCCESS', -1: 'FAILURE', 0: 'UNKNOWN'}.get(y_true[i], '?')
+                p_f_val = p_failure[i] if p_failure is not None else 0.0
+                marker = " <-- q_hat" if np.isclose(scores[i], q_hat, atol=1e-6) else ""
+                print(f"    {i:>4} {label_str:>7} {p_success[i]:>6.3f} {p_f_val:>6.3f} {scores[i]:>7.4f}{marker}")
 
         return q_hat
 

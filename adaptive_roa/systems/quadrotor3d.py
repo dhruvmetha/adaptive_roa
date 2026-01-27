@@ -54,7 +54,7 @@ class Quadrotor3DSystem(DynamicalSystem):
         self.goal_angular_velocity = np.array([0.0, 0.0, 0.0])
 
         # Success threshold (Euclidean distance in state space)
-        self.success_threshold = 0.05
+        self.success_threshold = 0.2
 
         super().__init__()
 
@@ -123,7 +123,7 @@ class Quadrotor3DSystem(DynamicalSystem):
         Target state: hover at (0, 0, 1) with identity orientation and zero velocities
 
         Returns:
-            List of 13D attractor states
+            List of 13D attractor states (quaternion representation)
         """
         return [
             [0.0, 0.0, 1.0,    # Position (x, y, z)
@@ -132,13 +132,77 @@ class Quadrotor3DSystem(DynamicalSystem):
              0.0, 0.0, 0.0]    # Angular velocity
         ]
 
+    def attractor_euler(self) -> List[float]:
+        """
+        Goal state in Euler representation (12D).
+
+        Returns:
+            12D goal state: [x, y, z, roll, pitch, yaw, ẋ, ẏ, ż, p, q, r]
+        """
+        return [0.0, 0.0, 1.0,  # Position (x, y, z)
+                0.0, 0.0, 0.0,  # Euler angles (roll, pitch, yaw) - identity
+                0.0, 0.0, 0.0,  # Linear velocity
+                0.0, 0.0, 0.0]  # Angular velocity
+
+    def quaternion_to_euler(self, quat: torch.Tensor) -> torch.Tensor:
+        """
+        Convert quaternion (qw, qx, qy, qz) to Euler angles (roll, pitch, yaw).
+
+        Uses ZYX convention (yaw-pitch-roll, intrinsic rotations).
+
+        Args:
+            quat: Quaternion tensor [B, 4] as (qw, qx, qy, qz)
+
+        Returns:
+            Euler angles [B, 3] as (roll, pitch, yaw) in radians
+        """
+        qw, qx, qy, qz = quat[:, 0], quat[:, 1], quat[:, 2], quat[:, 3]
+
+        # Roll (x-axis rotation)
+        sinr_cosp = 2.0 * (qw * qx + qy * qz)
+        cosr_cosp = 1.0 - 2.0 * (qx * qx + qy * qy)
+        roll = torch.atan2(sinr_cosp, cosr_cosp)
+
+        # Pitch (y-axis rotation)
+        sinp = 2.0 * (qw * qy - qz * qx)
+        # Clamp to avoid numerical issues at poles
+        sinp = torch.clamp(sinp, -1.0, 1.0)
+        pitch = torch.asin(sinp)
+
+        # Yaw (z-axis rotation)
+        siny_cosp = 2.0 * (qw * qz + qx * qy)
+        cosy_cosp = 1.0 - 2.0 * (qy * qy + qz * qz)
+        yaw = torch.atan2(siny_cosp, cosy_cosp)
+
+        return torch.stack([roll, pitch, yaw], dim=1)
+
+    def state_to_euler(self, state: torch.Tensor) -> torch.Tensor:
+        """
+        Convert 13D quaternion state to 12D Euler state.
+
+        Args:
+            state: [B, 13] as (x, y, z, qw, qx, qy, qz, ẋ, ẏ, ż, p, q, r)
+
+        Returns:
+            [B, 12] as (x, y, z, roll, pitch, yaw, ẋ, ẏ, ż, p, q, r)
+        """
+        pos = state[:, 0:3]           # (x, y, z)
+        quat = state[:, 3:7]          # (qw, qx, qy, qz)
+        vel = state[:, 7:13]          # (ẋ, ẏ, ż, p, q, r)
+
+        euler = self.quaternion_to_euler(quat)  # (roll, pitch, yaw)
+
+        return torch.cat([pos, euler, vel], dim=1)
+
     def is_in_attractor(self, state, radius: float = 0.05):
         """
         Check if states are within attractor basin (hovering at goal)
 
+        Converts state to Euler representation and computes L2 distance from goal.
+
         Args:
             state: States [B, 13] - numpy array or torch tensor
-            radius: Attractor radius (Euclidean distance threshold)
+            radius: Attractor radius (Euclidean distance threshold in Euler space)
 
         Returns:
             Boolean tensor [B] indicating attractor membership
@@ -149,12 +213,14 @@ class Quadrotor3DSystem(DynamicalSystem):
         if state.dim() == 1:
             state = state.unsqueeze(0)
 
-        # Goal state
-        goal = torch.tensor(self.attractors()[0], device=state.device, dtype=state.dtype)
+        # Convert to Euler representation
+        state_euler = self.state_to_euler(state)
 
-        # Compute Euclidean distance in full state space
-        # Note: For quaternions, this is an approximation; proper SO(3) distance would be geodesic
-        dist = torch.norm(state - goal.unsqueeze(0), dim=1)
+        # Goal in Euler representation
+        goal_euler = torch.tensor(self.attractor_euler(), device=state.device, dtype=state.dtype)
+
+        # Compute L2 distance in Euler space
+        dist = torch.norm(state_euler - goal_euler.unsqueeze(0), dim=1)
 
         result = dist < radius
 
@@ -168,7 +234,7 @@ class Quadrotor3DSystem(DynamicalSystem):
         Classify Quadrotor 3D states into three categories based on termination conditions
 
         Three-way classification:
-        1. SUCCESS (label=1): Within radius of goal state
+        1. SUCCESS (label=1): Within radius of goal state (in Euler space)
         2. FAILURE (label=-1): Exceeded termination thresholds (system failed)
         3. SEPARATRIX (label=0): Between attractor and failure (uncertain region)
 
@@ -193,11 +259,14 @@ class Quadrotor3DSystem(DynamicalSystem):
         if state.dim() == 1:
             state = state.unsqueeze(0)
 
-        # Goal state
-        goal = torch.tensor(self.attractors()[0], device=state.device, dtype=state.dtype)
+        # Convert to Euler representation for attractor check
+        state_euler = self.state_to_euler(state)
 
-        # Compute Euclidean distance for attractor check
-        dist = torch.norm(state - goal.unsqueeze(0), dim=1)
+        # Goal in Euler representation
+        goal_euler = torch.tensor(self.attractor_euler(), device=state.device, dtype=state.dtype)
+
+        # Compute L2 distance in Euler space
+        dist = torch.norm(state_euler - goal_euler.unsqueeze(0), dim=1)
         in_attractor = dist < radius
 
         # Check termination thresholds (with small margin for overshoot)

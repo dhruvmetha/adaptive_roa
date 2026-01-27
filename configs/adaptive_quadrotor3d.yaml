@@ -82,7 +82,7 @@ conformal:
   alpha: 0.1               # 90% coverage guarantee
   num_mc_samples: 10       # MC samples for probability estimation (fitting)
   num_mc_samples_eval: 10  # MC samples for full ROA evaluation (faster)
-  attractor_radius: 0.05   # For classify_attractor() - matches dataset success threshold
+  attractor_radius: 0.2   # For classify_attractor() - matches dataset success threshold
   # NOTE: calibration_ratio removed - q_hat is now calibrated on D1 samples (not training split)
 
   # Optimization mode: "lambda" or "delta"
@@ -115,14 +115,14 @@ conformal:
 # =====================================================================
 # Flow Matcher Training Configuration
 # =====================================================================
-batch_size: 256
+batch_size: 1024
 val_batch_size: 2048
 num_workers: 4
-latent_dim: 4  # Larger latent dim for 13D state
+latent_dim: 0  # Larger latent dim for 13D state
 
 # Trainer: PyTorch Lightning
 trainer:
-  max_epochs: 2000
+  max_epochs: 1000
   accelerator: gpu
   devices: 1
   precision: 32

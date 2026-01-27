@@ -82,7 +82,7 @@ conformal:
 
   verbose: false           # Print detailed debug info (q_hat calibration, scores, etc.)
   delta: 0.05              # Unknown region half-width (used when optimize_mode="lambda")
-  w: 0.9                   # Misclassification weight (1.0 = only minimize errors, ignore unknown rate)
+  w: 0.99                # Misclassification weight (1.0 = only minimize errors, ignore unknown rate)
   alpha: 0.1               # 90% coverage guarantee
   num_mc_samples: 10       # MC samples for probability estimation (fitting)
   num_mc_samples_eval: 10  # MC samples for full ROA evaluation (faster)
@@ -159,7 +159,7 @@ flow_matching:
   use_loss_weights: ${use_loss_weights}  # If true, weight loss by state limits (proportional)
   use_log_loss_weights: ${use_log_loss_weights}  # If true (with use_loss_weights=true), use 1+log(limit) for more balanced weights
   use_manifold: ${use_manifold}    # If true, use S¹ manifold for angle; if false, use Euclidean R^4
-  clamp_noise: true                # Clamp noise to [-1, 1] to prevent ODE divergence during validation MAE
+  clamp_noise: false                # Clamp noise to [-1, 1] to prevent ODE divergence during validation MAE
   zero_latent: true                # Use zero latent vectors instead of random sampling
   noise_scale: ${noise_scale}      # Scale factor for initial noise (0-1), reduces variance when < 1
 

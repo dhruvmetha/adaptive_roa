@@ -1253,6 +1253,7 @@ def train_flow_matcher(
     use_loss_weights = cfg.flow_matching.get('use_loss_weights', False)
     use_manifold = cfg.flow_matching.get('use_manifold', True)
     use_log_loss_weights = cfg.flow_matching.get('use_log_loss_weights', False)
+    quat_loss_weight = cfg.flow_matching.get('quat_loss_weight', 1.0)
     clamp_noise = cfg.flow_matching.get('clamp_noise', True)
 
     # Auto-adjust model output_dim based on manifold setting
@@ -1282,6 +1283,7 @@ def train_flow_matcher(
         use_loss_weights=use_loss_weights,
         use_manifold=use_manifold,
         use_log_loss_weights=use_log_loss_weights,
+        quat_loss_weight=quat_loss_weight,
         clamp_noise=clamp_noise,
         zero_latent=zero_latent,
         noise_scale=noise_scale,

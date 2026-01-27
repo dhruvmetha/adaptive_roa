@@ -24,7 +24,8 @@ output_dir: ${exp_dir}/${name}/outputs/init_size_${initial_train_size}_training_
 device: cuda:0
 
 use_loss_weights: false          # If true, weight loss by state limits (proportional)
-use_log_loss_weights: false 
+use_log_loss_weights: false
+quat_loss_weight: 1.0            # Scalar weight for quaternion loss dims (when use_loss_weights=true)
 
 noise_scale: 1.0
 # noise_scale: 0.577
@@ -152,6 +153,7 @@ flow_matching:
   mae_val_frequency: 10            # Compute MAE validation every N epochs
   use_loss_weights: ${use_loss_weights}          # If true, weight loss by state limits (proportional)
   use_log_loss_weights: ${use_log_loss_weights}      # If true (with use_loss_weights=true), use 1+log(limit) for more balanced weights
+  quat_loss_weight: ${quat_loss_weight}              # Scalar weight for quaternion loss dimensions
   use_manifold: ${use_manifold}               # If true, use SO(3) manifold; if false, use Euclidean R^13
   clamp_noise: false                # Clamp noise to [-1, 1] to prevent ODE divergence during validation MAE
   zero_latent: true                # Use zero latent vectors instead of random sampling

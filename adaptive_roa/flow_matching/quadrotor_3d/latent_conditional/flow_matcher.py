@@ -61,6 +61,7 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
                  use_loss_weights: bool = False,
                  use_manifold: bool = True,
                  use_log_loss_weights: bool = False,
+                 quat_loss_weight: float = 1.0,
                  clamp_noise: bool = True,
                  zero_latent: bool = False,
                  val_error_log_file: Optional[str] = None,
@@ -81,6 +82,8 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
                          If False, use pure Euclidean R^13 with post-hoc quaternion projection
             use_log_loss_weights: If True and use_loss_weights=True, use 1+log(limit) instead of limit
                                   for more balanced weight ratios across dimensions
+            quat_loss_weight: Scalar weight applied to quaternion loss dimensions when use_loss_weights=True.
+                             Default 1.0 (no extra scaling). Values > 1 increase quaternion loss importance.
             clamp_noise: If True, clamp noise to [-1, 1] to prevent ODE divergence
             zero_latent: If True, use zero latent vectors instead of random sampling
             val_error_log_file: Path to text file for logging validation errors
@@ -89,6 +92,7 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
         # Store use_manifold BEFORE calling super().__init__ because it calls _create_manifold()
         self.use_manifold = use_manifold
         self.use_log_loss_weights = use_log_loss_weights
+        self.quat_loss_weight = quat_loss_weight
 
         super().__init__(system, model, optimizer, scheduler, model_config, latent_dim, mae_val_frequency, use_loss_weights, clamp_noise, zero_latent, val_error_log_file, noise_scale)
 
@@ -101,6 +105,18 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
                 weight_type = "1+log(limit)" if use_log_loss_weights else "limit"
                 dim_str = "13D" if not use_manifold else "12D"
                 print(f"📊 Loss weights ({dim_str}, {weight_type}): {loss_weights.tolist()}")
+
+            # Apply quat_loss_weight to quaternion/rotation dimensions
+            if quat_loss_weight != 1.0 and self.loss_weights is not None:
+                if use_manifold:
+                    # Manifold mode: 12D tangent (3 pos + 3 rot + 6 vel)
+                    # Rotation tangent dimensions are indices 3:6
+                    self.loss_weights[3:6] *= quat_loss_weight
+                else:
+                    # Euclidean mode: 13D tangent (3 pos + 4 quat + 6 vel)
+                    # Quaternion dimensions are indices 3:7
+                    self.loss_weights[3:7] *= quat_loss_weight
+                print(f"📊 Applied quat_loss_weight={quat_loss_weight} → updated weights: {self.loss_weights.tolist()}")
 
         manifold_str = "ℝ³ × SO(3) × ℝ⁶" if use_manifold else "ℝ¹³ (Euclidean)"
         tangent_str = "12D (3 pos + 3 rot + 6 vel)" if use_manifold else "13D (all Euclidean)"
@@ -372,8 +388,15 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
         # Call parent implementation
         endpoints = super().predict_endpoint(start_states, num_steps, latent, method)
 
-        # When using Euclidean manifold, project quaternion to unit norm
-        if not self.use_manifold:
+        # IMPORTANT: Always return a valid quaternion representative.
+        #
+        # - Training data is canonicalized (qw >= 0).
+        # - Depending on the SO(3) implementation / integration, we may return q or -q
+        #   (same rotation). Downstream code (e.g. Euclidean goal-distance checks)
+        #   is sign-sensitive, so we canonicalize here.
+        if hasattr(self.system, "project_to_manifold"):
+            endpoints = self.system.project_to_manifold(endpoints)
+        else:
             endpoints = self._project_quaternion(endpoints)
 
         return endpoints
@@ -618,7 +641,7 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
             hidden_dims=model_config.get('hidden_dims', [512, 1024, 512]),
             output_dim=model_output_dim,  # 12D for SO3, 13D for Euclidean
             use_input_embeddings=model_config.get('use_input_embeddings', False),
-            input_emb_dim=model_config.get('input_emb_dim', 128)
+            input_emb_dim=model_config.get('input_emb_dim', 128),
         )
 
         # Create flow matcher instance
@@ -629,7 +652,7 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
             scheduler=None,
             model_config=model_config,
             latent_dim=latent_dim,
-            use_manifold=use_manifold
+            use_manifold=use_manifold,
         )
 
         # Load model weights

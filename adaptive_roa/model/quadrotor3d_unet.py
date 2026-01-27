@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
 def timestep_embedding(t: torch.Tensor, dim: int) -> torch.Tensor:
     """
     Standard sinusoidal (Fourier) time embedding.

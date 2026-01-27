@@ -151,17 +151,20 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         self.train_loss = MeanMetric()
         self.val_loss = MeanMetric()
 
-        # MAE metrics per dimension for endpoint prediction
-        self.val_endpoint_mae_per_dim = nn.ModuleList(
-            [MeanMetric() for _ in range(self.system.state_dim)]
-        )
-
         # Storage for collecting validation errors for percentile computation
         # These are lists that get reset each validation epoch
-        self._val_abs_errors_buffer = []  # Will hold [B, state_dim] tensors
+        self._val_abs_errors_buffer = []  # Will hold [B, manifold_dist_dim] tensors
 
         # Facebook FM components (subclass creates manifold)
         self.manifold = self._create_manifold()
+
+        # MAE metrics per dimension for endpoint prediction
+        # Must be initialized AFTER manifold creation since manifold.dist() may return
+        # fewer dimensions than state_dim (e.g., SO3 returns 1 geodesic distance, not 4)
+        self._manifold_dist_dim = self._get_manifold_dist_dim()
+        self.val_endpoint_mae_per_dim = nn.ModuleList(
+            [MeanMetric() for _ in range(self._manifold_dist_dim)]
+        )
         self.path = GeodesicProbPath(
             scheduler=CondOTScheduler(), manifold=self.manifold
         )
@@ -217,13 +220,13 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         self, predicted_endpoints: torch.Tensor, true_endpoints: torch.Tensor
     ) -> torch.Tensor:
         """
+        DEPRECATED: Use compute_manifold_distance_per_component() instead.
+
         Compute MAE per state dimension using absolute differences.
 
-        This provides per-dimension error statistics that correspond directly
-        to each state component (x, y, z, qw, qx, qy, qz, etc.).
-
-        For circular/SO3 components, this gives component-wise errors which
-        may not reflect geodesic distance but are useful for debugging.
+        WARNING: This method uses Euclidean absolute differences which are
+        incorrect for manifold components (SO3 quaternions, S1 angles).
+        For proper geodesic distances, use compute_manifold_distance_per_component().
 
         Args:
             predicted_endpoints: Predicted endpoints [B, state_dim]
@@ -232,6 +235,14 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         Returns:
             mae_per_dim: MAE for each state dimension [state_dim]
         """
+        import warnings
+        warnings.warn(
+            "compute_endpoint_mae_per_dim() uses Euclidean distances which are incorrect "
+            "for manifold components (SO3, S1). Use compute_manifold_distance_per_component() "
+            "for proper geodesic distances.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         # Compute absolute difference per dimension
         # Shape: [batch_size, state_dim]
         abs_diff = torch.abs(predicted_endpoints - true_endpoints)
@@ -245,12 +256,13 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         aggregation: str = "mean",
     ) -> Dict[str, torch.Tensor]:
         """
+        DEPRECATED: Use evaluate_with_manifold_metrics() instead.
+
         Compute comprehensive evaluation metrics for final state error.
 
-        Computes three levels of statistics:
-        1. Per-dimension MAE (using mean or median aggregation over samples)
-        2. Aggregated over dimensions (mean/median of per-dim MAE)
-        3. Overall error statistics
+        WARNING: This method uses Euclidean absolute differences which are
+        incorrect for manifold components (SO3 quaternions, S1 angles).
+        For proper geodesic distances, use evaluate_with_manifold_metrics().
 
         Args:
             predicted_endpoints: Predicted endpoints [B, state_dim]
@@ -269,6 +281,14 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
             - 'per_sample_mae': MAE for each sample [B]
             - 'per_sample_median_ae': Median AE for each sample [B]
         """
+        import warnings
+        warnings.warn(
+            "compute_evaluation_metrics() uses Euclidean distances which are incorrect "
+            "for manifold components (SO3, S1). Use evaluate_with_manifold_metrics() "
+            "for proper geodesic distances.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         # Compute absolute errors: [B, state_dim]
         abs_errors = torch.abs(predicted_endpoints - true_endpoints)
 
@@ -320,7 +340,13 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         device: Optional[torch.device] = None,
     ) -> Dict[str, Any]:
         """
+        DEPRECATED: Use evaluate_with_manifold_metrics() instead.
+
         Evaluate the model on a full dataset (e.g., evaluation/test set).
+
+        WARNING: This method uses Euclidean absolute differences which are
+        incorrect for manifold components (SO3 quaternions, S1 angles).
+        For proper geodesic distances, use evaluate_with_manifold_metrics().
 
         Args:
             dataloader: DataLoader providing batches with 'start_state' and 'end_state'
@@ -335,6 +361,14 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
             - Overall dataset statistics
             - Per-sample errors for analysis
         """
+        import warnings
+        warnings.warn(
+            "evaluate_on_dataset() uses Euclidean distances which are incorrect "
+            "for manifold components (SO3, S1). Use evaluate_with_manifold_metrics() "
+            "for proper geodesic distances.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         if device is None:
             device = next(self.parameters()).device
 
@@ -461,6 +495,47 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
             Product manifold (e.g., S¹×ℝ for pendulum, ℝ²×S¹×ℝ for cartpole)
         """
         pass
+
+    def _get_manifold_dist_dim(self) -> int:
+        """
+        Get the output dimension of manifold.dist().
+
+        For Product manifolds, the distance output may differ from state_dim:
+        - Euclidean(n) returns n per-dimension distances
+        - SO3(4, 3) returns 1 geodesic distance (not 4)
+        - FlatTorus/S1 returns 1 geodesic distance per circle
+
+        This is used to correctly initialize per-dimension validation metrics.
+
+        Returns:
+            Number of distance components returned by manifold.dist()
+        """
+        # Import manifold types for isinstance checks
+        try:
+            from flow_matching.utils.manifolds import SO3, FlatTorus
+        except ImportError:
+            SO3 = None
+            FlatTorus = None
+
+        # For Product manifolds, compute based on component structure
+        if hasattr(self.manifold, 'manifolds') and hasattr(self.manifold, 'dimensions'):
+            total_dim = 0
+            manifolds = self.manifold.manifolds
+            dimensions = self.manifold.dimensions
+
+            for i, m in enumerate(manifolds):
+                # SO3 and FlatTorus return single geodesic distance, not per-dim
+                if SO3 is not None and isinstance(m, SO3):
+                    total_dim += 1  # Single geodesic angle
+                elif FlatTorus is not None and isinstance(m, FlatTorus):
+                    total_dim += 1  # Single geodesic distance
+                else:
+                    # Euclidean and other manifolds return per-dimension distances
+                    total_dim += dimensions[i]
+            return total_dim
+        else:
+            # Non-product manifold (e.g., pure Euclidean)
+            return self.system.state_dim
 
     @abstractmethod
     def sample_noisy_input(self, batch_size: int, device: torch.device) -> torch.Tensor:
@@ -658,8 +733,9 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         if self.use_loss_weights and self.loss_weights is not None:
             # Weighted MSE: mean(weights * (pred - target)^2)
             # weights shape: [tangent_dim], velocity shape: [batch, tangent_dim]
+            normalized_loss_weights = self.loss_weights / (self.loss_weights.mean() + 1e-12)
             squared_error = (predicted_velocity - target_velocity) ** 2
-            weighted_error = self.loss_weights.unsqueeze(0) * squared_error
+            weighted_error = normalized_loss_weights.unsqueeze(0) * squared_error
             loss = weighted_error.mean()
         else:
             loss = nn.functional.mse_loss(predicted_velocity, target_velocity)
@@ -802,8 +878,10 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
                     start_states=start_states, num_steps=100, latent=None
                 )
 
-            # Compute geodesic errors per dimension using manifold distance [B, state_dim]
+            # Compute geodesic errors per component using manifold distance [B, manifold_dist_dim]
             # This properly handles circular/manifold components (e.g., angles on S¹, quaternions on SO(3))
+            # Note: manifold.dist() returns per-component distances, not per-state-dimension
+            # e.g., Quadrotor3D: 13D state → 10D distances (SO3 returns 1 geodesic, not 4)
             pred_normalized = self.normalize_state(predicted_endpoints)
             true_normalized = self.normalize_state(true_endpoints)
             geodesic_errors = self.manifold.dist(pred_normalized, true_normalized)
@@ -811,19 +889,22 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
             # Store for percentile computation at epoch end
             self._val_abs_errors_buffer.append(geodesic_errors.detach().cpu())
 
-            # Compute MAE per dimension (for backward compatibility with logging)
+            # Compute MAE per component (for backward compatibility with logging)
             mae_per_dim = geodesic_errors.mean(dim=0)
 
-            # Update metrics
-            for dim_idx in range(self.system.state_dim):
+            # Update metrics - use manifold dist dim, not state dim
+            # Get component names for logging (may differ from state dimension names)
+            component_names = self.get_manifold_component_names()
+            for dim_idx in range(self._manifold_dist_dim):
                 try:
                     self.val_endpoint_mae_per_dim[dim_idx](mae_per_dim[dim_idx])
                 except Exception:
                     self.val_endpoint_mae_per_dim[dim_idx].update(mae_per_dim[dim_idx])
 
-                # Log individual dimension MAE
+                # Log individual component MAE
+                comp_name = component_names[dim_idx] if dim_idx < len(component_names) else f"dim_{dim_idx}"
                 self.log(
-                    f"val_endpoint_mae_{self._get_dimension_name(dim_idx)}",
+                    f"val_endpoint_mae_{comp_name}",
                     self.val_endpoint_mae_per_dim[dim_idx],
                     on_step=False,
                     on_epoch=True,
@@ -877,32 +958,35 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
             all_abs_errors = torch.cat(self._val_abs_errors_buffer, dim=0)
             n_samples = all_abs_errors.shape[0]
 
-            # Compute per-dimension statistics
-            # For each dimension: compute mean, P50, P90, P99 over all samples
-            mean_per_dim = all_abs_errors.mean(dim=0)  # [state_dim]
-            p50_per_dim = torch.quantile(all_abs_errors, 0.50, dim=0)  # [state_dim]
-            p90_per_dim = torch.quantile(all_abs_errors, 0.90, dim=0)  # [state_dim]
-            p99_per_dim = torch.quantile(all_abs_errors, 0.99, dim=0)  # [state_dim]
+            # Compute per-component statistics (using manifold dist dimension, not state dim)
+            # For each component: compute mean, P50, P90, P99 over all samples
+            mean_per_dim = all_abs_errors.mean(dim=0)  # [manifold_dist_dim]
+            p50_per_dim = torch.quantile(all_abs_errors, 0.50, dim=0)  # [manifold_dist_dim]
+            p90_per_dim = torch.quantile(all_abs_errors, 0.90, dim=0)  # [manifold_dist_dim]
+            p99_per_dim = torch.quantile(all_abs_errors, 0.99, dim=0)  # [manifold_dist_dim]
 
-            # Compute overall state error (L2 norm across dimensions for each sample)
+            # Compute overall state error (L2 norm across components for each sample)
             overall_errors = torch.norm(all_abs_errors, dim=1)  # [N]
             overall_mean = overall_errors.mean().item()
             overall_p50 = torch.quantile(overall_errors, 0.50).item()
             overall_p90 = torch.quantile(overall_errors, 0.90).item()
             overall_p99 = torch.quantile(overall_errors, 0.99).item()
 
+            # Get component names for display
+            component_names = self.get_manifold_component_names()
+
             # Print header
             print(f"\n{'='*80}")
             print(f"📊 Epoch {self.current_epoch} - Validation Error Statistics (n={n_samples})")
             print(f"{'='*80}")
 
-            # Print per-dimension table
-            print(f"\n{'Per-Dimension Absolute Errors:'}")
+            # Print per-component table
+            print(f"\n{'Per-Component Geodesic Errors:'}")
             print(f"{'Component':<20} {'Mean':>12} {'P50':>12} {'P90':>12} {'P99':>12}")
             print(f"{'-'*68}")
 
-            for dim_idx in range(self.system.state_dim):
-                comp_name = self._get_dimension_name(dim_idx)
+            for dim_idx in range(self._manifold_dist_dim):
+                comp_name = component_names[dim_idx] if dim_idx < len(component_names) else f"dim_{dim_idx}"
                 print(f"{comp_name:<20} {mean_per_dim[dim_idx]:>12.6f} {p50_per_dim[dim_idx]:>12.6f} "
                       f"{p90_per_dim[dim_idx]:>12.6f} {p99_per_dim[dim_idx]:>12.6f}")
 
@@ -927,19 +1011,19 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
 
                 with open(self.val_error_log_file, 'a') as f:
                     if write_header:
-                        # Header: epoch, n_samples, per-dim stats, overall stats
+                        # Header: epoch, n_samples, per-component stats, overall stats
                         dim_headers = []
-                        for dim_idx in range(self.system.state_dim):
-                            dim_name = self._get_dimension_name(dim_idx)
+                        for dim_idx in range(self._manifold_dist_dim):
+                            comp_name = component_names[dim_idx] if dim_idx < len(component_names) else f"dim_{dim_idx}"
                             for stat in ['mean', 'p50', 'p90', 'p99']:
-                                dim_headers.append(f"{dim_name}_{stat}")
+                                dim_headers.append(f"{comp_name}_{stat}")
                         overall_headers = ['overall_mean', 'overall_p50', 'overall_p90', 'overall_p99']
                         header = '\t'.join(['epoch', 'n_samples'] + dim_headers + overall_headers)
                         f.write(header + '\n')
 
                     # Data row
                     dim_values = []
-                    for dim_idx in range(self.system.state_dim):
+                    for dim_idx in range(self._manifold_dist_dim):
                         dim_values.extend([
                             f"{mean_per_dim[dim_idx].item():.6f}",
                             f"{p50_per_dim[dim_idx].item():.6f}",
@@ -1393,7 +1477,6 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
             Dictionary with per-component and aggregate statistics
         """
         N = distances.shape[0]
-        num_components = distances.shape[1]
 
         stats = {
             "n_samples": N,

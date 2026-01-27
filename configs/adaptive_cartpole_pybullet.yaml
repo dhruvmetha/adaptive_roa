@@ -44,6 +44,10 @@ data_source:
   shuffled_labels_file: ${data_source.train_test_splits_dir}/shuffled_labels_${training_index}.txt
   # Eval states (full dataset with start, end, labels - for evaluation only)
   eval_states_file: ${data_source.base_dir}/eval_states.txt
+  # Held-out calibration set (20% of eval_states, for final q_hat calibration)
+  cal_set_file: ${data_source.base_dir}/cal_set.txt
+  # Held-out test set (80% of eval_states, for final evaluation)
+  test_set_file: ${data_source.base_dir}/test_set.txt
 
 # Dataset splits (val/test are subsets of training with overlap)
 val_ratio: 0.1      # 10% of training for validation
@@ -71,7 +75,12 @@ max_samples_per_epoch: 50000 # Safety cap on total candidates evaluated per epoc
 # Conformal Prediction Configuration
 # =====================================================================
 conformal:
-  verbose: true            # Print detailed debug info (q_hat calibration, scores, etc.)
+  # Toggle conformal prediction on/off
+  # - true: Calibrate q_hat on D1, use prediction sets for uncertainty
+  # - false: Skip q_hat calibration, use λ*/δ* thresholds directly for uncertainty
+  use_conformal: true
+
+  verbose: false           # Print detailed debug info (q_hat calibration, scores, etc.)
   delta: 0.05              # Unknown region half-width (used when optimize_mode="lambda")
   w: 0.9                   # Misclassification weight (1.0 = only minimize errors, ignore unknown rate)
   alpha: 0.1               # 90% coverage guarantee

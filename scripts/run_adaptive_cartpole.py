@@ -1346,10 +1346,9 @@ def main(cfg: DictConfig):
     print("=" * 70)
     print(OmegaConf.to_yaml(cfg))
 
-    # Set seed
+    # Set seed (covers random, numpy, torch CPU/CUDA, and DataLoader workers)
     seed = cfg.get('seed', 42)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
+    pl.seed_everything(seed, workers=True)
 
     # Setup output directory
     output_dir = Path(cfg.output_dir)

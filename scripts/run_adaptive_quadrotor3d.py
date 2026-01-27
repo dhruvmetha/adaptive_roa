@@ -1581,6 +1581,7 @@ def main(cfg: DictConfig):
         d2_indices = sample_result.uncertain_indices
         n_d2 = len(d2_indices)
         n_certain_discarded = sample_result.n_certain_discarded
+        n_invalid_added = sample_result.n_invalid_added
 
         # Mark D2 as used and add to training
         if n_d2 > 0:
@@ -1589,9 +1590,11 @@ def main(cfg: DictConfig):
 
         print(f"\n[6] Summary of sampling this epoch...")
         print(f"    D1 (calibration): {len(d1_indices)} points (added)")
-        print(f"    D2 (uncertain):   {n_d2} points (added)")
+        print(f"    D2 (uncertain+invalid): {n_d2} points (added)")
+        print(f"        - uncertain: {n_d2 - n_invalid_added}")
+        print(f"        - invalid:   {n_invalid_added}")
         print(f"    Total added:      {len(d1_indices) + n_d2}")
-        print(f"    Discarded (certain, stay in pool): {n_certain_discarded}")
+        print(f"    Discarded (certain success/failure): {n_certain_discarded}")
         print(f"    D2 candidates evaluated: {sample_result.n_candidates_evaluated} over {sample_result.n_batches} batches")
 
         # Step 7: Evaluate on test set (subset of training)
@@ -1599,26 +1602,66 @@ def main(cfg: DictConfig):
         X_test, y_test = dataset_builder.get_test_labels()
         test_metrics = conformal_predictor.evaluate(X_test, y_test, verbose=True)
 
-        # Step 8: Evaluate on FULL eval_states.txt (fast batched)
+        # Step 8: Evaluate on HELD-OUT test set with proper calibration
         num_mc_samples_eval = cfg.conformal.get('num_mc_samples_eval', 20)
+        conformal_verbose = cfg.conformal.get('verbose', True)
 
-        print(f"\n[8] Evaluating on FULL eval_states.txt ({num_mc_samples_eval} MC samples, fast batched)...")
-        print(f"    Using λ*={lambda_star:.4f} ± δ*={delta_star:.4f}, q_hat={q_hat:.4f} from conformal prediction")
+        print(f"\n[8] Evaluating on HELD-OUT test set...")
+
+        # 8a: Load held-out calibration set and calibrate NEW q_hat
+        print(f"    Loading calibration set: {cfg.data_source.cal_set_file}")
+        X_cal_eval, _, y_cal_eval = load_eval_states(cfg.data_source.cal_set_file)
+        print(f"    Calibration set size: {len(X_cal_eval)}")
+
+        # Estimate probabilities on calibration set
+        X_cal_tensor = torch.tensor(X_cal_eval, dtype=torch.float32, device=device)
+        with torch.no_grad():
+            p_cal_success, p_cal_failure, _ = prob_estimator.estimate(X_cal_tensor)
+
+        # Calibrate q_hat on held-out calibration set
+        from adaptive_roa.conformal.calibrator import Calibrator
+        eval_conformal_config = ConformalConfig(
+            delta=delta_star,
+            alpha=cfg.conformal.alpha,
+            decision_rule=cfg.conformal.get('decision_rule', 'two_sided')
+        )
+        eval_calibrator = Calibrator(eval_conformal_config)
+        p_cal_success_np = p_cal_success.cpu().numpy() if hasattr(p_cal_success, 'cpu') else p_cal_success
+        p_cal_failure_np = p_cal_failure.cpu().numpy() if hasattr(p_cal_failure, 'cpu') else p_cal_failure
+        q_hat_eval = eval_calibrator.calibrate(
+            p_cal_success_np,
+            y_cal_eval,
+            lambda_star,
+            delta_star,
+            p_failure=p_cal_failure_np,
+            verbose=conformal_verbose
+        )
+        if conformal_verbose:
+            print(f"    Eval q_hat = {q_hat_eval:.4f} (calibrated on {len(X_cal_eval)} held-out points)")
+            print(f"    (Training q_hat was {q_hat:.4f} from D1)")
+
+        # 8b: Evaluate on held-out test set
+        print(f"    Evaluating on test set: {cfg.data_source.test_set_file}")
         full_roa_output_file = epoch_output_dir / "full_roa_evaluation.json"
         full_roa_metrics = evaluate_full_roa_fast(
             flow_matcher=flow_matcher,
             system=system,
-            eval_states_file=cfg.data_source.eval_states_file,
+            eval_states_file=cfg.data_source.test_set_file,
             num_mc_samples=num_mc_samples_eval,
             batch_size=cfg.get('val_batch_size', 2048),
             lambda_star=lambda_star,
             delta=delta_star,
-            q_hat=q_hat,
+            q_hat=q_hat_eval,
             attractor_radius=cfg.conformal.get('attractor_radius', 0.05),
             device=device,
             output_file=str(full_roa_output_file),
-            verbose=True
+            verbose=conformal_verbose
         )
+
+        # Store both q_hats in results
+        full_roa_metrics['q_hat_training'] = float(q_hat)
+        full_roa_metrics['q_hat_eval'] = float(q_hat_eval)
+        full_roa_metrics['n_cal_eval'] = len(X_cal_eval)
 
         # Step 9: Rebuild datasets with new data
         print(f"\n[9] Rebuilding datasets...")
@@ -1630,17 +1673,21 @@ def main(cfg: DictConfig):
             'train_trajectories': train_trajectories_this_epoch,
             'n_d1_added': len(d1_indices),
             'n_d2_added': int(n_d2),
+            'n_d2_uncertain': int(n_d2 - n_invalid_added),
+            'n_d2_invalid': int(n_invalid_added),
             'n_discarded_certain': int(n_certain_discarded),
             # Conformal parameters
             'lambda_star': float(conformal_predictor.lambda_star),
             'delta_star': float(conformal_predictor.delta_star),
-            'q_hat': float(conformal_predictor.q_hat),
+            'q_hat': float(q_hat),              # Training-time q_hat (used for sampling)
+            'q_hat_eval': float(q_hat_eval),    # Eval-time q_hat (for proper guarantees)
+            'n_cal_eval': len(X_cal_eval),      # Held-out calibration set size
             'optimize_mode': cfg.conformal.get('optimize_mode', 'lambda'),
             # Test set metrics (subset of training)
             'test_coverage': test_metrics['coverage'],
             'test_f1': test_metrics['f1'],
             'test_unknown_rate': test_metrics['unknown_rate'],
-            # Full ROA metrics (entire eval_states.txt)
+            # Full ROA metrics (held-out test_set.txt)
             'full_roa': full_roa_metrics,
         }
         epoch_results.append(epoch_result)
@@ -1650,9 +1697,12 @@ def main(cfg: DictConfig):
         print("-" * 70)
         print(f"  Training trajectories: {epoch_result['train_trajectories']}")
         print(f"  Added this epoch: {len(d1_indices) + n_d2} (D1={len(d1_indices)}, D2={n_d2})")
-        print(f"  Discarded (certain): {n_certain_discarded}")
-        print(f"  λ* = {epoch_result['lambda_star']:.4f}, δ* = {epoch_result['delta_star']:.4f}, q_hat = {epoch_result['q_hat']:.4f}")
-        print(f"  --- Full ROA (all {full_roa_metrics['n_total']} trajectories) ---")
+        print(f"    D2 breakdown: {n_d2 - n_invalid_added} uncertain + {n_invalid_added} invalid")
+        print(f"  Discarded (certain success/failure): {n_certain_discarded}")
+        print(f"  λ* = {epoch_result['lambda_star']:.4f}, δ* = {epoch_result['delta_star']:.4f}")
+        if conformal_verbose:
+            print(f"  q_hat (training) = {epoch_result['q_hat']:.4f}, q_hat (eval) = {epoch_result['q_hat_eval']:.4f}")
+        print(f"  --- Full ROA (held-out test set: {full_roa_metrics['n_total']} trajectories) ---")
         conf_m = full_roa_metrics['conformal_thresholds']
         notebook_m = full_roa_metrics['notebook_thresholds']
         print(f"  [λ*±δ] Sep%={conf_m['separatrix_pct']:.1%}, F1={conf_m['f1']:.2%}, Acc={conf_m['accuracy']:.2%}")
@@ -1713,7 +1763,10 @@ def main(cfg: DictConfig):
         print(f"  Accuracy:      {first['notebook_thresholds']['accuracy']:.2%} → {last['notebook_thresholds']['accuracy']:.2%}")
         print(f"\n  λ*:            {epoch_results[0]['lambda_star']:.4f} → {epoch_results[-1]['lambda_star']:.4f}")
         print(f"  δ*:            {epoch_results[0]['delta_star']:.4f} → {epoch_results[-1]['delta_star']:.4f}")
-        print(f"  q_hat:         {epoch_results[0]['q_hat']:.4f} → {epoch_results[-1]['q_hat']:.4f}")
+        if cfg.conformal.get('verbose', True):
+            print(f"  q_hat (train): {epoch_results[0]['q_hat']:.4f} → {epoch_results[-1]['q_hat']:.4f}")
+            print(f"  q_hat (eval):  {epoch_results[0]['q_hat_eval']:.4f} → {epoch_results[-1]['q_hat_eval']:.4f}")
+            print(f"  n_cal (eval):  {epoch_results[-1]['n_cal_eval']} held-out calibration points")
 
     # Save final results
     with open(output_dir / "final_results.json", 'w') as f:

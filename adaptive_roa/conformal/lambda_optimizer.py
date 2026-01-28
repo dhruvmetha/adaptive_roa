@@ -65,9 +65,9 @@ def apply_two_sided_rule(
     pred[p_success > success_thresh] = 1
     pred[(1.0 - p_failure) < failure_thresh] = -1
     
-    # If both trigger, treat as unknown
-    both = (p_success > success_thresh) & ((1.0 - p_failure) < failure_thresh)
-    pred[both] = 0
+    # # If both trigger, treat as unknown
+    # both = (p_success > success_thresh) & ((1.0 - p_failure) < failure_thresh)
+    # pred[both] = 0
     
     return pred
 

@@ -12,7 +12,7 @@ import numpy as np
 from typing import List, Set, Optional
 from adaptive_roa.conformal.config import ConformalConfig
 
-
+# Candidate Set
 def nonconformity_score_one_sided(
     p_success: float,
     y_candidate: int,
@@ -42,6 +42,20 @@ def nonconformity_score_one_sided(
             return 0.0
 
 
+# p_invalid, p_success, p_failure
+
+
+# if p_invalid >= 0.5:
+#     assign INVALID
+# else:
+#     prediction_set = compute_prediction_set(p_success, p_failure, lambda_star, delta)
+
+#     if UNCERTAIN in prediction_set or len(prediction_set) == 0 or len(prediction_set) > 1:
+#         assign UNCERTAIN
+#     else:
+#         assign SUCCESS or FAILURE
+
+# Candidate Set
 def nonconformity_score_two_sided(
     p_success: float,
     p_failure: float,
@@ -55,7 +69,7 @@ def nonconformity_score_two_sided(
     Decision regions (with u = λ+δ, v = 1-λ+δ):
     - SUCCESS: p_s >= u and p_f <= v
     - FAILURE: p_f >= v and p_s <= u  
-    - UNKNOWN/SEPARATRIX: neither confident (p_s < u and p_f < v)
+    - INVALID: neither confident (p_s < u and p_f < v)
     
     Score = max of constraint violations (L_inf distance to region).
     """
@@ -65,17 +79,17 @@ def nonconformity_score_two_sided(
     if y_candidate == 1:  # SUCCESS
         # Require: p_s >= u and p_f <= v
         # Score = max(0, u - p_s, p_f - v)
-        return max(0.0, u - p_success, p_failure - v)
+        return max(0.0, u - p_success)
     elif y_candidate == -1:  # FAILURE
         # Require: p_f >= v and p_s <= u
         # Score = max(0, v - p_f, p_s - u)
-        return max(0.0, v - p_failure, p_success - u)
-    else:  # UNKNOWN (y_candidate == 0)
+        return max(0.0, v - p_failure)
+    else:  # INVALID (y_candidate == 0)
         # Require: p_s < u and p_f < v (separatrix region)
         # Score = max(0, p_s - u, p_f - v)
         return max(0.0, p_success - u, p_failure - v)
 
-
+# For Calibration Set
 def nonconformity_scores_batch_one_sided(
     p_success: np.ndarray,
     y_candidates: np.ndarray,
@@ -87,6 +101,7 @@ def nonconformity_scores_batch_one_sided(
     upper = lambda_star + delta
 
     scores = np.zeros(len(p_success))
+
 
     # FAILURE candidates
     failure_mask = y_candidates == -1
@@ -106,11 +121,11 @@ def nonconformity_scores_batch_one_sided(
 
     return scores
 
-
+# For Calibration Set
 def nonconformity_scores_batch_two_sided(
     p_success: np.ndarray,
     p_failure: np.ndarray,
-    y_candidates: np.ndarray,
+    y_groundtruth: np.ndarray,
     lambda_star: float,
     delta: float
 ) -> np.ndarray:
@@ -121,21 +136,23 @@ def nonconformity_scores_batch_two_sided(
     scores = np.zeros(len(p_success))
 
     # SUCCESS candidates: require p_s >= u and p_f <= v
-    success_mask = y_candidates == 1
+    success_mask = y_groundtruth == 1
     scores[success_mask] = np.maximum(
         0,
-        np.maximum(u - p_success[success_mask], p_failure[success_mask] - v)
+        u - p_success[success_mask]
     )
 
     # FAILURE candidates: require p_f >= v and p_s <= u
-    failure_mask = y_candidates == -1
+    failure_mask = y_groundtruth == -1
     scores[failure_mask] = np.maximum(
         0,
-        np.maximum(v - p_failure[failure_mask], p_success[failure_mask] - u)
+        v - p_failure[failure_mask]
     )
 
-    # UNKNOWN candidates: require p_s < u and p_f < v
-    unknown_mask = y_candidates == 0
+    # UNKNOWN candidates: require p_s < u and p_f < v (separatrix region)
+    # Note: ground truth calibration sets don't have y=0, but ranked sampling
+    # uses y=0 for all candidates to measure uncertainty.
+    unknown_mask = y_groundtruth == 0
     scores[unknown_mask] = np.maximum(
         0,
         np.maximum(p_success[unknown_mask] - u, p_failure[unknown_mask] - v)

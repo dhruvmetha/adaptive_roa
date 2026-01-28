@@ -192,7 +192,7 @@ class ConformalPredictor:
         # Step 1: Estimate probabilities for calibration set
         if verbose:
             print(f"\n[1/2] Estimating probabilities for calibration set ({self.config.num_mc_samples} MC samples)...")
-        p_cal_success, p_cal_failure, _ = self.prob_estimator.estimate(X_cal)
+        p_cal_success, p_cal_failure, p_cal_invalid = self.prob_estimator.estimate(X_cal)
 
         # Step 2: Calibrate q_hat
         p_failure_for_cal = p_cal_failure if decision_rule == "two_sided" else None

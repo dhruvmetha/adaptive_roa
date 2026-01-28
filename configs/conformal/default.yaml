@@ -13,7 +13,8 @@ delta: 0.05                # Unknown region half-width [λ-δ, λ+δ] (used when
 w: 0.9                     # Misclassification weight in loss (higher = penalize wrong predictions more)
 
 # Coverage parameters
-alpha: 0.1                 # Significance level (0.1 = 90% coverage guarantee)
+alpha_sampling: 0.1        # Alpha for sampling conformal prediction
+alpha_eval: 0.1            # Alpha for evaluation conformal prediction
 
 # Monte Carlo sampling for probability estimation
 num_mc_samples: 100        # Number of latent z samples per state

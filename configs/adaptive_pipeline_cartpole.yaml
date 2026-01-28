@@ -38,7 +38,8 @@ conformal:
   attractor_radius: 0.2     # CartPole attractor radius
   num_mc_samples: 100       # MC samples for probability estimation
   delta: 0.05               # Unknown region half-width
-  alpha: 0.1                # 90% coverage guarantee
+  alpha_sampling: 0.1       # Alpha for sampling conformal prediction
+  alpha_eval: 0.1           # Alpha for evaluation conformal prediction
 
 # Override adaptive config
 adaptive:

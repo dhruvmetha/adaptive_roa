@@ -70,7 +70,8 @@ conformal:
   verbose: false           # Print detailed debug info (q_hat calibration, scores, etc.)
   delta: 0.05              # Unknown region half-width (used when optimize_mode="lambda")
   w: 1.0                   # Misclassification weight (1.0 = only minimize errors, ignore unknown rate)
-  alpha: 0.1               # 90% coverage guarantee
+  alpha_sampling: 0.1      # Alpha for sampling conformal prediction
+  alpha_eval: 0.1          # Alpha for evaluation conformal prediction
   num_mc_samples: 10       # MC samples for probability estimation (fitting)
   num_mc_samples_eval: 10  # MC samples for full ROA evaluation (faster)
   attractor_radius: 0.1    # For classify_attractor() - pendulum attractors are small

@@ -1392,7 +1392,7 @@ def main(cfg: DictConfig):
     conformal_config = ConformalConfig(
         delta=cfg.conformal.get('delta', 0.05),
         w=cfg.conformal.get('w', 0.9),
-        alpha=cfg.conformal.get('alpha', 0.1),
+        alpha=cfg.conformal.alpha_sampling,
         num_mc_samples=cfg.conformal.get('num_mc_samples', 100),
         attractor_radius=cfg.conformal.get('attractor_radius', 0.2),
         # Optimization mode: "lambda" or "delta"
@@ -1679,7 +1679,7 @@ def main(cfg: DictConfig):
             from adaptive_roa.conformal.calibrator import Calibrator
             eval_conformal_config = ConformalConfig(
                 delta=delta_star,
-                alpha=cfg.conformal.alpha,
+                alpha=cfg.conformal.alpha_eval,
                 decision_rule=cfg.conformal.get('decision_rule', 'two_sided')
             )
             eval_calibrator = Calibrator(eval_conformal_config)

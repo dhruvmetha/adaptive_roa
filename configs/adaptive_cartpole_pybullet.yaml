@@ -107,6 +107,10 @@ conformal:
   delta_min: 0.05          # Minimum δ value
   delta_max: 0.45          # Maximum δ value
 
+  # Max samples from endpoint dataset for λ*/δ* optimization
+  # Uses min(10% of dataset, max_opt_samples). If dataset <= max_opt_samples, uses all.
+  max_opt_samples: 5000
+
   # Threshold mode: "dynamic" or "fixed"
   # - "dynamic": Run optimization to find λ*/δ*, then calibrate q_hat
   # - "fixed": Skip optimization, use fixed thresholds for q_hat calibration and sampling

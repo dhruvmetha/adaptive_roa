@@ -6,6 +6,8 @@
 
 defaults:
   - system: quadrotor3d
+  - conformal: default
+  - adaptive: default
   - _self_
 
 name: adaptive_quadrotor3d
@@ -14,30 +16,30 @@ seed: 42
 # User-specific paths (loaded from .env file via resolvers)
 # To customize: edit .env file with EXP_DIR and DATA_DIR
 exp_dir: ${exp_dir:}
-shared_data: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}
+data_dir: ${data_dir:}
+
+use_loss_weights: false          # If true, weight loss by state limits (proportional)
+use_log_loss_weights: true
+quat_loss_weight: 1.0            # Scalar weight for quaternion loss dims (when use_loss_weights=true)
+
+noise_scale: 1.0                 # Scale factor for initial noise (0-1), reduces variance when < 1
+
+threshold_mode: dynamic # dynamic or fixed
+
+use_manifold: false               # If true, use SO(3) manifold; if false, use Euclidean R^13
 
 # Output directory
 training_index: 0
-output_dir: ${exp_dir}/${name}/outputs/init_size_${initial_train_size}_training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}/${now:%Y-%m-%d_%H-%M-%S}
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_threshold_mode_${threshold_mode}_adapt_iter_${n_epochs}/${now:%Y-%m-%d_%H-%M-%S}
 
 # Device
 device: cuda:0
-
-use_loss_weights: false          # If true, weight loss by state limits (proportional)
-use_log_loss_weights: false
-quat_loss_weight: 1.0            # Scalar weight for quaternion loss dims (when use_loss_weights=true)
-
-noise_scale: 1.0
-# noise_scale: 0.577
-
-use_manifold: true
-                 # Scale factor for initial noise (0-1), reduces variance when < 1
 
 # =====================================================================
 # Data Source Configuration
 # =====================================================================
 data_source:
-  base_dir: ${shared_data}/quadrotor3D_lqr
+  base_dir: ${data_dir}/quadrotor3D_lqr
   trajectories_dir: ${data_source.base_dir}/trajectories
   train_test_splits_dir: ${data_source.base_dir}/train_test_splits
   # Shuffled indices and labels (aligned, for training)
@@ -57,15 +59,25 @@ test_ratio: 0.1     # 10% of training for testing
 # =====================================================================
 # Adaptive Sampling Configuration
 # =====================================================================
-initial_train_size: 500    # Initial training trajectories
-n_epochs: 10              # Number of adaptive sampling epochs
-samples_per_epoch: 500      # New candidates per epoch (for fixed strategy only)
+initial_train_size: 300    # Initial training trajectories
+n_epochs: 20              # Number of adaptive sampling epochs
+samples_per_epoch: 100      # New candidates per epoch (for fixed strategy only)
 warm_start: false           # If true, continue training from previous epoch's checkpoint
+
+# Sampling mode: "conformal", "direct", or "ranked"
+# - "conformal": D1/D2 split with q_hat calibration (default)
+# - "direct": D1/D2 split with λ*/δ* thresholds directly (no q_hat)
+# - "ranked": No D1/D2 split; rank n_ranked_candidates by NC score (y=UNKNOWN),
+#             select lowest samples_per_epoch
+sampling_mode: conformal
+
+# Ranked sampling config (only used when sampling_mode="ranked")
+n_ranked_candidates: 1000   # Number of candidates to evaluate for ranking
 
 # D1/D2 Split for Adaptive Sampling
 # D1 = calibration set (random), used to calibrate q_hat
 # D2 = uncertain set, sampled using q_hat-based prediction sets
-d2_ratio: 0              # Fraction for D2 (uncertainty-filtered using q_hat).
+d2_ratio: 0.5              # Fraction for D2 (uncertainty-filtered using q_hat).
                           #   (1 - d2_ratio) = fraction for D1 (calibration, random)
                           #   d2_ratio = fraction for D2 (uncertain sampling with q_hat)
                           # Example: d2_ratio=0.75 → D1=25%, D2=75%
@@ -76,6 +88,11 @@ max_samples_per_epoch: 50000 # Safety cap on total candidates evaluated per epoc
 # Conformal Prediction Configuration
 # =====================================================================
 conformal:
+  # Toggle conformal prediction on/off
+  # - true: Calibrate q_hat on D1, use prediction sets for uncertainty
+  # - false: Skip q_hat calibration, use λ*/δ* thresholds directly for uncertainty
+  use_conformal: true
+
   verbose: false           # Print detailed debug info (q_hat calibration, scores, etc.)
   delta: 0.05              # Unknown region half-width (used when optimize_mode="lambda")
   w: 1.0                   # Misclassification weight (1.0 = only minimize errors, ignore unknown rate)
@@ -98,7 +115,7 @@ conformal:
   # Threshold mode: "dynamic" or "fixed"
   # - "dynamic": Run optimization to find λ*/δ*, then calibrate q_hat
   # - "fixed": Skip optimization, use fixed thresholds for q_hat calibration and sampling
-  threshold_mode: dynamic
+  threshold_mode: ${threshold_mode}
 
   # Fixed thresholds (only used when threshold_mode="fixed")
   fixed_lambda_star: 0.5   # Fixed decision boundary
@@ -111,6 +128,10 @@ conformal:
   delta_grid_size: 100     # Number of grid points for δ search
   delta_min: 0.05          # Minimum δ value
   delta_max: 0.45          # Maximum δ value
+
+  # Max samples from endpoint dataset for λ*/δ* optimization
+  # Uses min(10% of dataset, max_opt_samples). If dataset <= max_opt_samples, uses all.
+  max_opt_samples: 5000
 
 # =====================================================================
 # Flow Matcher Training Configuration
@@ -194,7 +215,7 @@ scheduler:
 # System (Quadrotor 3D)
 system:
   _target_: adaptive_roa.systems.quadrotor3d.Quadrotor3DSystem
-  dataset_dir: ${shared_data}/quadrotor3D_lqr
+  dataset_dir: ${data_dir}/quadrotor3D_lqr
 
 # Hydra
 hydra:

@@ -1542,6 +1542,9 @@ def main(cfg: DictConfig):
 
         decision_rule = cfg.conformal.get('decision_rule', 'two_sided')
 
+        # use_conformal controls evaluation-time conformal prediction (always true)
+        use_conformal = True
+
         # Create probability estimator for uncertainty evaluation
         prob_estimator = ProbabilityEstimator(
             flow_matcher=flow_matcher,
@@ -1551,14 +1554,32 @@ def main(cfg: DictConfig):
         )
 
         if sampling_mode == "ranked":
-            # ========== RANKED MODE: No D1/D2 split ==========
+            # ========== RANKED MODE: D1 uniform + D2 ranked ==========
+
+            # Compute target sizes (same split as other modes)
+            n_d1_target = int(samples_per_epoch * (1 - d2_ratio))
+            n_d2_target = samples_per_epoch - n_d1_target
+
+            # Step 3: Sample D1 (uniform calibration set)
+            print(f"\n[3] Sampling D1 (calibration set)...")
+            d1_states, d1_indices = dataset_builder.sample_candidates_without_marking(n_d1_target)
+
+            if len(d1_indices) == 0:
+                print("    No more trajectories available!")
+                break
+
+            dataset_builder.mark_indices_as_used(d1_indices)
+            dataset_builder.add_to_training_balanced(d1_indices)
+            print(f"    D1: {len(d1_indices)} calibration points sampled and added to training")
+
+            # Step 4: Sample D2 via ranked NC scores
             n_ranked_candidates = cfg.get('n_ranked_candidates', 1000)
-            print(f"\n[3] Ranked sampling: evaluating {n_ranked_candidates} candidates, "
-                  f"selecting {samples_per_epoch} lowest NC scores...")
+            print(f"\n[4] Ranked sampling D2: evaluating {n_ranked_candidates} candidates, "
+                  f"selecting {n_d2_target} lowest NC scores...")
 
             uncertain_sampler = UncertainSampler(
                 dataset_builder=dataset_builder,
-                target_count=samples_per_epoch,
+                target_count=n_d2_target,
                 batch_size=cfg.get('batch_size_sampling', 50),
                 max_candidates=cfg.get('max_samples_per_epoch', 50000),
             )
@@ -1570,33 +1591,30 @@ def main(cfg: DictConfig):
                 delta_star=delta_star,
                 decision_rule=decision_rule,
                 n_candidates=n_ranked_candidates,
-                n_select=samples_per_epoch,
+                n_select=n_d2_target,
                 verbose=conformal_verbose,
             )
 
-            selected_indices = ranked_result.selected_indices
-            if len(selected_indices) > 0:
-                dataset_builder.mark_indices_as_used(selected_indices)
-                dataset_builder.add_to_training_balanced(selected_indices)
+            d2_indices = ranked_result.selected_indices
+            n_d2 = len(d2_indices)
+            if n_d2 > 0:
+                dataset_builder.mark_indices_as_used(d2_indices)
+                dataset_builder.add_to_training_balanced(d2_indices)
 
-            # Compatibility variables for downstream code
-            d1_indices = []
-            d2_indices = selected_indices
-            n_d2 = len(selected_indices)
             n_certain_discarded = ranked_result.n_candidates_evaluated - n_d2
             n_invalid_added = 0
             q_hat = None
-            use_conformal = False
 
-            print(f"\n[4] Ranked sampling summary:")
+            print(f"\n[5] Ranked sampling summary:")
+            print(f"    D1 (calibration): {len(d1_indices)} points (added)")
+            print(f"    D2 (ranked): {n_d2} points (added)")
+            print(f"    Total added: {len(d1_indices) + n_d2}")
             print(f"    Candidates evaluated: {ranked_result.n_candidates_evaluated}")
-            print(f"    Selected (lowest NC score): {n_d2}")
             if ranked_result.n_candidates_evaluated > 0:
                 print(f"    Score threshold: {ranked_result.score_threshold:.4f}")
 
         else:
             # ========== D1/D2 MODES (conformal / direct) ==========
-            use_conformal = (sampling_mode == "conformal")
 
             # Step 3: Sample D1 (calibration set)
             print(f"\n[3] Sampling D1 (calibration set)...")
@@ -1621,18 +1639,18 @@ def main(cfg: DictConfig):
 
             print(f"    D1: {len(d1_indices)} calibration points sampled and added to training")
 
-            # Step 4: Calibrate q_hat using D1 (only if conformal enabled)
-            if use_conformal:
+            # Step 4: Calibrate q_hat using D1 (only if sampling_mode is conformal)
+            if sampling_mode == "conformal":
                 print(f"\n[4] Calibrating q_hat on D1...")
                 q_hat = conformal_predictor.calibrate_qhat(d1_states, d1_labels, verbose=conformal_verbose)
                 if conformal_verbose:
                     print(f"    q_hat = {q_hat:.4f}")
             else:
-                print(f"\n[4] Skipping q_hat calibration (use_conformal=false)")
+                print(f"\n[4] Skipping q_hat calibration (sampling_mode={sampling_mode})")
                 q_hat = None
 
             # Step 5: Sample D2 (uncertain)
-            if use_conformal:
+            if sampling_mode == "conformal":
                 print(f"\n[5] Sampling D2 (uncertain) using q_hat...")
             else:
                 print(f"\n[5] Sampling D2 (uncertain) using λ*/δ* thresholds directly...")
@@ -1646,7 +1664,7 @@ def main(cfg: DictConfig):
             )
 
             # Sample D2 using appropriate method
-            if use_conformal:
+            if sampling_mode == "conformal":
                 # Use q_hat-based conformal prediction sets
                 sample_result = uncertain_sampler.sample(
                     prob_estimator=prob_estimator,
@@ -1689,10 +1707,14 @@ def main(cfg: DictConfig):
             print(f"    Discarded (certain success/failure): {n_certain_discarded}")
             print(f"    D2 candidates evaluated: {sample_result.n_candidates_evaluated} over {sample_result.n_batches} batches")
 
-        # Step 7: Evaluate on test set (subset of training)
-        print(f"\n[7] Evaluating on test set...")
-        X_test, y_test = dataset_builder.get_test_labels()
-        test_metrics = conformal_predictor.evaluate(X_test, y_test, verbose=conformal_verbose)
+        # Step 7: Evaluate on test set using D1-calibrated q_hat (only for conformal sampling)
+        if sampling_mode == "conformal":
+            print(f"\n[7] Evaluating on test set (D1-calibrated conformal)...")
+            X_test, y_test = dataset_builder.get_test_labels()
+            test_metrics = conformal_predictor.evaluate(X_test, y_test, verbose=conformal_verbose)
+        else:
+            print(f"\n[7] Skipping D1 conformal evaluation (sampling_mode={sampling_mode})")
+            test_metrics = {'coverage': None, 'f1': None, 'unknown_rate': None}
 
         # Step 8: Evaluate on HELD-OUT test set with proper calibration
         num_mc_samples_eval = cfg.conformal.get('num_mc_samples_eval', 20)
@@ -1804,7 +1826,7 @@ def main(cfg: DictConfig):
         print(f"  Training trajectories: {epoch_result['train_trajectories']}")
         print(f"  Sampling mode: {sampling_mode}")
         if sampling_mode == "ranked":
-            print(f"  Added this epoch: {n_d2} (ranked selection)")
+            print(f"  Added this epoch: {len(d1_indices) + n_d2} (D1={len(d1_indices)}, D2={n_d2})")
             print(f"  Ranked candidates evaluated: {ranked_result.n_candidates_evaluated}")
             if ranked_result.n_candidates_evaluated > 0:
                 print(f"  Score threshold: {ranked_result.score_threshold:.4f}")
@@ -1813,8 +1835,10 @@ def main(cfg: DictConfig):
             print(f"    D2 breakdown: {n_d2 - n_invalid_added} uncertain + {n_invalid_added} invalid")
             print(f"  Discarded (certain success/failure): {n_certain_discarded}")
         print(f"  λ* = {epoch_result['lambda_star']:.4f}, δ* = {epoch_result['delta_star']:.4f}")
-        if conformal_verbose and use_conformal:
+        if conformal_verbose and sampling_mode == "conformal":
             print(f"  q_hat (training) = {epoch_result['q_hat']:.4f}, q_hat (eval) = {epoch_result['q_hat_eval']:.4f}")
+        elif conformal_verbose and q_hat_eval is not None:
+            print(f"  q_hat (eval) = {epoch_result['q_hat_eval']:.4f}")
         print(f"  --- Full ROA (held-out test set: {full_roa_metrics['n_total']} trajectories) ---")
         conf_m = full_roa_metrics['conformal_thresholds']
         notebook_m = full_roa_metrics['notebook_thresholds']
@@ -1877,10 +1901,12 @@ def main(cfg: DictConfig):
         print(f"  Accuracy:      {first['notebook_thresholds']['accuracy']:.2%} → {last['notebook_thresholds']['accuracy']:.2%}")
         print(f"\n  λ*:            {epoch_results[0]['lambda_star']:.4f} → {epoch_results[-1]['lambda_star']:.4f}")
         print(f"  δ*:            {epoch_results[0]['delta_star']:.4f} → {epoch_results[-1]['delta_star']:.4f}")
-        if cfg.conformal.get('verbose', True) and epoch_results[-1].get('use_conformal', True):
-            print(f"  q_hat (train): {epoch_results[0]['q_hat']:.4f} → {epoch_results[-1]['q_hat']:.4f}")
-            print(f"  q_hat (eval):  {epoch_results[0]['q_hat_eval']:.4f} → {epoch_results[-1]['q_hat_eval']:.4f}")
-            print(f"  n_cal (eval):  {epoch_results[-1]['n_cal_eval']} held-out calibration points")
+        if cfg.conformal.get('verbose', True):
+            if epoch_results[0].get('q_hat') is not None:
+                print(f"  q_hat (train): {epoch_results[0]['q_hat']:.4f} → {epoch_results[-1]['q_hat']:.4f}")
+            if epoch_results[0].get('q_hat_eval') is not None:
+                print(f"  q_hat (eval):  {epoch_results[0]['q_hat_eval']:.4f} → {epoch_results[-1]['q_hat_eval']:.4f}")
+                print(f"  n_cal (eval):  {epoch_results[-1]['n_cal_eval']} held-out calibration points")
         if epoch_results[0].get('endpoint_error') and epoch_results[-1].get('endpoint_error'):
             print(f"\n  Endpoint MAE:  {epoch_results[0]['endpoint_error']['overall_mae']:.6f} -> {epoch_results[-1]['endpoint_error']['overall_mae']:.6f}")
 

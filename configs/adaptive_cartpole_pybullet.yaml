@@ -25,9 +25,11 @@ threshold_mode: dynamic # dynamic or fixed
 
 use_manifold: true               # If true, use S¹ manifold for angle; if false, use Euclidean R^4
 
+alpha_sampling: 0.1
+
 # Output  directory
 training_index: 0
-output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_threshold_mode_${threshold_mode}_adapt_iter_${n_epochs}/${now:%Y-%m-%d_%H-%M-%S}
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_threshold_mode_${threshold_mode}_adapt_iter_${n_epochs}_alpha_{alpha_sampling}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
 
 # Device
 device: cuda:0
@@ -61,6 +63,10 @@ n_epochs: 10               # Number of adaptive sampling epochs
 samples_per_epoch: 100      # Total samples to add per epoch (D1 + D2)
 warm_start: true          # If true, continue training from previous epoch's checkpoint
 
+sampling_mode: conformal # conformal or ranked or direct
+
+n_ranked_candidates: 1000   # Number of candidates to evaluate for ranking
+
 # D1/D2 Split for Adaptive Sampling
 # D1 = calibration set (random), used to calibrate q_hat
 # D2 = uncertain set, sampled using q_hat-based prediction sets
@@ -83,7 +89,7 @@ conformal:
   verbose: false           # Print detailed debug info (q_hat calibration, scores, etc.)
   delta: 0.05              # Unknown region half-width (used when optimize_mode="lambda")
   w: 0.99                # Misclassification weight (1.0 = only minimize errors, ignore unknown rate)
-  alpha_sampling: 0.1      # Alpha for sampling conformal prediction
+  alpha_sampling: ${alpha_sampling}      # Alpha for sampling conformal prediction
   alpha_eval: 0.1          # Alpha for evaluation conformal prediction
   num_mc_samples: 10       # MC samples for probability estimation (fitting)
   num_mc_samples_eval: 10  # MC samples for full ROA evaluation (faster)

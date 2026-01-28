@@ -4,7 +4,7 @@ Uncertain Sampler for Adaptive Training.
 Samples candidates and filters for uncertain points using q_hat-based prediction sets.
 Points are added to training if:
   - Uncertain: prediction set has multiple labels (e.g., {0, 1}, {-1, 0})
-  - Certainly invalid: prediction set is {0} (invalid/unknown region)
+  - Certainly invalid: prediction set is {0} (invalid region)
 Certain success/failure points (singleton {1} or {-1}) are discarded back to the pool.
 """
 
@@ -23,6 +23,15 @@ class UncertainSamplingResult:
     n_batches: int                  # Number of batches sampled
     n_certain_discarded: int        # Certain success/failure points discarded (stay in pool)
     n_invalid_added: int = 0        # Certainly invalid points added (prediction set = {0})
+
+
+@dataclass
+class RankedSamplingResult:
+    """Result from non-conformity score ranked sampling."""
+    selected_indices: List[int]       # Indices selected (lowest NC scores)
+    all_scores: np.ndarray            # NC scores for all candidates evaluated
+    n_candidates_evaluated: int       # Total candidates evaluated
+    score_threshold: float            # NC score of the last selected point
 
 
 class UncertainSampler:
@@ -396,3 +405,92 @@ class UncertainSampler:
                 uncertain_indices.append(idx)
 
         return uncertain_indices, certain_indices
+
+    def sample_ranked(
+        self,
+        prob_estimator,
+        calibrator,
+        lambda_star: float,
+        delta_star: float,
+        decision_rule: str = "two_sided",
+        n_candidates: int = 1000,
+        n_select: int = 100,
+        verbose: bool = True,
+    ) -> RankedSamplingResult:
+        """
+        Rank candidates by non-conformity score (with y=UNKNOWN) and select the lowest-scored.
+
+        Computes the NC score with label fixed to UNKNOWN (y=0) for all candidates.
+        Low NC score = the point sits in the uncertain region (neither p_success nor
+        p_failure is confidently high), making it most informative for training.
+
+        No D1/D2 split. No q_hat calibration. No true labels needed.
+
+        Args:
+            prob_estimator: ProbabilityEstimator to estimate p(success|x)
+            calibrator: Calibrator with non_conformity_scores_batch method
+            lambda_star: Decision boundary from threshold optimization
+            delta_star: Uncertainty half-width
+            decision_rule: "one_sided" or "two_sided"
+            n_candidates: Number of candidates to evaluate from pool
+            n_select: Number of points to select (lowest NC scores)
+            verbose: Print progress
+
+        Returns:
+            RankedSamplingResult with selected indices and score diagnostics
+        """
+        if verbose:
+            print(f"    [Ranked] Evaluating {n_candidates} candidates, selecting {n_select} lowest NC scores")
+            print(f"    Using λ*={lambda_star:.4f}, δ*={delta_star:.4f}, rule={decision_rule}")
+
+        # Step 1: Sample candidates from pool
+        candidate_states, candidate_indices = self.dataset_builder.sample_candidates_without_marking(
+            n_candidates
+        )
+
+        n_actual = len(candidate_indices)
+        if n_actual == 0:
+            if verbose:
+                print(f"    Pool exhausted. No candidates available.")
+            return RankedSamplingResult(
+                selected_indices=[],
+                all_scores=np.array([]),
+                n_candidates_evaluated=0,
+                score_threshold=float('inf'),
+            )
+
+        if verbose and n_actual < n_candidates:
+            print(f"    Pool has only {n_actual} available (requested {n_candidates})")
+
+        # Step 2: Estimate probabilities
+        p_success, p_failure, _ = prob_estimator.estimate(candidate_states)
+
+        # Step 3: Compute NC scores with label = UNKNOWN (y=0) for all candidates
+        y_unknown = np.zeros(n_actual, dtype=int)
+        p_fail_for_rule = p_failure if decision_rule == "two_sided" else None
+        scores = calibrator.non_conformity_scores_batch(
+            p_success, y_unknown, lambda_star, delta_star, p_fail_for_rule
+        )
+
+        # Step 4: Sort ascending (lowest NC score = most uncertain)
+        sorted_order = np.argsort(scores)
+
+        # Step 5: Select top n_select
+        n_to_select = min(n_select, len(sorted_order))
+        selected_order = sorted_order[:n_to_select]
+        selected_indices = [candidate_indices[i] for i in selected_order]
+
+        score_threshold = float(scores[sorted_order[n_to_select - 1]]) if n_to_select > 0 else float('inf')
+
+        if verbose:
+            print(f"    Selected {len(selected_indices)}/{n_actual} candidates")
+            print(f"    Score stats: min={scores.min():.4f}, max={scores.max():.4f}, "
+                  f"mean={scores.mean():.4f}, median={np.median(scores):.4f}")
+            print(f"    Selection threshold (max score of selected): {score_threshold:.4f}")
+
+        return RankedSamplingResult(
+            selected_indices=selected_indices,
+            all_scores=scores,
+            n_candidates_evaluated=n_actual,
+            score_threshold=score_threshold,
+        )

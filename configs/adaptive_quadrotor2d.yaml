@@ -1,0 +1,191 @@
+# Adaptive Sampling Pipeline for Quadrotor 2D
+# =====================================================================
+# Uses pre-collected trajectory data with conformal prediction
+# to efficiently build training datasets for Quadrotor 2D (R^2 x S^1 x R^3 manifold)
+# =====================================================================
+
+defaults:
+  - system: quadrotor2d
+  - conformal: default
+  - adaptive: default
+  - _self_
+
+name: adaptive_quadrotor2d
+seed: 42
+
+# User-specific paths (loaded from .env file via resolvers)
+exp_dir: ${exp_dir:}
+data_dir: ${data_dir:}
+
+use_loss_weights: false          # If true, weight loss by state limits (proportional)
+use_log_loss_weights: false      # If true (with use_loss_weights=true), use 1+log(limit) for more balanced weights
+
+noise_scale: 1.0                 # Scale factor for initial noise (0-1), reduces variance when < 1
+
+threshold_mode: dynamic # dynamic or fixed
+
+use_manifold: true               # If true, use S^1 manifold for angle; if false, use Euclidean R^6
+
+# Output directory
+training_index: 0
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_threshold_mode_${threshold_mode}_adapt_iter_${n_epochs}/${now:%Y-%m-%d_%H-%M-%S}
+
+# Device
+device: cuda:0
+
+# =====================================================================
+# Data Source Configuration
+# =====================================================================
+data_source:
+  base_dir: ${data_dir}/quadrotor2D_rl
+  trajectories_dir: ${data_source.base_dir}/trajectories
+  train_test_splits_dir: ${data_source.base_dir}/train_test_splits
+  # Shuffled indices and labels (aligned, for training)
+  shuffled_indices_file: ${data_source.train_test_splits_dir}/shuffled_indices_${training_index}.txt
+  shuffled_labels_file: ${data_source.train_test_splits_dir}/shuffled_labels_${training_index}.txt
+  # Eval states (full dataset with start, end, labels - for evaluation only)
+  eval_states_file: ${data_source.base_dir}/eval_states.txt
+  # Held-out calibration set (1000 random samples from eval_states)
+  cal_set_file: ${data_source.base_dir}/cal_set.txt
+  # Held-out test set (remaining eval_states)
+  test_set_file: ${data_source.base_dir}/test_set.txt
+
+# Dataset splits (val/test are subsets of training with overlap)
+val_ratio: 0.1      # 10% of training for validation
+test_ratio: 0.1     # 10% of training for testing
+
+# =====================================================================
+# Adaptive Sampling Configuration
+# =====================================================================
+initial_train_size: 300    # Initial training trajectories
+n_epochs: 20               # Number of adaptive sampling epochs
+samples_per_epoch: 100      # New candidates per epoch
+
+warm_start: false           # If true, continue training from previous epoch's checkpoint
+
+# Sampling mode: "conformal", "direct", or "ranked"
+sampling_mode: conformal
+
+# Ranked sampling config (only used when sampling_mode="ranked")
+n_ranked_candidates: 1000
+
+# D1/D2 Split for Adaptive Sampling
+d2_ratio: 0.5
+batch_size_sampling: 50
+max_samples_per_epoch: 50000
+
+# =====================================================================
+# Conformal Prediction Configuration
+# =====================================================================
+conformal:
+  use_conformal: true
+
+  verbose: false
+  delta: 0.05
+  w: 1.0
+  alpha_sampling: 0.1
+  alpha_eval: 0.1
+  num_mc_samples: 10
+  num_mc_samples_eval: 10
+  attractor_radius: 0.2    # Matches dataset success threshold
+
+  optimize_mode: delta
+  decision_rule: two_sided
+
+  threshold_mode: ${threshold_mode}
+
+  fixed_lambda_star: 0.5
+  fixed_delta_star: 0.1
+
+  lambda_grid_size: 100
+  delta_grid_size: 100
+  delta_min: 0.05
+  delta_max: 0.45
+
+  max_opt_samples: 5000
+
+# =====================================================================
+# Flow Matcher Training Configuration
+# =====================================================================
+batch_size: 1024
+val_batch_size: 2048
+num_workers: 4
+latent_dim: 0
+
+# Trainer: PyTorch Lightning
+trainer:
+  max_epochs: 1000
+  accelerator: gpu
+  devices: 1
+  precision: 32
+  gradient_clip_val: 1.0
+  log_every_n_steps: 10
+  check_val_every_n_epoch: 1
+  enable_progress_bar: true
+  enable_model_summary: true
+  callbacks:
+    - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+      monitor: val_loss
+      mode: min
+      save_top_k: 1
+      save_last: true
+      filename: "best-{epoch:02d}-{val_loss:.4f}"
+      auto_insert_metric_name: false
+    - _target_: lightning.pytorch.callbacks.EarlyStopping
+      monitor: val_loss
+      mode: min
+      patience: 2000
+      verbose: true
+
+# Flow matching specific settings
+flow_matching:
+  latent_dim: ${latent_dim}
+  num_integration_steps: 100
+  mae_val_frequency: 10
+  use_loss_weights: ${use_loss_weights}
+  use_log_loss_weights: ${use_log_loss_weights}
+  use_manifold: ${use_manifold}
+  clamp_noise: false
+  zero_latent: true
+  noise_scale: ${noise_scale}
+
+# Flow Matcher
+flow_matcher:
+  _target_: adaptive_roa.flow_matching.quadrotor_2d.latent_conditional.flow_matcher.Quadrotor2DLatentConditionalFlowMatcher
+
+# Model: Quadrotor 2D UNet
+model:
+  _target_: adaptive_roa.model.quadrotor2d_unet.Quadrotor2DUNet
+  embedded_dim: 7              # (x_norm, z_norm, sin θ, cos θ, ẋ_norm, ż_norm, θ̇_norm)
+  latent_dim: ${latent_dim}
+  condition_dim: 7             # Embedded start state
+  time_emb_dim: 64
+  hidden_dims: [256, 512, 1024, 512, 256]
+  output_dim: 6                # Velocity in tangent space
+  use_input_embeddings: false
+  input_emb_dim: 64
+
+# Optimizer
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 1e-3
+  weight_decay: 1e-5
+  betas: [0.9, 0.999]
+
+# Scheduler
+scheduler:
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  mode: min
+  factor: 0.5
+  patience: 10
+  min_lr: 1e-6
+
+# System (Quadrotor 2D)
+system:
+  _target_: adaptive_roa.systems.quadrotor2d.Quadrotor2DSystem
+  dataset_dir: ${data_dir}/quadrotor2D_rl
+
+# Hydra
+hydra:
+  run:
+    dir: ${output_dir}

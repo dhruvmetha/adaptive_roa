@@ -609,6 +609,104 @@ def compute_metrics_lambda_delta_quadrotor3d(
     }
 
 
+def compute_metrics_lambda_only_quadrotor3d(
+    p_success: np.ndarray,
+    p_failure: np.ndarray,
+    y_all: np.ndarray,
+    lambda_star: float,
+    p_invalid: np.ndarray = None,
+) -> Dict:
+    """
+    Compute classification metrics with NO confidence threshold (delta=0).
+
+    This is a baseline to demonstrate that confidence thresholds are necessary.
+    Uses simple lambda_star comparison without any delta margin.
+
+    Decision rule (two-sided for Quadrotor3D):
+    - SUCCESS if p_success > lambda_star
+    - FAILURE if p_failure > (1 - lambda_star) (symmetric rule)
+    - UNCERTAIN if both or neither condition is met
+    - INVALID if p_invalid >= 0.5
+    """
+    n_total = len(y_all)
+
+    # Step 1: Identify invalid points (p_invalid >= 0.5)
+    if p_invalid is not None:
+        is_invalid = p_invalid >= 0.5
+        n_invalid = int(np.sum(is_invalid))
+    else:
+        is_invalid = np.zeros(n_total, dtype=bool)
+        n_invalid = 0
+
+    # Symmetric threshold for failure: p_failure > (1 - lambda_star)
+    failure_thresh = 1.0 - lambda_star
+
+    # Step 2: Apply simple lambda threshold (no delta margin)
+    # pred_labels: 1=success, 0=failure, -1=uncertain, -2=invalid
+    pred_labels = np.full(n_total, -1)  # Default: uncertain
+    pred_labels[is_invalid] = -2  # Mark invalid
+
+    non_invalid = ~is_invalid
+    is_success = (p_success > lambda_star) & non_invalid
+    is_failure = (p_failure > failure_thresh) & non_invalid
+
+    # If both conditions trigger, treat as uncertain (rare but possible)
+    both = is_success & is_failure
+    pred_labels[is_success & ~both] = 1   # SUCCESS
+    pred_labels[is_failure & ~both] = 0   # FAILURE
+    # Neither or both remain uncertain (-1)
+
+    n_uncertain = int(np.sum(pred_labels == -1))
+    invalid_pct = n_invalid / n_total
+    uncertain_pct = n_uncertain / n_total
+
+    # Valid predictions: success (1) or failure (0)
+    confident_mask = (pred_labels == 1) | (pred_labels == 0)
+    n_confident = int(np.sum(confident_mask))
+
+    n_pred_success = int(np.sum(pred_labels == 1))
+    n_pred_failure = int(np.sum(pred_labels == 0))
+    n_pred_uncertain = int(np.sum(pred_labels == -1))
+    n_pred_invalid = int(np.sum(pred_labels == -2))
+
+    # Map predictions to ground truth space: pred 1 -> 1, pred 0 -> -1
+    y_pred_conf = np.where(pred_labels[confident_mask] == 1, 1, -1)
+    y_true_conf = y_all[confident_mask]
+
+    tp = int(np.sum((y_pred_conf == 1) & (y_true_conf == 1)))
+    tn = int(np.sum((y_pred_conf == -1) & (y_true_conf == -1)))
+    fp = int(np.sum((y_pred_conf == 1) & (y_true_conf == -1)))
+    fn = int(np.sum((y_pred_conf == -1) & (y_true_conf == 1)))
+
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+    accuracy = (tp + tn) / n_confident if n_confident > 0 else 0.0
+
+    return {
+        'n_confident': int(n_confident),
+        'n_invalid': int(n_invalid),
+        'n_uncertain': int(n_uncertain),
+        'invalid_pct': float(invalid_pct),
+        'uncertain_pct': float(uncertain_pct),
+        'separatrix_pct': float(invalid_pct + uncertain_pct),
+        'accuracy': float(accuracy),
+        'precision': float(precision),
+        'recall': float(recall),
+        'specificity': float(specificity),
+        'f1': float(f1),
+        'tp': tp, 'tn': tn, 'fp': fp, 'fn': fn,
+        'lambda_star': float(lambda_star),
+        'delta': 0.0,  # No threshold
+        'failure_threshold_pfailure': float(failure_thresh),
+        'n_pred_success': n_pred_success,
+        'n_pred_failure': n_pred_failure,
+        'n_pred_uncertain': n_pred_uncertain,
+        'n_pred_invalid': n_pred_invalid,
+    }
+
+
 def compute_metrics_qhat_conformal(
     p_success: np.ndarray,
     p_failure: np.ndarray,
@@ -952,7 +1050,16 @@ def evaluate_full_roa_fast(
         p_invalid=p_invalid,
     )
 
-    # 3. q_hat-based conformal prediction sets (if q_hat provided)
+    # 3. Lambda-only (no confidence threshold, delta=0) - baseline
+    metrics_lambda_only = compute_metrics_lambda_only_quadrotor3d(
+        p_success=p_success,
+        p_failure=p_failure,
+        y_all=y_all,
+        lambda_star=lambda_star,
+        p_invalid=p_invalid,
+    )
+
+    # 4. q_hat-based conformal prediction sets (if q_hat provided)
     if q_hat is not None:
         metrics_qhat_conformal = compute_metrics_qhat_conformal(
             p_success=p_success,
@@ -1046,6 +1153,23 @@ def evaluate_full_roa_fast(
         print(f"Recall:          {metrics_notebook['recall']:.2%}")
         print(f"Specificity:     {metrics_notebook['specificity']:.2%}")
 
+        print(f"\n{'='*60}")
+        print("METRICS WITH λ* ONLY (NO CONFIDENCE THRESHOLD)")
+        print(f"{'='*60}")
+        print(f"λ*={lambda_star:.4f}, δ=0 (no threshold)")
+        print(f"  Success if p_success > {lambda_star:.4f}")
+        print(f"  Failure if p_failure > {1.0 - lambda_star:.4f} (symmetric)")
+        print(f"Invalid %:       {metrics_lambda_only['invalid_pct']:.2%} (p_invalid >= 0.5)")
+        print(f"Uncertain %:     {metrics_lambda_only['uncertain_pct']:.2%} (both or neither)")
+        print(f"Confident:       {metrics_lambda_only['n_confident']} predictions")
+        print(f"  Pred success:  {metrics_lambda_only['n_pred_success']}")
+        print(f"  Pred failure:  {metrics_lambda_only['n_pred_failure']}")
+        print(f"Accuracy:        {metrics_lambda_only['accuracy']:.2%}")
+        print(f"F1 Score:        {metrics_lambda_only['f1']:.2%}")
+        print(f"Precision:       {metrics_lambda_only['precision']:.2%}")
+        print(f"Recall:          {metrics_lambda_only['recall']:.2%}")
+        print(f"Specificity:     {metrics_lambda_only['specificity']:.2%}")
+
         if metrics_qhat_conformal is not None:
             print(f"\n{'='*60}")
             print("METRICS WITH q_hat CONFORMAL PREDICTION SETS")
@@ -1115,6 +1239,7 @@ def evaluate_full_roa_fast(
         'delta': float(delta),
         'conformal_thresholds': metrics_conformal,
         'notebook_thresholds': metrics_notebook,
+        'lambda_only_thresholds': metrics_lambda_only,
         'qhat_conformal_thresholds': metrics_qhat_conformal,
         'q_hat': float(q_hat) if q_hat is not None else None,
         # Keep top-level metrics for backward compatibility (using notebook-style now)

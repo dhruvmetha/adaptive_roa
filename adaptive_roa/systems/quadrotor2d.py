@@ -50,7 +50,7 @@ class Quadrotor2DSystem(DynamicalSystem):
 
         # Goal state: hover at (x=0, z=1, θ=0, ẋ=0, ż=0, θ̇=0)
         self.goal_state = np.array([0.0, 1.0, 0.0, 0.0, 0.0, 0.0])
-        self.success_threshold = 0.2
+        self.success_threshold = 0.3
 
         super().__init__()
 
@@ -124,7 +124,7 @@ class Quadrotor2DSystem(DynamicalSystem):
             [0.0, 1.0, 0.0, 0.0, 0.0, 0.0],  # Hover at z=1
         ]
 
-    def is_in_attractor(self, state, radius: float = 0.2):
+    def is_in_attractor(self, state, radius: float = 0.3):
         """
         Check if states are within attractor basin (hovering at goal)
 
@@ -165,7 +165,7 @@ class Quadrotor2DSystem(DynamicalSystem):
 
         return result
 
-    def classify_attractor(self, state: torch.Tensor, radius: float = 0.2) -> torch.Tensor:
+    def classify_attractor(self, state: torch.Tensor, radius: float = 0.3) -> torch.Tensor:
         """
         Classify Quadrotor 2D states into three categories based on termination conditions
 

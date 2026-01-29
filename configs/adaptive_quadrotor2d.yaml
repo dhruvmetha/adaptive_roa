@@ -84,12 +84,12 @@ conformal:
 
   verbose: false
   delta: 0.05
-  w: 1.0
+  w: 0.9
   alpha_sampling: ${alpha_sampling}
   alpha_eval: 0.1
   num_mc_samples: 10
   num_mc_samples_eval: 10
-  attractor_radius: 0.2    # Matches dataset success threshold
+  attractor_radius: 0.3    # Matches dataset success threshold
 
   optimize_mode: delta
   decision_rule: two_sided

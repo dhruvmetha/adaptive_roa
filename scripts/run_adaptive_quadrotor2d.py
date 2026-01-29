@@ -742,7 +742,7 @@ def evaluate_full_roa_fast(
     lambda_star: float = None,
     delta: float = 0.05,
     q_hat: float = None,
-    attractor_radius: float = 0.2,
+    attractor_radius: float = 0.3,
     device: str = 'cuda',
     output_file: str = None,
     verbose: bool = True
@@ -1402,7 +1402,7 @@ def main(cfg: DictConfig):
         w=cfg.conformal.get('w', 0.9),
         alpha=cfg.conformal.alpha_sampling,
         num_mc_samples=cfg.conformal.get('num_mc_samples', 100),
-        attractor_radius=cfg.conformal.get('attractor_radius', 0.2),
+        attractor_radius=cfg.conformal.get('attractor_radius', 0.3),
         # Optimization mode: "lambda" or "delta"
         optimize_mode=cfg.conformal.get('optimize_mode', 'lambda'),
         # Decision rule: "one_sided" (p_s only) or "two_sided" (p_s and p_f)
@@ -1745,7 +1745,7 @@ def main(cfg: DictConfig):
             lambda_star=lambda_star,
             delta=delta_star,
             q_hat=q_hat_eval,  # Changed: use eval-time q_hat
-            attractor_radius=cfg.conformal.get('attractor_radius', 0.2),
+            attractor_radius=cfg.conformal.get('attractor_radius', 0.3),
             device=device,
             output_file=str(full_roa_output_file),
             verbose=conformal_verbose

@@ -111,6 +111,18 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
             # Pure Euclidean mode: all 4D treated as Euclidean
             return Euclidean()
 
+    def _create_distance_manifold(self):
+        """
+        Create manifold for distance computation (always true system manifold).
+
+        Always returns ℝ×S¹×ℝ² regardless of use_manifold setting,
+        ensuring proper geodesic distances for the pole angle component.
+
+        Returns:
+            Product manifold with FlatTorus for proper angle distances
+        """
+        return Product(input_dim=4, manifolds=[(Euclidean(), 1), (FlatTorus(), 1), (Euclidean(), 2)])
+
     def _get_euclidean_loss_weights(self) -> torch.Tensor:
         """
         Get 4D loss weights for Euclidean mode or log-weighted mode.
@@ -239,9 +251,50 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         """Delegate to system for embedding"""
         return self.system.embed_state_for_model(normalized_state)
 
-    # ===================================================================
-    # NOTE: predict_endpoint() moved to BaseFlowMatcher (unified implementation)
-    # ===================================================================
+    def _wrap_angle(self, state: torch.Tensor) -> torch.Tensor:
+        """
+        Wrap pole angle component (index 1) to [-π, π].
+
+        Used when use_manifold=False to ensure valid angle after Euclidean integration.
+
+        Args:
+            state: State tensor [B, 4] as (x, θ, ẋ, θ̇)
+
+        Returns:
+            State with wrapped angle [B, 4]
+        """
+        result = state.clone()
+        # Wrap pole angle (index 1) to [-π, π] using atan2(sin, cos)
+        result[:, 1] = torch.atan2(torch.sin(state[:, 1]), torch.cos(state[:, 1]))
+        return result
+
+    def predict_endpoint(self,
+                        start_states: torch.Tensor,
+                        num_steps: int = 100,
+                        latent: Optional[torch.Tensor] = None,
+                        method: str = "euler") -> torch.Tensor:
+        """
+        Predict endpoints from start states.
+
+        Overrides base class to add angle wrapping when use_manifold=False.
+
+        Args:
+            start_states: Start states [B, state_dim] in raw coordinates
+            num_steps: Number of integration steps for ODE solving
+            latent: Optional latent vectors [B, latent_dim]. If None, will sample.
+            method: Integration method ("euler_riemannian", "euler", "rk4", "midpoint")
+
+        Returns:
+            Predicted endpoints [B, state_dim] in raw coordinates
+        """
+        # Call parent implementation
+        endpoints = super().predict_endpoint(start_states, num_steps, latent, method)
+
+        # When use_manifold=False, wrap pole angle to [-π, π] after Euclidean integration
+        if not self.use_manifold:
+            endpoints = self._wrap_angle(endpoints)
+
+        return endpoints
 
     def predict_endpoints_batch(self,
                                start_states: torch.Tensor,

@@ -42,6 +42,8 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
                  latent_dim: int = 2,
                  mae_val_frequency: int = 10,
                  use_loss_weights: bool = False,
+                 use_manifold: bool = True,
+                 use_log_loss_weights: bool = False,
                  clamp_noise: bool = True,
                  zero_latent: bool = False,
                  val_error_log_file: Optional[str] = None,
@@ -58,23 +60,92 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
             latent_dim: Dimension of latent space
             mae_val_frequency: Compute MAE validation every N epochs
             use_loss_weights: If True, weight loss by normalization limits
+            use_manifold: If True, use S¹ manifold for angle; if False, use pure Euclidean ℝ²
+            use_log_loss_weights: If True and use_loss_weights=True, use 1+log(limit) for balanced weights
             clamp_noise: If True, clamp noise to [-1, 1] to prevent ODE divergence
             zero_latent: If True, use zero latent vectors instead of random sampling
             val_error_log_file: Path to text file for logging validation errors
             noise_scale: Scale factor for noise in sample_noisy_input (0-1, default 1.0)
         """
+        # Store use_manifold BEFORE calling super().__init__ because it calls _create_manifold()
+        self.use_manifold = use_manifold
+        self.use_log_loss_weights = use_log_loss_weights
+
         super().__init__(system, model, optimizer, scheduler, model_config, latent_dim, mae_val_frequency, use_loss_weights, clamp_noise, zero_latent, val_error_log_file, noise_scale)
 
+        # Override loss weights for Euclidean mode or log weights
+        if use_loss_weights:
+            if use_log_loss_weights or not use_manifold:
+                loss_weights_2d = self._get_euclidean_loss_weights()
+                self.register_buffer('loss_weights', loss_weights_2d)
+                weight_type = "1+log(limit)" if use_log_loss_weights else "limit"
+                print(f"📊 Loss weights (2D, {weight_type}): {loss_weights_2d.tolist()}")
+
+        manifold_str = "S¹×ℝ (FlatTorus × Euclidean)" if use_manifold else "ℝ² (Euclidean)"
+
         print("✅ Initialized Pendulum LCFM with Facebook Flow Matching:")
-        print(f"   - Manifold: S¹×ℝ (FlatTorus × Euclidean)")
+        print(f"   - Manifold: {manifold_str}")
         print(f"   - Path: GeodesicProbPath with CondOTScheduler")
         print(f"   - Latent dim: {latent_dim}")
         print(f"   - MAE validation frequency: every {mae_val_frequency} epochs")
+        print(f"   - Use manifold: {use_manifold}")
 
     def _create_manifold(self):
-        """Create S¹×ℝ manifold for pendulum"""
-        # Use Product manifold from flow_matching: (θ, θ̇) where θ is on FlatTorus
+        """
+        Create manifold for Pendulum.
+
+        If use_manifold=True:
+            Product manifold S¹×ℝ
+            - FlatTorus(1): Angle (θ) - circular
+            - Euclidean(1): Angular velocity (θ̇)
+
+        If use_manifold=False:
+            Pure Euclidean ℝ² (all dimensions treated as Euclidean)
+        """
+        if self.use_manifold:
+            return Product(input_dim=2, manifolds=[(FlatTorus(), 1), (Euclidean(), 1)])
+        else:
+            return Euclidean()
+
+    def _create_distance_manifold(self):
+        """
+        Create manifold for distance computation (always true system manifold).
+
+        Always returns S¹×ℝ regardless of use_manifold setting,
+        ensuring proper geodesic distances for the angle component.
+
+        Returns:
+            Product manifold with FlatTorus for proper angle distances
+        """
         return Product(input_dim=2, manifolds=[(FlatTorus(), 1), (Euclidean(), 1)])
+
+    def _get_euclidean_loss_weights(self) -> torch.Tensor:
+        """
+        Get 2D loss weights for Euclidean mode or log-weighted mode.
+
+        Components:
+        - Angle: weight = π (angle range)
+        - Angular velocity: weight from angular_velocity_limit
+
+        If use_log_loss_weights=True, applies 1 + log(limit) transformation.
+        """
+        import math
+
+        angle_limit = math.pi
+        angular_velocity_limit = self.system.angular_velocity_limit
+
+        if self.use_log_loss_weights:
+            weights = torch.tensor([
+                1.0 + math.log(angle_limit),
+                1.0 + math.log(angular_velocity_limit),
+            ], dtype=torch.float32)
+        else:
+            weights = torch.tensor([
+                angle_limit,
+                angular_velocity_limit,
+            ], dtype=torch.float32)
+
+        return weights
 
     def _get_start_states(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """Extract start states from batch"""
@@ -157,6 +228,51 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
         noisy_input = self.manifold.projx(noisy_input)
         return noisy_input
 
+    def _wrap_angle(self, state: torch.Tensor) -> torch.Tensor:
+        """
+        Wrap angle component (index 0) to [-π, π].
+
+        Used when use_manifold=False to ensure valid angle after Euclidean integration.
+
+        Args:
+            state: State tensor [B, 2] as (θ, θ̇)
+
+        Returns:
+            State with wrapped angle [B, 2]
+        """
+        result = state.clone()
+        # Wrap angle to [-π, π] using atan2(sin, cos)
+        result[:, 0] = torch.atan2(torch.sin(state[:, 0]), torch.cos(state[:, 0]))
+        return result
+
+    def predict_endpoint(self,
+                        start_states: torch.Tensor,
+                        num_steps: int = 100,
+                        latent: Optional[torch.Tensor] = None,
+                        method: str = "euler") -> torch.Tensor:
+        """
+        Predict endpoints from start states.
+
+        Overrides base class to add angle wrapping when use_manifold=False.
+
+        Args:
+            start_states: Start states [B, state_dim] in raw coordinates
+            num_steps: Number of integration steps for ODE solving
+            latent: Optional latent vectors [B, latent_dim]. If None, will sample.
+            method: Integration method ("euler_riemannian", "euler", "rk4", "midpoint")
+
+        Returns:
+            Predicted endpoints [B, state_dim] in raw coordinates
+        """
+        # Call parent implementation
+        endpoints = super().predict_endpoint(start_states, num_steps, latent, method)
+
+        # When use_manifold=False, wrap angle to [-π, π] after Euclidean integration
+        if not self.use_manifold:
+            endpoints = self._wrap_angle(endpoints)
+
+        return endpoints
+
     # ===================================================================
     # REMOVED METHODS (now in base class or handled by Facebook FM):
     # ===================================================================
@@ -166,7 +282,6 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
     # ✅ compute_endpoint_mae_per_dim() → moved to BaseFlowMatcher
     # ✅ validation_step() → moved to BaseFlowMatcher
     # ✅ on_validation_epoch_end() → moved to BaseFlowMatcher
-    # ✅ predict_endpoint() → moved to BaseFlowMatcher (unified implementation)
     # ❌ interpolate_s1_x_r() → replaced by self.path.sample()
     # ❌ compute_target_velocity_s1_x_r() → automatic in path_sample.dx_t
 

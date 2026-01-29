@@ -156,6 +156,22 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
             # Pure Euclidean mode: all 13D treated as Euclidean
             return Euclidean()
 
+    def _create_distance_manifold(self):
+        """
+        Create manifold for distance computation (always true system manifold).
+
+        Always returns ℝ³ × SO(3) × ℝ⁶ regardless of use_manifold setting,
+        ensuring proper geodesic distances for quaternion components.
+
+        Returns:
+            Product manifold with SO(3) for proper orientation distances
+        """
+        return Product(input_dim=13, manifolds=[
+            (Euclidean(), 3),      # Position (x, y, z)
+            (SO3(), 4, 3),         # Quaternion (qw, qx, qy, qz) - 4D representation, 3D tangent
+            (Euclidean(), 6)       # Velocities (ẋ, ẏ, ż, p, q, r)
+        ])
+
     def _get_euclidean_loss_weights(self) -> torch.Tensor:
         """
         Get loss weights for tangent space dimensions.

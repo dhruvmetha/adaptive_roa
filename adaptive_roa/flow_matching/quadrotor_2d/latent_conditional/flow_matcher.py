@@ -102,6 +102,18 @@ class Quadrotor2DLatentConditionalFlowMatcher(BaseFlowMatcher):
         else:
             return Euclidean()
 
+    def _create_distance_manifold(self):
+        """
+        Create manifold for distance computation (always true system manifold).
+
+        Always returns ℝ²×S¹×ℝ³ regardless of use_manifold setting,
+        ensuring proper geodesic distances for the pitch angle component.
+
+        Returns:
+            Product manifold with FlatTorus for proper angle distances
+        """
+        return Product(input_dim=6, manifolds=[(Euclidean(), 2), (FlatTorus(), 1), (Euclidean(), 3)])
+
     def _get_euclidean_loss_weights(self) -> torch.Tensor:
         """
         Get 6D loss weights for Euclidean mode or log-weighted mode.
@@ -221,6 +233,51 @@ class Quadrotor2DLatentConditionalFlowMatcher(BaseFlowMatcher):
     def embed_state_for_model(self, normalized_state: torch.Tensor) -> torch.Tensor:
         """Delegate to system for embedding"""
         return self.system.embed_state_for_model(normalized_state)
+
+    def _wrap_angle(self, state: torch.Tensor) -> torch.Tensor:
+        """
+        Wrap pitch angle component (index 2) to [-π, π].
+
+        Used when use_manifold=False to ensure valid angle after Euclidean integration.
+
+        Args:
+            state: State tensor [B, 6] as (x, z, θ, ẋ, ż, θ̇)
+
+        Returns:
+            State with wrapped angle [B, 6]
+        """
+        result = state.clone()
+        # Wrap pitch angle (index 2) to [-π, π] using atan2(sin, cos)
+        result[:, 2] = torch.atan2(torch.sin(state[:, 2]), torch.cos(state[:, 2]))
+        return result
+
+    def predict_endpoint(self,
+                        start_states: torch.Tensor,
+                        num_steps: int = 100,
+                        latent: Optional[torch.Tensor] = None,
+                        method: str = "euler") -> torch.Tensor:
+        """
+        Predict endpoints from start states.
+
+        Overrides base class to add angle wrapping when use_manifold=False.
+
+        Args:
+            start_states: Start states [B, state_dim] in raw coordinates
+            num_steps: Number of integration steps for ODE solving
+            latent: Optional latent vectors [B, latent_dim]. If None, will sample.
+            method: Integration method ("euler_riemannian", "euler", "rk4", "midpoint")
+
+        Returns:
+            Predicted endpoints [B, state_dim] in raw coordinates
+        """
+        # Call parent implementation
+        endpoints = super().predict_endpoint(start_states, num_steps, latent, method)
+
+        # When use_manifold=False, wrap pitch angle to [-π, π] after Euclidean integration
+        if not self.use_manifold:
+            endpoints = self._wrap_angle(endpoints)
+
+        return endpoints
 
     def predict_endpoints_batch(self,
                                start_states: torch.Tensor,

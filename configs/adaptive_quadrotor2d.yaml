@@ -26,9 +26,11 @@ threshold_mode: dynamic # dynamic or fixed
 
 use_manifold: true               # If true, use S^1 manifold for angle; if false, use Euclidean R^6
 
+alpha_sampling: 0.1
+
 # Output directory
 training_index: 0
-output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_threshold_mode_${threshold_mode}_adapt_iter_${n_epochs}/${now:%Y-%m-%d_%H-%M-%S}
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_threshold_mode_${threshold_mode}_adapt_iter_${n_epochs}_alpha_${alpha_sampling}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
 
 # Device
 device: cuda:0
@@ -83,7 +85,7 @@ conformal:
   verbose: false
   delta: 0.05
   w: 1.0
-  alpha_sampling: 0.1
+  alpha_sampling: ${alpha_sampling}
   alpha_eval: 0.1
   num_mc_samples: 10
   num_mc_samples_eval: 10

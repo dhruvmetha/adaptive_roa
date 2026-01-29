@@ -28,9 +28,11 @@ threshold_mode: dynamic # dynamic or fixed
 
 use_manifold: false               # If true, use SO(3) manifold; if false, use Euclidean R^13
 
+alpha_sampling: 0.1
+
 # Output directory
 training_index: 0
-output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_threshold_mode_${threshold_mode}_adapt_iter_${n_epochs}/${now:%Y-%m-%d_%H-%M-%S}
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_threshold_mode_${threshold_mode}_adapt_iter_${n_epochs}_alpha_${alpha_sampling}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
 
 # Device
 device: cuda:0
@@ -96,7 +98,7 @@ conformal:
   verbose: false           # Print detailed debug info (q_hat calibration, scores, etc.)
   delta: 0.05              # Unknown region half-width (used when optimize_mode="lambda")
   w: 1.0                   # Misclassification weight (1.0 = only minimize errors, ignore unknown rate)
-  alpha_sampling: 0.1      # Alpha for sampling conformal prediction
+  alpha_sampling: ${alpha_sampling}      # Alpha for sampling conformal prediction
   alpha_eval: 0.1          # Alpha for evaluation conformal prediction
   num_mc_samples: 10       # MC samples for probability estimation (fitting)
   num_mc_samples_eval: 10  # MC samples for full ROA evaluation (faster)

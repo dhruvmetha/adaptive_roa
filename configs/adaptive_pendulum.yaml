@@ -16,9 +16,13 @@ seed: 42
 exp_dir: ${exp_dir:}
 data_dir: ${data_dir:}
 
+threshold_mode: dynamic
+
+alpha_sampling: 0.1
+
 # Output directory (matches CartPole naming convention)
 training_index: 0
-output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_threshold_mode_${conformal.threshold_mode}_adapt_iter_${n_epochs}_alpha_${conformal.alpha_sampling}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_threshold_mode_${threshold_mode}_adapt_iter_${n_epochs}_alpha_${alpha_sampling}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
 
 # Device
 device: cuda:0
@@ -80,7 +84,7 @@ conformal:
   use_conformal: true      # Enable conformal prediction for evaluation (always true, kept for backward compat)
   delta: 0.05              # Unknown region half-width (used when optimize_mode="lambda")
   w: 1.0                   # Misclassification weight (1.0 = only minimize errors, ignore unknown rate)
-  alpha_sampling: 0.1      # Alpha for sampling conformal prediction
+  alpha_sampling: ${alpha_sampling}      # Alpha for sampling conformal prediction
   alpha_eval: 0.1          # Alpha for evaluation conformal prediction
   num_mc_samples: 10       # MC samples for probability estimation (fitting)
   num_mc_samples_eval: 10  # MC samples for full ROA evaluation (faster)
@@ -101,7 +105,7 @@ conformal:
   # Threshold mode: "dynamic" or "fixed"
   # - "dynamic": Run optimization to find λ*/δ*, then calibrate q_hat
   # - "fixed": Skip optimization, use fixed thresholds for q_hat calibration and sampling
-  threshold_mode: dynamic
+  threshold_mode: ${threshold_mode}
 
   # Fixed thresholds (only used when threshold_mode="fixed")
   fixed_lambda_star: 0.5   # Fixed decision boundary

@@ -2,12 +2,21 @@
 """
 Compile and plot metrics across adaptive ROA training epochs.
 
-Usage:
-    python scripts/compile_adaptive_metrics.py /path/to/training/output/dir
+Supports both default training metrics and re-evaluations.
 
-Output is saved to {training_output_dir}/metrics/:
-    - metrics_summary.csv: Complete metrics table
-    - plots/: Directory with visualization plots
+Usage:
+    # Compile ALL: default + all re-evaluations
+    python scripts/compile_adaptive_metrics.py /path/to/training/output
+
+    # Compile only default (training) metrics
+    python scripts/compile_adaptive_metrics.py /path/to/training/output --eval_dir default
+
+    # Compile specific re-evaluation
+    python scripts/compile_adaptive_metrics.py /path/to/training/output --eval_dir radius_0.25
+
+Output structure:
+    - Default metrics: {training_dir}/metrics/
+    - Re-evaluation metrics: {training_dir}/evaluations/{eval_name}/metrics/
 """
 
 import argparse
@@ -99,37 +108,46 @@ def extract_metrics_from_epoch(results: dict[str, Any]) -> dict[str, Any]:
     return metrics
 
 
-def compile_metrics(output_dir: Path) -> pd.DataFrame:
+def compile_metrics(source_dir: Path) -> pd.DataFrame:
     """Compile metrics from all epochs into a DataFrame."""
     epoch_dirs = sorted(
-        [d for d in output_dir.iterdir() if d.is_dir() and re.match(r"epoch_\d+", d.name)],
+        [d for d in source_dir.iterdir() if d.is_dir() and re.match(r"epoch_\d+", d.name)],
         key=lambda x: int(re.search(r"\d+", x.name).group()),
     )
 
     if not epoch_dirs:
-        raise ValueError(f"No epoch directories found in {output_dir}")
+        raise ValueError(f"No epoch directories found in {source_dir}")
 
     all_metrics = []
     for epoch_dir in epoch_dirs:
         results_file = epoch_dir / "results.json"
         if not results_file.exists():
-            print(f"Warning: {results_file} not found, skipping")
+            print(f"    Warning: {results_file} not found, skipping")
             continue
 
         try:
             with open(results_file) as f:
                 results = json.load(f)
         except PermissionError:
-            print(f"Warning: Permission denied for {results_file}, skipping")
+            print(f"    Warning: Permission denied for {results_file}, skipping")
             continue
         except json.JSONDecodeError as e:
-            print(f"Warning: Failed to parse {results_file}: {e}, skipping")
+            print(f"    Warning: Failed to parse {results_file}: {e}, skipping")
             continue
 
         metrics = extract_metrics_from_epoch(results)
         all_metrics.append(metrics)
 
     return pd.DataFrame(all_metrics)
+
+
+def generate_plots(df: pd.DataFrame, plots_dir: Path) -> None:
+    """Generate all plots."""
+    plot_performance_metrics(df, plots_dir)
+    plot_coverage_breakdown(df, plots_dir)
+    plot_endpoint_errors(df, plots_dir)
+    plot_training_progress(df, plots_dir)
+    plot_stratified_region_errors(df, plots_dir)
 
 
 def plot_performance_metrics(df: pd.DataFrame, output_dir: Path) -> None:
@@ -327,49 +345,146 @@ def plot_stratified_region_errors(df: pd.DataFrame, output_dir: Path) -> None:
     plt.close()
 
 
+def compile_default(training_dir: Path) -> None:
+    """Compile metrics from default training results (epoch_XXX/results.json)."""
+    print("  Source: epoch_XXX/results.json (original training)")
+
+    # Check if epochs exist
+    epoch_dirs = [d for d in training_dir.iterdir() if d.is_dir() and re.match(r"epoch_\d+", d.name)]
+    if not epoch_dirs:
+        print("  WARNING: No epoch directories found, skipping default compilation")
+        return
+
+    # Compile metrics
+    df = compile_metrics(training_dir)
+    print(f"  Found {len(df)} epochs")
+
+    # Save to training_dir/metrics/ (not under evaluations/)
+    metrics_dir = training_dir / "metrics"
+    metrics_dir.mkdir(exist_ok=True)
+
+    csv_path = metrics_dir / "metrics_summary.csv"
+    df.to_csv(csv_path, index=False)
+    print(f"  Saved: {csv_path}")
+
+    plots_dir = metrics_dir / "plots"
+    plots_dir.mkdir(exist_ok=True)
+    generate_plots(df, plots_dir)
+    print(f"  Plots: {plots_dir}")
+
+
+def compile_reeval(eval_dir: Path) -> None:
+    """Compile metrics from a re-evaluation directory."""
+    # Load eval_config.json to show what params were used
+    eval_config_path = eval_dir / "eval_config.json"
+    if eval_config_path.exists():
+        with open(eval_config_path) as f:
+            eval_config = json.load(f)
+        params = eval_config.get("parameters", {})
+        print(f"  Parameters: {params}")
+
+    # Check if epochs exist
+    epoch_dirs = [d for d in eval_dir.iterdir() if d.is_dir() and re.match(r"epoch_\d+", d.name)]
+    if not epoch_dirs:
+        print("  WARNING: No epoch directories found, skipping")
+        return
+
+    # Compile metrics
+    df = compile_metrics(eval_dir)
+    print(f"  Found {len(df)} epochs")
+
+    # Save to eval_dir/metrics/
+    metrics_dir = eval_dir / "metrics"
+    metrics_dir.mkdir(exist_ok=True)
+
+    csv_path = metrics_dir / "metrics_summary.csv"
+    df.to_csv(csv_path, index=False)
+    print(f"  Saved: {csv_path}")
+
+    plots_dir = metrics_dir / "plots"
+    plots_dir.mkdir(exist_ok=True)
+    generate_plots(df, plots_dir)
+    print(f"  Plots: {plots_dir}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Compile and plot metrics across adaptive ROA training epochs"
     )
     parser.add_argument(
-        "output_dir",
+        "training_dir",
         type=Path,
-        help="Path to training output directory containing epoch_NNN folders",
+        help="Path to training output directory containing epoch_XXX folders",
+    )
+    parser.add_argument(
+        "--eval_dir",
+        type=str,
+        default=None,
+        help="Specific evaluation to compile: 'default', 'radius_0.25', etc. "
+             "If not specified, compiles ALL evaluations (default + re-evaluations).",
     )
     args = parser.parse_args()
 
-    output_dir = args.output_dir
-    if not output_dir.exists():
-        raise FileNotFoundError(f"Output directory not found: {output_dir}")
+    training_dir = args.training_dir
+    if not training_dir.exists():
+        raise FileNotFoundError(f"Training directory not found: {training_dir}")
 
-    # Create metrics output directory inside training output dir
-    metrics_dir = output_dir / "metrics"
-    metrics_dir.mkdir(exist_ok=True)
-    plots_dir = metrics_dir / "plots"
-    plots_dir.mkdir(exist_ok=True)
+    evaluations_dir = training_dir / "evaluations"
 
-    print(f"Compiling metrics from {output_dir}")
+    if args.eval_dir is None:
+        # Compile ALL: default + re-evaluations
+        print("=" * 70)
+        print("COMPILING ALL EVALUATIONS")
+        print("=" * 70)
 
-    # Compile metrics
-    df = compile_metrics(output_dir)
-    print(f"Found {len(df)} epochs")
+        # 1. Compile DEFAULT (from training_dir/epoch_XXX/)
+        print("\n--- Compiling: default ---")
+        compile_default(training_dir)
 
-    # Save CSV
-    csv_path = metrics_dir / "metrics_summary.csv"
-    df.to_csv(csv_path, index=False)
-    print(f"Saved metrics to {csv_path}")
+        # 2. Compile all re-evaluations
+        if evaluations_dir.exists():
+            for eval_dir in sorted(evaluations_dir.iterdir()):
+                if eval_dir.is_dir():
+                    print(f"\n--- Compiling: {eval_dir.name} ---")
+                    compile_reeval(eval_dir)
+        else:
+            print("\n(No re-evaluations found)")
 
-    # Generate plots
-    print("Generating plots...")
-    plot_performance_metrics(df, plots_dir)
-    plot_coverage_breakdown(df, plots_dir)
-    plot_endpoint_errors(df, plots_dir)
-    plot_training_progress(df, plots_dir)
-    plot_stratified_region_errors(df, plots_dir)
+        print("\n" + "=" * 70)
+        print("COMPILATION COMPLETE")
+        print("=" * 70)
 
-    print(f"Plots saved to {plots_dir}")
-    print("Done!")
+    elif args.eval_dir == "default":
+        # Compile DEFAULT only
+        print("=" * 70)
+        print("COMPILING: default (original training metrics)")
+        print("=" * 70)
+        compile_default(training_dir)
+        print("\nDone!")
+
+    else:
+        # Compile specific re-evaluation
+        eval_dir = evaluations_dir / args.eval_dir
+        if not eval_dir.exists():
+            print(f"ERROR: {eval_dir} does not exist")
+            print("\nAvailable re-evaluations:")
+            if evaluations_dir.exists():
+                for d in sorted(evaluations_dir.iterdir()):
+                    if d.is_dir():
+                        print(f"  - {d.name}")
+            else:
+                print("  (none)")
+            return 1
+
+        print("=" * 70)
+        print(f"COMPILING: {args.eval_dir}")
+        print("=" * 70)
+        compile_reeval(eval_dir)
+        print("\nDone!")
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    sys.exit(main() or 0)

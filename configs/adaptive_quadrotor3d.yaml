@@ -61,7 +61,7 @@ test_ratio: 0.1     # 10% of training for testing
 # =====================================================================
 # Adaptive Sampling Configuration
 # =====================================================================
-initial_train_size: 300    # Initial training trajectories
+initial_train_size: 500    # Initial training trajectories
 n_epochs: 20              # Number of adaptive sampling epochs
 samples_per_epoch: 100      # New candidates per epoch (for fixed strategy only)
 warm_start: false           # If true, continue training from previous epoch's checkpoint
@@ -71,7 +71,7 @@ warm_start: false           # If true, continue training from previous epoch's c
 # - "direct": D1/D2 split with λ*/δ* thresholds directly (no q_hat)
 # - "ranked": No D1/D2 split; rank n_ranked_candidates by NC score (y=UNKNOWN),
 #             select lowest samples_per_epoch
-sampling_mode: conformal
+sampling_mode: ranked
 
 # Ranked sampling config (only used when sampling_mode="ranked")
 n_ranked_candidates: 1000   # Number of candidates to evaluate for ranking
@@ -203,7 +203,7 @@ model:
 # Optimizer
 optimizer:
   _target_: torch.optim.AdamW
-  lr: 1e-3
+  lr: 5e-4
   weight_decay: 1e-5
   betas: [0.9, 0.999]
 

@@ -24,7 +24,7 @@ noise_scale: 1.0                 # Scale factor for initial noise (0-1), reduces
 
 threshold_mode: dynamic # dynamic or fixed
 
-use_manifold: true               # If true, use S^1 manifold for angle; if false, use Euclidean R^6
+use_manifold: false               # If true, use S^1 manifold for angle; if false, use Euclidean R^6
 
 alpha_sampling: 0.1
 
@@ -59,14 +59,14 @@ test_ratio: 0.1     # 10% of training for testing
 # =====================================================================
 # Adaptive Sampling Configuration
 # =====================================================================
-initial_train_size: 300    # Initial training trajectories
+initial_train_size: 400    # Initial training trajectories
 n_epochs: 20               # Number of adaptive sampling epochs
 samples_per_epoch: 100      # New candidates per epoch
 
 warm_start: false           # If true, continue training from previous epoch's checkpoint
 
 # Sampling mode: "conformal", "direct", or "ranked"
-sampling_mode: conformal
+sampling_mode: ranked
 
 # Ranked sampling config (only used when sampling_mode="ranked")
 n_ranked_candidates: 1000
@@ -89,7 +89,7 @@ conformal:
   alpha_eval: 0.1
   num_mc_samples: 10
   num_mc_samples_eval: 10
-  attractor_radius: 0.3    # Matches dataset success threshold
+  attractor_radius: 0.3
 
   optimize_mode: delta
   decision_rule: two_sided

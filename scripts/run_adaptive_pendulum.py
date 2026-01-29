@@ -817,16 +817,17 @@ def evaluate_full_roa_fast(
                 # Accumulate predictions for mean endpoint computation
                 pred_endpoints_sum[batch_start:batch_end] += pred.cpu().numpy()
                 # Compute per-sample geodesic error (L2 norm across dimensions)
-                geodesic_dist = flow_matcher.manifold.dist(pred, batch_actual).cpu().numpy()
+                # Use distance_manifold (true system manifold) for proper geodesic distances
+                geodesic_dist = flow_matcher.distance_manifold.dist(pred, batch_actual).cpu().numpy()
                 mc_errors[batch_start:batch_end, sample_idx] = np.linalg.norm(geodesic_dist, axis=1)
 
     # Compute mean predicted endpoints
     pred_endpoints_mean = pred_endpoints_sum / num_mc_samples
 
-    # Compute endpoint errors using manifold's geodesic distance (for legacy stats)
+    # Compute endpoint errors using distance_manifold's geodesic distance (for legacy stats)
     pred_tensor = torch.from_numpy(pred_endpoints_mean).float().to(device)
     actual_tensor = torch.from_numpy(end_states_all).float().to(device)
-    geodesic_errors = flow_matcher.manifold.dist(pred_tensor, actual_tensor).cpu().numpy()
+    geodesic_errors = flow_matcher.distance_manifold.dist(pred_tensor, actual_tensor).cpu().numpy()
 
     # Get component names for reporting
     component_names = flow_matcher.get_manifold_component_names()

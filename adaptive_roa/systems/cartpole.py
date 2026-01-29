@@ -122,9 +122,12 @@ class CartPoleSystem(DynamicalSystem):
         """
         Check if states are within attractor basins (balanced CartPole)
 
+        Uses circular distance for pole angle θ (index 1) and Euclidean
+        distance for all other components.
+
         Args:
             state: States [B, 4] as (x, θ, ẋ, θ̇) - numpy array or torch tensor
-            radius: Attractor radius for position/velocity tolerances
+            radius: Attractor radius (distance threshold)
 
         Returns:
             Boolean tensor [B] indicating attractor membership
@@ -136,25 +139,21 @@ class CartPoleSystem(DynamicalSystem):
         if state.dim() == 1:
             state = state.unsqueeze(0)
 
-        result = torch.norm(state, dim=1) < radius
+        # Goal state is [0, 0, 0, 0]
+        # Euclidean components: x, ẋ, θ̇ (indices 0, 2, 3)
+        euclidean_diff = state[:, [0, 2, 3]]  # Goal is 0 for all
 
-        # x, theta, x_dot, theta_dot = state[:, 0], state[:, 1], state[:, 2], state[:, 3]
+        # Circular component: θ (index 1) - wrap difference to [-π, π]
+        # Goal θ = 0, so angle_diff = θ - 0 = θ
+        angle_diff = torch.atan2(torch.sin(state[:, 1]), torch.cos(state[:, 1]))
 
-        # # Position and velocity constraints (using radius = 0.1 consistently)
-        # position_ok = torch.abs(x) < radius
-        # velocity_ok = torch.abs(x_dot) < radius
-        # angular_velocity_ok = torch.abs(theta_dot) < radius
+        # Combined distance: sqrt(sum of squared Euclidean diffs + squared angle diff)
+        dist = torch.sqrt(torch.sum(euclidean_diff**2, dim=1) + angle_diff**2)
+        result = dist < radius
 
-        # # Angular constraint: check if close to upright (0° ONLY)
-        # # Distance from 0° (upright position)
-        # dist_from_zero = torch.abs(theta)
-        # angle_ok = dist_from_zero < radius
-
-        # result = position_ok & velocity_ok & angle_ok & angular_velocity_ok
-        # # Convert back to numpy if input was numpy
         if len(result) == 1:
             return result.item()
-        
+
         return result
 
     def classify_attractor(self, state: torch.Tensor, radius: float = 0.1) -> torch.Tensor:
@@ -191,13 +190,16 @@ class CartPoleSystem(DynamicalSystem):
 
         x, theta, x_dot, theta_dot = state[:, 0], state[:, 1], state[:, 2], state[:, 3]
 
-        # SUCCESS: Check all constraints for upright balanced attractor
-        position_ok = torch.abs(x) < radius
-        velocity_ok = torch.abs(x_dot) < radius
-        angular_velocity_ok = torch.abs(theta_dot) < radius
-        angle_ok = torch.abs(theta) < radius
+        # SUCCESS: Distance from goal [0,0,0,0] < radius (with circular handling for θ)
+        # Euclidean components: x, ẋ, θ̇ (indices 0, 2, 3)
+        euclidean_diff = state[:, [0, 2, 3]]  # Goal is 0 for all
 
-        in_attractor = position_ok & velocity_ok & angle_ok & angular_velocity_ok
+        # Circular component: θ (index 1) - wrap difference to [-π, π]
+        angle_diff = torch.atan2(torch.sin(theta), torch.cos(theta))
+
+        # Combined distance
+        dist = torch.sqrt(torch.sum(euclidean_diff**2, dim=1) + angle_diff**2)
+        in_attractor = dist < radius
 
 
 

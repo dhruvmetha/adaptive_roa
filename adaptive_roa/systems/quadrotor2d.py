@@ -128,9 +128,12 @@ class Quadrotor2DSystem(DynamicalSystem):
         """
         Check if states are within attractor basin (hovering at goal)
 
+        Uses circular distance for pitch angle θ (index 2) and Euclidean
+        distance for all other components.
+
         Args:
             state: States [B, 6] as (x, z, θ, ẋ, ż, θ̇) - numpy array or torch tensor
-            radius: Attractor radius (Euclidean distance threshold)
+            radius: Attractor radius (distance threshold)
 
         Returns:
             Boolean tensor [B] indicating attractor membership
@@ -142,7 +145,19 @@ class Quadrotor2DSystem(DynamicalSystem):
             state = state.unsqueeze(0)
 
         goal = torch.tensor(self.goal_state, device=state.device, dtype=state.dtype)
-        dist = torch.norm(state - goal.unsqueeze(0), dim=1)
+
+        # Euclidean components: x, z, ẋ, ż, θ̇ (indices 0, 1, 3, 4, 5)
+        euclidean_indices = [0, 1, 3, 4, 5]
+        euclidean_diff = state[:, euclidean_indices] - goal[euclidean_indices].unsqueeze(0)
+
+        # Circular component: θ (index 2) - wrap difference to [-π, π]
+        angle_diff = state[:, 2] - goal[2]
+        angle_diff = torch.atan2(torch.sin(angle_diff), torch.cos(angle_diff))
+
+        # Combined distance: sqrt(sum of squared Euclidean diffs + squared angle diff)
+        dist = torch.sqrt(
+            torch.sum(euclidean_diff**2, dim=1) + angle_diff**2
+        )
         result = dist < radius
 
         if len(result) == 1:
@@ -188,9 +203,19 @@ class Quadrotor2DSystem(DynamicalSystem):
             state[:, 3], state[:, 4], state[:, 5]
         )
 
-        # SUCCESS: Euclidean distance from goal < radius
+        # SUCCESS: Distance from goal < radius (with circular handling for θ)
         goal = torch.tensor(self.goal_state, device=state.device, dtype=state.dtype)
-        dist = torch.norm(state - goal.unsqueeze(0), dim=1)
+
+        # Euclidean components: x, z, ẋ, ż, θ̇ (indices 0, 1, 3, 4, 5)
+        euclidean_indices = [0, 1, 3, 4, 5]
+        euclidean_diff = state[:, euclidean_indices] - goal[euclidean_indices].unsqueeze(0)
+
+        # Circular component: θ (index 2) - wrap difference to [-π, π]
+        angle_diff = state[:, 2] - goal[2]
+        angle_diff = torch.atan2(torch.sin(angle_diff), torch.cos(angle_diff))
+
+        # Combined distance
+        dist = torch.sqrt(torch.sum(euclidean_diff**2, dim=1) + angle_diff**2)
         in_attractor = dist < radius
 
         # FAILURE: Exceeded termination thresholds (with small margin for overshoot)

@@ -747,7 +747,7 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         start_states: torch.Tensor,
         num_steps: int = 100,
         latent: Optional[torch.Tensor] = None,
-        method: str = "euler_riemannian",
+        method: str = "euler",
     ) -> torch.Tensor:
         """
         Predict endpoints from start states using Facebook FM's RiemannianODESolver

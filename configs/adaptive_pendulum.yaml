@@ -16,9 +16,9 @@ seed: 42
 exp_dir: ${exp_dir:}
 data_dir: ${data_dir:}
 
-# Output directory
+# Output directory (matches CartPole naming convention)
 training_index: 0
-output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}/${now:%Y-%m-%d_%H-%M-%S}
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_threshold_mode_${conformal.threshold_mode}_adapt_iter_${n_epochs}_alpha_${conformal.alpha_sampling}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
 
 # Device
 device: cuda:0
@@ -53,6 +53,15 @@ n_epochs: 20               # Number of adaptive sampling epochs
 samples_per_epoch: 50      # New candidates per epoch (for fixed strategy only)
 warm_start: True          # If true, continue training from previous epoch's checkpoint
 
+# Sampling mode: "conformal", "ranked", or "direct"
+# - "conformal": Full conformal prediction with q_hat calibration and coverage guarantees
+# - "ranked": Select points with lowest NC scores (most uncertain), no q_hat calibration
+# - "direct": Use λ*/δ* thresholds directly, no conformal calibration
+sampling_mode: conformal
+
+# Ranked sampling configuration (only used when sampling_mode="ranked")
+n_ranked_candidates: 1000  # Number of candidates to evaluate for ranked sampling
+
 # D1/D2 Split for Adaptive Sampling
 # D1 = calibration set (random), used to calibrate q_hat
 # D2 = uncertain set, sampled using q_hat-based prediction sets
@@ -68,6 +77,7 @@ max_samples_per_epoch: 50000 # Safety cap on total candidates evaluated per epoc
 # =====================================================================
 conformal:
   verbose: false           # Print detailed debug info (q_hat calibration, scores, etc.)
+  use_conformal: true      # Enable conformal prediction for evaluation (always true, kept for backward compat)
   delta: 0.05              # Unknown region half-width (used when optimize_mode="lambda")
   w: 1.0                   # Misclassification weight (1.0 = only minimize errors, ignore unknown rate)
   alpha_sampling: 0.1      # Alpha for sampling conformal prediction
@@ -75,6 +85,7 @@ conformal:
   num_mc_samples: 10       # MC samples for probability estimation (fitting)
   num_mc_samples_eval: 10  # MC samples for full ROA evaluation (faster)
   attractor_radius: 0.1    # For classify_attractor() - pendulum attractors are small
+  max_opt_samples: 5000    # Max samples for λ*/δ* optimization (sampled from training data)
   # NOTE: calibration_ratio removed - q_hat is now calibrated on D1 samples (not training split)
 
   # Optimization mode: "lambda" or "delta"
@@ -107,7 +118,7 @@ conformal:
 # =====================================================================
 # Flow Matcher Training Configuration
 # =====================================================================
-batch_size: 64
+batch_size: 512
 val_batch_size: 2048
 num_workers: 4
 latent_dim: 2

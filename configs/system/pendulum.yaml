@@ -2,8 +2,8 @@
 # =====================================================================
 # Pendulum System Configuration
 # =====================================================================
-# Pendulum dynamics with S¹×ℝ manifold structure
-# State: (θ, θ̇) where θ ∈ S¹ (angle), θ̇ ∈ ℝ (angular velocity)
+# Pendulum dynamics with S^1 x R manifold structure
+# State: (theta, theta_dot) where theta in S^1 (angle), theta_dot in R (angular velocity)
 #
 # Attractors:
 #   - [0.0, 0.0]: Bottom equilibrium (stable)
@@ -14,4 +14,4 @@
 _target_: adaptive_roa.systems.pendulum.PendulumSystem
 
 # Dataset directory containing dataset_description.json with bounds
-dataset_dir: ${data_dir:/common/users/shared/pracsys/genMoPlan/data_trajectories}/pendulum_lqr_50k
+dataset_dir: ${data_dir:}/pendulum_lqr_50k

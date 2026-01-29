@@ -157,6 +157,9 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
 
         # Facebook FM components (subclass creates manifold)
         self.manifold = self._create_manifold()
+        # Distance manifold is always the true system manifold (for proper geodesic distances)
+        # Even when use_manifold=False for training, distances should use true manifold
+        self.distance_manifold = self._create_distance_manifold()
 
         # MAE metrics per dimension for endpoint prediction
         # Must be initialized AFTER manifold creation since manifold.dist() may return
@@ -215,39 +218,6 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
             Predicted velocity [batch_size, state_dim]
         """
         return self.model(x_t, t, z, condition)
-
-    def compute_endpoint_mae_per_dim(
-        self, predicted_endpoints: torch.Tensor, true_endpoints: torch.Tensor
-    ) -> torch.Tensor:
-        """
-        DEPRECATED: Use compute_manifold_distance_per_component() instead.
-
-        Compute MAE per state dimension using absolute differences.
-
-        WARNING: This method uses Euclidean absolute differences which are
-        incorrect for manifold components (SO3 quaternions, S1 angles).
-        For proper geodesic distances, use compute_manifold_distance_per_component().
-
-        Args:
-            predicted_endpoints: Predicted endpoints [B, state_dim]
-            true_endpoints: True endpoints [B, state_dim]
-
-        Returns:
-            mae_per_dim: MAE for each state dimension [state_dim]
-        """
-        import warnings
-        warnings.warn(
-            "compute_endpoint_mae_per_dim() uses Euclidean distances which are incorrect "
-            "for manifold components (SO3, S1). Use compute_manifold_distance_per_component() "
-            "for proper geodesic distances.",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        # Compute absolute difference per dimension
-        # Shape: [batch_size, state_dim]
-        abs_diff = torch.abs(predicted_endpoints - true_endpoints)
-        # Average over batch → [state_dim]
-        return abs_diff.mean(dim=0)
 
     def compute_evaluation_metrics(
         self,
@@ -489,16 +459,36 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
     @abstractmethod
     def _create_manifold(self):
         """
-        Create Facebook FM manifold for this system
+        Create Facebook FM manifold for this system (used for training).
+
+        When use_manifold=False, this may return Euclidean manifold.
 
         Returns:
             Product manifold (e.g., S¹×ℝ for pendulum, ℝ²×S¹×ℝ for cartpole)
         """
         pass
 
+    def _create_distance_manifold(self):
+        """
+        Create manifold for distance computation (always true system manifold).
+
+        This is used for geodesic distance calculations regardless of use_manifold setting.
+        Override in subclasses that support use_manifold=False to return the true
+        system manifold even when training uses Euclidean.
+
+        By default, returns the same as _create_manifold() for backward compatibility.
+
+        Returns:
+            Product manifold representing the true system geometry
+        """
+        return self.manifold
+
     def _get_manifold_dist_dim(self) -> int:
         """
-        Get the output dimension of manifold.dist().
+        Get the output dimension of distance_manifold.dist().
+
+        Uses distance_manifold (true system manifold) not training manifold,
+        so distances are always computed with correct geodesic structure.
 
         For Product manifolds, the distance output may differ from state_dim:
         - Euclidean(n) returns n per-dimension distances
@@ -508,7 +498,7 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         This is used to correctly initialize per-dimension validation metrics.
 
         Returns:
-            Number of distance components returned by manifold.dist()
+            Number of distance components returned by distance_manifold.dist()
         """
         # Import manifold types for isinstance checks
         try:
@@ -518,10 +508,11 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
             FlatTorus = None
 
         # For Product manifolds, compute based on component structure
-        if hasattr(self.manifold, 'manifolds') and hasattr(self.manifold, 'dimensions'):
+        # Use distance_manifold (true system manifold) not training manifold
+        if hasattr(self.distance_manifold, 'manifolds') and hasattr(self.distance_manifold, 'dimensions'):
             total_dim = 0
-            manifolds = self.manifold.manifolds
-            dimensions = self.manifold.dimensions
+            manifolds = self.distance_manifold.manifolds
+            dimensions = self.distance_manifold.dimensions
 
             for i, m in enumerate(manifolds):
                 # SO3 and FlatTorus return single geodesic distance, not per-dim
@@ -1054,7 +1045,10 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         self, predicted_endpoints: torch.Tensor, true_endpoints: torch.Tensor
     ) -> torch.Tensor:
         """
-        Compute per-component geodesic distance using manifold.dist().
+        Compute per-component geodesic distance using distance_manifold.dist().
+
+        Uses distance_manifold (true system manifold) for proper geodesic distances,
+        even when training uses Euclidean manifold (use_manifold=False).
 
         For Quadrotor3D: Returns 10 values (3 Euclidean + 1 SO3 geodesic + 6 Euclidean)
         For Pendulum: Returns 2 values (1 circular + 1 Euclidean)
@@ -1071,8 +1065,8 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         pred_normalized = self.normalize_state(predicted_endpoints)
         true_normalized = self.normalize_state(true_endpoints)
 
-        # Use manifold.dist() for proper geodesic distances
-        distances = self.manifold.dist(pred_normalized, true_normalized)
+        # Use distance_manifold (true system manifold) for proper geodesic distances
+        distances = self.distance_manifold.dist(pred_normalized, true_normalized)
 
         return distances
 

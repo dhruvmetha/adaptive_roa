@@ -1,12 +1,14 @@
 results/
 outputs/
 logs/
+experiment_logs/
 *.pyc
 *.egg-info/
 attractor_analysis*
 *.png
 *.npz
 *.txt
+*.log
 
 # Environment files (user-specific, should not be committed)
 .env

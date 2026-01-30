@@ -124,12 +124,15 @@ def recompute_qhat(
     attractor_radius: float,
     device: str,
     invalid_threshold: float = None,
+    filter_invalid_by_conformal: bool = False,
 ) -> tuple:
     """Recompute q_hat using alpha_eval on calibration set.
 
     Args:
         invalid_threshold: If provided, exclude calibration points where
             p_invalid >= invalid_threshold from the non-conformity score computation.
+        filter_invalid_by_conformal: If True, exclude calibration points where
+            p_invalid >= (lambda_star - delta). This takes precedence over invalid_threshold.
 
     Returns:
         Tuple of (q_hat, n_cal_total, n_cal_used)
@@ -161,7 +164,15 @@ def recompute_qhat(
         p_invalid = p_invalid.cpu().numpy()
 
     # Filter out invalid points if threshold is provided
-    if invalid_threshold is not None:
+    # filter_invalid_by_conformal takes precedence over invalid_threshold
+    if filter_invalid_by_conformal:
+        conformal_threshold = lambda_star - delta
+        valid_mask = p_invalid < conformal_threshold
+        p_success = p_success[valid_mask]
+        p_failure = p_failure[valid_mask]
+        y_cal = y_cal[valid_mask]
+        n_cal_used = int(np.sum(valid_mask))
+    elif invalid_threshold is not None:
         valid_mask = p_invalid < invalid_threshold
         p_success = p_success[valid_mask]
         p_failure = p_failure[valid_mask]
@@ -267,6 +278,11 @@ def main():
         action="store_true",
         help="Force re-evaluation even with no parameter changes",
     )
+    parser.add_argument(
+        "--no_filter_invalid_by_conformal",
+        action="store_true",
+        help="Disable default filtering of calibration points where p_invalid >= (lambda_star - delta)",
+    )
     args = parser.parse_args()
 
     training_dir = args.training_dir
@@ -360,7 +376,12 @@ def main():
         print(f"ERROR: No epoch directories found in {training_dir}")
         return 1
 
-    print(f"\nFound {len(epoch_dirs)} epochs to re-evaluate")
+    # Reorder: even epochs first, then odd epochs
+    even_epochs = [d for d in epoch_dirs if int(re.search(r"\d+", d.name).group()) % 2 == 0]
+    odd_epochs = [d for d in epoch_dirs if int(re.search(r"\d+", d.name).group()) % 2 == 1]
+    epoch_dirs = even_epochs + odd_epochs
+
+    print(f"\nFound {len(epoch_dirs)} epochs to re-evaluate (even first, then odd)")
 
     # Initialize system
     system = Quadrotor2DSystem()
@@ -389,6 +410,10 @@ def main():
         print(f"    lambda_star: {lambda_star}, delta: {delta}")
 
         # 3. Recompute q_hat using alpha_eval on calibration set
+        # Determine filtering mode: conformal (default) or fixed threshold
+        filter_invalid_by_conformal = not args.no_filter_invalid_by_conformal
+        conformal_threshold = lambda_star - delta if filter_invalid_by_conformal else None
+
         print(f"  Recomputing q_hat (alpha_eval={alpha_eval})...")
         q_hat, n_cal_total, n_cal_used = recompute_qhat(
             flow_matcher,
@@ -401,8 +426,11 @@ def main():
             attractor_radius,
             args.device,
             invalid_threshold=args.invalid_threshold,
+            filter_invalid_by_conformal=filter_invalid_by_conformal,
         )
-        if args.invalid_threshold is not None:
+        if filter_invalid_by_conformal:
+            print(f"    q_hat: {q_hat:.4f} (from {n_cal_used}/{n_cal_total} cal points, {n_cal_total - n_cal_used} excluded by conformal filter: p_invalid >= {conformal_threshold:.4f})")
+        elif args.invalid_threshold is not None:
             print(f"    q_hat: {q_hat:.4f} (from {n_cal_used}/{n_cal_total} cal points, {n_cal_total - n_cal_used} excluded by invalid_threshold)")
         else:
             print(f"    q_hat: {q_hat:.4f} (from {n_cal_used} calibration points)")
@@ -441,6 +469,7 @@ def main():
             "q_hat_recomputed": q_hat,
             "n_cal_total": n_cal_total,
             "n_cal_used": n_cal_used,
+            "conformal_threshold": conformal_threshold,
         }
 
     # Save eval_config.json
@@ -454,6 +483,7 @@ def main():
             "num_mc_samples": num_mc_samples,
             "batch_size": batch_size,
             "invalid_threshold": args.invalid_threshold,
+            "filter_invalid_by_conformal": not args.no_filter_invalid_by_conformal,
             "device": args.device,
         },
         "training_defaults": training_defaults,

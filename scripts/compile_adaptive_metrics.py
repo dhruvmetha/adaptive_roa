@@ -155,7 +155,7 @@ def plot_performance_metrics(df: pd.DataFrame, output_dir: Path) -> None:
     fig, axes = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
 
     # F1 Score
-    axes[0].plot(df["epoch"], df["f1"], "b-o", linewidth=2, markersize=6)
+    axes[0].plot(df["train_trajectories"], df["f1"], "b-o", linewidth=2, markersize=6)
     axes[0].set_ylabel("F1 Score", fontsize=12)
     axes[0].set_title("Classification Performance", fontsize=14)
     axes[0].grid(True, alpha=0.3)
@@ -163,10 +163,10 @@ def plot_performance_metrics(df: pd.DataFrame, output_dir: Path) -> None:
 
     # Separatrix %
     axes[1].plot(
-        df["epoch"], df["separatrix_pct"] * 100, "r-o", linewidth=2, markersize=6
+        df["train_trajectories"], df["separatrix_pct"] * 100, "r-o", linewidth=2, markersize=6
     )
     axes[1].set_ylabel("Separatrix %", fontsize=12)
-    axes[1].set_xlabel("Epoch", fontsize=12)
+    axes[1].set_xlabel("Training Trajectories", fontsize=12)
     axes[1].grid(True, alpha=0.3)
     axes[1].set_ylim([0, 100])
 
@@ -180,7 +180,7 @@ def plot_coverage_breakdown(df: pd.DataFrame, output_dir: Path) -> None:
     fig, ax = plt.subplots(figsize=(10, 6))
 
     ax.plot(
-        df["epoch"],
+        df["train_trajectories"],
         df["invalid_pct"] * 100,
         "r-o",
         linewidth=2,
@@ -188,7 +188,7 @@ def plot_coverage_breakdown(df: pd.DataFrame, output_dir: Path) -> None:
         label="Invalid %",
     )
     ax.plot(
-        df["epoch"],
+        df["train_trajectories"],
         df["uncertain_pct"] * 100,
         "orange",
         linestyle="-",
@@ -198,7 +198,7 @@ def plot_coverage_breakdown(df: pd.DataFrame, output_dir: Path) -> None:
         label="Uncertain %",
     )
     ax.plot(
-        df["epoch"],
+        df["train_trajectories"],
         df["separatrix_pct"] * 100,
         "purple",
         linestyle="--",
@@ -208,7 +208,7 @@ def plot_coverage_breakdown(df: pd.DataFrame, output_dir: Path) -> None:
         label="Separatrix % (total)",
     )
 
-    ax.set_xlabel("Epoch", fontsize=12)
+    ax.set_xlabel("Training Trajectories", fontsize=12)
     ax.set_ylabel("Percentage", fontsize=12)
     ax.set_title("Coverage Breakdown", fontsize=14)
     ax.legend(loc="best")
@@ -225,7 +225,7 @@ def plot_endpoint_errors(df: pd.DataFrame, output_dir: Path) -> None:
     fig, ax = plt.subplots(figsize=(10, 6))
 
     ax.plot(
-        df["epoch"],
+        df["train_trajectories"],
         df["endpoint_mae_overall"],
         "b-o",
         linewidth=2,
@@ -233,7 +233,7 @@ def plot_endpoint_errors(df: pd.DataFrame, output_dir: Path) -> None:
         label="Overall MAE",
     )
     ax.plot(
-        df["epoch"],
+        df["train_trajectories"],
         df["endpoint_mae_success"],
         "g-s",
         linewidth=2,
@@ -241,7 +241,7 @@ def plot_endpoint_errors(df: pd.DataFrame, output_dir: Path) -> None:
         label="Success MAE",
     )
     ax.plot(
-        df["epoch"],
+        df["train_trajectories"],
         df["endpoint_mae_failure"],
         "r-^",
         linewidth=2,
@@ -249,7 +249,7 @@ def plot_endpoint_errors(df: pd.DataFrame, output_dir: Path) -> None:
         label="Failure MAE",
     )
 
-    ax.set_xlabel("Epoch", fontsize=12)
+    ax.set_xlabel("Training Trajectories", fontsize=12)
     ax.set_ylabel("Mean Absolute Error", fontsize=12)
     ax.set_title("Endpoint Prediction Errors (Training Data)", fontsize=14)
     ax.legend(loc="best")
@@ -262,22 +262,24 @@ def plot_endpoint_errors(df: pd.DataFrame, output_dir: Path) -> None:
 
 
 def plot_training_progress(df: pd.DataFrame, output_dir: Path) -> None:
-    """Plot cumulative training trajectories."""
+    """Plot training trajectories added per epoch."""
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    ax.plot(
+    # Calculate trajectories added per epoch
+    traj_added = df["train_trajectories"].diff().fillna(df["train_trajectories"].iloc[0])
+
+    ax.bar(
         df["epoch"],
-        df["train_trajectories"],
-        "b-o",
-        linewidth=2,
-        markersize=6,
+        traj_added,
+        color="steelblue",
+        alpha=0.7,
+        edgecolor="black",
     )
-    ax.fill_between(df["epoch"], 0, df["train_trajectories"], alpha=0.3)
 
     ax.set_xlabel("Epoch", fontsize=12)
-    ax.set_ylabel("Cumulative Trajectories", fontsize=12)
-    ax.set_title("Training Data Growth", fontsize=14)
-    ax.grid(True, alpha=0.3)
+    ax.set_ylabel("Trajectories Added", fontsize=12)
+    ax.set_title("Training Data Added Per Epoch", fontsize=14)
+    ax.grid(True, alpha=0.3, axis="y")
 
     plt.tight_layout()
     plt.savefig(output_dir / "training_progress.png", dpi=150, bbox_inches="tight")
@@ -290,7 +292,7 @@ def plot_stratified_region_errors(df: pd.DataFrame, output_dir: Path) -> None:
 
     # Plot each region
     ax.plot(
-        df["epoch"],
+        df["train_trajectories"],
         df["roa_error_certain"],
         "b-o",
         linewidth=2,
@@ -298,7 +300,7 @@ def plot_stratified_region_errors(df: pd.DataFrame, output_dir: Path) -> None:
         label="Certain (all)",
     )
     ax.plot(
-        df["epoch"],
+        df["train_trajectories"],
         df["roa_error_certain_success"],
         "g-s",
         linewidth=2,
@@ -306,7 +308,7 @@ def plot_stratified_region_errors(df: pd.DataFrame, output_dir: Path) -> None:
         label="Certain Success",
     )
     ax.plot(
-        df["epoch"],
+        df["train_trajectories"],
         df["roa_error_certain_failure"],
         "c-^",
         linewidth=2,
@@ -314,7 +316,7 @@ def plot_stratified_region_errors(df: pd.DataFrame, output_dir: Path) -> None:
         label="Certain Failure",
     )
     ax.plot(
-        df["epoch"],
+        df["train_trajectories"],
         df["roa_error_uncertain"],
         "orange",
         linestyle="-",
@@ -324,7 +326,7 @@ def plot_stratified_region_errors(df: pd.DataFrame, output_dir: Path) -> None:
         label="Uncertain",
     )
     ax.plot(
-        df["epoch"],
+        df["train_trajectories"],
         df["roa_error_invalid"],
         "r-v",
         linewidth=2,
@@ -332,7 +334,7 @@ def plot_stratified_region_errors(df: pd.DataFrame, output_dir: Path) -> None:
         label="Invalid",
     )
 
-    ax.set_xlabel("Epoch", fontsize=12)
+    ax.set_xlabel("Training Trajectories", fontsize=12)
     ax.set_ylabel("Mean Endpoint Error", fontsize=12)
     ax.set_title("Endpoint Errors by Prediction Region (Full ROA Evaluation)", fontsize=14)
     ax.legend(loc="best")
@@ -373,8 +375,14 @@ def compile_default(training_dir: Path) -> None:
     print(f"  Plots: {plots_dir}")
 
 
-def compile_reeval(eval_dir: Path) -> None:
-    """Compile metrics from a re-evaluation directory."""
+def compile_reeval(eval_dir: Path, training_dir: Path | None = None) -> None:
+    """Compile metrics from a re-evaluation directory.
+
+    Args:
+        eval_dir: Path to the re-evaluation directory (e.g., evaluations/batch_61440/)
+        training_dir: Path to the main training directory (to fetch train_trajectories).
+                      If None, will be inferred as eval_dir.parent.parent.
+    """
     # Load eval_config.json to show what params were used
     eval_config_path = eval_dir / "eval_config.json"
     if eval_config_path.exists():
@@ -392,6 +400,28 @@ def compile_reeval(eval_dir: Path) -> None:
     # Compile metrics
     df = compile_metrics(eval_dir)
     print(f"  Found {len(df)} epochs")
+
+    # Fetch train_trajectories from main training directory
+    if training_dir is None:
+        training_dir = eval_dir.parent.parent
+
+    train_traj_map = {}
+    for epoch_dir in training_dir.iterdir():
+        if epoch_dir.is_dir() and re.match(r"epoch_\d+", epoch_dir.name):
+            results_file = epoch_dir / "results.json"
+            if results_file.exists():
+                try:
+                    with open(results_file) as f:
+                        results = json.load(f)
+                    epoch_num = int(re.search(r"\d+", epoch_dir.name).group())
+                    train_traj_map[epoch_num] = results.get("train_trajectories", 0)
+                except (json.JSONDecodeError, PermissionError):
+                    pass
+
+    # Update train_trajectories column in dataframe
+    if train_traj_map:
+        df["train_trajectories"] = df["epoch"].map(train_traj_map).fillna(0).astype(int)
+        print(f"  Loaded train_trajectories from {len(train_traj_map)} training epochs")
 
     # Save to eval_dir/metrics/
     metrics_dir = eval_dir / "metrics"
@@ -446,7 +476,7 @@ def main():
             for eval_dir in sorted(evaluations_dir.iterdir()):
                 if eval_dir.is_dir():
                     print(f"\n--- Compiling: {eval_dir.name} ---")
-                    compile_reeval(eval_dir)
+                    compile_reeval(eval_dir, training_dir)
         else:
             print("\n(No re-evaluations found)")
 
@@ -479,7 +509,7 @@ def main():
         print("=" * 70)
         print(f"COMPILING: {args.eval_dir}")
         print("=" * 70)
-        compile_reeval(eval_dir)
+        compile_reeval(eval_dir, training_dir)
         print("\nDone!")
 
     return 0

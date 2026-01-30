@@ -19,6 +19,7 @@ data_dir: ${data_dir:}
 threshold_mode: dynamic
 
 alpha_sampling: 0.1
+use_manifold: false
 
 # Output directory (matches CartPole naming convention)
 training_index: 0
@@ -53,15 +54,15 @@ test_ratio: 0.1     # 10% of training for testing
 # Adaptive Sampling Configuration
 # =====================================================================
 initial_train_size: 50    # Initial training trajectories
-n_epochs: 20               # Number of adaptive sampling epochs
+n_epochs: 19               # Number of adaptive sampling epochs
 samples_per_epoch: 50      # New candidates per epoch (for fixed strategy only)
-warm_start: True          # If true, continue training from previous epoch's checkpoint
+warm_start: False          # If true, continue training from previous epoch's checkpoint
 
 # Sampling mode: "conformal", "ranked", or "direct"
 # - "conformal": Full conformal prediction with q_hat calibration and coverage guarantees
 # - "ranked": Select points with lowest NC scores (most uncertain), no q_hat calibration
 # - "direct": Use λ*/δ* thresholds directly, no conformal calibration
-sampling_mode: conformal
+sampling_mode: ranked
 
 # Ranked sampling configuration (only used when sampling_mode="ranked")
 n_ranked_candidates: 1000  # Number of candidates to evaluate for ranked sampling
@@ -122,7 +123,7 @@ conformal:
 # =====================================================================
 # Flow Matcher Training Configuration
 # =====================================================================
-batch_size: 512
+batch_size: 1024
 val_batch_size: 2048
 num_workers: 4
 latent_dim: 2
@@ -157,6 +158,9 @@ flow_matching:
   latent_dim: ${latent_dim}
   num_integration_steps: 100       # ODE solver steps for inference
   mae_val_frequency: 10            # Compute MAE validation every N epochs
+  use_loss_weights: false          # Weight loss by normalization limits
+  use_manifold: ${use_manifold}               # Use S¹×ℝ manifold (true) or pure Euclidean ℝ² (false)
+  use_log_loss_weights: false      # Use 1+log(limit) for balanced weights (requires use_loss_weights=true)
   clamp_noise: true                # Clamp noise to [-1, 1] to prevent ODE divergence during validation MAE
   zero_latent: true                # Use zero latent vectors instead of random sampling
   noise_scale: 1.0                 # Scale factor for initial noise (0-1), reduces variance when < 1

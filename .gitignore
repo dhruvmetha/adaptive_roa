@@ -7,3 +7,8 @@ attractor_analysis*
 *.png
 *.npz
 *.txt
+results_*.csv
+slurm_*.err
+slurm_*.out
+slurm_q3d_*.err
+slurm_q3d_*.out

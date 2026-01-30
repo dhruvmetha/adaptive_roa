@@ -1,0 +1,88 @@
+# CartPole Classification Training Config
+# Binary classification: success (1) vs failure (0) from initial state
+
+name: cartpole_classification
+seed: 42
+batch_size: 256
+base_lr: 1e-3
+num_workers: 4
+
+# Model: Simple MLP for binary classification
+model:
+  _target_: src.model.simple_mlp.SimpleMLP
+  _recursive_: false
+  model:
+    input_dim: 5       # (x_norm, sin_theta, cos_theta, x_dot_norm, theta_dot_norm) - manifold embedding
+    output_dim: 1      # Binary classification (logit)
+    hidden_channels: [128, 256, 128]
+  optimizer: ${optimizer}
+  scheduler: ${scheduler}
+
+# Data: CartPole classification from trajectories (first 1000 samples for training)
+data:
+  _target_: src.data.cartpole_classification_data.CartPoleClassificationDataModule
+  shuffled_indices_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/train_test_splits/shuffled_indices_0.txt
+  shuffled_labels_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/train_test_splits/shuffled_labels_0.txt
+  trajectories_dir: /common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet/trajectories
+  batch_size: ${batch_size}
+  num_workers: ${num_workers}
+  train_split: 0.95
+  val_split: 0.05
+  max_samples: 1000
+  balance_samples: true
+
+# Optimizer: AdamW
+optimizer:
+  _target_: functools.partial
+  _args_:
+    - _target_: torch.optim.AdamW
+      _partial_: true
+  lr: ${base_lr}
+  weight_decay: 1e-4
+
+# Scheduler: Cosine annealing
+scheduler:
+  _target_: functools.partial
+  _args_:
+    - _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+      _partial_: true
+  T_max: 500
+  eta_min: 1e-6
+
+# Trainer: PyTorch Lightning
+trainer:
+  _target_: lightning.pytorch.Trainer
+  max_epochs: 500
+  accelerator: gpu
+  devices: [0]
+  precision: 32
+  gradient_clip_val: 1.0
+  log_every_n_steps: 10
+  check_val_every_n_epoch: 1
+  enable_progress_bar: true
+  enable_model_summary: true
+  logger:
+    _target_: lightning.pytorch.loggers.TensorBoardLogger
+    save_dir: "${hydra:runtime.output_dir}"
+    name: ""
+    version: null
+  callbacks:
+    - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+      dirpath: "${hydra:runtime.output_dir}/checkpoints"
+      monitor: val_loss
+      mode: min
+      save_top_k: 3
+      save_last: true
+      filename: "epoch{epoch:02d}-val_loss{val_loss:.4f}"
+      auto_insert_metric_name: false
+    - _target_: lightning.pytorch.callbacks.EarlyStopping
+      monitor: val_loss
+      mode: min
+      patience: 50
+      verbose: true
+
+# Hydra output directory
+hydra:
+  run:
+    dir: outputs/${name}/${now:%Y-%m-%d_%H-%M-%S}
+

@@ -4,11 +4,25 @@ import lightning.pytorch as pl
 import torch
 
 class SimpleMLP(pl.LightningModule):
-    def __init__(self, model, optimizer, scheduler):
+    def __init__(self, model=None, optimizer=None, scheduler=None,
+                 input_dim=None, output_dim=None, hidden_channels=None,
+                 lr=1e-3, weight_decay=1e-4, max_epochs=500):
         super().__init__()
-        input_dim = model.input_dim
-        output_dim = model.output_dim
-        hidden_channels = model.hidden_channels
+        
+        # Support both old-style (model object) and new-style (direct params) init
+        if model is not None:
+            input_dim = model.input_dim
+            output_dim = model.output_dim
+            hidden_channels = model.hidden_channels
+        
+        # Store for optimizer config
+        self.lr = lr
+        self.weight_decay = weight_decay
+        self.max_epochs = max_epochs
+        self._input_dim = input_dim
+        self._output_dim = output_dim
+        self._hidden_channels = hidden_channels
+        
         self.model = nn.ModuleList()
         for i in range(len(hidden_channels)):
             self.model.append(nn.Linear(input_dim, hidden_channels[i]))
@@ -34,7 +48,8 @@ class SimpleMLP(pl.LightningModule):
         self.test_f1 = F1Score(task="binary")
         self.test_confmat = ConfusionMatrix(task="binary", num_classes=2)
         
-        self.save_hyperparameters()
+        # Save only serializable hyperparameters
+        self.save_hyperparameters(ignore=['model', 'optimizer', 'scheduler'])
         
     def forward(self, x):
         for layer in self.model:
@@ -57,24 +72,24 @@ class SimpleMLP(pl.LightningModule):
         
     def training_step(self, batch, batch_idx):
         x, y = batch["inputs"], batch["label"]
-        y_hat = self(x)
+        y_hat = self(x).squeeze(-1)  # [B, 1] -> [B]
         loss = self.criterion(y_hat, y)
         self.train_loss.update(loss)
         
         y_hat_sigmoid = torch.sigmoid(y_hat)
-        self.train_acc.update(y_hat_sigmoid, y)
+        self.train_acc.update(y_hat_sigmoid, y.int())
         self.log("train_loss", self.train_loss, on_epoch=True, prog_bar=True)
         self.log("train_acc", self.train_acc, on_epoch=True, prog_bar=True)
         return loss
     
     def validation_step(self, batch, batch_idx):
         x, y = batch["inputs"], batch["label"]
-        y_hat = self(x)
+        y_hat = self(x).squeeze(-1)  # [B, 1] -> [B]
         loss = self.criterion(y_hat, y)
         self.val_loss.update(loss)
         
         y_hat_sigmoid = torch.sigmoid(y_hat)
-        self.val_acc.update(y_hat_sigmoid, y)
+        self.val_acc.update(y_hat_sigmoid, y.int())
         self.log("val_loss", self.val_loss, on_epoch=True, prog_bar=True)
         self.log("val_acc", self.val_acc, on_epoch=True, prog_bar=True)
         return loss
@@ -85,23 +100,20 @@ class SimpleMLP(pl.LightningModule):
     
     def test_step(self, batch, batch_idx):
         x, y = batch["inputs"], batch["label"]
-        x[:, 4] = - 3 / 8
-        x[:, 5] = 0.0
-        x[:, 6] = 0.0
-        x[:, 7] = 0.0
         
-        y_hat = self(x)
+        y_hat = self(x).squeeze(-1)  # [B, 1] -> [B]
         loss = self.criterion(y_hat, y)
         
         # Apply sigmoid for metric calculations
         y_hat_sigmoid = torch.sigmoid(y_hat)
+        y_int = y.int()
         
         # Update all metrics
-        self.test_acc.update(y_hat_sigmoid, y)
-        self.test_precision.update(y_hat_sigmoid, y)
-        self.test_recall.update(y_hat_sigmoid, y)
-        self.test_f1.update(y_hat_sigmoid, y)
-        self.test_confmat.update(y_hat_sigmoid, y)
+        self.test_acc.update(y_hat_sigmoid, y_int)
+        self.test_precision.update(y_hat_sigmoid, y_int)
+        self.test_recall.update(y_hat_sigmoid, y_int)
+        self.test_f1.update(y_hat_sigmoid, y_int)
+        self.test_confmat.update(y_hat_sigmoid, y_int)
         
         # Log all metrics
         self.log("test_loss", loss, on_epoch=True, prog_bar=True)
@@ -142,8 +154,21 @@ class SimpleMLP(pl.LightningModule):
         return pred
     
     def configure_optimizers(self):
-        self.optimizer = self.optimizer_partial(params=self.parameters())
-        self.scheduler = self.scheduler_partial(optimizer=self.optimizer)
+        # Support both partial-based and direct param-based config
+        if self.optimizer_partial is not None:
+            self.optimizer = self.optimizer_partial(params=self.parameters())
+            self.scheduler = self.scheduler_partial(optimizer=self.optimizer)
+        else:
+            self.optimizer = torch.optim.AdamW(
+                params=self.parameters(),
+                lr=self.lr,
+                weight_decay=self.weight_decay,
+            )
+            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer=self.optimizer,
+                T_max=self.max_epochs,
+                eta_min=1e-6,
+            )
         
         return {
             "optimizer": self.optimizer,

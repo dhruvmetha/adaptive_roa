@@ -1,0 +1,67 @@
+# Quadrotor 2D Classification Training Config
+# Binary classification: success (1) vs failure (0) from initial state
+#
+# State space (6D raw -> 7D embedded):
+# - Position: x (normalized), z (normalized from [0.1, 1.5] to [-1, 1])
+# - Orientation: theta -> sin(theta), cos(theta) (S^1 manifold embedding)
+# - Linear velocity: x_dot, z_dot (normalized to [-1, 1])
+# - Angular velocity: theta_dot (normalized using achieved bounds ~10.5 rad/s)
+
+name: quadrotor2d_classification
+seed: 42
+batch_size: 256
+base_lr: 1e-3
+num_workers: 4
+
+# Model architecture
+# Input: 7D (after sin/cos embedding of theta)
+hidden_channels:
+  - 512
+  - 512
+  - 512
+
+# Data: Quadrotor 2D classification from trajectories
+# Labels computed from trajectory files (final state distance to goal)
+data:
+  _target_: src.data.quadrotor2d_classification_data.Quadrotor2DClassificationDataModule
+  shuffled_indices_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/quadrotor2D_lqr/train_test_splits/shuffled_indices_0.txt
+  trajectories_dir: /common/users/shared/pracsys/genMoPlan/data_trajectories/quadrotor2D_lqr/trajectories
+  batch_size: ${batch_size}
+  num_workers: ${num_workers}
+  train_split: 0.95
+  val_split: 0.05
+  max_samples: 1000
+  balance_samples: true
+
+# Trainer: PyTorch Lightning
+trainer:
+  _target_: lightning.pytorch.Trainer
+  max_epochs: 500
+  accelerator: gpu
+  devices: 1
+  precision: 32
+  gradient_clip_val: 1.0
+  log_every_n_steps: 10
+  check_val_every_n_epoch: 1
+  enable_progress_bar: true
+  enable_model_summary: true
+  logger:
+    _target_: lightning.pytorch.loggers.TensorBoardLogger
+    save_dir: ${hydra:runtime.output_dir}
+    name: ""
+    version: null
+  callbacks:
+    - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+      dirpath: ${hydra:runtime.output_dir}/checkpoints
+      monitor: val_loss
+      mode: min
+      save_top_k: 3
+      save_last: true
+      filename: epoch{epoch:02d}-val_loss{val_loss:.4f}
+      auto_insert_metric_name: false
+
+# Hydra output directory
+hydra:
+  run:
+    dir: outputs/${name}/${now:%Y-%m-%d_%H-%M-%S}
+

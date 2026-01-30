@@ -23,7 +23,7 @@ use_manifold: false
 
 # Output directory (matches CartPole naming convention)
 training_index: 0
-output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_threshold_mode_${threshold_mode}_adapt_iter_${n_epochs}_alpha_${alpha_sampling}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
+output_dir: ${exp_dir}/${name}_dhruv/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_threshold_mode_${threshold_mode}_adapt_iter_${n_epochs}_alpha_${alpha_sampling}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
 
 # Device
 device: cuda:0

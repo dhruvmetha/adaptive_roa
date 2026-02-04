@@ -1,47 +1,46 @@
+# =============================================================================
 # Quadrotor 3D Classification Training Config
-# Binary classification: success (1) vs failure (0) from initial state
+# =============================================================================
+# Binary classification: success (1) vs failure (0)
+# Uses expanded dataset with all trajectory points.
 #
-# State space (13D):
-# - Position: x, y, z (normalized to [-1, 1])
-# - Orientation: qw, qx, qy, qz (unit quaternion, NOT normalized)
-# - Linear velocity: x_dot, y_dot, z_dot (normalized to [-1, 1])
-# - Angular velocity: p, q, r (normalized to [-1, 1])
+# State: 13D raw -> 13D embedded
+#   [x, y, z, qw, qx, qy, qz, x_dot, y_dot, z_dot, p, q, r]
+#   Positions/velocities normalized, quaternion kept as unit quaternion
+# =============================================================================
 
 name: quadrotor3d_classification
+system: quadrotor3d
 seed: 42
-batch_size: 256
-base_lr: 1e-3
+batch_size: 512
+base_lr: 1e-4
+weight_decay: 1e-4
 num_workers: 4
 
-# Model architecture (larger than CartPole due to 13D input)
+# Model architecture
+# Input: 13D
 hidden_channels:
+  - 256
   - 512
-  - 1024
   - 512
+  - 256
 
-# Data: Quadrotor 3D classification from trajectories
+# Data paths (relative to project root)
 data:
-  _target_: src.data.quadrotor3d_classification_data.Quadrotor3DClassificationDataModule
-  shuffled_indices_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/quadrotor3D_lqr/train_test_splits/shuffled_indices_0.txt
-  shuffled_labels_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/quadrotor3D_lqr/train_test_splits/shuffled_labels_0.txt
-  trajectories_dir: /common/users/shared/pracsys/genMoPlan/data_trajectories/quadrotor3D_lqr/trajectories
-  batch_size: ${batch_size}
-  num_workers: ${num_workers}
-  train_split: 0.95
-  val_split: 0.05
-  max_samples: 1000
+  train_file: data/classification/quadrotor3d/train.txt
+  val_file: data/classification/quadrotor3d/val.txt
+  test_file: data/classification/quadrotor3d/test.txt
   balance_samples: true
-  check_quaternion_norm: true
 
-# Trainer: PyTorch Lightning
+# Trainer config
 trainer:
   _target_: lightning.pytorch.Trainer
-  max_epochs: 500
+  max_epochs: 200
   accelerator: gpu
   devices: 1
   precision: 32
   gradient_clip_val: 1.0
-  log_every_n_steps: 10
+  log_every_n_steps: 50
   check_val_every_n_epoch: 1
   enable_progress_bar: true
   enable_model_summary: true
@@ -59,8 +58,13 @@ trainer:
       save_last: true
       filename: epoch{epoch:02d}-val_loss{val_loss:.4f}
       auto_insert_metric_name: false
+    - _target_: lightning.pytorch.callbacks.EarlyStopping
+      monitor: val_loss
+      mode: min
+      patience: 20
+      verbose: true
 
-# Hydra output directory
+# Hydra output
 hydra:
   run:
     dir: outputs/${name}/${now:%Y-%m-%d_%H-%M-%S}

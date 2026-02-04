@@ -1,0 +1,75 @@
+# =====================================================================
+# Quadrotor 3D All-Points Classification Training Config
+# =====================================================================
+# Binary classification: success (1) vs failure (0) from ALL trajectory points
+#
+# State space (13D):
+# - Position: x, y, z (normalized to [-1, 1])
+# - Orientation: qw, qx, qy, qz (unit quaternion, NOT normalized)
+# - Linear velocity: x_dot, y_dot, z_dot (normalized to [-1, 1])
+# - Angular velocity: p, q, r (normalized to [-1, 1])
+#
+# Dataset: Built using build_quadrotor3d_allpoints.yaml config
+# Data expansion: N trajectories × avg_length points → ~400k samples
+# =====================================================================
+
+name: quadrotor3d_allpoints_classification
+seed: 42
+batch_size: 64
+base_lr: 1e-4
+num_workers: 4
+
+# Model architecture (larger network for expanded dataset)
+hidden_channels:
+  - 512
+  - 1024
+  - 1024
+  - 512
+
+# Data: Quadrotor 3D all-points classification
+data:
+  _target_: src.data.quadrotor3d_allpoints_data.Quadrotor3DAllPointsDataModule
+  train_file: /common/users/dm1487/arcmg_datasets/quadrotor3d_allpoints/train_endpoint_dataset.txt
+  val_file: /common/users/dm1487/arcmg_datasets/quadrotor3d_allpoints/val_endpoint_dataset.txt
+  batch_size: ${batch_size}
+  num_workers: ${num_workers}
+  max_samples: null  # Use all samples
+  balance_samples: true
+  check_quaternion_norm: true
+
+# Trainer: PyTorch Lightning
+trainer:
+  _target_: lightning.pytorch.Trainer
+  max_epochs: 500
+  accelerator: gpu
+  devices: 1
+  precision: 32
+  gradient_clip_val: 1.0
+  log_every_n_steps: 50
+  check_val_every_n_epoch: 1
+  enable_progress_bar: true
+  enable_model_summary: true
+  logger:
+    _target_: lightning.pytorch.loggers.TensorBoardLogger
+    save_dir: ${hydra:runtime.output_dir}
+    name: ""
+    version: null
+  callbacks:
+    - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+      dirpath: ${hydra:runtime.output_dir}/checkpoints
+      monitor: val_loss
+      mode: min
+      save_top_k: 3
+      save_last: true
+      filename: epoch{epoch:02d}-val_loss{val_loss:.4f}
+      auto_insert_metric_name: false
+    - _target_: lightning.pytorch.callbacks.EarlyStopping
+      monitor: val_loss
+      mode: min
+      patience: 30
+      verbose: true
+
+# Hydra output directory
+hydra:
+  run:
+    dir: outputs/${name}/${now:%Y-%m-%d_%H-%M-%S}

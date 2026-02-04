@@ -1,0 +1,18 @@
+# @package _global_.system
+# =====================================================================
+# Quadrotor 2D System Configuration
+# =====================================================================
+# Quadrotor 2D dynamics with ℝ² × S¹ × ℝ³ manifold structure
+# State: (x, z, theta, x_dot, z_dot, theta_dot) where:
+#   - x ∈ ℝ (horizontal position)
+#   - z ∈ ℝ (vertical position / altitude)
+#   - theta ∈ S¹ (pitch angle)
+#   - x_dot ∈ ℝ (horizontal velocity)
+#   - z_dot ∈ ℝ (vertical velocity)
+#   - theta_dot ∈ ℝ (angular velocity)
+#
+# Goal state: [0, 1, 0, 0, 0, 0]
+# (hover at x=0, altitude z=1, level orientation, zero velocities)
+# =====================================================================
+
+_target_: src.systems.quadrotor2d.Quadrotor2DSystem

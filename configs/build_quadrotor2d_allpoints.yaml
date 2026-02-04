@@ -1,0 +1,48 @@
+# =====================================================================
+# Quadrotor 2D All-Points Classification Dataset Builder
+# =====================================================================
+# Builds classification dataset using ALL points from trajectories.
+# Each point on a trajectory gets the same success/failure label.
+#
+# Usage:
+#   # Train set (all points from trajectories)
+#   python src/build_shuffled_endpoint_dataset.py --config-name=build_quadrotor2d_allpoints \
+#       start=0 end=15000 increment=train type=train
+#
+#   # Validation set (all points from trajectories)
+#   python src/build_shuffled_endpoint_dataset.py --config-name=build_quadrotor2d_allpoints \
+#       start=15000 end=18000 increment=val type=train
+#
+#   # Test set (first point only per trajectory)
+#   python src/build_shuffled_endpoint_dataset.py --config-name=build_quadrotor2d_allpoints \
+#       start=18000 end=20000 increment=test type=test
+# =====================================================================
+
+defaults:
+  - system: quadrotor2d
+
+# Data paths
+data_dirs: /common/users/shared/pracsys/genMoPlan/data_trajectories/quadrotor2D_rl/trajectories
+shuffled_idxs_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/quadrotor2D_rl/train_test_splits/all_shuffled_indices.txt
+dest_dir: /common/users/dm1487/arcmg_datasets/quadrotor2d_allpoints
+
+# Processing range (slicing shuffled_indices.txt)
+start: 0
+end: 15000
+increment: train
+
+# Dataset type: "train" uses all points, "test" uses first point only
+type: train
+
+# =====================================================================
+# Classification Settings
+# =====================================================================
+# Label based on trajectory outcome (final state distance to goal):
+#   1 = success (reached goal within attractor_radius)
+#  -1 = failure (exceeded bounds before reaching goal)
+#
+# Note: Quadrotor 2D uses 0.2 threshold in dataset (from dataset_description.json)
+# =====================================================================
+use_fixed_attractors: false
+attractor_radius: 0.2
+balance_dataset: false

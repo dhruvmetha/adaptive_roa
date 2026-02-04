@@ -1,0 +1,16 @@
+# @package _global_.system
+# =====================================================================
+# Quadrotor 3D System Configuration
+# =====================================================================
+# Quadrotor 3D dynamics with ℝ³ × SO(3) × ℝ⁶ manifold structure
+# State: (x, y, z, qw, qx, qy, qz, x_dot, y_dot, z_dot, p, q, r) where:
+#   - x, y, z ∈ ℝ (position)
+#   - qw, qx, qy, qz ∈ S³ (unit quaternion, SO(3) orientation)
+#   - x_dot, y_dot, z_dot ∈ ℝ (linear velocity)
+#   - p, q, r ∈ ℝ (angular velocity, body frame)
+#
+# Goal state: [0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+# (hover at origin, altitude 1m, identity orientation, zero velocities)
+# =====================================================================
+
+_target_: src.systems.quadrotor3d.Quadrotor3DSystem

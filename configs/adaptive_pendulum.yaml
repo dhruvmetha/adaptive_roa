@@ -1,0 +1,206 @@
+# Adaptive Sampling Pipeline for Pendulum 2D
+# =====================================================================
+# Uses pre-collected trajectory data with conformal prediction
+# to efficiently build training datasets for pendulum (S^1 x R manifold)
+# =====================================================================
+
+defaults:
+  - system: pendulum
+  - _self_
+
+name: adaptive_pendulum
+seed: 42
+
+# User-specific paths (loaded from .env file via resolvers)
+# To customize: edit .env file with EXP_DIR and DATA_DIR
+exp_dir: ${exp_dir:}
+data_dir: ${data_dir:}
+
+threshold_mode: dynamic
+
+alpha_sampling: 0.1
+use_manifold: false
+
+# Output directory (matches CartPole naming convention)Whgi
+training_index: 0
+output_dir: ${exp_dir}/${name}_dhruv/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_threshold_mode_${threshold_mode}_adapt_iter_${n_epochs}_alpha_${alpha_sampling}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
+
+# Device
+device: cuda:0
+
+# =====================================================================
+# Data Source Configuration
+# =====================================================================
+# Shuffle variant (0-9) for cross-validation experiments
+shuffle_variant: 0
+
+data_source:
+  trajectories_dir: ${data_dir}/pendulum_lqr_50k/trajectories
+  # Shuffled indices and labels (aligned, for training)
+  shuffled_indices_file: ${data_dir}/pendulum_lqr_50k/train_test_splits/shuffled_indices_${shuffle_variant}.txt
+  shuffled_labels_file: ${data_dir}/pendulum_lqr_50k/train_test_splits/shuffled_labels_${shuffle_variant}.txt
+  # Eval states (full dataset with start, end, labels - for evaluation only)
+  eval_states_file: ${data_dir}/pendulum_lqr_50k/eval_states.txt
+  # Held-out calibration set (1000 samples, for final q_hat calibration)
+  cal_set_file: ${data_dir}/pendulum_lqr_50k/cal_set.txt
+  # Held-out test set (remaining samples, for final evaluation)
+  test_set_file: ${data_dir}/pendulum_lqr_50k/test_set.txt
+
+# Dataset splits (val/test are subsets of training with overlap)
+val_ratio: 0.1      # 10% of training for validation
+test_ratio: 0.1     # 10% of training for testing
+
+# =====================================================================
+# Adaptive Sampling Configuration
+# =====================================================================
+initial_train_size: 50    # Initial training trajectories
+n_epochs: 19               # Number of adaptive sampling epochs
+samples_per_epoch: 50      # New candidates per epoch (for fixed strategy only)
+warm_start: False          # If true, continue training from previous epoch's checkpoint
+
+# Sampling mode: "conformal", "ranked", or "direct"
+# - "conformal": Full conformal prediction with q_hat calibration and coverage guarantees
+# - "ranked": Select points with lowest NC scores (most uncertain), no q_hat calibration
+# - "direct": Use λ*/δ* thresholds directly, no conformal calibration
+sampling_mode: ranked
+
+# Ranked sampling configuration (only used when sampling_mode="ranked")
+n_ranked_candidates: 1000  # Number of candidates to evaluate for ranked sampling
+
+# D1/D2 Split for Adaptive Sampling
+# D1 = calibration set (random), used to calibrate q_hat
+# D2 = uncertain set, sampled using q_hat-based prediction sets
+d2_ratio: 0.5             # Fraction for D2 (uncertainty-filtered using q_hat).
+                          #   (1 - d2_ratio) = fraction for D1 (calibration, random)
+                          #   d2_ratio = fraction for D2 (uncertain sampling with q_hat)
+                          # Example: d2_ratio=0.75 → D1=25%, D2=75%
+batch_size_sampling: 50    # Size of batches when searching for uncertain points in D2
+max_samples_per_epoch: 50000 # Safety cap on total candidates evaluated per epoch
+
+# =====================================================================
+# Conformal Prediction Configuration
+# =====================================================================
+conformal:
+  verbose: false           # Print detailed debug info (q_hat calibration, scores, etc.)
+  use_conformal: true      # Enable conformal prediction for evaluation (always true, kept for backward compat)
+  delta: 0.05              # Unknown region half-width (used when optimize_mode="lambda")
+  w: 0.9                   # Misclassification weight (1.0 = only minimize errors, ignore unknown rate)
+  alpha_sampling: ${alpha_sampling}      # Alpha for sampling conformal prediction
+  alpha_eval: 0.1          # Alpha for evaluation conformal prediction
+  num_mc_samples: 10       # MC samples for probability estimation (fitting)
+  num_mc_samples_eval: 10  # MC samples for full ROA evaluation (faster)
+  attractor_radius: 0.1    # For classify_attractor() - pendulum attractors are small
+  max_opt_samples: 5000    # Max samples for λ*/δ* optimization (sampled from training data)
+  # NOTE: calibration_ratio removed - q_hat is now calibrated on D1 samples (not training split)
+
+  # Optimization mode: "lambda" or "delta"
+  # - "lambda": Optimize λ* with fixed δ (find best decision boundary)
+  # - "delta": Optimize δ* with fixed λ=0.5 (find best uncertainty width)
+  optimize_mode: delta
+
+  # Decision rule: "one_sided" or "two_sided"
+  # - "one_sided": Uses only p_success (for pendulum, mountain car)
+  # - "two_sided": Uses both p_success and p_failure (for 3-way classification)
+  decision_rule: one_sided
+
+  # Threshold mode: "dynamic" or "fixed"
+  # - "dynamic": Run optimization to find λ*/δ*, then calibrate q_hat
+  # - "fixed": Skip optimization, use fixed thresholds for q_hat calibration and sampling
+  threshold_mode: ${threshold_mode}
+
+  # Fixed thresholds (only used when threshold_mode="fixed")
+  fixed_lambda_star: 0.5   # Fixed decision boundary
+  fixed_delta_star: 0.1    # Fixed uncertainty half-width
+
+  # Lambda optimization (when optimize_mode="lambda")
+  lambda_grid_size: 100    # Number of grid points for λ search
+
+  # Delta optimization (when optimize_mode="delta")
+  delta_grid_size: 100     # Number of grid points for δ search
+  delta_min: 0.05          # Minimum δ value
+  delta_max: 0.45          # Maximum δ value
+
+# =====================================================================
+# Flow Matcher Training Configuration
+# =====================================================================
+batch_size: 1024
+val_batch_size: 2048
+num_workers: 4
+latent_dim: 2
+
+# Trainer: PyTorch Lightning
+trainer:
+  max_epochs: 1000
+  accelerator: gpu
+  devices: 1
+  precision: 32
+  gradient_clip_val: 1.0
+  log_every_n_steps: 10
+  check_val_every_n_epoch: 1
+  enable_progress_bar: true
+  enable_model_summary: true
+  callbacks:
+    - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+      monitor: val_loss
+      mode: min
+      save_top_k: 1
+      save_last: true
+      filename: "best-{epoch:02d}-{val_loss:.4f}"
+      auto_insert_metric_name: false
+    # - _target_: lightning.pytorch.callbacks.EarlyStopping
+    #   monitor: val_loss
+    #   mode: min
+    #   patience: 20
+    #   verbose: true
+
+# Flow matching specific settings
+flow_matching:
+  latent_dim: ${latent_dim}
+  num_integration_steps: 100       # ODE solver steps for inference
+  mae_val_frequency: 10            # Compute MAE validation every N epochs
+  use_loss_weights: false          # Weight loss by normalization limits
+  use_manifold: ${use_manifold}               # Use S¹×ℝ manifold (true) or pure Euclidean ℝ² (false)
+  use_log_loss_weights: false      # Use 1+log(limit) for balanced weights (requires use_loss_weights=true)
+  clamp_noise: true                # Clamp noise to [-1, 1] to prevent ODE divergence during validation MAE
+  zero_latent: true                # Use zero latent vectors instead of random sampling
+  noise_scale: 1.0                 # Scale factor for initial noise (0-1), reduces variance when < 1
+
+# Flow Matcher
+flow_matcher:
+  _target_: adaptive_roa.flow_matching.pendulum.latent_conditional.flow_matcher.PendulumLatentConditionalFlowMatcher
+
+# Model: Pendulum UNet (S^1 x R manifold)
+model:
+  _target_: adaptive_roa.model.pendulum_unet.PendulumUNet
+  embedded_dim: 3              # (sin theta, cos theta, theta_dot_norm)
+  latent_dim: ${latent_dim}
+  condition_dim: 3             # Embedded start state
+  time_emb_dim: 64
+  hidden_dims: [256, 512, 256]
+  output_dim: 2                # Velocity in tangent space (d_theta, d_theta_dot)
+  use_input_embeddings: false
+  input_emb_dim: 64
+
+# Optimizer
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 1e-3
+  weight_decay: 1e-5
+  betas: [0.9, 0.999]
+
+# Scheduler
+scheduler:
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  mode: min
+  factor: 0.5
+  patience: 10
+  min_lr: 1e-6
+
+# System (Pendulum)
+system:
+  _target_: adaptive_roa.systems.pendulum.PendulumSystem
+
+# Hydra
+hydra:
+  run:
+    dir: ${output_dir}

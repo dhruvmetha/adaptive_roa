@@ -1,47 +1,46 @@
+# =============================================================================
 # Quadrotor 2D Classification Training Config
-# Binary classification: success (1) vs failure (0) from initial state
+# =============================================================================
+# Binary classification: success (1) vs failure (0)
+# Uses expanded dataset with all trajectory points.
 #
-# State space (6D raw -> 7D embedded):
-# - Position: x (normalized), z (normalized from [0.1, 1.5] to [-1, 1])
-# - Orientation: theta -> sin(theta), cos(theta) (S^1 manifold embedding)
-# - Linear velocity: x_dot, z_dot (normalized to [-1, 1])
-# - Angular velocity: theta_dot (normalized using achieved bounds ~10.5 rad/s)
+# State: 6D raw -> 7D embedded
+#   [x, z, theta, x_dot, z_dot, theta_dot] ->
+#   [x_norm, z_norm, sin(theta), cos(theta), x_dot_norm, z_dot_norm, theta_dot_norm]
+# =============================================================================
 
 name: quadrotor2d_classification
+system: quadrotor2d
 seed: 42
-batch_size: 256
-base_lr: 1e-3
+batch_size: 512
+base_lr: 1e-4
+weight_decay: 1e-4
 num_workers: 4
 
 # Model architecture
-# Input: 7D (after sin/cos embedding of theta)
+# Input: 7D (after sin/cos embedding)
 hidden_channels:
+  - 256
   - 512
   - 512
-  - 512
+  - 256
 
-# Data: Quadrotor 2D classification from trajectories
-# Labels computed from trajectory files (final state distance to goal)
+# Data paths (relative to project root)
 data:
-  _target_: src.data.quadrotor2d_classification_data.Quadrotor2DClassificationDataModule
-  shuffled_indices_file: /common/users/shared/pracsys/genMoPlan/data_trajectories/quadrotor2D_lqr/train_test_splits/shuffled_indices_0.txt
-  trajectories_dir: /common/users/shared/pracsys/genMoPlan/data_trajectories/quadrotor2D_lqr/trajectories
-  batch_size: ${batch_size}
-  num_workers: ${num_workers}
-  train_split: 0.95
-  val_split: 0.05
-  max_samples: 1000
+  train_file: data/classification/quadrotor2d/train.txt
+  val_file: data/classification/quadrotor2d/val.txt
+  test_file: data/classification/quadrotor2d/test.txt
   balance_samples: true
 
-# Trainer: PyTorch Lightning
+# Trainer config
 trainer:
   _target_: lightning.pytorch.Trainer
-  max_epochs: 500
+  max_epochs: 200
   accelerator: gpu
   devices: 1
   precision: 32
   gradient_clip_val: 1.0
-  log_every_n_steps: 10
+  log_every_n_steps: 50
   check_val_every_n_epoch: 1
   enable_progress_bar: true
   enable_model_summary: true
@@ -59,9 +58,13 @@ trainer:
       save_last: true
       filename: epoch{epoch:02d}-val_loss{val_loss:.4f}
       auto_insert_metric_name: false
+    - _target_: lightning.pytorch.callbacks.EarlyStopping
+      monitor: val_loss
+      mode: min
+      patience: 20
+      verbose: true
 
-# Hydra output directory
+# Hydra output
 hydra:
   run:
     dir: outputs/${name}/${now:%Y-%m-%d_%H-%M-%S}
-

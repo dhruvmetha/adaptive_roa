@@ -1,0 +1,75 @@
+# =====================================================================
+# CartPole All-Points Classification Training Config
+# =====================================================================
+# Binary classification: success (1) vs failure (0) from ALL trajectory points
+#
+# State space (4D raw -> 5D embedded):
+# - Position: x (normalized to [-1, 1])
+# - Orientation: theta -> sin(theta), cos(theta) (S^1 manifold embedding)
+# - Velocity: x_dot (normalized to [-1, 1])
+# - Angular velocity: theta_dot (normalized to [-1, 1])
+#
+# Dataset: Built using build_cartpole_allpoints.yaml config
+# Data expansion: N trajectories × avg_length points → ~500k samples
+# =====================================================================
+
+name: cartpole_allpoints_classification
+seed: 42
+batch_size: 512
+base_lr: 1e-3
+num_workers: 4
+
+# Model architecture (larger network for expanded dataset)
+# Input: 5D (x_norm, sin_theta, cos_theta, x_dot_norm, theta_dot_norm)
+hidden_channels:
+  - 256
+  - 512
+  - 512
+  - 256
+
+# Data: CartPole all-points classification
+data:
+  _target_: src.data.cartpole_allpoints_data.CartPoleAllPointsDataModule
+  train_file: /common/users/dm1487/arcmg_datasets/cartpole_allpoints/train_endpoint_dataset.txt
+  val_file: /common/users/dm1487/arcmg_datasets/cartpole_allpoints/val_endpoint_dataset.txt
+  batch_size: ${batch_size}
+  num_workers: ${num_workers}
+  max_samples: null  # Use all samples
+  balance_samples: true
+
+# Trainer: PyTorch Lightning
+trainer:
+  _target_: lightning.pytorch.Trainer
+  max_epochs: 500
+  accelerator: gpu
+  devices: 1
+  precision: 32
+  gradient_clip_val: 1.0
+  log_every_n_steps: 50
+  check_val_every_n_epoch: 1
+  enable_progress_bar: true
+  enable_model_summary: true
+  logger:
+    _target_: lightning.pytorch.loggers.TensorBoardLogger
+    save_dir: ${hydra:runtime.output_dir}
+    name: ""
+    version: null
+  callbacks:
+    - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+      dirpath: ${hydra:runtime.output_dir}/checkpoints
+      monitor: val_loss
+      mode: min
+      save_top_k: 3
+      save_last: true
+      filename: epoch{epoch:02d}-val_loss{val_loss:.4f}
+      auto_insert_metric_name: false
+    - _target_: lightning.pytorch.callbacks.EarlyStopping
+      monitor: val_loss
+      mode: min
+      patience: 30
+      verbose: true
+
+# Hydra output directory
+hydra:
+  run:
+    dir: outputs/${name}/${now:%Y-%m-%d_%H-%M-%S}

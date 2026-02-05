@@ -19,6 +19,11 @@ Usage:
         --attractor_radius 0.1 \
         --alpha_eval 0.05 \
         --num_mc_samples 20
+
+    # Evaluate only a specific epoch
+    python scripts/reevaluate_quadrotor3d.py /path/to/training/output \
+        --epoch 10 \
+        --batch_size 61440
 """
 
 import argparse
@@ -270,6 +275,18 @@ def main():
         help="Device for evaluation",
     )
     parser.add_argument(
+        "--epoch",
+        type=int,
+        default=None,
+        help="Specific epoch to evaluate (if not specified, evaluates all epochs)",
+    )
+    parser.add_argument(
+        "--max_epoch",
+        type=int,
+        default=None,
+        help="Maximum epoch number to evaluate (evaluates all epochs up to and including this)",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="Force re-evaluation even with no parameter changes",
@@ -372,12 +389,28 @@ def main():
         print(f"ERROR: No epoch directories found in {training_dir}")
         return 1
 
-    # Reorder: even epochs first, then odd epochs
-    even_epochs = [d for d in epoch_dirs if int(re.search(r"\d+", d.name).group()) % 2 == 0]
-    odd_epochs = [d for d in epoch_dirs if int(re.search(r"\d+", d.name).group()) % 2 == 1]
-    epoch_dirs = even_epochs + odd_epochs
+    # Filter to specific epoch if requested
+    if args.epoch is not None:
+        epoch_dirs = [d for d in epoch_dirs if int(re.search(r"\d+", d.name).group()) == args.epoch]
+        if not epoch_dirs:
+            print(f"ERROR: Epoch {args.epoch} not found in {training_dir}")
+            return 1
+        print(f"\nEvaluating single epoch: {args.epoch}")
+    else:
+        # Filter by max_epoch if specified
+        if args.max_epoch is not None:
+            epoch_dirs = [d for d in epoch_dirs if int(re.search(r"\d+", d.name).group()) <= args.max_epoch]
+            if not epoch_dirs:
+                print(f"ERROR: No epochs found <= {args.max_epoch} in {training_dir}")
+                return 1
 
-    print(f"\nFound {len(epoch_dirs)} epochs to re-evaluate (even first, then odd)")
+        # Reorder: even epochs first, then odd epochs
+        even_epochs = [d for d in epoch_dirs if int(re.search(r"\d+", d.name).group()) % 2 == 0]
+        odd_epochs = [d for d in epoch_dirs if int(re.search(r"\d+", d.name).group()) % 2 == 1]
+        epoch_dirs = even_epochs + odd_epochs
+
+        max_info = f" (up to epoch {args.max_epoch})" if args.max_epoch is not None else ""
+        print(f"\nFound {len(epoch_dirs)} epochs to re-evaluate{max_info} (even first, then odd)")
 
     # Initialize system
     system = Quadrotor3DSystem()
@@ -454,9 +487,9 @@ def main():
         )
         print(f"  Results saved to: {epoch_output_dir}")
 
-        # Print summary metrics
-        conf_m = metrics.get("conformal_thresholds", {})
-        print(f"  [lambda*+/-delta] F1={conf_m.get('f1', 0):.2%}, Acc={conf_m.get('accuracy', 0):.2%}, Sep%={conf_m.get('separatrix_pct', 0):.1%}")
+        # Print summary metrics (q_hat conformal)
+        qhat_m = metrics.get("qhat_conformal_thresholds", {})
+        print(f"  [q_hat conformal] F1={qhat_m.get('f1', 0):.2%}, Acc={qhat_m.get('accuracy', 0):.2%}, Sep%={qhat_m.get('invalid_pct', 0):.1%}, Coverage={qhat_m.get('coverage', 0):.2%}")
 
         # Track info for eval_config
         per_epoch_info[f"epoch_{epoch_num:03d}"] = {

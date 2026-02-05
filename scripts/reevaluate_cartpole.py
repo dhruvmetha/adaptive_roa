@@ -19,6 +19,11 @@ Usage:
         --attractor_radius 0.2 \
         --alpha_eval 0.05 \
         --num_mc_samples 20
+
+    # Evaluate only a specific epoch
+    python scripts/reevaluate_cartpole.py /path/to/training/output \
+        --epoch 10 \
+        --batch_size 61440
 """
 
 import argparse
@@ -270,6 +275,12 @@ def main():
         help="Device for evaluation",
     )
     parser.add_argument(
+        "--epoch",
+        type=int,
+        default=None,
+        help="Specific epoch to evaluate (if not specified, evaluates all epochs)",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="Force re-evaluation even with no parameter changes",
@@ -327,10 +338,11 @@ def main():
     hydra_config = load_hydra_config(training_dir)
 
     # Set defaults from training config if not specified
+    conformal_config = hydra_config.get("conformal", {})
     training_defaults = {
-        "attractor_radius": hydra_config["conformal"]["attractor_radius"],
-        "alpha_eval": hydra_config["conformal"]["alpha_eval"],
-        "num_mc_samples_eval": hydra_config["conformal"]["num_mc_samples_eval"],
+        "attractor_radius": conformal_config.get("attractor_radius", 0.2),
+        "alpha_eval": conformal_config.get("alpha_eval", 0.1),
+        "num_mc_samples_eval": conformal_config.get("num_mc_samples_eval", 100),
         "val_batch_size": hydra_config.get("val_batch_size", 2048),
     }
 
@@ -372,12 +384,19 @@ def main():
         print(f"ERROR: No epoch directories found in {training_dir}")
         return 1
 
-    # Reorder: even epochs first, then odd epochs
-    even_epochs = [d for d in epoch_dirs if int(re.search(r"\d+", d.name).group()) % 2 == 0]
-    odd_epochs = [d for d in epoch_dirs if int(re.search(r"\d+", d.name).group()) % 2 == 1]
-    epoch_dirs = even_epochs + odd_epochs
-
-    print(f"\nFound {len(epoch_dirs)} epochs to re-evaluate (even first, then odd)")
+    # Filter to specific epoch if requested
+    if args.epoch is not None:
+        epoch_dirs = [d for d in epoch_dirs if int(re.search(r"\d+", d.name).group()) == args.epoch]
+        if not epoch_dirs:
+            print(f"ERROR: Epoch {args.epoch} not found in {training_dir}")
+            return 1
+        print(f"\nEvaluating single epoch: {args.epoch}")
+    else:
+        # Reorder: even epochs first, then odd epochs
+        even_epochs = [d for d in epoch_dirs if int(re.search(r"\d+", d.name).group()) % 2 == 0]
+        odd_epochs = [d for d in epoch_dirs if int(re.search(r"\d+", d.name).group()) % 2 == 1]
+        epoch_dirs = even_epochs + odd_epochs
+        print(f"\nFound {len(epoch_dirs)} epochs to re-evaluate (even first, then odd)")
 
     # Initialize system
     system = CartPoleSystem()
@@ -390,83 +409,88 @@ def main():
     per_epoch_info = {}
 
     # Re-evaluate each epoch
+    skipped_epochs = []
     for epoch_dir in epoch_dirs:
         epoch_num = int(re.search(r"\d+", epoch_dir.name).group())
         print(f"\n{'='*60}")
         print(f"EPOCH {epoch_num}")
         print(f"{'='*60}")
 
-        # 1. Load checkpoint
-        print("  Loading checkpoint...")
-        flow_matcher = load_checkpoint(epoch_dir, args.device)
+        try:
+            # 1. Load checkpoint
+            print("  Loading checkpoint...")
+            flow_matcher = load_checkpoint(epoch_dir, args.device)
 
-        # 2. Load conformal state (lambda_star, delta from training)
-        print("  Loading conformal state...")
-        lambda_star, delta = load_conformal_state(epoch_dir)
-        print(f"    lambda_star: {lambda_star}, delta: {delta}")
+            # 2. Load conformal state (lambda_star, delta from training)
+            print("  Loading conformal state...")
+            lambda_star, delta = load_conformal_state(epoch_dir)
+            print(f"    lambda_star: {lambda_star}, delta: {delta}")
 
-        # 3. Recompute q_hat using alpha_eval on calibration set
-        # Determine filtering mode: conformal (default) or fixed threshold
-        filter_invalid_by_conformal = not args.no_filter_invalid_by_conformal
-        conformal_threshold = lambda_star - delta if filter_invalid_by_conformal else None
+            # 3. Recompute q_hat using alpha_eval on calibration set
+            # Determine filtering mode: conformal (default) or fixed threshold
+            filter_invalid_by_conformal = not args.no_filter_invalid_by_conformal
+            conformal_threshold = lambda_star - delta if filter_invalid_by_conformal else None
 
-        print(f"  Recomputing q_hat (alpha_eval={alpha_eval})...")
-        q_hat, n_cal_total, n_cal_used = recompute_qhat(
-            flow_matcher,
-            system,
-            cal_set_file,
-            lambda_star,
-            delta,
-            alpha_eval,
-            num_mc_samples,
-            attractor_radius,
-            args.device,
-            invalid_threshold=args.invalid_threshold,
-            filter_invalid_by_conformal=filter_invalid_by_conformal,
-        )
-        if filter_invalid_by_conformal:
-            print(f"    q_hat: {q_hat:.4f} (from {n_cal_used}/{n_cal_total} cal points, {n_cal_total - n_cal_used} excluded by conformal filter: p_invalid >= {conformal_threshold:.4f})")
-        elif args.invalid_threshold is not None:
-            print(f"    q_hat: {q_hat:.4f} (from {n_cal_used}/{n_cal_total} cal points, {n_cal_total - n_cal_used} excluded by invalid_threshold)")
-        else:
-            print(f"    q_hat: {q_hat:.4f} (from {n_cal_used} calibration points)")
+            print(f"  Recomputing q_hat (alpha_eval={alpha_eval})...")
+            q_hat, n_cal_total, n_cal_used = recompute_qhat(
+                flow_matcher,
+                system,
+                cal_set_file,
+                lambda_star,
+                delta,
+                alpha_eval,
+                num_mc_samples,
+                attractor_radius,
+                args.device,
+                invalid_threshold=args.invalid_threshold,
+                filter_invalid_by_conformal=filter_invalid_by_conformal,
+            )
+            if filter_invalid_by_conformal:
+                print(f"    q_hat: {q_hat:.4f} (from {n_cal_used}/{n_cal_total} cal points, {n_cal_total - n_cal_used} excluded by conformal filter: p_invalid >= {conformal_threshold:.4f})")
+            elif args.invalid_threshold is not None:
+                print(f"    q_hat: {q_hat:.4f} (from {n_cal_used}/{n_cal_total} cal points, {n_cal_total - n_cal_used} excluded by invalid_threshold)")
+            else:
+                print(f"    q_hat: {q_hat:.4f} (from {n_cal_used} calibration points)")
 
-        # 4. Run full ROA evaluation
-        print(f"  Running full ROA evaluation...")
-        metrics = evaluate_full_roa_fast(
-            flow_matcher,
-            system,
-            test_set_file,
-            num_mc_samples=num_mc_samples,
-            batch_size=batch_size,
-            lambda_star=lambda_star,
-            delta=delta,
-            q_hat=q_hat,
-            attractor_radius=attractor_radius,
-            device=args.device,
-            output_file=None,
-            verbose=False,
-        )
+            # 4. Run full ROA evaluation
+            print(f"  Running full ROA evaluation...")
+            metrics = evaluate_full_roa_fast(
+                flow_matcher,
+                system,
+                test_set_file,
+                num_mc_samples=num_mc_samples,
+                batch_size=batch_size,
+                lambda_star=lambda_star,
+                delta=delta,
+                q_hat=q_hat,
+                attractor_radius=attractor_radius,
+                device=args.device,
+                output_file=None,
+                verbose=False,
+            )
 
-        # 5. Save results
-        epoch_output_dir = save_epoch_results(
-            output_dir, epoch_num, metrics, lambda_star, delta, q_hat
-        )
-        print(f"  Results saved to: {epoch_output_dir}")
+            # 5. Save results
+            epoch_output_dir = save_epoch_results(
+                output_dir, epoch_num, metrics, lambda_star, delta, q_hat
+            )
+            print(f"  Results saved to: {epoch_output_dir}")
 
-        # Print summary metrics
-        conf_m = metrics.get("conformal_thresholds", {})
-        print(f"  [lambda*+/-delta] F1={conf_m.get('f1', 0):.2%}, Acc={conf_m.get('accuracy', 0):.2%}, Sep%={conf_m.get('separatrix_pct', 0):.1%}")
+            # Print summary metrics (q_hat conformal)
+            qhat_m = metrics.get("qhat_conformal_thresholds", {})
+            print(f"  [q_hat conformal] F1={qhat_m.get('f1', 0):.2%}, Acc={qhat_m.get('accuracy', 0):.2%}, Sep%={qhat_m.get('invalid_pct', 0):.1%}, Coverage={qhat_m.get('coverage', 0):.2%}")
 
-        # Track info for eval_config
-        per_epoch_info[f"epoch_{epoch_num:03d}"] = {
-            "lambda_star": lambda_star,
-            "delta_star": delta,
-            "q_hat_recomputed": q_hat,
-            "n_cal_total": n_cal_total,
-            "n_cal_used": n_cal_used,
-            "conformal_threshold": conformal_threshold,
-        }
+            # Track info for eval_config
+            per_epoch_info[f"epoch_{epoch_num:03d}"] = {
+                "lambda_star": lambda_star,
+                "delta_star": delta,
+                "q_hat_recomputed": q_hat,
+                "n_cal_total": n_cal_total,
+                "n_cal_used": n_cal_used,
+                "conformal_threshold": conformal_threshold,
+            }
+        except Exception as e:
+            print(f"  SKIPPED: {e}")
+            skipped_epochs.append(epoch_num)
 
     # Save eval_config.json
     eval_config = {
@@ -484,6 +508,7 @@ def main():
         },
         "training_defaults": training_defaults,
         "per_epoch": per_epoch_info,
+        "skipped_epochs": skipped_epochs,
     }
 
     with open(output_dir / "eval_config.json", "w") as f:
@@ -492,6 +517,8 @@ def main():
     print(f"\n{'='*70}")
     print("RE-EVALUATION COMPLETE")
     print(f"{'='*70}")
+    if skipped_epochs:
+        print(f"Skipped epochs (no checkpoint or error): {skipped_epochs}")
     print(f"Results saved to: {output_dir}")
     print(f"\nTo compile metrics and generate plots, run:")
     print(f"  python scripts/compile_adaptive_metrics.py {training_dir} --eval_dir {output_dir.name}")

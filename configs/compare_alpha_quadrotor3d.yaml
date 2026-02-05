@@ -1,0 +1,33 @@
+# Comparison of different alpha values - Quadrotor 3D
+# Use with: python scripts/adaptive_metrics_plotter.py --config configs/compare_alpha_quadrotor3d.yaml
+
+adaptive_experiments:
+  - name: "α = 0.01"
+    metrics_dir: "/common/users/shared/pracsys/adaptive_roa_experiments/adaptive_quadrotor3d/outputs/training_index_0_d2_ratio_0.75_warm_start_False_manifold_False_threshold_mode_dynamic_adapt_iter_40_alpha_0.1_sampling_mode_ranked/2026-01-29_07-38-07/evaluations/alpha_0.01_batch_81920/metrics"
+  - name: "α = 0.1"
+    metrics_dir: "/common/users/shared/pracsys/adaptive_roa_experiments/adaptive_quadrotor3d/outputs/training_index_0_d2_ratio_0.75_warm_start_False_manifold_False_threshold_mode_dynamic_adapt_iter_40_alpha_0.1_sampling_mode_ranked/2026-01-29_07-38-07/evaluations/batch_81920/metrics"
+  - name: "α = 0.4"
+    metrics_dir: "/common/users/shared/pracsys/adaptive_roa_experiments/adaptive_quadrotor3d/outputs/training_index_0_d2_ratio_0.75_warm_start_False_manifold_False_threshold_mode_dynamic_adapt_iter_40_alpha_0.1_sampling_mode_ranked/2026-01-29_07-38-07/evaluations/alpha_0.4_batch_81920/metrics"
+
+metrics_to_plot:
+  - f1
+  - separatrix_pct
+  - q_hat_eval
+
+y_labels:
+  f1: "F1"
+  separatrix_pct: "Separatrix %"
+  q_hat_eval: "q̂"
+
+# Only show legend on F1 plot
+legend_on_metrics:
+  - f1
+
+# Sync first epoch to use max value across experiments
+sync_first_epoch: true
+
+# Figure size (square)
+figsize: [8, 8]
+
+output_dir: "./plots/alpha_comparison_quadrotor3d"
+output_format: "png"

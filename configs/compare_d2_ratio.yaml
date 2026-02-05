@@ -1,0 +1,29 @@
+# Comparison of Uncertain-Uniform sampling ratio experiments
+# Use with: python scripts/adaptive_metrics_plotter.py --config configs/compare_d2_ratio.yaml
+
+adaptive_experiments:
+  - name: "Uncertain-Uniform Ratio = 0.75"
+    metrics_dir: "/common/users/shared/pracsys/adaptive_roa_experiments/adaptive_cartpole_pybullet/outputs/training_index_0_d2_ratio_0.75_warm_start_True_manifold_False_threshold_mode_dynamic_adapt_iter_10_alpha_0.1_sampling_mode_ranked/2026-01-30_13-48-14/evaluations/batch_61440/metrics"
+  - name: "Uncertain-Uniform Ratio = 0.5"
+    metrics_dir: "/common/users/shared/pracsys/adaptive_roa_experiments/adaptive_cartpole_pybullet/outputs/training_index_0_d2_ratio_0.5_warm_start_True_manifold_False_threshold_mode_dynamic_adapt_iter_10_alpha_0.1_sampling_mode_ranked/2026-01-30_13-48-34/evaluations/batch_61440/metrics"
+  - name: "Uncertain-Uniform Ratio = 0"
+    metrics_dir: "/common/users/shared/pracsys/adaptive_roa_experiments/adaptive_cartpole_pybullet/outputs/training_index_0_d2_ratio_0.0_warm_start_True_manifold_False_threshold_mode_dynamic_adapt_iter_10_alpha_0.1_sampling_mode_ranked/2026-01-30_13-48-29/evaluations/batch_61440/metrics"
+
+metrics_to_plot:
+  - f1
+  - separatrix_pct
+
+y_labels:
+  f1: "F1"
+  separatrix_pct: "Separatrix %"
+
+# Fixed axis scales
+x_max: 1000
+y_min: 0
+y_max: 1
+
+# Sync first epoch to use max value across experiments
+sync_first_epoch: true
+
+output_dir: "./plots/d2_ratio_comparison"
+output_format: "png"

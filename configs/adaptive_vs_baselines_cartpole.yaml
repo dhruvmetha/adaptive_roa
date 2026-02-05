@@ -1,0 +1,51 @@
+# Comparison of Adaptive method vs Non-Adaptive Baselines - CartPole
+# Use with: python scripts/adaptive_metrics_plotter.py --config configs/adaptive_vs_baselines_cartpole.yaml
+
+adaptive_experiments:
+  - name: "Conformal Adaptive (Ours)"
+    metrics_dir: "/common/users/shared/pracsys/adaptive_roa_experiments/adaptive_cartpole_pybullet/outputs/training_index_0_d2_ratio_0.75_warm_start_True_manifold_False_threshold_mode_dynamic_adapt_iter_10_alpha_0.1_sampling_mode_ranked/2026-01-30_13-48-14/evaluations/batch_61440/metrics"
+
+non_adaptive_experiments:
+  - name: "Conformal Non-Adaptive (Ours)"
+    scores:
+      f1: 0.970
+      separatrix_pct: 0.034
+  - name: "Classification"
+    scores:
+      f1: 0.685
+      separatrix_pct: 0.053
+  - name: "Non-Generative Final State Predictor"
+    scores:
+      f1: 0.999
+      separatrix_pct: 0.316
+  - name: "NeuroMancer"
+    scores:
+      f1: 0.911
+      separatrix_pct: 0.507
+  - name: "MORALS"
+    scores:
+      f1: 0.939
+      separatrix_pct: 0.073
+
+metrics_to_plot:
+  - f1
+  - separatrix_pct
+
+y_labels:
+  f1: "F1"
+  separatrix_pct: "Separatrix %"
+
+# Only show legend on these metrics
+legend_on_metrics:
+  - f1
+
+# Fixed axis scales
+x_max: 1000
+y_min: 0
+y_max: 1
+
+# Sync first epoch to use max value across experiments
+sync_first_epoch: false
+
+output_dir: "./plots/adaptive_vs_baselines_cartpole"
+output_format: "png"

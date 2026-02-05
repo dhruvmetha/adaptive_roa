@@ -1,0 +1,29 @@
+# Comparison of Uncertain-Uniform sampling ratio experiments - Quadrotor 2D
+# Use with: python scripts/adaptive_metrics_plotter.py --config configs/compare_d2_ratio_quadrotor2d.yaml
+
+adaptive_experiments:
+  - name: "Uncertain-Uniform Ratio = 0.75"
+    metrics_dir: "/common/users/shared/pracsys/adaptive_roa_experiments/adaptive_quadrotor2d/outputs/training_index_0_d2_ratio_0.75_warm_start_False_manifold_False_threshold_mode_dynamic_adapt_iter_60_alpha_0.1_sampling_mode_ranked/2026-01-29_08-06-00/evaluations/batch_102400/metrics"
+  - name: "Uncertain-Uniform Ratio = 0.5"
+    metrics_dir: "/common/users/shared/pracsys/adaptive_roa_experiments/adaptive_quadrotor2d/outputs/training_index_0_d2_ratio_0.5_warm_start_False_manifold_False_threshold_mode_dynamic_adapt_iter_60_alpha_0.1_sampling_mode_ranked/2026-01-29_08-05-48/evaluations/batch_81920/metrics"
+  - name: "Uncertain-Uniform Ratio = 0"
+    metrics_dir: "/common/users/shared/pracsys/adaptive_roa_experiments/adaptive_quadrotor2d/outputs/training_index_0_d2_ratio_0_warm_start_False_manifold_False_threshold_mode_dynamic_adapt_iter_60_alpha_0.1_sampling_mode_ranked/2026-01-29_08-08-12/evaluations/batch_81920/metrics"
+
+metrics_to_plot:
+  - f1
+  - separatrix_pct
+
+y_labels:
+  f1: "F1"
+  separatrix_pct: "Separatrix %"
+
+# Fixed axis scales (epoch 40 = 400 + 40*100 = 4400 trajectories)
+x_max: 4400
+y_min: 0
+y_max: 1
+
+# Sync first epoch to use max value across experiments
+sync_first_epoch: true
+
+output_dir: "./plots/d2_ratio_comparison_quadrotor2d"
+output_format: "png"

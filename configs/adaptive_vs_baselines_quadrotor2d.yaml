@@ -1,0 +1,49 @@
+# Comparison of Adaptive method vs Non-Adaptive Baselines - Quadrotor 2D
+# Use with: python scripts/adaptive_metrics_plotter.py --config configs/adaptive_vs_baselines_quadrotor2d.yaml
+
+adaptive_experiments:
+  - name: "Conformal Adaptive (Ours)"
+    metrics_dir: "/common/users/shared/pracsys/adaptive_roa_experiments/adaptive_quadrotor2d/outputs/training_index_0_d2_ratio_0.75_warm_start_False_manifold_False_threshold_mode_dynamic_adapt_iter_60_alpha_0.1_sampling_mode_ranked/2026-01-29_08-06-00/evaluations/batch_102400/metrics"
+
+non_adaptive_experiments:
+  - name: "Conformal Non-Adaptive (Ours)"
+    scores:
+      f1: 0.807
+      separatrix_pct: 0.146
+  - name: "Classification"
+    scores:
+      f1: 0.970
+      separatrix_pct: 0.0055
+  - name: "Non-Generative Final State Predictor"
+    scores:
+      f1: 0.581
+      separatrix_pct: 0.435
+  - name: "NeuroMancer"
+    scores:
+      f1: 0.767
+      separatrix_pct: 0.959
+
+metrics_to_plot:
+  - f1
+  - separatrix_pct
+
+y_labels:
+  f1: "F1"
+  separatrix_pct: "Separatrix %"
+
+# Only show legend on F1 plot
+legend_on_metrics:
+  - f1
+
+# Fixed axis scales
+y_min: 0
+y_max: 1
+
+# Sync first epoch to use max value across experiments
+sync_first_epoch: false
+
+# Figure size (square)
+figsize: [8, 8]
+
+output_dir: "./plots/adaptive_vs_baselines_quadrotor2d"
+output_format: "png"

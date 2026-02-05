@@ -1,0 +1,44 @@
+# Example configuration for adaptive_metrics_plotter.py
+#
+# Usage:
+#   python scripts/adaptive_metrics_plotter.py --config configs/plot_adaptive_metrics_example.yaml
+
+# Adaptive experiments (read from metrics directory)
+# Colors are assigned by index: experiment 0 gets color 0, experiment 1 gets color 1, etc.
+adaptive_experiments:
+  - name: "Adaptive (dynamic threshold)"
+    metrics_dir: "/common/users/shared/pracsys/adaptive_roa_experiments/adaptive_quadrotor2d/outputs/training_index_0_d2_ratio_0_warm_start_False_manifold_False_threshold_mode_dynamic_adapt_iter_60_alpha_0.1_sampling_mode_ranked/2026-01-29_08-08-12/metrics"
+  # Add more adaptive experiments as needed:
+  # - name: "Adaptive (static threshold)"
+  #   metrics_dir: "/path/to/other/metrics"
+
+# Non-adaptive baselines (manually entered scores)
+# These appear as horizontal dotted lines spanning the full x-range.
+# Colors start from index 10 (11th color in tab20 colormap).
+non_adaptive_experiments:
+  - name: "Non-Adaptive 1k trajectories"
+    scores:
+      f1: 0.75
+      accuracy: 0.85
+      roa_error_full: 2.5
+  - name: "Non-Adaptive 5k trajectories"
+    scores:
+      f1: 0.82
+      accuracy: 0.90
+      roa_error_full: 1.8
+
+# Metrics to plot (must match column names in metrics_summary.csv)
+# Each metric generates a separate plot file.
+# Available metrics include:
+#   - f1, accuracy, precision, recall, specificity
+#   - endpoint_mae_overall, endpoint_mae_success, endpoint_mae_failure
+#   - roa_error_full, roa_error_certain, roa_error_uncertain
+#   - And more (see metrics_summary.csv for full list)
+metrics_to_plot:
+  - f1
+  - accuracy
+  - roa_error_full
+
+# Output settings
+output_dir: "./plots"
+output_format: "png"  # Options: png, pdf, svg

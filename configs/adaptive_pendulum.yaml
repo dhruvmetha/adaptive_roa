@@ -53,9 +53,9 @@ test_ratio: 0.1     # 10% of training for testing
 # =====================================================================
 # Adaptive Sampling Configuration
 # =====================================================================
-initial_train_size: 50    # Initial training trajectories
+initial_train_size: 100    # Initial training trajectories
 n_epochs: 19               # Number of adaptive sampling epochs
-samples_per_epoch: 50      # New candidates per epoch (for fixed strategy only)
+samples_per_epoch: 100      # New candidates per epoch (for fixed strategy only)
 warm_start: False          # If true, continue training from previous epoch's checkpoint
 
 # Sampling mode: "conformal", "ranked", or "direct"
@@ -147,11 +147,6 @@ trainer:
       save_last: true
       filename: "best-{epoch:02d}-{val_loss:.4f}"
       auto_insert_metric_name: false
-    - _target_: lightning.pytorch.callbacks.EarlyStopping
-      monitor: val_loss
-      mode: min
-      patience: 20
-      verbose: true
 
 # Flow matching specific settings
 flow_matching:
@@ -184,7 +179,7 @@ model:
 # Optimizer
 optimizer:
   _target_: torch.optim.AdamW
-  lr: 1e-4
+  lr: 0.001
   weight_decay: 1e-5
   betas: [0.9, 0.999]
 
@@ -195,10 +190,6 @@ scheduler:
   factor: 0.5
   patience: 10
   min_lr: 1e-6
-
-# System (Pendulum)
-system:
-  _target_: adaptive_roa.systems.pendulum.PendulumSystem
 
 # Hydra
 hydra:

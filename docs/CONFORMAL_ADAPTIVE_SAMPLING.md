@@ -31,10 +31,10 @@ adaptive_roa/
 │   └── balanced_sampler.py         # UncertainSampler: q_hat-based uncertain sampling
 │
 scripts/
-└── run_adaptive_cartpole.py        # Main adaptive sampling script
+└── run_adaptive.py        # Main adaptive sampling script
 
 configs/
-└── adaptive_cartpole_pybullet.yaml # CartPole PyBullet config
+└── adaptive_v2/system/cartpole_pybullet.yaml # CartPole PyBullet config
 ```
 
 ---
@@ -335,10 +335,10 @@ n_certain_discarded = result.n_certain_discarded
 
 ```bash
 # Default config
-python scripts/run_adaptive_cartpole.py
+python scripts/run_adaptive.py system=cartpole_pybullet
 
 # Custom parameters
-python scripts/run_adaptive_cartpole.py \
+python scripts/run_adaptive.py system=cartpole_pybullet \
     initial_train_size=200 \
     n_epochs=5 \
     samples_per_epoch=100 \
@@ -349,7 +349,7 @@ python scripts/run_adaptive_cartpole.py \
 
 ## Configuration Reference
 
-### configs/adaptive_cartpole_pybullet.yaml
+### configs/adaptive_v2/system/cartpole_pybullet.yaml
 
 ```yaml
 name: adaptive_cartpole_pybullet

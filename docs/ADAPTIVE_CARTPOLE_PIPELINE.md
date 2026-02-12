@@ -1,6 +1,6 @@
 # Adaptive Sampling Pipeline (CartPole PyBullet)
 
-This report describes the **high-level pipeline** implemented by `scripts/run_adaptive_cartpole.py`: an iterative loop that (1) trains a stochastic **flow-matching endpoint model**, then (2) uses **Monte Carlo probability estimation + conformal prediction** to identify *uncertain* start states (near the separatrix) and add their trajectories to the training set.
+This report describes the **high-level pipeline** implemented by `scripts/run_adaptive.py system=cartpole_pybullet`: an iterative loop that (1) trains a stochastic **flow-matching endpoint model**, then (2) uses **Monte Carlo probability estimation + conformal prediction** to identify *uncertain* start states (near the separatrix) and add their trajectories to the training set.
 
 It is written to help you reason about the system as a data/compute pipeline: **what goes in, what happens at each stage, and what artifacts come out**.
 
@@ -74,7 +74,7 @@ Implementation: `adaptive_roa/conformal/probability_estimator.py`.
 
 The pipeline tries to produce **confident** decisions (success/failure) while allowing an abstention region (“unknown”) near the boundary.
 
-For CartPole, the default is **two-sided** decision logic (uses both `p_success` and `p_failure`), matching `conformal.decision_rule: two_sided` in `configs/adaptive_cartpole_pybullet.yaml`.
+For CartPole, the default is **two-sided** decision logic (uses both `p_success` and `p_failure`), matching `conformal.decision_rule: two_sided` in `configs/adaptive_v2/system/cartpole_pybullet.yaml`.
 
 Two-sided thresholds (conceptually):
 
@@ -148,7 +148,7 @@ Important nuance:
 
 ### 2.3 Flow matcher training: “fit p(endpoint | start)”
 
-Entry: `train_flow_matcher()` in `scripts/run_adaptive_cartpole.py`.
+Entry: `train_flow_matcher()` in `scripts/run_adaptive.py system=cartpole_pybullet`.
 
 Core pieces:
 
@@ -199,7 +199,7 @@ In non-conformal mode (`conformal.use_conformal: false`), it uses `(λ*, δ*)` d
 
 ### 3.1 Inputs (what must exist before you run)
 
-Configured in `configs/adaptive_cartpole_pybullet.yaml` under `data_source`:
+Configured in `configs/adaptive_v2/system/cartpole_pybullet.yaml` under `data_source`:
 
 1. **Trajectory pool**
    - `trajectories_dir`: directory of trajectory text files
@@ -215,7 +215,7 @@ Configured in `configs/adaptive_cartpole_pybullet.yaml` under `data_source`:
 
 ### 3.2 Startup stage (once per run)
 
-`scripts/run_adaptive_cartpole.py`:
+`scripts/run_adaptive.py system=cartpole_pybullet`:
 
 1. Register resolvers (`exp_dir`, `data_dir`, etc.) before Hydra loads config.
 2. `pl.seed_everything(seed, workers=True)` for reproducibility across Python/numpy/torch/DataLoader.
@@ -343,7 +343,7 @@ After all epochs, the script:
 
 ## 4) Outputs and artifacts (what you can inspect after a run)
 
-All outputs live under `cfg.output_dir` (see `configs/adaptive_cartpole_pybullet.yaml`).
+All outputs live under `cfg.output_dir` (see `configs/adaptive_v2/system/cartpole_pybullet.yaml`).
 
 ### 4.1 Directory layout (typical)
 
@@ -361,8 +361,9 @@ output_dir/
       best-*.ckpt
       last.ckpt
     validation_errors.txt
-    results.json                   # epoch summary (counts + metrics pointers)
-    conformal_state.json           # λ*, δ*, q_hat and config summary
+    artifacts_v2.json              # canonical epoch summary (thresholds, acquisition, metrics + legacy stats)
+    results.json                   # legacy flat epoch metrics (enabled by default)
+    conformal_state.json           # legacy conformal predictor state (enabled by default)
     full_roa_evaluation.json       # held-out metrics + error stats
     full_roa_evaluation_per_point.npz
     full_roa_evaluation_roa_projections.png
@@ -375,11 +376,12 @@ output_dir/
 
 - **`datasets/*.txt`**: the actual training data consumed by Lightning each epoch (endpoint pairs).
 - **`epoch_###/checkpoints/`**: model checkpoints; used for warm-start and post-run analysis.
-- **`epoch_###/results.json`**: per-epoch bookkeeping:
+- **`epoch_###/artifacts_v2.json`**: canonical per-epoch bookkeeping:
   - how many points added/discarded
   - `lambda_star`, `delta_star`, `q_hat` (training-time)
   - summary metrics on the training subset and held-out test set
-- **`epoch_###/conformal_state.json`**: serialized conformal predictor state.
+  - `legacy_epoch_metrics` (old `results.json` payload)
+  - `conformal_state` (old `conformal_state.json` payload)
 - **`epoch_###/full_roa_evaluation.json`**: held-out evaluation metrics, including:
   - threshold-based metrics (`λ±δ`, notebook thresholds)
   - q_hat conformal metrics (coverage, avg set size), if enabled
@@ -392,7 +394,7 @@ output_dir/
 
 ## 5) Key configuration knobs (how to think about tuning)
 
-File: `configs/adaptive_cartpole_pybullet.yaml`
+File: `configs/adaptive_v2/system/cartpole_pybullet.yaml`
 
 ### 5.1 Compute / runtime knobs
 
@@ -442,23 +444,23 @@ File: `configs/adaptive_cartpole_pybullet.yaml`
 From the repo root:
 
 ```bash
-python scripts/run_adaptive_cartpole.py
+python scripts/run_adaptive.py system=cartpole_pybullet
 ```
 
 Useful overrides for quick experiments:
 
 ```bash
 # Short debug run
-python scripts/run_adaptive_cartpole.py n_epochs=1 samples_per_epoch=10 trainer.max_epochs=10 conformal.num_mc_samples=5 conformal.num_mc_samples_eval=5
+python scripts/run_adaptive.py system=cartpole_pybullet n_epochs=1 samples_per_epoch=10 trainer.max_epochs=10 conformal.num_mc_samples=5 conformal.num_mc_samples_eval=5
 
 # Disable conformal prediction (use λ±δ directly for uncertainty sampling)
-python scripts/run_adaptive_cartpole.py conformal.use_conformal=false
+python scripts/run_adaptive.py system=cartpole_pybullet conformal.use_conformal=false
 
 # Use fixed thresholds (no optimization)
-python scripts/run_adaptive_cartpole.py conformal.threshold_mode=fixed conformal.fixed_lambda_star=0.5 conformal.fixed_delta_star=0.1
+python scripts/run_adaptive.py system=cartpole_pybullet conformal.threshold_mode=fixed conformal.fixed_lambda_star=0.5 conformal.fixed_delta_star=0.1
 
 # More aggressive uncertainty sampling
-python scripts/run_adaptive_cartpole.py d2_ratio=0.8 samples_per_epoch=200
+python scripts/run_adaptive.py system=cartpole_pybullet d2_ratio=0.8 samples_per_epoch=200
 ```
 
 ---
@@ -493,7 +495,7 @@ To replicate the same pipeline for a new system you need:
 
 ## 9) Code map (where to look)
 
-- Pipeline entrypoint: `scripts/run_adaptive_cartpole.py`
+- Pipeline entrypoint: `scripts/run_adaptive.py system=cartpole_pybullet`
 - Data pool + endpoint dataset generation: `adaptive_roa/adaptive/data_source.py`
 - Index bookkeeping + dataset building: `adaptive_roa/adaptive/dataset_builder.py`
 - Uncertain sampling logic: `adaptive_roa/adaptive/balanced_sampler.py`
@@ -508,6 +510,4 @@ Each sample: p_success, p_failure, p_invalid
 
 if (p_invalid >= 0.5):
     label = INVALID
-
-
 

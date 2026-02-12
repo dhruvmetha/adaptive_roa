@@ -121,10 +121,10 @@ cd /common/users/$USER/adaptive_cartpole
 export PYTHONPATH=$(pwd):$PYTHONPATH
 
 # Run with default config
-CUDA_VISIBLE_DEVICES=0 python src/adaptive/run_adaptive_cartpole.py
+CUDA_VISIBLE_DEVICES=0 python scripts/run_adaptive.py system=cartpole_pybullet
 
 # Run with custom parameters
-CUDA_VISIBLE_DEVICES=0 python src/adaptive/run_adaptive_cartpole.py \
+CUDA_VISIBLE_DEVICES=0 python scripts/run_adaptive.py system=cartpole_pybullet \
     initial_train_size=1000 \
     n_epochs=1 \
     trainer.max_epochs=500 \
@@ -134,7 +134,7 @@ CUDA_VISIBLE_DEVICES=0 python src/adaptive/run_adaptive_cartpole.py \
 ### Run adaptive sampling (Mountain Car):
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python src/adaptive/run_adaptive_mountain_car.py \
+CUDA_VISIBLE_DEVICES=0 python scripts/run_adaptive_mountain_car.py \
     initial_train_size=1000 \
     n_epochs=1 \
     trainer.max_epochs=500 \
@@ -144,11 +144,46 @@ CUDA_VISIBLE_DEVICES=0 python src/adaptive/run_adaptive_mountain_car.py \
 ### Run adaptive sampling (Pendulum):
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python src/adaptive/run_adaptive_pendulum.py \
+CUDA_VISIBLE_DEVICES=0 python scripts/run_adaptive.py system=pendulum \
     initial_train_size=500 \
     n_epochs=1 \
     trainer.max_epochs=500
 ```
+
+### Run unified v2 smoke tests (2 adaptive epochs, 1 FM epoch each):
+
+```bash
+BASE=/tmp/adaptive_v2_smoke_e2
+mkdir -p $BASE/{logs,out,hydra}
+
+for SYS in pendulum cartpole_pybullet quadrotor2d quadrotor3d; do
+  INIT=10
+  if [ "$SYS" = "quadrotor3d" ]; then INIT=20; fi
+
+  timeout 180 python scripts/run_adaptive.py \
+    system=$SYS \
+    +adaptive_v2.smoke_mode=true \
+    n_epochs=2 \
+    trainer.max_epochs=1 \
+    +trainer.limit_train_batches=1 \
+    +trainer.limit_val_batches=1 \
+    sampling_mode=ranked \
+    n_ranked_candidates=10 \
+    batch_size_sampling=5 \
+    max_samples_per_epoch=20 \
+    initial_train_size=$INIT \
+    output_dir=$BASE/out/$SYS \
+    hydra.run.dir=$BASE/hydra/$SYS \
+    > $BASE/logs/$SYS.log 2>&1
+
+  echo "$SYS EXIT_CODE=$?"
+done
+```
+
+Notes:
+- `+adaptive_v2.smoke_mode=true` skips heavy evaluation stages and is intended for pipeline validation.
+- `trainer.max_epochs=1` enforces one FM training epoch per adaptive epoch.
+- If CUDA is requested but unavailable, v2 falls back to CPU.
 
 ---
 
@@ -158,14 +193,14 @@ CUDA_VISIBLE_DEVICES=0 python src/adaptive/run_adaptive_pendulum.py \
 
 ```bash
 # Run with shuffle variant 0 (default)
-python src/adaptive/run_adaptive_cartpole.py shuffle_variant=0
+python scripts/run_adaptive.py system=cartpole_pybullet shuffle_variant=0
 
 # Run with shuffle variant 3
-python src/adaptive/run_adaptive_cartpole.py shuffle_variant=3
+python scripts/run_adaptive.py system=cartpole_pybullet shuffle_variant=3
 
 # Run all 10 variants
 for i in {0..9}; do
-    CUDA_VISIBLE_DEVICES=$((i % 4)) python src/adaptive/run_adaptive_cartpole.py \
+    CUDA_VISIBLE_DEVICES=$((i % 4)) python scripts/run_adaptive.py system=cartpole_pybullet \
         shuffle_variant=$i &
 done
 wait
@@ -176,7 +211,7 @@ wait
 ```bash
 mkdir -p logs
 
-CUDA_VISIBLE_DEVICES=0 python src/adaptive/run_adaptive_cartpole.py \
+CUDA_VISIBLE_DEVICES=0 python scripts/run_adaptive.py system=cartpole_pybullet \
     > logs/cartpole_run.log 2>&1 &
 
 # Monitor progress
@@ -187,20 +222,20 @@ tail -f logs/cartpole_run.log
 
 ## 8. Key Configuration Parameters
 
-Edit `configs/adaptive_cartpole_pybullet.yaml` (or pass as CLI args):
+Edit `configs/adaptive_v2/system/cartpole_pybullet.yaml` (or pass as CLI args):
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `initial_train_size` | Initial training trajectories | 1000 |
-| `n_epochs` | Number of adaptive sampling epochs | 1 |
-| `warm_start` | Continue training from previous checkpoint | true |
-| `adaptive_data_max` | New samples per epoch | 50 |
+| `initial_train_size` | Initial training trajectories | 300 |
+| `n_epochs` | Number of adaptive sampling epochs | 8 |
+| `warm_start` | Continue training from previous checkpoint | false |
+| `samples_per_epoch` | New samples per epoch (D1 + D2) | 100 |
 | `d2_ratio` | Fraction for uncertainty-filtered sampling | 0.5 |
-| `trainer.max_epochs` | Training epochs per round | 2000 |
-| `batch_size` | Training batch size | 512 |
+| `trainer.max_epochs` | Training epochs per round | 1000 |
+| `batch_size` | Training batch size | 1024 |
 | `optimizer.lr` | Learning rate | 1e-3 |
 | `conformal.optimize_mode` | "lambda" or "delta" | delta |
-| `shuffle_variant` | Data shuffle variant (0-9) | 0 |
+| `sampling_mode` | "ranked", "conformal", or "direct" | ranked |
 
 ---
 
@@ -215,11 +250,14 @@ outputs/adaptive_cartpole_pybullet/2026-01-18_16-45-00/
 │   ├── train_endpoint_dataset.txt
 │   ├── val_endpoint_dataset.txt
 │   └── test_endpoint_dataset.txt
-├── epoch_0/                   # Per-epoch outputs
-│   ├── checkpoints/           # Model checkpoints
-│   └── version_0/             # Lightning logs
-├── conformal_results.json     # Conformal prediction results
-└── roa_evaluation.json        # Full ROA evaluation metrics
+├── final_results.json         # Run-level summary
+└── epoch_000/                 # Per-epoch outputs
+    ├── checkpoints/           # Model checkpoints
+    ├── full_roa_evaluation.json
+    ├── artifacts_v2.json      # Canonical v2 epoch artifact (includes legacy_epoch_metrics + conformal_state)
+    ├── results.json           # Legacy flat epoch metrics (enabled by default)
+    ├── conformal_state.json   # Legacy conformal predictor state (enabled by default)
+    └── version_0/             # Lightning logs
 ```
 
 ---
@@ -236,7 +274,7 @@ export PYTHONPATH=/common/users/$USER/adaptive_cartpole:$PYTHONPATH
 
 Reduce batch size:
 ```bash
-python src/adaptive/run_adaptive_cartpole.py batch_size=256
+python scripts/run_adaptive.py system=cartpole_pybullet batch_size=256
 ```
 
 ### Hydra override errors
@@ -275,13 +313,13 @@ export PYTHONPATH=$(pwd):$PYTHONPATH
 nvidia-smi
 
 # Run CartPole
-CUDA_VISIBLE_DEVICES=4 python src/adaptive/run_adaptive_cartpole.py
+CUDA_VISIBLE_DEVICES=4 python scripts/run_adaptive.py system=cartpole_pybullet
 
 # Run Mountain Car
-CUDA_VISIBLE_DEVICES=5 python src/adaptive/run_adaptive_mountain_car.py
+CUDA_VISIBLE_DEVICES=5 python scripts/run_adaptive_mountain_car.py
 
 # Run Pendulum
-CUDA_VISIBLE_DEVICES=6 python src/adaptive/run_adaptive_pendulum.py
+CUDA_VISIBLE_DEVICES=6 python scripts/run_adaptive.py system=pendulum
 
 # Monitor logs
 tail -f logs/*.log
@@ -289,5 +327,20 @@ tail -f logs/*.log
 # Check running jobs
 ps aux | grep python
 ```
+
+---
+
+## 12. Legacy Mountain Car
+
+`mountain_car` remains legacy in this phase and is intentionally separate from unified v2.
+
+Use:
+
+```bash
+python scripts/run_adaptive_mountain_car.py
+```
+
+Legacy v1 details for the four unified systems are archived in:
+`docs/archive/LEGACY_ADAPTIVE_V1.md`
 
 ---

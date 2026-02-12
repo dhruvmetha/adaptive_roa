@@ -1,6 +1,6 @@
 # Adaptive ROA via Conditional Flow Matching + Conformal Inference (System-Agnostic)
 
-This document gives an **idea-level, system-agnostic, mathematical** description of the method implemented by the adaptive training scripts (e.g., `scripts/run_adaptive_cartpole.py`, `scripts/run_adaptive_pendulum.py`, `scripts/run_adaptive_quadrotor2d.py`, `scripts/run_adaptive_quadrotor3d.py`) and the post-hoc conformal re-evaluation scripts (e.g., `scripts/reevaluate_cartpole.py`).
+This document gives an **idea-level, system-agnostic, mathematical** description of the method implemented by the adaptive training scripts (e.g., `scripts/run_adaptive.py system=cartpole_pybullet`, `scripts/run_adaptive.py system=pendulum`, `scripts/run_adaptive.py system=quadrotor2d`, `scripts/run_adaptive.py system=quadrotor3d`) and the post-hoc conformal re-evaluation scripts (e.g., `scripts/reevaluate_cartpole.py`).
 
 The core concept is:
 

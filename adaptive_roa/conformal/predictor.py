@@ -112,7 +112,7 @@ class ConformalPredictor:
         # Step 1: Estimate probabilities for training set
         if verbose:
             print(f"\n[1/2] Estimating probabilities for training set ({self.config.num_mc_samples} MC samples)...")
-        p_train_success, p_train_failure, _ = self.prob_estimator.estimate(X_train)
+        p_train_success, p_train_failure, p_train_invalid = self.prob_estimator.estimate(X_train)
 
         # Step 2: Optimize λ* or δ* depending on mode
         p_failure_for_opt = p_train_failure if decision_rule == "two_sided" else None
@@ -120,29 +120,24 @@ class ConformalPredictor:
         if optimize_mode == "delta":
             if verbose:
                 print(f"[2/2] Optimizing δ* via grid search with fixed λ=0.5 ({self.config.delta_grid_size} points)...")
-            self.lambda_star, self.delta_star, opt_info = self.lambda_optimizer.optimize(
-                p_train_success, y_train, p_failure=p_failure_for_opt
-            )
+        elif optimize_mode == "joint":
             if verbose:
-                print(f"      → λ = {self.lambda_star:.4f} (fixed)")
-                print(f"      → δ* = {self.delta_star:.4f}")
-                print(f"      → Best loss = {opt_info['best_loss']:.4f}")
-                print(f"      → Misclass rate = {opt_info['best_misclass_rate']:.2%}")
-                print(f"      → Unknown rate = {opt_info['best_unknown_rate']:.2%}")
+                print(f"[2/2] Optimizing λ* and δ* jointly via 2D grid search "
+                      f"({self.config.lambda_grid_size}×{self.config.delta_grid_size} grid)...")
         else:
             if verbose:
                 print(f"[2/2] Optimizing λ* via grid search with fixed δ={self.config.delta} ({self.config.lambda_grid_size} points)...")
-            self.lambda_star, self.delta_star, opt_info = self.lambda_optimizer.optimize(
-                p_train_success, y_train, p_failure=p_failure_for_opt
-            )
-            if verbose:
-                print(f"      → λ* = {self.lambda_star:.4f}")
-                print(f"      → δ = {self.delta_star:.4f} (fixed)")
-                print(f"      → Best loss = {opt_info['best_loss']:.4f}")
-                print(f"      → Misclass rate = {opt_info['best_misclass_rate']:.2%}")
-                print(f"      → Unknown rate = {opt_info['best_unknown_rate']:.2%}")
+
+        self.lambda_star, self.delta_star, opt_info = self.lambda_optimizer.optimize(
+            p_train_success, y_train, p_failure=p_failure_for_opt, p_invalid=p_train_invalid
+        )
 
         if verbose:
+            print(f"      → λ* = {self.lambda_star:.4f}" + (" (fixed)" if optimize_mode == "delta" else ""))
+            print(f"      → δ* = {self.delta_star:.4f}" + (" (fixed)" if optimize_mode == "lambda" else ""))
+            print(f"      → Best loss = {opt_info['best_loss']:.4f}")
+            print(f"      → Misclass rate = {opt_info['best_misclass_rate']:.2%}")
+            print(f"      → Unknown rate = {opt_info['best_unknown_rate']:.2%}")
             print("=" * 60)
             print("THRESHOLD OPTIMIZATION COMPLETE (q_hat NOT yet calibrated)")
             print("=" * 60)
@@ -273,36 +268,33 @@ class ConformalPredictor:
         # Step 1: Estimate probabilities for training set
         if verbose:
             print(f"\n[1/4] Estimating probabilities for training set ({self.config.num_mc_samples} MC samples)...")
-        p_train_success, p_train_failure, _ = self.prob_estimator.estimate(X_train)
+        p_train_success, p_train_failure, p_train_invalid = self.prob_estimator.estimate(X_train)
 
         # Step 2: Optimize λ* or δ* depending on mode
         # Pass p_failure for two_sided decision rule (CartPole), None for one_sided (pendulum)
         p_failure_for_opt = p_train_failure if decision_rule == "two_sided" else None
-        
+
         if optimize_mode == "delta":
             if verbose:
                 print(f"[2/4] Optimizing δ* via grid search with fixed λ=0.5 ({self.config.delta_grid_size} points)...")
-            self.lambda_star, self.delta_star, opt_info = self.lambda_optimizer.optimize(
-                p_train_success, y_train, p_failure=p_failure_for_opt
-            )
+        elif optimize_mode == "joint":
             if verbose:
-                print(f"      → λ = {self.lambda_star:.4f} (fixed)")
-                print(f"      → δ* = {self.delta_star:.4f}")
-                print(f"      → Best loss = {opt_info['best_loss']:.4f}")
-                print(f"      → Misclass rate = {opt_info['best_misclass_rate']:.2%}")
-                print(f"      → Unknown rate = {opt_info['best_unknown_rate']:.2%}")
+                print(f"[2/4] Optimizing λ* and δ* jointly via 2D grid search "
+                      f"({self.config.lambda_grid_size}×{self.config.delta_grid_size} grid)...")
         else:
             if verbose:
                 print(f"[2/4] Optimizing λ* via grid search with fixed δ={self.config.delta} ({self.config.lambda_grid_size} points)...")
-            self.lambda_star, self.delta_star, opt_info = self.lambda_optimizer.optimize(
-                p_train_success, y_train, p_failure=p_failure_for_opt
-            )
-            if verbose:
-                print(f"      → λ* = {self.lambda_star:.4f}")
-                print(f"      → δ = {self.delta_star:.4f} (fixed)")
-                print(f"      → Best loss = {opt_info['best_loss']:.4f}")
-                print(f"      → Misclass rate = {opt_info['best_misclass_rate']:.2%}")
-                print(f"      → Unknown rate = {opt_info['best_unknown_rate']:.2%}")
+
+        self.lambda_star, self.delta_star, opt_info = self.lambda_optimizer.optimize(
+            p_train_success, y_train, p_failure=p_failure_for_opt, p_invalid=p_train_invalid
+        )
+
+        if verbose:
+            print(f"      → λ* = {self.lambda_star:.4f}" + (" (fixed)" if optimize_mode == "delta" else ""))
+            print(f"      → δ* = {self.delta_star:.4f}" + (" (fixed)" if optimize_mode == "lambda" else ""))
+            print(f"      → Best loss = {opt_info['best_loss']:.4f}")
+            print(f"      → Misclass rate = {opt_info['best_misclass_rate']:.2%}")
+            print(f"      → Unknown rate = {opt_info['best_unknown_rate']:.2%}")
 
         # Step 3: Estimate probabilities for calibration set
         if verbose:

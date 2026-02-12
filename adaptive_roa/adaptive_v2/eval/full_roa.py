@@ -290,9 +290,21 @@ def evaluate_full_roa_fast(
 
     X_all, end_states_all, y_all = load_eval_states(eval_states_file)
     n_total = len(y_all)
+    n_success_true = int(np.sum(y_all == 1))
+    n_failure_true = int(np.sum(y_all == -1))
 
     if lambda_star is None:
         lambda_star = 0.5
+
+    if verbose:
+        refine_str = (
+            f", refine t~U[{refine_t_range[0]}, {refine_t_range[1]}] max_attempts={refine_max_attempts}"
+            if refine_invalids else ""
+        )
+        print(f"  [Full ROA] N={n_total} eval states ({n_success_true} success, {n_failure_true} failure), "
+              f"K={num_mc_samples} MC samples, batch={batch_size}{refine_str}")
+        print(f"  [Full ROA] λ*={lambda_star:.4f}, δ={delta:.4f}, "
+              f"q_hat={q_hat:.4f if q_hat is not None else 'None'}, rule={effective_rule}")
 
     X_tensor = torch.from_numpy(X_all).float().to(device)
     end_tensor = torch.from_numpy(end_states_all).float().to(device)
@@ -307,9 +319,13 @@ def evaluate_full_roa_fast(
     total_refined_to_failure = 0
     per_attempt_resolved = [0] * refine_max_attempts if refine_invalids else []
 
+    n_batches = (n_total + batch_size - 1) // batch_size
+    total_steps = n_batches * num_mc_samples
+
     flow_matcher.eval()
     with torch.no_grad():
-        for batch_start in tqdm(range(0, n_total, batch_size), desc="Evaluating", disable=not verbose):
+      with tqdm(total=total_steps, desc="Full ROA eval", disable=not verbose) as pbar:
+        for batch_start in range(0, n_total, batch_size):
             batch_end = min(batch_start + batch_size, n_total)
             batch_inputs = X_tensor[batch_start:batch_end]
             batch_actual = end_tensor[batch_start:batch_end]
@@ -368,6 +384,8 @@ def evaluate_full_roa_fast(
                 else:
                     geodesic = pred_np - batch_actual.cpu().numpy()
                 mc_errors[batch_start:batch_end, sample_idx] = np.linalg.norm(geodesic, axis=1)
+
+                pbar.update(1)
 
     if refine_invalids and verbose:
         total_refined = total_refined_to_success + total_refined_to_failure
@@ -445,6 +463,22 @@ def evaluate_full_roa_fast(
     else:
         pred_qhat = None
         metrics_qhat = None
+
+    if verbose:
+        mc_p_inv_mean = float(np.mean(p_invalid))
+        mc_p_inv_median = float(np.median(p_invalid))
+        print(f"  [Full ROA] MC probs: p_success mean={np.mean(p_success):.4f}, "
+              f"p_failure mean={np.mean(p_failure):.4f}, p_invalid mean={mc_p_inv_mean:.4f} median={mc_p_inv_median:.4f}")
+        print(f"  [Full ROA] λ±δ results:  F1={metrics_conformal['f1']:.4f}  "
+              f"acc={metrics_conformal['accuracy']:.4f}  "
+              f"prec={metrics_conformal['precision']:.4f}  "
+              f"recall={metrics_conformal['recall']:.4f}  "
+              f"separatrix={metrics_conformal['separatrix_pct']:.1%}")
+        if metrics_qhat is not None:
+            print(f"  [Full ROA] q_hat sets:   F1={metrics_qhat['f1']:.4f}  "
+                  f"acc={metrics_qhat['accuracy']:.4f}  "
+                  f"coverage={metrics_qhat.get('coverage', 0):.4f}  "
+                  f"avg_set={metrics_qhat.get('avg_set_size', 0):.2f}")
 
     mask_invalid = pred_conformal == -2
     mask_uncertain = pred_conformal == -1

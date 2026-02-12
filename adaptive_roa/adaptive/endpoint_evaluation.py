@@ -12,54 +12,35 @@ from typing import Tuple, Dict
 
 def sample_endpoint_data_for_optimization(
     dataset_builder,
-    sample_fraction: float = 0.1,
-    max_samples: int = 5000,
+    sample_fraction: float = 1.0,
+    max_samples: int = 0,
     seed: int = 42,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Sample from the endpoint dataset for lambda/delta optimization.
+    Get endpoint data for lambda/delta optimization.
 
-    Uses the expanded endpoint dataset (get_training_data) which has multiple
-    pairs per trajectory. Samples min(fraction, max_samples) points, or uses
-    everything if the dataset is smaller than max_samples.
+    Uses the full expanded endpoint dataset (get_training_data) which has
+    multiple pairs per trajectory.
 
     Args:
         dataset_builder: AdaptiveDatasetBuilder with training data
-        sample_fraction: Fraction of endpoint pairs to sample (default 0.1 = 10%)
-        max_samples: Maximum number of samples (default 5000)
-        seed: Random seed for reproducibility
+        sample_fraction: Unused, kept for API compatibility.
+        max_samples: Unused, kept for API compatibility.
+        seed: Unused, kept for API compatibility.
 
     Returns:
-        Tuple of (X_sampled [N_sample, state_dim], y_sampled [N_sample])
-        where X_sampled are start states and y_sampled are labels
+        Tuple of (X [N, state_dim], y [N])
+        where X are start states and y are labels
     """
     start_states, end_states, labels = dataset_builder.get_training_data()
 
     n_total = len(labels)
+    n_success = int(np.sum(labels == 1))
+    n_failure = int(np.sum(labels == -1))
+    print(f"    Endpoint dataset: {n_total} total pairs (using all)")
+    print(f"    Labels: {n_success} success, {n_failure} failure")
 
-    if n_total <= max_samples:
-        # Dataset is small enough — use everything
-        n_success = int(np.sum(labels == 1))
-        n_failure = int(np.sum(labels == -1))
-        print(f"    Endpoint dataset: {n_total} total pairs (using all, <= {max_samples} cap)")
-        print(f"    Labels: {n_success} success, {n_failure} failure")
-        return start_states, labels
-
-    # Sample min(10%, 10k)
-    n_sample = min(max(1, int(n_total * sample_fraction)), max_samples)
-
-    rng = np.random.RandomState(seed)
-    sample_indices = rng.choice(n_total, size=n_sample, replace=False)
-
-    X_sampled = start_states[sample_indices]
-    y_sampled = labels[sample_indices]
-
-    n_success = int(np.sum(y_sampled == 1))
-    n_failure = int(np.sum(y_sampled == -1))
-    print(f"    Endpoint dataset: {n_total} total pairs, sampled {n_sample} (min({sample_fraction:.0%}, {max_samples}))")
-    print(f"    Sampled labels: {n_success} success, {n_failure} failure")
-
-    return X_sampled, y_sampled
+    return start_states, labels
 
 
 @torch.no_grad()

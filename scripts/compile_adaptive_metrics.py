@@ -53,16 +53,16 @@ def extract_metrics_from_epoch(results: dict[str, Any]) -> dict[str, Any]:
     # Full ROA evaluation metrics
     full_roa = results.get("full_roa", {})
 
-    # Classification metrics (from conformal_thresholds or top-level)
-    conformal = full_roa.get("conformal_thresholds", {})
-    metrics["f1"] = full_roa.get("f1", conformal.get("f1", 0))
-    metrics["accuracy"] = full_roa.get("accuracy", conformal.get("accuracy", 0))
-    metrics["precision"] = full_roa.get("precision", conformal.get("precision", 0))
-    metrics["recall"] = full_roa.get("recall", conformal.get("recall", 0))
-    metrics["specificity"] = full_roa.get("specificity", conformal.get("specificity", 0))
+    # Classification metrics (lambda_delta, with fallback to old conformal_thresholds key)
+    conformal = full_roa.get("lambda_delta", full_roa.get("conformal_thresholds", {}))
+    metrics["f1"] = conformal.get("f1", 0)
+    metrics["accuracy"] = conformal.get("accuracy", 0)
+    metrics["precision"] = conformal.get("precision", 0)
+    metrics["recall"] = conformal.get("recall", 0)
+    metrics["specificity"] = conformal.get("specificity", 0)
 
     # Coverage metrics
-    metrics["separatrix_pct"] = full_roa.get("separatrix_pct", conformal.get("separatrix_pct", 0))
+    metrics["separatrix_pct"] = conformal.get("separatrix_pct", 0)
     metrics["invalid_pct"] = conformal.get("invalid_pct", 0)
     metrics["uncertain_pct"] = conformal.get("uncertain_pct", 0)
 

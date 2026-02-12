@@ -322,23 +322,9 @@ class Quadrotor2DLatentConditionalFlowMatcher(BaseFlowMatcher):
             Loaded model ready for inference
         """
         import torch
-        import yaml
-        import os
         from pathlib import Path
-        from omegaconf import OmegaConf
         from adaptive_roa.systems.quadrotor2d import Quadrotor2DSystem
         from adaptive_roa.model.quadrotor2d_unet import Quadrotor2DUNet
-        from adaptive_roa.utils.env_config import get_net_id, get_exp_dir, get_data_dir, get_env_config
-
-        # Register OmegaConf resolvers for Hydra config loading
-        if not OmegaConf.has_resolver("net_id"):
-            OmegaConf.register_new_resolver("net_id", lambda: get_net_id())
-        if not OmegaConf.has_resolver("exp_dir"):
-            OmegaConf.register_new_resolver("exp_dir", lambda: get_exp_dir())
-        if not OmegaConf.has_resolver("data_dir"):
-            OmegaConf.register_new_resolver("data_dir", lambda: get_data_dir())
-        if not OmegaConf.has_resolver("env"):
-            OmegaConf.register_new_resolver("env", lambda key, default="": os.environ.get(key, get_env_config().get(key, default)))
 
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -350,9 +336,12 @@ class Quadrotor2DLatentConditionalFlowMatcher(BaseFlowMatcher):
             print(f"Folder provided: {checkpoint_path}")
             print(f"Searching for checkpoint in folder...")
 
-            checkpoint_dir = checkpoint_path / "version_0" / "checkpoints"
+            # Try v2 adaptive layout first, then legacy standalone layout
+            checkpoint_dir = checkpoint_path / "checkpoints"
             if not checkpoint_dir.exists():
-                raise FileNotFoundError(f"No checkpoints directory found at {checkpoint_dir}")
+                checkpoint_dir = checkpoint_path / "version_0" / "checkpoints"
+            if not checkpoint_dir.exists():
+                raise FileNotFoundError(f"No checkpoints directory found in {checkpoint_path}")
 
             checkpoints = [p for p in checkpoint_dir.glob("*.ckpt") if p.name != "last.ckpt"]
             if not checkpoints:
@@ -386,40 +375,11 @@ class Quadrotor2DLatentConditionalFlowMatcher(BaseFlowMatcher):
         if not checkpoint_path.exists():
             raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
-        # Find the training directory (Hydra root)
-        if checkpoint_path.parent.name == "checkpoints":
-            potential_version_dir = checkpoint_path.parent.parent
-            if potential_version_dir.name.startswith("version_"):
-                training_dir = potential_version_dir.parent
-            else:
-                training_dir = potential_version_dir
-        else:
-            training_dir = checkpoint_path.parent
-
+        # Find training directory and load Hydra config
+        from adaptive_roa.flow_matching.base.checkpoint_utils import find_training_dir, load_hydra_config
+        training_dir = find_training_dir(checkpoint_path)
         print(f"Training directory: {training_dir}")
-
-        # Load Hydra config
-        hydra_config = None
-        hydra_config_path = None
-        search_dir = training_dir
-        for _ in range(3):
-            candidate_path = search_dir / ".hydra" / "config.yaml"
-            if candidate_path.exists():
-                hydra_config_path = candidate_path
-                break
-            search_dir = search_dir.parent
-
-        if hydra_config_path:
-            try:
-                print(f"Loading Hydra config: {hydra_config_path}")
-                hydra_omega_config = OmegaConf.load(hydra_config_path)
-                hydra_config = OmegaConf.to_container(hydra_omega_config, resolve=True)
-                print("Hydra config loaded successfully")
-            except Exception as e:
-                print(f"Warning: Could not load Hydra config: {e}")
-                hydra_config = None
-        else:
-            print(f"Hydra config not found in {training_dir} or parent directories")
+        hydra_config = load_hydra_config(training_dir)
 
         # Load Lightning checkpoint
         print(f"Loading Lightning checkpoint...")
@@ -427,12 +387,23 @@ class Quadrotor2DLatentConditionalFlowMatcher(BaseFlowMatcher):
         hparams = checkpoint.get("hyper_parameters", {})
         print("Lightning checkpoint loaded")
 
-        # Extract latent_dim
-        latent_dim = hparams.get("latent_dim")
-        if latent_dim is None and hydra_config:
-            latent_dim = hydra_config.get("flow_matching", {}).get("latent_dim", 0)
-        if latent_dim is None:
-            latent_dim = 0
+        def _require_hparam(key: str):
+            if key not in hparams:
+                raise KeyError(
+                    f"Missing required checkpoint hyper_parameter '{key}'. "
+                    f"Checkpoint: {checkpoint_path}"
+                )
+            return hparams[key]
+
+        latent_dim = int(_require_hparam("latent_dim"))
+        use_manifold = bool(_require_hparam("use_manifold"))
+        use_loss_weights = bool(_require_hparam("use_loss_weights"))
+        use_log_loss_weights = bool(_require_hparam("use_log_loss_weights"))
+        clamp_noise = bool(_require_hparam("clamp_noise"))
+        zero_latent = bool(_require_hparam("zero_latent"))
+        mae_val_frequency = int(_require_hparam("mae_val_frequency"))
+        noise_scale = float(_require_hparam("noise_scale"))
+        val_error_log_file = hparams.get("val_error_log_file")
 
         # Extract model config
         config_source = None
@@ -442,12 +413,11 @@ class Quadrotor2DLatentConditionalFlowMatcher(BaseFlowMatcher):
         elif "config" in hparams:
             model_config = hparams["config"]
             config_source = "checkpoint (config)"
-        elif hydra_config:
-            model_config = hydra_config.get("model", {})
-            config_source = "Hydra config"
         else:
-            model_config = {}
-            config_source = "defaults (empty)"
+            raise KeyError(
+                f"Checkpoint missing both 'model_config' and 'config' hyper_parameters. "
+                f"Checkpoint: {checkpoint_path}"
+            )
 
         if isinstance(model_config, dict) and "_target_" in model_config:
             model_config = {k: v for k, v in model_config.items() if k != "_target_"}
@@ -457,19 +427,29 @@ class Quadrotor2DLatentConditionalFlowMatcher(BaseFlowMatcher):
         print(f"Config source: {config_source}")
         print(f"Final config - latent_dim: {latent_dim}")
         print(f"Model config keys: {list(model_config.keys())}")
+        print(
+            "Runtime config - "
+            f"use_manifold: {use_manifold}, "
+            f"use_loss_weights: {use_loss_weights}, "
+            f"use_log_loss_weights: {use_log_loss_weights}, "
+            f"clamp_noise: {clamp_noise}, "
+            f"zero_latent: {zero_latent}, "
+            f"mae_val_frequency: {mae_val_frequency}, "
+            f"noise_scale: {noise_scale}"
+        )
 
         # Initialize system and model
         system = hparams.get("system")
         if system is None:
             print("Creating new Quadrotor2D system (not found in hparams)")
-            if hydra_config and "system" in hydra_config:
-                system_config = hydra_config["system"]
-                dataset_dir = system_config.get("dataset_dir", None)
-                print(f"   dataset_dir: {dataset_dir}")
-                system = Quadrotor2DSystem(dataset_dir=dataset_dir)
-            else:
-                print("   No Hydra system config found, using defaults")
-                system = Quadrotor2DSystem()
+            dataset_dir = hparams.get("system_dataset_dir")
+            if not dataset_dir:
+                raise KeyError(
+                    "Checkpoint is missing 'system_dataset_dir' hyper_parameter required for "
+                    "strict Quadrotor2D restoration. Re-train with updated code."
+                )
+            print(f"   dataset_dir: {dataset_dir}")
+            system = Quadrotor2DSystem(dataset_dir=dataset_dir)
         else:
             print("Restored Quadrotor2D system from checkpoint")
 
@@ -492,7 +472,15 @@ class Quadrotor2DLatentConditionalFlowMatcher(BaseFlowMatcher):
             optimizer=None,
             scheduler=None,
             model_config=model_config,
-            latent_dim=latent_dim
+            latent_dim=latent_dim,
+            mae_val_frequency=mae_val_frequency,
+            use_loss_weights=use_loss_weights,
+            use_manifold=use_manifold,
+            use_log_loss_weights=use_log_loss_weights,
+            clamp_noise=clamp_noise,
+            zero_latent=zero_latent,
+            val_error_log_file=val_error_log_file,
+            noise_scale=noise_scale,
         )
 
         # Load model weights
@@ -508,6 +496,9 @@ class Quadrotor2DLatentConditionalFlowMatcher(BaseFlowMatcher):
         # Move to device and set eval mode
         flow_matcher = flow_matcher.to(device)
         flow_matcher.eval()
+
+        # Attach Hydra training config
+        flow_matcher.training_config = hydra_config
 
         print(f"\nModel loaded successfully!")
         print(f"   Checkpoint: {checkpoint_path.name}")

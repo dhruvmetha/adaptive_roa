@@ -31,6 +31,7 @@ class PendulumSystem(DynamicalSystem):
             dataset_dir = f"{get_data_dir()}/pendulum_lqr_50k"
 
         dataset_dir = Path(dataset_dir)
+        self.dataset_dir = str(dataset_dir)
         json_path = dataset_dir / "dataset_description.json"
 
         # Load bounds from JSON - no fallback, error if not found

@@ -34,6 +34,7 @@ class CartPoleSystem(DynamicalSystem):
             dataset_dir = f"{get_data_dir()}/cartpole_pybullet"
 
         dataset_dir = Path(dataset_dir)
+        self.dataset_dir = str(dataset_dir)
         json_path = dataset_dir / "dataset_description.json"
 
         # Load bounds from JSON - no fallback, error if not found

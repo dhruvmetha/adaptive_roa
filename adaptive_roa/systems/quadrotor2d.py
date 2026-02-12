@@ -39,6 +39,7 @@ class Quadrotor2DSystem(DynamicalSystem):
             dataset_dir = f"{get_data_dir()}/quadrotor2D_rl"
 
         dataset_dir = Path(dataset_dir)
+        self.dataset_dir = str(dataset_dir)
         json_path = dataset_dir / "dataset_description.json"
 
         if not json_path.exists():

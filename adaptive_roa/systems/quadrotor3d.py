@@ -37,6 +37,7 @@ class Quadrotor3DSystem(DynamicalSystem):
             dataset_dir = f"{get_shared_data_base()}/quadrotor3D_lqr"
 
         dataset_dir = Path(dataset_dir)
+        self.dataset_dir = str(dataset_dir)
         json_path = dataset_dir / "dataset_description.json"
 
         # Try loading from JSON

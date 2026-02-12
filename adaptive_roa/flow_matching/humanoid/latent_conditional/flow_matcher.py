@@ -223,11 +223,12 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
             print(f"📁 Folder provided: {checkpoint_path}")
             print(f"🔍 Searching for checkpoint in folder...")
 
-            # Look for checkpoints in version_0/checkpoints/
-            checkpoint_dir = checkpoint_path / "version_0" / "checkpoints"
-
+            # Try v2 adaptive layout first, then legacy standalone layout
+            checkpoint_dir = checkpoint_path / "checkpoints"
             if not checkpoint_dir.exists():
-                raise FileNotFoundError(f"No checkpoints directory found at {checkpoint_dir}")
+                checkpoint_dir = checkpoint_path / "version_0" / "checkpoints"
+            if not checkpoint_dir.exists():
+                raise FileNotFoundError(f"No checkpoints directory found in {checkpoint_path}")
 
             # Find all .ckpt files (exclude last.ckpt)
             checkpoints = [p for p in checkpoint_dir.glob("*.ckpt") if p.name != "last.ckpt"]
@@ -270,44 +271,11 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
         if not checkpoint_path.exists():
             raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
-        # Find the training directory (Hydra root)
-        if checkpoint_path.parent.name == "checkpoints":
-            potential_version_dir = checkpoint_path.parent.parent
-            if potential_version_dir.name.startswith("version_"):
-                training_dir = potential_version_dir.parent
-            else:
-                training_dir = potential_version_dir
-        else:
-            training_dir = checkpoint_path.parent
-
+        # Find training directory and load Hydra config
+        from adaptive_roa.flow_matching.base.checkpoint_utils import find_training_dir, load_hydra_config
+        training_dir = find_training_dir(checkpoint_path)
         print(f"🗂️  Training directory: {training_dir}")
-
-        # Load Hydra config - check current dir and parent directories
-        # (adaptive loop stores .hydra in parent, not per-epoch directories)
-        hydra_config = None
-        hydra_config_path = None
-
-        search_dir = training_dir
-        for _ in range(3):  # Check up to 3 parent levels
-            candidate_path = search_dir / ".hydra" / "config.yaml"
-            if candidate_path.exists():
-                hydra_config_path = candidate_path
-                break
-            search_dir = search_dir.parent
-
-        if hydra_config_path:
-            try:
-                print(f"📋 Loading Hydra config: {hydra_config_path}")
-                # Use OmegaConf to load and resolve interpolations (e.g., ${data_dir})
-                hydra_omega_config = OmegaConf.load(hydra_config_path)
-                # Resolve all interpolations and convert to plain dict
-                hydra_config = OmegaConf.to_container(hydra_omega_config, resolve=True)
-                print("✅ Hydra config loaded successfully")
-            except Exception as e:
-                print(f"⚠️  Warning: Could not load Hydra config: {e}")
-                hydra_config = None
-        else:
-            print(f"⚠️  Hydra config not found in {training_dir} or parent directories")
+        hydra_config = load_hydra_config(training_dir)
 
         # Load Lightning checkpoint
         print(f"📦 Loading Lightning checkpoint...")
@@ -400,6 +368,9 @@ class HumanoidLatentConditionalFlowMatcher(BaseFlowMatcher):
         # Move to device and set eval mode
         flow_matcher = flow_matcher.to(device)
         flow_matcher.eval()
+
+        # Attach Hydra training config
+        flow_matcher.training_config = hydra_config
 
         # Success summary
         print(f"\n✅ Model loaded successfully!")

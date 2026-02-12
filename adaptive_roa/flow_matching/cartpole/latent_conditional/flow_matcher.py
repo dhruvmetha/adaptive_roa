@@ -345,23 +345,9 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
             Loaded model ready for inference
         """
         import torch
-        import yaml
-        import os
         from pathlib import Path
-        from omegaconf import OmegaConf
         from adaptive_roa.systems.cartpole import CartPoleSystem
         from adaptive_roa.model.cartpole_unet import CartPoleUNet
-        from adaptive_roa.utils.env_config import get_net_id, get_exp_dir, get_data_dir, get_env_config
-
-        # Register OmegaConf resolvers for Hydra config loading
-        if not OmegaConf.has_resolver("net_id"):
-            OmegaConf.register_new_resolver("net_id", lambda: get_net_id())
-        if not OmegaConf.has_resolver("exp_dir"):
-            OmegaConf.register_new_resolver("exp_dir", lambda: get_exp_dir())
-        if not OmegaConf.has_resolver("data_dir"):
-            OmegaConf.register_new_resolver("data_dir", lambda: get_data_dir())
-        if not OmegaConf.has_resolver("env"):
-            OmegaConf.register_new_resolver("env", lambda key, default="": os.environ.get(key, get_env_config().get(key, default)))
 
         # Determine device
         if device is None:
@@ -374,11 +360,12 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
             print(f"📁 Folder provided: {checkpoint_path}")
             print(f"🔍 Searching for checkpoint in folder...")
 
-            # Look for checkpoints in version_0/checkpoints/
-            checkpoint_dir = checkpoint_path / "version_0" / "checkpoints"
-
+            # Try v2 adaptive layout first, then legacy standalone layout
+            checkpoint_dir = checkpoint_path / "checkpoints"
             if not checkpoint_dir.exists():
-                raise FileNotFoundError(f"No checkpoints directory found at {checkpoint_dir}")
+                checkpoint_dir = checkpoint_path / "version_0" / "checkpoints"
+            if not checkpoint_dir.exists():
+                raise FileNotFoundError(f"No checkpoints directory found in {checkpoint_path}")
 
             # Find all .ckpt files (exclude last.ckpt)
             checkpoints = [p for p in checkpoint_dir.glob("*.ckpt") if p.name != "last.ckpt"]
@@ -421,49 +408,11 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         if not checkpoint_path.exists():
             raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
-        # Find the training directory (Hydra root)
-        # New structure: outputs/{name}/{timestamp}/version_0/checkpoints/{checkpoint}.ckpt
-        # Old structure: outputs/{name}/{timestamp}/checkpoints/{checkpoint}.ckpt
-        if checkpoint_path.parent.name == "checkpoints":
-            # Could be version_0/checkpoints/ or just checkpoints/
-            potential_version_dir = checkpoint_path.parent.parent
-            if potential_version_dir.name.startswith("version_"):
-                # New structure: go up one more level to Hydra root
-                training_dir = potential_version_dir.parent
-            else:
-                # Old structure: already at Hydra root
-                training_dir = potential_version_dir
-        else:
-            training_dir = checkpoint_path.parent
-
+        # Find training directory and load Hydra config
+        from adaptive_roa.flow_matching.base.checkpoint_utils import find_training_dir, load_hydra_config
+        training_dir = find_training_dir(checkpoint_path)
         print(f"🗂️  Training directory: {training_dir}")
-
-        # Load Hydra config - check current dir and parent directories
-        # (adaptive loop stores .hydra in parent, not per-epoch directories)
-        hydra_config = None
-        hydra_config_path = None
-
-        search_dir = training_dir
-        for _ in range(3):  # Check up to 3 parent levels
-            candidate_path = search_dir / ".hydra" / "config.yaml"
-            if candidate_path.exists():
-                hydra_config_path = candidate_path
-                break
-            search_dir = search_dir.parent
-
-        if hydra_config_path:
-            try:
-                print(f"📋 Loading Hydra config: {hydra_config_path}")
-                # Use OmegaConf to load and resolve interpolations (e.g., ${data_dir})
-                hydra_omega_config = OmegaConf.load(hydra_config_path)
-                # Resolve all interpolations and convert to plain dict
-                hydra_config = OmegaConf.to_container(hydra_omega_config, resolve=True)
-                print("✅ Hydra config loaded successfully")
-            except Exception as e:
-                print(f"⚠️  Warning: Could not load Hydra config: {e}")
-                hydra_config = None
-        else:
-            print(f"⚠️  Hydra config not found in {training_dir} or parent directories")
+        hydra_config = load_hydra_config(training_dir)
 
         # Load Lightning checkpoint
         print(f"📦 Loading Lightning checkpoint...")
@@ -471,15 +420,24 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         hparams = checkpoint.get("hyper_parameters", {})
         print("✅ Lightning checkpoint loaded")
 
-        # Extract latent_dim
-        latent_dim = hparams.get("latent_dim")
-        if latent_dim is None and hydra_config:
-            latent_dim = hydra_config.get("flow_matching", {}).get("latent_dim", 0)
-        if latent_dim is None:
-            latent_dim = 0
-            print(f"⚠️  Using default latent_dim: {latent_dim}")
+        def _require_hparam(key: str):
+            if key not in hparams:
+                raise KeyError(
+                    f"Missing required checkpoint hyper_parameter '{key}'. "
+                    f"Checkpoint: {checkpoint_path}"
+                )
+            return hparams[key]
 
-        # Extract model config (try both 'model_config' and 'config' for backward compatibility)
+        latent_dim = int(_require_hparam("latent_dim"))
+        use_manifold = bool(_require_hparam("use_manifold"))
+        use_loss_weights = bool(_require_hparam("use_loss_weights"))
+        use_log_loss_weights = bool(_require_hparam("use_log_loss_weights"))
+        clamp_noise = bool(_require_hparam("clamp_noise"))
+        zero_latent = bool(_require_hparam("zero_latent"))
+        mae_val_frequency = int(_require_hparam("mae_val_frequency"))
+        noise_scale = float(_require_hparam("noise_scale"))
+        val_error_log_file = hparams.get("val_error_log_file")
+
         config_source = None
         if "model_config" in hparams:
             model_config = hparams["model_config"]
@@ -487,12 +445,11 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         elif "config" in hparams:
             model_config = hparams["config"]
             config_source = "checkpoint (config)"
-        elif hydra_config:
-            model_config = hydra_config.get("model", {})
-            config_source = "Hydra config"
         else:
-            model_config = {}
-            config_source = "defaults (empty)"
+            raise KeyError(
+                f"Checkpoint missing both 'model_config' and 'config' hyper_parameters. "
+                f"Checkpoint: {checkpoint_path}"
+            )
 
         # Remove _target_ key if present (not needed for reconstruction)
         if isinstance(model_config, dict) and "_target_" in model_config:
@@ -503,22 +460,29 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         print(f"📋 Config source: {config_source}")
         print(f"📋 Final config - latent_dim: {latent_dim}")
         print(f"📋 Model config keys: {list(model_config.keys())}")
+        print(
+            "📋 Runtime config - "
+            f"use_manifold: {use_manifold}, "
+            f"use_loss_weights: {use_loss_weights}, "
+            f"use_log_loss_weights: {use_log_loss_weights}, "
+            f"clamp_noise: {clamp_noise}, "
+            f"zero_latent: {zero_latent}, "
+            f"mae_val_frequency: {mae_val_frequency}, "
+            f"noise_scale: {noise_scale}"
+        )
 
         # Initialize system and model
         system = hparams.get("system")
         if system is None:
             print("🔧 Creating new CartPole system (not found in hparams)")
-            # Use system config from Hydra if available
-            if hydra_config and "system" in hydra_config:
-                system_config = hydra_config["system"]
-                print(f"   Using system config from Hydra config")
-                # Extract dataset_dir configuration
-                dataset_dir = system_config.get("dataset_dir", None)
-                print(f"   dataset_dir: {dataset_dir}")
-                system = CartPoleSystem(dataset_dir=dataset_dir)
-            else:
-                print("   No Hydra system config found, using defaults")
-                system = CartPoleSystem()
+            dataset_dir = hparams.get("system_dataset_dir")
+            if not dataset_dir:
+                raise KeyError(
+                    "Checkpoint is missing 'system_dataset_dir' hyper_parameter required for "
+                    "strict CartPole restoration."
+                )
+            print(f"   dataset_dir: {dataset_dir}")
+            system = CartPoleSystem(dataset_dir=dataset_dir)
         else:
             print("✅ Restored CartPole system from checkpoint")
 
@@ -541,7 +505,15 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
             optimizer=None,
             scheduler=None,
             model_config=model_config,
-            latent_dim=latent_dim
+            latent_dim=latent_dim,
+            mae_val_frequency=mae_val_frequency,
+            use_loss_weights=use_loss_weights,
+            use_manifold=use_manifold,
+            use_log_loss_weights=use_log_loss_weights,
+            clamp_noise=clamp_noise,
+            zero_latent=zero_latent,
+            val_error_log_file=val_error_log_file,
+            noise_scale=noise_scale,
         )
 
         # Load model weights
@@ -558,6 +530,9 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         flow_matcher = flow_matcher.to(device)
         flow_matcher.eval()
 
+        # Attach Hydra training config
+        flow_matcher.training_config = hydra_config
+
         # Success summary
         print(f"\n✅ Model loaded successfully!")
         print(f"   Checkpoint: {checkpoint_path.name}")
@@ -565,6 +540,7 @@ class CartPoleLatentConditionalFlowMatcher(BaseFlowMatcher):
         print(f"   System: {type(system).__name__}")
         print(f"   System bounds: cart±{system.cart_limit:.1f}, vel±{system.velocity_limit:.1f}")
         print(f"   Latent dim: {latent_dim}")
+        print(f"   Use manifold: {use_manifold}")
         print(f"   Model architecture: {model_config.get('hidden_dims', 'unknown')}")
         print(f"   Total parameters: {sum(p.numel() for p in model.parameters()):,}")
         print(f"   Device: {device}")

@@ -99,9 +99,10 @@ class ProbabilityEstimator:
         success_counts = torch.zeros(N, dtype=torch.int32, device=self.device)
         failure_counts = torch.zeros(N, dtype=torch.int32, device=self.device)
         invalid_counts = torch.zeros(N, dtype=torch.int32, device=self.device)
-        # Track how many invalids were resolved by refinement
+        # Track how many invalids were resolved by refinement (per attempt)
         refined_to_success = torch.zeros(N, dtype=torch.int32, device=self.device)
         refined_to_failure = torch.zeros(N, dtype=torch.int32, device=self.device)
+        per_attempt_resolved = [0] * refine_max_attempts if refine_invalids else []
 
         n_batches = (N + batch_size - 1) // batch_size
         total_steps = n_batches * K
@@ -141,6 +142,7 @@ class ProbabilityEstimator:
                             resolved_success = (refined_labels == 1)
                             resolved_failure = (refined_labels == -1)
                             resolved = resolved_success | resolved_failure
+                            per_attempt_resolved[_attempt] += int(resolved.sum().item())
 
                             # Map back to batch-level indices
                             still_invalid_indices = still_invalid.nonzero(as_tuple=True)[0]
@@ -184,6 +186,9 @@ class ProbabilityEstimator:
                 resolve_rate = total_refined / total_original_invalid * 100
                 print(f"      [Refine] {total_refined}/{total_original_invalid} invalid samples resolved ({resolve_rate:.1f}%)")
                 print(f"               → success: {total_refined_success}, → failure: {total_refined_failure}")
+                attempt_strs = [f"a{i+1}={c}" for i, c in enumerate(per_attempt_resolved) if c > 0]
+                if attempt_strs:
+                    print(f"               per-attempt: {', '.join(attempt_strs)}")
 
         return p_success, p_failure, p_invalid
 

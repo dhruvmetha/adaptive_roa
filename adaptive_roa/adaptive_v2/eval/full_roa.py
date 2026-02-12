@@ -305,6 +305,7 @@ def evaluate_full_roa_fast(
     total_invalids_before_refine = 0
     total_refined_to_success = 0
     total_refined_to_failure = 0
+    per_attempt_resolved = [0] * refine_max_attempts if refine_invalids else []
 
     flow_matcher.eval()
     with torch.no_grad():
@@ -338,9 +339,12 @@ def evaluate_full_roa_fast(
 
                             resolved_success = (refined_labels == 1)
                             resolved_failure = (refined_labels == -1)
+                            resolved = resolved_success | resolved_failure
 
+                            n_resolved = int(resolved.sum().item())
                             total_refined_to_success += resolved_success.sum().item()
                             total_refined_to_failure += resolved_failure.sum().item()
+                            per_attempt_resolved[_attempt] += n_resolved
 
                             # Update pred and labels for resolved endpoints
                             still_invalid_indices = still_invalid.nonzero(as_tuple=True)[0]
@@ -371,6 +375,9 @@ def evaluate_full_roa_fast(
             resolve_rate = total_refined / total_invalids_before_refine * 100
             print(f"  [Refine] {total_refined}/{total_invalids_before_refine} invalid MC samples resolved ({resolve_rate:.1f}%) [max_attempts={refine_max_attempts}]")
             print(f"           → success: {total_refined_to_success}, → failure: {total_refined_to_failure}")
+            attempt_strs = [f"a{i+1}={c}" for i, c in enumerate(per_attempt_resolved) if c > 0]
+            if attempt_strs:
+                print(f"           per-attempt: {', '.join(attempt_strs)}")
 
     pred_mean = pred_sum / float(num_mc_samples)
 

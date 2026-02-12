@@ -1,0 +1,51 @@
+# @package _global_
+
+defaults:
+  - _base
+  - _self_
+
+name: adaptive_quadrotor2d
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_threshold_mode_${threshold_mode}_adapt_iter_${n_epochs}_alpha_${alpha_sampling}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
+
+data_source:
+  base_dir: ${data_dir}/quadrotor2D_rl
+  trajectories_dir: ${data_source.base_dir}/trajectories
+  train_test_splits_dir: ${data_source.base_dir}/train_test_splits
+  shuffled_indices_file: ${data_source.train_test_splits_dir}/shuffled_indices_${training_index}.txt
+  shuffled_labels_file: ${data_source.train_test_splits_dir}/shuffled_labels_${training_index}.txt
+  eval_states_file: ${data_source.base_dir}/eval_states.txt
+  cal_set_file: ${data_source.base_dir}/cal_set.txt
+  test_set_file: ${data_source.base_dir}/test_set.txt
+
+initial_train_size: 1000
+samples_per_epoch: 250
+n_epochs: 20
+
+conformal:
+  decision_rule: two_sided
+  attractor_radius: 0.2
+  optimize_mode: joint
+
+flow_matching:
+  clamp_noise: false
+
+system:
+  _target_: adaptive_roa.systems.quadrotor2d.Quadrotor2DSystem
+  dataset_dir: ${data_dir}/quadrotor2D_rl
+
+flow_matcher:
+  _target_: adaptive_roa.flow_matching.quadrotor_2d.latent_conditional.flow_matcher.Quadrotor2DLatentConditionalFlowMatcher
+
+model:
+  _target_: adaptive_roa.model.quadrotor2d_unet.Quadrotor2DUNet
+  embedded_dim: 7
+  latent_dim: ${latent_dim}
+  condition_dim: 7
+  time_emb_dim: 64
+  hidden_dims: [256, 512, 1024, 512, 256]
+  output_dim: 6
+  use_input_embeddings: false
+  input_emb_dim: 64
+
+adaptive_v2:
+  system_name: quadrotor2d

@@ -1,0 +1,5 @@
+# @package _global_
+
+adaptive_v2:
+  threshold:
+    _target_: adaptive_roa.adaptive_v2.threshold.conformal_threshold.ConformalThresholdBackend

@@ -1,0 +1,57 @@
+# @package _global_
+
+defaults:
+  - _base
+  - _self_
+
+name: adaptive_quadrotor3d
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_threshold_mode_${threshold_mode}_adapt_iter_${n_epochs}_alpha_${alpha_sampling}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
+
+use_log_loss_weights: true
+
+data_source:
+  base_dir: ${data_dir}/quadrotor3D_lqr
+  trajectories_dir: ${data_source.base_dir}/trajectories
+  train_test_splits_dir: ${data_source.base_dir}/train_test_splits
+  shuffled_indices_file: ${data_source.train_test_splits_dir}/shuffled_indices_${training_index}.txt
+  shuffled_labels_file: ${data_source.train_test_splits_dir}/shuffled_labels_${training_index}.txt
+  eval_states_file: ${data_source.base_dir}/eval_states.txt
+  cal_set_file: ${data_source.base_dir}/cal_set.txt
+  test_set_file: ${data_source.base_dir}/test_set.txt
+
+initial_train_size: 2000
+n_epochs: 30
+samples_per_epoch: 500
+
+conformal:
+  decision_rule: two_sided
+  attractor_radius: 0.2
+  optimize_mode: joint
+
+flow_matching:
+  clamp_noise: false
+  quat_loss_weight: ${quat_loss_weight}
+
+optimizer:
+  lr: 5e-4
+
+system:
+  _target_: adaptive_roa.systems.quadrotor3d.Quadrotor3DSystem
+  dataset_dir: ${data_dir}/quadrotor3D_lqr
+
+flow_matcher:
+  _target_: adaptive_roa.flow_matching.quadrotor_3d.latent_conditional.flow_matcher.Quadrotor3DLatentConditionalFlowMatcher
+
+model:
+  _target_: adaptive_roa.model.quadrotor3d_unet.Quadrotor3DUNet
+  embedded_dim: 13
+  latent_dim: ${latent_dim}
+  condition_dim: 13
+  time_emb_dim: 64
+  hidden_dims: [512, 1024, 1024, 512]
+  output_dim: 12
+  use_input_embeddings: false
+  input_emb_dim: 128
+
+adaptive_v2:
+  system_name: quadrotor3d

@@ -1,0 +1,112 @@
+# @package _global_
+
+seed: 42
+exp_dir: ${exp_dir:}
+data_dir: ${data_dir:}
+training_index: 0
+device: cuda:0
+
+threshold_mode: dynamic
+alpha_sampling: 0.1
+w: 0.9
+use_manifold: false
+use_loss_weights: false
+use_log_loss_weights: false
+noise_scale: 1.0
+quat_loss_weight: 1.0
+
+val_ratio: 0.1
+test_ratio: 0.1
+
+initial_train_size: 300
+n_epochs: 10
+samples_per_epoch: 100
+warm_start: false
+
+sampling_mode: ranked
+n_ranked_candidates: 1000
+d2_ratio: 0.5
+batch_size_sampling: 50
+max_samples_per_epoch: 50000
+
+batch_size: 1024
+val_batch_size: 2048
+num_workers: 4
+latent_dim: 0
+
+conformal:
+  verbose: false
+  delta: 0.05
+  w: ${w}
+  alpha_sampling: ${alpha_sampling}
+  alpha_eval: 0.1
+  num_mc_samples: 10
+  num_mc_samples_eval: 10
+  attractor_radius: 0.2
+
+  optimize_mode: delta
+  decision_rule: two_sided
+  threshold_mode: ${threshold_mode}
+
+  fixed_lambda_star: 0.5
+  fixed_delta_star: 0.1
+  lambda_grid_size: 100
+  delta_grid_size: 100
+  delta_min: 0.05
+  delta_max: 0.45
+
+  # Invalid endpoint refinement
+  refine_invalids: false
+  refine_t_min: 0.7
+  refine_t_max: 0.9
+  refine_num_steps: 100
+  refine_max_attempts: 5
+
+trainer:
+  max_epochs: 1000
+  accelerator: gpu
+  devices: 1
+  precision: 32
+  gradient_clip_val: 1.0
+  log_every_n_steps: 10
+  check_val_every_n_epoch: 1
+  enable_progress_bar: true
+  enable_model_summary: true
+  callbacks:
+    - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+      monitor: val_loss
+      mode: min
+      save_top_k: 1
+      save_last: true
+      filename: "best-{epoch:02d}-{val_loss:.4f}"
+      auto_insert_metric_name: false
+    - _target_: lightning.pytorch.callbacks.EarlyStopping
+      monitor: val_loss
+      mode: min
+      patience: 2000
+      verbose: true
+
+flow_matching:
+  latent_dim: ${latent_dim}
+  num_integration_steps: 100
+  mae_val_frequency: 10
+  use_loss_weights: ${use_loss_weights}
+  use_log_loss_weights: ${use_log_loss_weights}
+  quat_loss_weight: ${quat_loss_weight}
+  use_manifold: ${use_manifold}
+  clamp_noise: false
+  zero_latent: true
+  noise_scale: ${noise_scale}
+
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 1e-3
+  weight_decay: 1e-5
+  betas: [0.9, 0.999]
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  mode: min
+  factor: 0.5
+  patience: 10
+  min_lr: 1e-6

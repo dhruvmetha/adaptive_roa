@@ -1,0 +1,5 @@
+# @package _global_
+
+adaptive_v2:
+  strategy:
+    mode_source: sampling_mode

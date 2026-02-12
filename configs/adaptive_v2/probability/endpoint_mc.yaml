@@ -1,0 +1,5 @@
+# @package _global_
+
+adaptive_v2:
+  probability:
+    _target_: adaptive_roa.adaptive_v2.probability.endpoint_mc.EndpointMCProbabilityBackend

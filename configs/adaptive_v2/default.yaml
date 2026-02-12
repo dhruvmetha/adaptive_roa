@@ -1,0 +1,19 @@
+defaults:
+  - system: pendulum
+  - trainer: flow_matching_trainer
+  - probability: endpoint_mc
+  - threshold: conformal_threshold
+  - strategy: auto
+  - eval: full_roa
+  - _self_
+
+adaptive_v2:
+  artifact_schema_version: 2
+  save_legacy_results_json: true
+  save_v2_artifacts: true
+
+hydra:
+  run:
+    dir: ${output_dir}
+  job:
+    chdir: false

@@ -1,0 +1,63 @@
+# @package _global_
+
+defaults:
+  - _base
+  - _self_
+
+name: adaptive_pendulum
+output_dir: ${exp_dir}/${name}_dhruv/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_threshold_mode_${threshold_mode}_adapt_iter_${n_epochs}_alpha_${alpha_sampling}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
+
+shuffle_variant: 0
+
+data_source:
+  trajectories_dir: ${data_dir}/pendulum_lqr_50k/trajectories
+  shuffled_indices_file: ${data_dir}/pendulum_lqr_50k/train_test_splits/shuffled_indices_${shuffle_variant}.txt
+  shuffled_labels_file: ${data_dir}/pendulum_lqr_50k/train_test_splits/shuffled_labels_${shuffle_variant}.txt
+  eval_states_file: ${data_dir}/pendulum_lqr_50k/eval_states.txt
+  cal_set_file: ${data_dir}/pendulum_lqr_50k/cal_set.txt
+  test_set_file: ${data_dir}/pendulum_lqr_50k/test_set.txt
+
+initial_train_size: 100
+n_epochs: 19
+samples_per_epoch: 100
+latent_dim: 2
+
+conformal:
+  decision_rule: one_sided
+  attractor_radius: 0.1
+  optimize_mode: joint
+
+trainer:
+  callbacks:
+    - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+      monitor: val_loss
+      mode: min
+      save_top_k: 1
+      save_last: true
+      filename: "best-{epoch:02d}-{val_loss:.4f}"
+      auto_insert_metric_name: false
+
+flow_matching:
+  clamp_noise: true
+  use_log_loss_weights: false
+
+system:
+  _target_: adaptive_roa.systems.pendulum.PendulumSystem
+  dataset_dir: ${data_dir}/pendulum_lqr_50k
+
+flow_matcher:
+  _target_: adaptive_roa.flow_matching.pendulum.latent_conditional.flow_matcher.PendulumLatentConditionalFlowMatcher
+
+model:
+  _target_: adaptive_roa.model.pendulum_unet.PendulumUNet
+  embedded_dim: 3
+  latent_dim: ${latent_dim}
+  condition_dim: 3
+  time_emb_dim: 64
+  hidden_dims: [256, 512, 256]
+  output_dim: 2
+  use_input_embeddings: false
+  input_emb_dim: 64
+
+adaptive_v2:
+  system_name: pendulum

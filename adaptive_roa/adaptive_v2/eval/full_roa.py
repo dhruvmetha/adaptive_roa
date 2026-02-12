@@ -17,6 +17,7 @@ from adaptive_roa.conformal.calibrator import (
     nonconformity_scores_batch_one_sided,
     nonconformity_scores_batch_two_sided,
 )
+from adaptive_roa.conformal.refinement import RefinementStats, refine_invalid_endpoints
 
 
 def _classification_metrics_from_predictions(pred_labels: np.ndarray, y_true: np.ndarray) -> dict[str, Any]:
@@ -303,8 +304,9 @@ def evaluate_full_roa_fast(
         )
         print(f"  [Full ROA] N={n_total} eval states ({n_success_true} success, {n_failure_true} failure), "
               f"K={num_mc_samples} MC samples, batch={batch_size}{refine_str}")
+        q_hat_str = f"{q_hat:.4f}" if q_hat is not None else "None"
         print(f"  [Full ROA] λ*={lambda_star:.4f}, δ={delta:.4f}, "
-              f"q_hat={q_hat:.4f if q_hat is not None else 'None'}, rule={effective_rule}")
+              f"q_hat={q_hat_str}, rule={effective_rule}")
 
     X_tensor = torch.from_numpy(X_all).float().to(device)
     end_tensor = torch.from_numpy(end_states_all).float().to(device)
@@ -313,11 +315,9 @@ def evaluate_full_roa_fast(
     pred_sum = np.zeros((n_total, end_states_all.shape[1]), dtype=np.float64)
     mc_errors = np.zeros((n_total, num_mc_samples), dtype=np.float32)
 
-    # Track refinement statistics
-    total_invalids_before_refine = 0
-    total_refined_to_success = 0
-    total_refined_to_failure = 0
-    per_attempt_resolved = [0] * refine_max_attempts if refine_invalids else []
+    cumulative_rstats = RefinementStats(
+        per_attempt_resolved=[0] * refine_max_attempts
+    ) if refine_invalids else None
 
     n_batches = (n_total + batch_size - 1) // batch_size
     total_steps = n_batches * num_mc_samples
@@ -334,45 +334,16 @@ def evaluate_full_roa_fast(
                 pred = flow_matcher.predict_endpoint(batch_inputs)
                 labels_tensor = system.classify_attractor(pred, attractor_radius)
 
-                # Iteratively refine invalid endpoints
                 if refine_invalids:
-                    still_invalid = (labels_tensor == 0)
-                    n_initial_invalid = still_invalid.sum().item()
-                    if n_initial_invalid > 0:
-                        total_invalids_before_refine += n_initial_invalid
-
-                        for _attempt in range(refine_max_attempts):
-                            if not still_invalid.any():
-                                break
-
-                            refined = flow_matcher.refine_endpoints(
-                                invalid_endpoints=pred[still_invalid],
-                                start_states=batch_inputs[still_invalid],
-                                t_range=refine_t_range,
-                                num_steps=refine_num_steps,
-                            )
-                            refined_labels = system.classify_attractor(refined, attractor_radius)
-
-                            resolved_success = (refined_labels == 1)
-                            resolved_failure = (refined_labels == -1)
-                            resolved = resolved_success | resolved_failure
-
-                            n_resolved = int(resolved.sum().item())
-                            total_refined_to_success += resolved_success.sum().item()
-                            total_refined_to_failure += resolved_failure.sum().item()
-                            per_attempt_resolved[_attempt] += n_resolved
-
-                            # Update pred and labels for resolved endpoints
-                            still_invalid_indices = still_invalid.nonzero(as_tuple=True)[0]
-                            labels_tensor[still_invalid_indices[resolved_success]] = 1
-                            labels_tensor[still_invalid_indices[resolved_failure]] = -1
-                            pred[still_invalid] = refined
-
-                            # Narrow to still-invalid
-                            still_invalid_remaining = (refined_labels == 0)
-                            new_still_invalid = torch.zeros_like(still_invalid)
-                            new_still_invalid[still_invalid_indices[still_invalid_remaining]] = True
-                            still_invalid = new_still_invalid
+                    rstats = refine_invalid_endpoints(
+                        flow_matcher, system,
+                        pred, labels_tensor, batch_inputs,
+                        attractor_radius=attractor_radius,
+                        t_range=refine_t_range,
+                        num_steps=refine_num_steps,
+                        max_attempts=refine_max_attempts,
+                    )
+                    cumulative_rstats.accumulate(rstats)
 
                 labels = labels_tensor.cpu().numpy()
                 mc_labels[batch_start:batch_end, sample_idx] = labels
@@ -387,15 +358,15 @@ def evaluate_full_roa_fast(
 
                 pbar.update(1)
 
-    if refine_invalids and verbose:
-        total_refined = total_refined_to_success + total_refined_to_failure
-        if total_invalids_before_refine > 0:
-            resolve_rate = total_refined / total_invalids_before_refine * 100
-            print(f"  [Refine] {total_refined}/{total_invalids_before_refine} invalid MC samples resolved ({resolve_rate:.1f}%) [max_attempts={refine_max_attempts}]")
-            print(f"           → success: {total_refined_to_success}, → failure: {total_refined_to_failure}")
-            attempt_strs = [f"a{i+1}={c}" for i, c in enumerate(per_attempt_resolved) if c > 0]
-            if attempt_strs:
-                print(f"           per-attempt: {', '.join(attempt_strs)}")
+    if refine_invalids and verbose and cumulative_rstats.n_initially_invalid > 0:
+        total_original = cumulative_rstats.n_initially_invalid
+        total_resolved = cumulative_rstats.n_resolved
+        resolve_rate = total_resolved / total_original * 100
+        print(f"  [Refine] {total_resolved}/{total_original} invalid MC samples resolved ({resolve_rate:.1f}%) [max_attempts={refine_max_attempts}]")
+        print(f"           → success: {cumulative_rstats.n_resolved_success}, → failure: {cumulative_rstats.n_resolved_failure}")
+        attempt_strs = [f"a{i+1}={c}" for i, c in enumerate(cumulative_rstats.per_attempt_resolved) if c > 0]
+        if attempt_strs:
+            print(f"           per-attempt: {', '.join(attempt_strs)}")
 
     pred_mean = pred_sum / float(num_mc_samples)
 

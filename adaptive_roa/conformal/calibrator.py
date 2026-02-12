@@ -333,16 +333,6 @@ class Calibrator:
             print(f"    Quantile level: (1-{alpha})*({n}+1)/{n} = {quantile_level:.4f}")
             print(f"    >>> q_hat = {q_hat:.4f}")
 
-            # Print individual scores with labels and probabilities
-            print(f"\n    [Per-point scores]")
-            print(f"    {'idx':>4} {'label':>7} {'p_s':>6} {'p_f':>6} {'score':>7}")
-            print(f"    {'-'*34}")
-            sorted_indices = np.argsort(scores)[::-1]  # Sort by score descending
-            for i in sorted_indices:
-                label_str = {1: 'SUCCESS', -1: 'FAILURE', 0: 'UNKNOWN'}.get(y_true[i], '?')
-                p_f_val = p_failure[i] if p_failure is not None else 0.0
-                marker = " <-- q_hat" if np.isclose(scores[i], q_hat, atol=1e-6) else ""
-                print(f"    {i:>4} {label_str:>7} {p_success[i]:>6.3f} {p_f_val:>6.3f} {scores[i]:>7.4f}{marker}")
 
         return q_hat
 

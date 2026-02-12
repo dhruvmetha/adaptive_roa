@@ -30,12 +30,12 @@ batch_size_sampling: 50
 max_samples_per_epoch: 50000
 
 batch_size: 1024
-val_batch_size: 2048
+val_batch_size: 8192
 num_workers: 4
 latent_dim: 0
 
 conformal:
-  verbose: false
+  verbose: true
   delta: 0.05
   w: ${w}
   alpha_sampling: ${alpha_sampling}

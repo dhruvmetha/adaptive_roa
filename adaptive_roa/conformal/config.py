@@ -25,8 +25,8 @@ class ConformalConfig:
         mc_batch_size: Batch size for MC sampling to manage GPU memory.
         attractor_radius: Radius passed to system.classify_attractor()
                          to determine if endpoint is in attractor basin.
-        optimize_mode: Either "lambda" (optimize λ with fixed δ) or
-                      "delta" (optimize δ with fixed λ=0.5).
+        optimize_mode: "lambda" (optimize λ with fixed δ), "delta" (optimize δ
+                      with fixed λ=0.5), or "joint" (optimize both via 2D grid search).
         decision_rule: Either "one_sided" (uses only p_success) or
                       "two_sided" (uses both p_success and p_failure).
                       Use "two_sided" for systems with explicit failure conditions (e.g. CartPole).
@@ -63,6 +63,13 @@ class ConformalConfig:
     delta_min: float = 0.01
     delta_max: float = 0.49
 
+    # Invalid endpoint refinement
+    refine_invalids: bool = False
+    refine_t_min: float = 0.7
+    refine_t_max: float = 0.9
+    refine_num_steps: int = 100
+    refine_max_attempts: int = 5
+
     def __post_init__(self):
         """Validate configuration parameters."""
         assert 0 < self.delta < 0.5, f"delta must be in (0, 0.5), got {self.delta}"
@@ -71,8 +78,15 @@ class ConformalConfig:
         assert self.num_mc_samples > 0, f"num_mc_samples must be positive, got {self.num_mc_samples}"
         assert self.mc_batch_size > 0, f"mc_batch_size must be positive, got {self.mc_batch_size}"
         assert self.attractor_radius > 0, f"attractor_radius must be positive, got {self.attractor_radius}"
-        assert self.optimize_mode in ["lambda", "delta"], f"optimize_mode must be 'lambda' or 'delta', got {self.optimize_mode}"
+        assert self.optimize_mode in ["lambda", "delta", "joint"], f"optimize_mode must be 'lambda', 'delta', or 'joint', got {self.optimize_mode}"
         assert self.decision_rule in ["one_sided", "two_sided"], f"decision_rule must be 'one_sided' or 'two_sided', got {self.decision_rule}"
         assert self.lambda_grid_size > 1, f"lambda_grid_size must be > 1, got {self.lambda_grid_size}"
         assert self.delta_grid_size > 1, f"delta_grid_size must be > 1, got {self.delta_grid_size}"
         assert 0 < self.delta_min < self.delta_max < 0.5, f"delta_min/max must be in (0, 0.5) with min < max"
+        if self.refine_invalids:
+            assert 0 < self.refine_t_min < self.refine_t_max < 1.0, (
+                f"refine_t_min/max must be in (0, 1) with min < max, "
+                f"got [{self.refine_t_min}, {self.refine_t_max}]"
+            )
+            assert self.refine_num_steps > 0, f"refine_num_steps must be positive, got {self.refine_num_steps}"
+            assert self.refine_max_attempts >= 1, f"refine_max_attempts must be >= 1, got {self.refine_max_attempts}"

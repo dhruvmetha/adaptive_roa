@@ -182,6 +182,9 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
 
         # Save hyperparameters (exclude model and optimizer/scheduler to avoid pickle issues)
         self.save_hyperparameters(ignore=["model", "optimizer", "scheduler", "system"])
+        # Persist dataset location explicitly so strict checkpoint restore does not
+        # need to infer or fallback to Hydra config files.
+        self.hparams["system_dataset_dir"] = getattr(system, "dataset_dir", None)
 
     def sample_latent(self, batch_size: int, device: torch.device) -> torch.Tensor:
         """
@@ -805,6 +808,88 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
 
         finally:
             # Restore original training mode
+            if was_training:
+                self.train()
+
+    def refine_endpoints(
+        self,
+        invalid_endpoints: torch.Tensor,
+        start_states: torch.Tensor,
+        t_range: tuple = (0.7, 0.9),
+        num_steps: int = 100,
+        latent: Optional[torch.Tensor] = None,
+        method: str = "euler",
+    ) -> torch.Tensor:
+        """
+        Refine invalid endpoints by re-running ODE from a late timestep t_start to 1.0.
+
+        For endpoints that landed in the separatrix (label=0), treat them as
+        partially-converged predictions at some t close to 1. The velocity field
+        at t ~ 0.8 expects mostly-data-like inputs with small noise — which matches
+        the distribution of "almost converged" invalid endpoints. Integrating from
+        t_start → 1.0 applies the final correction the model learned during training.
+
+        Args:
+            invalid_endpoints: Endpoints classified as invalid [B, state_dim] in raw coords
+            start_states: Original start states for conditioning [B, state_dim] in raw coords
+            t_range: Range (t_min, t_max) to uniformly sample t_start from
+            num_steps: Number of ODE integration steps for the [t_start, 1.0] interval
+            latent: Optional latent vectors [B, latent_dim]. If None, will sample fresh.
+            method: Integration method ("euler", "rk4", "midpoint")
+
+        Returns:
+            Refined endpoints [B, state_dim] in raw coordinates
+        """
+        batch_size = invalid_endpoints.shape[0]
+        device = invalid_endpoints.device
+
+        was_training = self.training
+        self.eval()
+
+        try:
+            with torch.no_grad():
+                # Sample random t_start ~ U[t_min, t_max]
+                t_start = torch.empty(1, device=device).uniform_(t_range[0], t_range[1]).item()
+
+                # Normalize invalid endpoints to use as x_init
+                x_init = self.normalize_state(invalid_endpoints)
+
+                # Prepare latent and condition (same as predict_endpoint)
+                if latent is None:
+                    z = self.sample_latent(batch_size, device)
+                else:
+                    z = latent
+
+                start_normalized = self.normalize_state(start_states)
+                start_embedded = self.embed_state_for_model(start_normalized)
+
+                # Create velocity model wrapper
+                velocity_model = LatentConditionalVelocityWrapper(
+                    model=self.model,
+                    latent=z,
+                    condition=start_embedded,
+                    embed_fn=self.embed_state_for_model,
+                )
+
+                # ODE integration from t_start → 1.0
+                solver = RiemannianODESolver(
+                    manifold=self.manifold, velocity_model=velocity_model
+                )
+
+                step_size = (1.0 - t_start) / num_steps
+
+                refined_normalized = solver.sample(
+                    x_init=x_init,
+                    step_size=step_size,
+                    method=method,
+                    projx=True,
+                    proju=True,
+                    time_grid=torch.tensor([t_start, 1.0], device=device),
+                )
+
+                return self.denormalize_state(refined_normalized)
+
+        finally:
             if was_training:
                 self.train()
 

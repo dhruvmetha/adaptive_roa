@@ -30,7 +30,7 @@ batch_size_sampling: 50
 max_samples_per_epoch: 50000
 
 batch_size: 1024
-val_batch_size: 8192
+val_batch_size: 50000
 num_workers: 4
 latent_dim: 0
 

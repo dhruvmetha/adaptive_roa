@@ -9,6 +9,7 @@ import numpy as np
 from typing import Union, Tuple
 from tqdm import tqdm
 from adaptive_roa.conformal.config import ConformalConfig
+from adaptive_roa.conformal.refinement import RefinementStats, refine_invalid_endpoints
 
 
 class ProbabilityEstimator:
@@ -49,10 +50,10 @@ class ProbabilityEstimator:
         self,
         states: Union[torch.Tensor, np.ndarray],
         verbose: bool = True,
-        refine_invalids: bool = False,
-        refine_t_range: Tuple[float, float] = (0.7, 0.9),
-        refine_num_steps: int = 100,
-        refine_max_attempts: int = 5,
+        refine_invalids: bool | None = None,
+        refine_t_range: Tuple[float, float] | None = None,
+        refine_num_steps: int | None = None,
+        refine_max_attempts: int | None = None,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Estimate p(success|x) for a batch of states.
@@ -80,6 +81,16 @@ class ProbabilityEstimator:
                 p_failure: [N] array of p(failure|x) = count(label=-1) / K
                 p_invalid: [N] array of p(invalid|x) = count(label=0) / K
         """
+        # Resolve refinement params: explicit overrides > config defaults
+        if refine_invalids is None:
+            refine_invalids = self.config.refine_invalids
+        if refine_t_range is None:
+            refine_t_range = (self.config.refine_t_min, self.config.refine_t_max)
+        if refine_num_steps is None:
+            refine_num_steps = self.config.refine_num_steps
+        if refine_max_attempts is None:
+            refine_max_attempts = self.config.refine_max_attempts
+
         if isinstance(states, np.ndarray):
             states = torch.from_numpy(states).float()
 
@@ -99,10 +110,9 @@ class ProbabilityEstimator:
         success_counts = torch.zeros(N, dtype=torch.int32, device=self.device)
         failure_counts = torch.zeros(N, dtype=torch.int32, device=self.device)
         invalid_counts = torch.zeros(N, dtype=torch.int32, device=self.device)
-        # Track how many invalids were resolved by refinement (per attempt)
-        refined_to_success = torch.zeros(N, dtype=torch.int32, device=self.device)
-        refined_to_failure = torch.zeros(N, dtype=torch.int32, device=self.device)
-        per_attempt_resolved = [0] * refine_max_attempts if refine_invalids else []
+        cumulative_rstats = RefinementStats(
+            per_attempt_resolved=[0] * refine_max_attempts
+        ) if refine_invalids else None
 
         n_batches = (N + batch_size - 1) // batch_size
         total_steps = n_batches * K
@@ -118,53 +128,16 @@ class ProbabilityEstimator:
                         endpoints, radius=self.config.attractor_radius
                     )
 
-                    # Iteratively refine invalid endpoints
                     if refine_invalids:
-                        # Track which original indices are still invalid
-                        still_invalid = (labels == 0)
-                        current_endpoints = endpoints.clone()
-
-                        for _attempt in range(refine_max_attempts):
-                            if not still_invalid.any():
-                                break
-
-                            refined = self.flow_matcher.refine_endpoints(
-                                invalid_endpoints=current_endpoints[still_invalid],
-                                start_states=batch_states[still_invalid],
-                                t_range=refine_t_range,
-                                num_steps=refine_num_steps,
-                            )
-                            refined_labels = self.system.classify_attractor(
-                                refined, radius=self.config.attractor_radius
-                            )
-
-                            # Identify which ones resolved this attempt
-                            resolved_success = (refined_labels == 1)
-                            resolved_failure = (refined_labels == -1)
-                            resolved = resolved_success | resolved_failure
-                            per_attempt_resolved[_attempt] += int(resolved.sum().item())
-
-                            # Map back to batch-level indices
-                            still_invalid_indices = still_invalid.nonzero(as_tuple=True)[0]
-                            for resolved_mask, counter in [
-                                (resolved_success, refined_to_success),
-                                (resolved_failure, refined_to_failure),
-                            ]:
-                                if resolved_mask.any():
-                                    counter[batch_start + still_invalid_indices[resolved_mask]] += 1
-
-                            # Update labels for resolved endpoints
-                            labels[still_invalid_indices[resolved_success]] = 1
-                            labels[still_invalid_indices[resolved_failure]] = -1
-
-                            # Update current_endpoints for next attempt (still-invalid get refined output)
-                            current_endpoints[still_invalid] = refined
-
-                            # Narrow still_invalid to only the ones that remain label=0
-                            still_invalid_remaining = (refined_labels == 0)
-                            new_still_invalid = torch.zeros_like(still_invalid)
-                            new_still_invalid[still_invalid_indices[still_invalid_remaining]] = True
-                            still_invalid = new_still_invalid
+                        rstats = refine_invalid_endpoints(
+                            self.flow_matcher, self.system,
+                            endpoints, labels, batch_states,
+                            attractor_radius=self.config.attractor_radius,
+                            t_range=refine_t_range,
+                            num_steps=refine_num_steps,
+                            max_attempts=refine_max_attempts,
+                        )
+                        cumulative_rstats.accumulate(rstats)
 
                     success_counts[batch_start:batch_end] += (labels == 1).int()
                     failure_counts[batch_start:batch_end] += (labels == -1).int()
@@ -177,18 +150,15 @@ class ProbabilityEstimator:
         p_failure = failure_counts.cpu().numpy().astype(np.float64) / K
         p_invalid = invalid_counts.cpu().numpy().astype(np.float64) / K
 
-        if refine_invalids and verbose:
-            total_refined_success = refined_to_success.sum().item()
-            total_refined_failure = refined_to_failure.sum().item()
-            total_refined = total_refined_success + total_refined_failure
-            total_original_invalid = total_refined + invalid_counts.sum().item()
-            if total_original_invalid > 0:
-                resolve_rate = total_refined / total_original_invalid * 100
-                print(f"      [Refine] {total_refined}/{total_original_invalid} invalid samples resolved ({resolve_rate:.1f}%)")
-                print(f"               → success: {total_refined_success}, → failure: {total_refined_failure}")
-                attempt_strs = [f"a{i+1}={c}" for i, c in enumerate(per_attempt_resolved) if c > 0]
-                if attempt_strs:
-                    print(f"               per-attempt: {', '.join(attempt_strs)}")
+        if refine_invalids and verbose and cumulative_rstats.n_initially_invalid > 0:
+            total_original = cumulative_rstats.n_initially_invalid
+            total_resolved = cumulative_rstats.n_resolved
+            resolve_rate = total_resolved / total_original * 100
+            print(f"      [Refine] {total_resolved}/{total_original} invalid samples resolved ({resolve_rate:.1f}%)")
+            print(f"               → success: {cumulative_rstats.n_resolved_success}, → failure: {cumulative_rstats.n_resolved_failure}")
+            attempt_strs = [f"a{i+1}={c}" for i, c in enumerate(cumulative_rstats.per_attempt_resolved) if c > 0]
+            if attempt_strs:
+                print(f"               per-attempt: {', '.join(attempt_strs)}")
 
         return p_success, p_failure, p_invalid
 

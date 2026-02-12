@@ -20,19 +20,7 @@ class ConformalThresholdBackend:
         self.predictor: ConformalPredictor | None = None
 
     def bind_model(self, model_handle: Any) -> None:
-        conf = ConformalConfig(
-            delta=self.cfg.conformal.get("delta", 0.05),
-            w=self.cfg.conformal.get("w", 0.9),
-            alpha=self.cfg.conformal.get("alpha_sampling", 0.1),
-            num_mc_samples=self.cfg.conformal.get("num_mc_samples", 100),
-            attractor_radius=self.cfg.conformal.get("attractor_radius", 0.2),
-            optimize_mode=self.cfg.conformal.get("optimize_mode", "lambda"),
-            decision_rule=self.cfg.conformal.get("decision_rule", "two_sided"),
-            lambda_grid_size=self.cfg.conformal.get("lambda_grid_size", 100),
-            delta_grid_size=self.cfg.conformal.get("delta_grid_size", 100),
-            delta_min=self.cfg.conformal.get("delta_min", 0.01),
-            delta_max=self.cfg.conformal.get("delta_max", 0.49),
-        )
+        conf = ConformalConfig.from_hydra(self.cfg)
         self.predictor = ConformalPredictor(
             flow_matcher=model_handle,
             system=self.system,

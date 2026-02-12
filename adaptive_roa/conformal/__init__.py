@@ -17,6 +17,7 @@ from adaptive_roa.conformal.probability_estimator import ProbabilityEstimator
 from adaptive_roa.conformal.lambda_optimizer import LambdaOptimizer
 from adaptive_roa.conformal.calibrator import Calibrator
 from adaptive_roa.conformal.predictor import ConformalPredictor
+from adaptive_roa.conformal.refinement import RefinementStats, refine_invalid_endpoints
 
 __all__ = [
     "ConformalConfig",
@@ -24,4 +25,6 @@ __all__ = [
     "LambdaOptimizer",
     "Calibrator",
     "ConformalPredictor",
+    "RefinementStats",
+    "refine_invalid_endpoints",
 ]

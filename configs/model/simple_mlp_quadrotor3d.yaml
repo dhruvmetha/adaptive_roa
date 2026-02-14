@@ -1,0 +1,13 @@
+_target_: adaptive_roa.model.simple_flow_mlp.SimpleFlowMLP
+
+# Quadrotor 3D dimensions
+embedded_dim: 13       # (x, y, z, qw, qx, qy, qz, ẋ, ẏ, ż, p, q, r)
+latent_dim: 4          # Will be overridden by flow_matching.latent_dim
+condition_dim: 13      # Start state conditioning
+time_emb_dim: 64
+output_dim: 12         # 12D tangent space (SO(3) has 3D tangent for 4D quaternion)
+
+# Architecture (larger for 13D input)
+hidden_dims: [512, 1024, 1024, 512]
+use_input_embeddings: false
+input_emb_dim: 128

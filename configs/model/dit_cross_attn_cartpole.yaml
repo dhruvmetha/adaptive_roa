@@ -1,0 +1,22 @@
+# DiT Cross-Attention for CartPole (R2 x S1 x R manifold)
+_target_: adaptive_roa.model.dit_cross_attention.DiTCrossAttentionModel
+
+# CartPole dimensions
+embedded_dim: 5       # [x_norm, x_dot_norm, sin(theta), cos(theta), theta_dot_norm]
+latent_dim: 2         # Latent variable dimension (overridden by flow_matching.latent_dim)
+condition_dim: 5      # Same as embedded_dim (start state condition)
+time_emb_dim: 64      # Sinusoidal time embedding dimension
+output_dim: 4         # [dx/dt, dx_dot/dt, dtheta/dt, dtheta_dot/dt] in tangent space
+
+# DiT architecture
+token_dim: 128        # Common token width
+n_heads: 4            # Number of attention heads
+num_blocks: 4         # Number of DiT blocks
+mlp_ratio: 4          # FFN expansion ratio
+cond_proj_dim: 256    # AdaLN conditioning dim
+dropout: 0.0
+
+# Component tokenization: [cart(x, x_dot), pole(sin, cos, theta_dot)]
+state_component_dims: [2, 3]
+condition_component_dims: [2, 3]
+output_component_dims: [2, 2]

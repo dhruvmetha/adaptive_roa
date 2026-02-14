@@ -72,3 +72,36 @@ def load_hydra_config(training_dir: Path) -> Optional[dict]:
     except Exception as e:
         print(f"   Warning: Could not load Hydra config: {e}")
         return None
+
+
+def instantiate_model_from_config(model_config: dict, latent_dim: int):
+    """
+    Dynamically instantiate a model from checkpoint config using Hydra.
+
+    The model_config must contain '_target_' pointing to the model class
+    (e.g., 'adaptive_roa.model.adaln_mlp.AdaLNResidualMLP').
+
+    Args:
+        model_config: Dict containing model config (must include '_target_')
+        latent_dim: Latent dimension to inject into config
+
+    Returns:
+        Instantiated nn.Module model
+
+    Raises:
+        KeyError: If '_target_' is not in model_config
+    """
+    import hydra
+    from omegaconf import OmegaConf
+
+    if "_target_" not in model_config:
+        raise KeyError(
+            "model_config must contain '_target_' for dynamic instantiation. "
+            "Legacy checkpoints without _target_ are not supported."
+        )
+
+    config = dict(model_config)
+    config["latent_dim"] = latent_dim
+
+    model_cfg = OmegaConf.create(config)
+    return hydra.utils.instantiate(model_cfg)

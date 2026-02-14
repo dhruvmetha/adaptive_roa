@@ -1,0 +1,16 @@
+# AdaLN Residual MLP for Pendulum Cartesian (R4 manifold)
+_target_: adaptive_roa.model.adaln_mlp.AdaLNResidualMLP
+
+# Pendulum Cartesian dimensions
+embedded_dim: 4       # [x, y, vx, vy] - no SO2 embedding
+latent_dim: 4         # Latent variable dimension (overridden by flow_matching.latent_dim)
+condition_dim: 4      # Same as embedded_dim (start state condition)
+time_emb_dim: 64      # Sinusoidal time embedding dimension
+output_dim: 4         # [dx/dt, dy/dt, dvx/dt, dvy/dt] in tangent space
+
+# AdaLN architecture
+hidden_dim: 256       # Uniform width of all residual blocks
+num_blocks: 4         # Number of AdaLN residual blocks
+cond_proj_dim: 128    # Conditioning projection dim for AdaLN
+mlp_ratio: 2          # FFN expansion ratio within blocks
+dropout: 0.0

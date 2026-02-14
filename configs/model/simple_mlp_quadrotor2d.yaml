@@ -1,0 +1,13 @@
+_target_: adaptive_roa.model.simple_flow_mlp.SimpleFlowMLP
+
+# Quadrotor 2D dimensions
+embedded_dim: 7        # (x_norm, z_norm, sin θ, cos θ, ẋ_norm, ż_norm, θ̇_norm)
+latent_dim: 4          # Will be overridden by flow_matching.latent_dim
+condition_dim: 7       # Start state conditioning
+time_emb_dim: 64
+output_dim: 6          # (dx/dt, dz/dt, dθ/dt, dẋ/dt, dż/dt, dθ̇/dt) tangent space
+
+# Architecture
+hidden_dims: [256, 512, 256]
+use_input_embeddings: false
+input_emb_dim: 64

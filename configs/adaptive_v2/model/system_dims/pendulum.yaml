@@ -1,0 +1,27 @@
+# @package model_dims
+
+embedded_dim: 3
+condition_dim: 3
+output_dim: 2
+time_emb_dim: 64
+
+unet_target: adaptive_roa.model.pendulum_unet.PendulumUNet
+unet_hidden_dims: [256, 512, 256]
+
+mlp_hidden_dims: [256, 512, 256]
+
+adaln_hidden_dim: 256
+adaln_num_blocks: 4
+adaln_cond_dim: 128
+adaln_mlp_ratio: 2
+adaln_dropout: 0.0
+
+dit_hidden_dim: 128
+dit_num_blocks: 3
+dit_num_heads: 2
+dit_cond_dim: 128
+dit_mlp_ratio: 4
+dit_dropout: 0.0
+
+use_input_embeddings: false
+input_emb_dim: 64

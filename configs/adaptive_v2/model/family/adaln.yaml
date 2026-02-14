@@ -1,0 +1,14 @@
+# @package model
+
+_target_: adaptive_roa.model.adaln_mlp.AdaLNResidualMLP
+
+embedded_dim: ${model_dims.embedded_dim}
+latent_dim: ${latent_dim}
+condition_dim: ${model_dims.condition_dim}
+time_emb_dim: ${model_dims.time_emb_dim}
+output_dim: ${model_dims.output_dim}
+hidden_dim: ${model_dims.adaln_hidden_dim}
+num_blocks: ${model_dims.adaln_num_blocks}
+cond_dim: ${model_dims.adaln_cond_dim}
+mlp_ratio: ${model_dims.adaln_mlp_ratio}
+dropout: ${model_dims.adaln_dropout}

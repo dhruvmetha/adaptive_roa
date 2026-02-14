@@ -468,7 +468,7 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
         import torch
         from pathlib import Path
         from adaptive_roa.systems.quadrotor3d import Quadrotor3DSystem
-        from adaptive_roa.model.quadrotor3d_unet import Quadrotor3DUNet
+        from adaptive_roa.flow_matching.base.checkpoint_utils import instantiate_model_from_config
 
         # Determine device
         if device is None:
@@ -575,17 +575,13 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
                 f"Checkpoint: {checkpoint_path}"
             )
 
-        # Remove _target_ key if present
-        if isinstance(model_config, dict) and "_target_" in model_config:
-            model_config = {k: v for k, v in model_config.items() if k != "_target_"}
-
         model_config["latent_dim"] = latent_dim
 
-        print(f"📋 Config source: {config_source}")
-        print(f"📋 Final config - latent_dim: {latent_dim}")
-        print(f"📋 Model config keys: {list(model_config.keys())}")
+        print(f"Config source: {config_source}")
+        print(f"Final config - latent_dim: {latent_dim}")
+        print(f"Model config keys: {list(model_config.keys())}")
         print(
-            "📋 Runtime config - "
+            "Runtime config - "
             f"use_manifold: {use_manifold}, "
             f"use_loss_weights: {use_loss_weights}, "
             f"use_log_loss_weights: {use_log_loss_weights}, "
@@ -599,7 +595,7 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
         # Initialize system and model
         system = hparams.get("system")
         if system is None:
-            print("🔧 Creating new Quadrotor3D system (not found in hparams)")
+            print("Creating new Quadrotor3D system (not found in hparams)")
             dataset_dir = hparams.get("system_dataset_dir")
             if not dataset_dir:
                 raise KeyError(
@@ -609,20 +605,10 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
             print(f"   dataset_dir: {dataset_dir}")
             system = Quadrotor3DSystem(dataset_dir=dataset_dir)
         else:
-            print("✅ Restored Quadrotor3D system from checkpoint")
+            print("Restored Quadrotor3D system from checkpoint")
 
-        # Create model architecture
-        # Note: output_dim depends on use_manifold (12 for SO3, 13 for Euclidean)
-        model = Quadrotor3DUNet(
-            embedded_dim=model_config.get('embedded_dim', 13),
-            latent_dim=model_config.get('latent_dim', latent_dim),
-            condition_dim=model_config.get('condition_dim', 13),
-            time_emb_dim=model_config.get('time_emb_dim', 64),
-            hidden_dims=model_config.get('hidden_dims', [512, 1024, 512]),
-            output_dim=model_output_dim,  # 12D for SO3, 13D for Euclidean
-            use_input_embeddings=model_config.get('use_input_embeddings', False),
-            input_emb_dim=model_config.get('input_emb_dim', 128),
-        )
+        # Dynamically instantiate model from config
+        model = instantiate_model_from_config(model_config, latent_dim)
 
         # Create flow matcher instance
         flow_matcher = cls(
@@ -661,15 +647,15 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
         flow_matcher.training_config = hydra_config
 
         # Success summary
-        manifold_str = "ℝ³ × SO(3) × ℝ⁶" if use_manifold else "ℝ¹³ (Euclidean)"
-        print(f"\n✅ Model loaded successfully!")
+        manifold_str = "R3 x SO(3) x R6" if use_manifold else "R13 (Euclidean)"
+        model_info = model.get_model_info() if hasattr(model, 'get_model_info') else {}
+        print(f"\nModel loaded successfully!")
         print(f"   Checkpoint: {checkpoint_path.name}")
         print(f"   Config sources: {'Hydra + Lightning' if hydra_config else 'Lightning only'}")
         print(f"   System: {type(system).__name__}")
         print(f"   Latent dim: {latent_dim}")
         print(f"   Use manifold: {use_manifold} ({manifold_str})")
-        print(f"   Model output dim: {model_output_dim}")
-        print(f"   Model architecture: {model_config.get('hidden_dims', 'unknown')}")
+        print(f"   Model type: {model_info.get('model_type', 'unknown')}")
         print(f"   Total parameters: {sum(p.numel() for p in model.parameters()):,}")
         print(f"   Device: {device}")
 

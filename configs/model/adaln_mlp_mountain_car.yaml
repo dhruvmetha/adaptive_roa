@@ -1,0 +1,16 @@
+# AdaLN Residual MLP for Mountain Car (R2 manifold)
+_target_: adaptive_roa.model.adaln_mlp.AdaLNResidualMLP
+
+# Mountain Car dimensions
+embedded_dim: 2       # [position, velocity]
+latent_dim: 2         # Latent variable dimension (overridden by flow_matching.latent_dim)
+condition_dim: 2      # Same as embedded_dim (start state condition)
+time_emb_dim: 64      # Sinusoidal time embedding dimension
+output_dim: 2         # [dpos/dt, dvel/dt] in tangent space
+
+# AdaLN architecture
+hidden_dim: 256       # Uniform width of all residual blocks
+num_blocks: 4         # Number of AdaLN residual blocks
+cond_proj_dim: 128    # Conditioning projection dim for AdaLN
+mlp_ratio: 2          # FFN expansion ratio within blocks
+dropout: 0.0

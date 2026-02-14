@@ -10,6 +10,10 @@ from .pendulum_unet import PendulumUNet
 from .pendulum_cartesian_unet import PendulumCartesianUNet
 from .cartpole_unet import CartPoleUNet
 from .mountain_car_unet import MountainCarUNet
+from .simple_flow_mlp import SimpleFlowMLP
+from .adaln_mlp import AdaLNResidualMLP
+from .dit_flow import DiTFlowModel
+from .dit_cross_attention import DiTCrossAttentionModel
 
 __all__ = [
     "UNet1D",
@@ -23,4 +27,8 @@ __all__ = [
     "PendulumCartesianUNet",
     "CartPoleUNet",
     "MountainCarUNet",
+    "SimpleFlowMLP",
+    "AdaLNResidualMLP",
+    "DiTFlowModel",
+    "DiTCrossAttentionModel",
 ]

@@ -1,0 +1,15 @@
+_target_: adaptive_roa.model.adaln_mlp.AdaLNResidualMLP
+
+# CartPole dimensions
+embedded_dim: 5        # (x_norm, ẋ_norm, sin θ, cos θ, θ̇_norm)
+latent_dim: 2          # Will be overridden by flow_matching.latent_dim
+condition_dim: 5       # Start state conditioning
+time_emb_dim: 64
+output_dim: 4          # (dx/dt, dẋ/dt, dθ/dt, dθ̇/dt) tangent space
+
+# Architecture
+hidden_dim: 384
+num_blocks: 6
+cond_dim: 192
+mlp_ratio: 2
+dropout: 0.0

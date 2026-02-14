@@ -1,0 +1,15 @@
+_target_: adaptive_roa.model.adaln_mlp.AdaLNResidualMLP
+
+# Pendulum dimensions
+embedded_dim: 3        # (sin θ, cos θ, θ̇)
+latent_dim: 2          # Will be overridden by flow_matching.latent_dim
+condition_dim: 3       # Start state conditioning
+time_emb_dim: 64
+output_dim: 2          # (dθ/dt, dθ̇/dt) tangent space
+
+# Architecture
+hidden_dim: 256
+num_blocks: 4
+cond_dim: 128
+mlp_ratio: 2
+dropout: 0.0

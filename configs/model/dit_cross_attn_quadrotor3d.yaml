@@ -1,0 +1,22 @@
+# DiT Cross-Attention for Quadrotor 3D (R3 x S3 x R3 x R3 manifold)
+_target_: adaptive_roa.model.dit_cross_attention.DiTCrossAttentionModel
+
+# Quadrotor 3D dimensions
+embedded_dim: 13      # [pos(3), quat(4), vel(3), omega(3)] (13D embedded)
+latent_dim: 4         # Latent variable dimension
+condition_dim: 13     # Same as embedded_dim (start state condition)
+time_emb_dim: 64      # Sinusoidal time embedding dimension
+output_dim: 12        # 12D tangent velocity [dpos(3), drot(3), dvel(3), domega(3)]
+
+# DiT architecture
+token_dim: 128        # Common token width
+n_heads: 4            # Number of attention heads
+num_blocks: 4         # Number of DiT blocks
+mlp_ratio: 4          # FFN expansion ratio
+cond_proj_dim: 256    # AdaLN conditioning dim
+dropout: 0.0
+
+# Component tokenization: [position(3), quaternion(4), velocity(3), angular_velocity(3)]
+state_component_dims: [3, 4, 3, 3]
+condition_component_dims: [3, 4, 3, 3]
+output_component_dims: [3, 3, 3, 3]

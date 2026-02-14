@@ -324,7 +324,7 @@ class Quadrotor2DLatentConditionalFlowMatcher(BaseFlowMatcher):
         import torch
         from pathlib import Path
         from adaptive_roa.systems.quadrotor2d import Quadrotor2DSystem
-        from adaptive_roa.model.quadrotor2d_unet import Quadrotor2DUNet
+        from adaptive_roa.flow_matching.base.checkpoint_utils import instantiate_model_from_config
 
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -419,9 +419,6 @@ class Quadrotor2DLatentConditionalFlowMatcher(BaseFlowMatcher):
                 f"Checkpoint: {checkpoint_path}"
             )
 
-        if isinstance(model_config, dict) and "_target_" in model_config:
-            model_config = {k: v for k, v in model_config.items() if k != "_target_"}
-
         model_config["latent_dim"] = latent_dim
 
         print(f"Config source: {config_source}")
@@ -453,17 +450,8 @@ class Quadrotor2DLatentConditionalFlowMatcher(BaseFlowMatcher):
         else:
             print("Restored Quadrotor2D system from checkpoint")
 
-        # Create model architecture
-        model = Quadrotor2DUNet(
-            embedded_dim=model_config.get('embedded_dim', 7),
-            latent_dim=model_config.get('latent_dim', latent_dim),
-            condition_dim=model_config.get('condition_dim', 7),
-            time_emb_dim=model_config.get('time_emb_dim', 64),
-            hidden_dims=model_config.get('hidden_dims', [256, 512, 256]),
-            output_dim=model_config.get('output_dim', 6),
-            use_input_embeddings=model_config.get('use_input_embeddings', False),
-            input_emb_dim=model_config.get('input_emb_dim', 64)
-        )
+        # Dynamically instantiate model from config
+        model = instantiate_model_from_config(model_config, latent_dim)
 
         # Create flow matcher instance
         flow_matcher = cls(
@@ -505,7 +493,8 @@ class Quadrotor2DLatentConditionalFlowMatcher(BaseFlowMatcher):
         print(f"   Config sources: {'Hydra + Lightning' if hydra_config else 'Lightning only'}")
         print(f"   System: {type(system).__name__}")
         print(f"   Latent dim: {latent_dim}")
-        print(f"   Model architecture: {model_config.get('hidden_dims', 'unknown')}")
+        model_info = model.get_model_info() if hasattr(model, 'get_model_info') else {}
+        print(f"   Model type: {model_info.get('model_type', 'unknown')}")
         print(f"   Total parameters: {sum(p.numel() for p in model.parameters()):,}")
         print(f"   Device: {device}")
 

@@ -1,0 +1,15 @@
+_target_: adaptive_roa.model.adaln_mlp.AdaLNResidualMLP
+
+# Quadrotor 3D dimensions
+embedded_dim: 13       # (x, y, z, qw, qx, qy, qz, ẋ, ẏ, ż, p, q, r)
+latent_dim: 4          # Will be overridden by flow_matching.latent_dim
+condition_dim: 13      # Start state conditioning
+time_emb_dim: 64
+output_dim: 12         # 12D tangent space (SO(3) has 3D tangent for 4D quaternion)
+
+# Architecture (larger for 13D)
+hidden_dim: 512
+num_blocks: 8
+cond_dim: 256
+mlp_ratio: 2
+dropout: 0.0

@@ -128,11 +128,15 @@ class ConformalPredictor:
             if verbose:
                 print(f"[2/2] Optimizing λ* via grid search with fixed δ={self.config.delta} ({self.config.lambda_grid_size} points)...")
 
+        p_invalid_for_opt = p_train_invalid if self.config.use_p_invalid_veto else None
+
         self.lambda_star, self.delta_star, opt_info = self.lambda_optimizer.optimize(
-            p_train_success, y_train, p_failure=p_failure_for_opt, p_invalid=p_train_invalid
+            p_train_success, y_train, p_failure=p_failure_for_opt, p_invalid=p_invalid_for_opt
         )
 
         if verbose:
+            if not self.config.use_p_invalid_veto:
+                print("      (p_invalid veto disabled)")
             print(f"      → λ* = {self.lambda_star:.4f}" + (" (fixed)" if optimize_mode == "delta" else ""))
             print(f"      → δ* = {self.delta_star:.4f}" + (" (fixed)" if optimize_mode == "lambda" else ""))
             print(f"      → Best loss = {opt_info['best_loss']:.4f}")
@@ -285,11 +289,15 @@ class ConformalPredictor:
             if verbose:
                 print(f"[2/4] Optimizing λ* via grid search with fixed δ={self.config.delta} ({self.config.lambda_grid_size} points)...")
 
+        p_invalid_for_opt = p_train_invalid if self.config.use_p_invalid_veto else None
+
         self.lambda_star, self.delta_star, opt_info = self.lambda_optimizer.optimize(
-            p_train_success, y_train, p_failure=p_failure_for_opt, p_invalid=p_train_invalid
+            p_train_success, y_train, p_failure=p_failure_for_opt, p_invalid=p_invalid_for_opt
         )
 
         if verbose:
+            if not self.config.use_p_invalid_veto:
+                print("      (p_invalid veto disabled)")
             print(f"      → λ* = {self.lambda_star:.4f}" + (" (fixed)" if optimize_mode == "delta" else ""))
             print(f"      → δ* = {self.delta_star:.4f}" + (" (fixed)" if optimize_mode == "lambda" else ""))
             print(f"      → Best loss = {opt_info['best_loss']:.4f}")

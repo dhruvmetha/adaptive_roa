@@ -19,6 +19,16 @@ class RankedAcquisitionStrategy:
         target_count: int,
         exclude: set[int] | None = None,
     ) -> AcquisitionResult:
+        if target_count <= 0:
+            return AcquisitionResult(
+                d1_indices=[],
+                d2_indices=[],
+                n_candidates_evaluated=0,
+                n_certain_discarded=0,
+                n_invalid_added=0,
+                diagnostics={"skipped_reason": "target_count_zero"},
+            )
+
         sampler = UncertainSampler(
             dataset_builder=pool.dataset_builder,
             target_count=target_count,

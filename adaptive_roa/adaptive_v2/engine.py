@@ -34,13 +34,13 @@ from adaptive_roa.conformal.calibrator import Calibrator
 
 
 def _convert_numpy(obj: Any) -> Any:
-    if is_dataclass(obj):
+    if is_dataclass(obj) and not isinstance(obj, type):
         return _convert_numpy(asdict(obj))
     if isinstance(obj, np.ndarray):
         return obj.tolist()
-    if isinstance(obj, (np.float16, np.float32, np.float64)):
+    if isinstance(obj, np.floating):
         return float(obj)
-    if isinstance(obj, (np.int16, np.int32, np.int64)):
+    if isinstance(obj, np.integer):
         return int(obj)
     if isinstance(obj, dict):
         return {k: _convert_numpy(v) for k, v in obj.items()}
@@ -98,6 +98,7 @@ class AdaptiveEngine:
         d2_ratio = float(self.cfg.get("d2_ratio", 0.5))
         warm_start = bool(self.cfg.get("warm_start", False))
         sampling_mode = str(self.cfg.get("sampling_mode", "conformal"))
+        eval_every = int(self.cfg.get("eval_every", 1))
 
         epoch_results: list[dict[str, Any]] = []
         previous_best_checkpoint: str | None = None
@@ -108,6 +109,8 @@ class AdaptiveEngine:
             print("=" * 70)
 
             train_trajectories_this_epoch = self.pool.train_size
+            is_last_epoch = (epoch == n_epochs - 1)
+            run_eval = (eval_every > 0 and (epoch % eval_every == 0 or is_last_epoch)) and not self.smoke_mode
             epoch_output_dir = self.output_dir / f"epoch_{epoch:03d}"
             epoch_output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -129,13 +132,20 @@ class AdaptiveEngine:
             self.probability_backend.bind_model(model_handle)
             self.threshold_backend.bind_model(model_handle)
 
+            n_d1_target = int(samples_per_epoch * (1.0 - d2_ratio))
+            n_d2_target = samples_per_epoch - n_d1_target
+            skip_ranked_for_eval_off = (
+                sampling_mode == "ranked" and eval_every <= 0 and d2_ratio <= 0.0
+            )
+            need_d2_acquisition = n_d2_target > 0 and not skip_ranked_for_eval_off
+
             X_train, y_train = sample_endpoint_data_for_optimization(
                 self.pool.dataset_builder,
             )
             threshold_state = self.threshold_backend.optimize(X_train, y_train)
 
-            if self.smoke_mode:
-                endpoint_error = {"smoke_mode": True}
+            if self.smoke_mode or not run_eval:
+                endpoint_error = {"skipped": True}
             else:
                 endpoint_error = compute_endpoint_prediction_error(
                     flow_matcher=model_handle,
@@ -145,11 +155,8 @@ class AdaptiveEngine:
                     verbose=self.cfg.conformal.get("verbose", True),
                 )
 
-            n_d1_target = int(samples_per_epoch * (1.0 - d2_ratio))
-            n_d2_target = samples_per_epoch - n_d1_target
-
             d1_states, d1_indices = self.pool.sample_candidates_without_marking(n_d1_target)
-            if len(d1_indices) == 0:
+            if n_d1_target > 0 and len(d1_indices) == 0:
                 print("No more trajectories available, stopping.")
                 break
 
@@ -158,27 +165,41 @@ class AdaptiveEngine:
 
             q_hat = None
             test_metrics = {"coverage": None, "f1": None, "unknown_rate": None}
-            if sampling_mode == "conformal":
+            if sampling_mode == "conformal" and need_d2_acquisition:
                 d1_labels = self.pool.get_labels(d1_indices)
                 q_hat = self.threshold_backend.calibrate_qhat(d1_states, d1_labels, threshold_state)
                 threshold_state.q_hat = q_hat
                 X_test, y_test = self.pool.get_test_labels()
-                test_metrics = self.threshold_backend.predictor.evaluate(
+                predictor = self.threshold_backend.predictor
+                if predictor is None:
+                    raise RuntimeError("Threshold backend predictor missing after bind_model")
+                test_metrics = predictor.evaluate(
                     X_test,
                     y_test,
                     verbose=self.cfg.conformal.get("verbose", True),
                 )
+            elif sampling_mode == "conformal":
+                print("Skipping q_hat calibration because d2_target=0")
 
-            strategy = _build_strategy(sampling_mode)
-            acquisition = strategy.select(
-                pool=self.pool,
-                probability_backend=self.probability_backend,
-                threshold_backend=self.threshold_backend,
-                threshold_state=threshold_state,
-                cfg=self.cfg,
-                target_count=n_d2_target,
-                exclude=set(d1_indices),
-            )
+            if need_d2_acquisition:
+                strategy = _build_strategy(sampling_mode)
+                acquisition = strategy.select(
+                    pool=self.pool,
+                    probability_backend=self.probability_backend,
+                    threshold_backend=self.threshold_backend,
+                    threshold_state=threshold_state,
+                    cfg=self.cfg,
+                    target_count=n_d2_target,
+                    exclude=set(d1_indices),
+                )
+            else:
+                skipped_reason = "d2_target_zero"
+                if skip_ranked_for_eval_off:
+                    skipped_reason = "ranked_disabled_when_eval_every_zero"
+                    print("Skipping ranked acquisition because eval_every=0")
+                acquisition = AcquisitionResult(
+                    diagnostics={"skipped_reason": skipped_reason},
+                )
             acquisition.d1_indices = list(d1_indices)
 
             if acquisition.d2_indices:
@@ -189,7 +210,7 @@ class AdaptiveEngine:
             q_hat_eval = None
             n_cal_eval = 0
             cal_file = self.cfg.data_source.get("cal_set_file", None)
-            if cal_file:
+            if run_eval and cal_file:
                 X_cal_eval, _, y_cal_eval = load_eval_states(cal_file)
                 cal_probs = self.probability_backend.estimate(X_cal_eval)
                 eval_conformal = ConformalConfig(
@@ -213,16 +234,18 @@ class AdaptiveEngine:
 
             threshold_state.q_hat_eval = q_hat_eval
 
-            if self.smoke_mode:
-                full_roa_metrics = {"smoke_mode": True}
+            if not run_eval:
+                full_roa_metrics: dict[str, Any] = {"skipped": True}
             else:
+                val_batch_size = int(self.cfg.get("val_batch_size", 2048))
+                print(f"[DEBUG] val_batch_size from config: {val_batch_size}")
                 full_roa_metrics = self.evaluator.evaluate_epoch(
                     model_handle,
                     threshold_state,
                     {
                         "eval_states_file": self.cfg.data_source.test_set_file,
                         "num_mc_samples": int(self.cfg.conformal.get("num_mc_samples_eval", 20)),
-                        "batch_size": int(self.cfg.get("val_batch_size", 2048)),
+                        "batch_size": val_batch_size,
                         "attractor_radius": float(self.cfg.conformal.get("attractor_radius", 0.2)),
                         "output_dir": str(epoch_output_dir),
                         "verbose": bool(self.cfg.conformal.get("verbose", True)),

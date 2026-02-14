@@ -1,4 +1,16 @@
-"""Unified adaptive training entrypoint for v2."""
+"""Unified adaptive training entrypoint for v2.
+
+Examples:
+    # Use system defaults (default family is unet per system config)
+    python scripts/run_adaptive.py system=pendulum
+
+    # Switch model family while keeping system-specific dimensions
+    python scripts/run_adaptive.py system=pendulum model/family=adaln
+    python scripts/run_adaptive.py system=cartpole_pybullet model/family=dit
+
+    # Compose and inspect final resolved config
+    python scripts/run_adaptive.py --cfg job --resolve system=quadrotor3d model/family=simple_mlp
+"""
 
 from __future__ import annotations
 

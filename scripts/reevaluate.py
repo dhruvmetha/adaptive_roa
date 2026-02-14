@@ -22,6 +22,10 @@ Usage:
     # Evaluate epochs up to a maximum
     python scripts/reevaluate.py /path/to/training/output --max_epoch 5
 
+    # Evaluate only even or odd epochs (useful for split/parallel runs)
+    python scripts/reevaluate.py /path/to/training/output --even_only --force
+    python scripts/reevaluate.py /path/to/training/output --odd_only --force
+
     # Custom output dir
     python scripts/reevaluate.py /path/to/training/output \
         --attractor_radius 0.25 --output_dir /custom/path
@@ -301,6 +305,17 @@ def main():
                         help="Specific epoch to evaluate")
     parser.add_argument("--max_epoch", type=int, default=None,
                         help="Maximum epoch to evaluate (all epochs <= max_epoch)")
+    parity_group = parser.add_mutually_exclusive_group()
+    parity_group.add_argument(
+        "--even_only",
+        action="store_true",
+        help="Evaluate only even-numbered epochs",
+    )
+    parity_group.add_argument(
+        "--odd_only",
+        action="store_true",
+        help="Evaluate only odd-numbered epochs",
+    )
     parser.add_argument("--force", action="store_true",
                         help="Force re-evaluation even with no parameter changes")
     parser.add_argument("--no_filter_invalid_by_conformal", action="store_true",
@@ -315,6 +330,8 @@ def main():
                         help="ODE steps for refinement interval (default: 100)")
     parser.add_argument("--refine_max_attempts", type=int, default=5,
                         help="Max refinement iterations per invalid endpoint (default: 5)")
+    parser.add_argument("--verbose", action="store_true",
+                        help="Show tqdm progress bars during evaluation")
     args = parser.parse_args()
 
     training_dir = args.training_dir
@@ -422,6 +439,13 @@ def main():
         return 1
 
     if args.epoch is not None:
+        if args.even_only and args.epoch % 2 != 0:
+            print(f"ERROR: --epoch {args.epoch} conflicts with --even_only")
+            return 1
+        if args.odd_only and args.epoch % 2 == 0:
+            print(f"ERROR: --epoch {args.epoch} conflicts with --odd_only")
+            return 1
+
         epoch_dirs = [d for d in epoch_dirs if int(re.search(r"\d+", d.name).group()) == args.epoch]
         if not epoch_dirs:
             print(f"ERROR: Epoch {args.epoch} not found in {training_dir}")
@@ -433,12 +457,29 @@ def main():
             if not epoch_dirs:
                 print(f"ERROR: No epochs <= {args.max_epoch} found in {training_dir}")
                 return 1
-        # Reorder: even epochs first, then odd epochs
-        even_epochs = [d for d in epoch_dirs if int(re.search(r"\d+", d.name).group()) % 2 == 0]
-        odd_epochs = [d for d in epoch_dirs if int(re.search(r"\d+", d.name).group()) % 2 == 1]
-        epoch_dirs = even_epochs + odd_epochs
+
+        # Optional parity filtering for split runs.
+        if args.even_only:
+            epoch_dirs = [d for d in epoch_dirs if int(re.search(r"\d+", d.name).group()) % 2 == 0]
+            order_info = "even only"
+        elif args.odd_only:
+            epoch_dirs = [d for d in epoch_dirs if int(re.search(r"\d+", d.name).group()) % 2 == 1]
+            order_info = "odd only"
+        else:
+            # Default ordering: even epochs first, then odd epochs.
+            even_epochs = [d for d in epoch_dirs if int(re.search(r"\d+", d.name).group()) % 2 == 0]
+            odd_epochs = [d for d in epoch_dirs if int(re.search(r"\d+", d.name).group()) % 2 == 1]
+            epoch_dirs = even_epochs + odd_epochs
+            order_info = "even first, then odd"
+
+        if not epoch_dirs:
+            max_info = f" with max_epoch={args.max_epoch}" if args.max_epoch is not None else ""
+            parity = "even" if args.even_only else "odd"
+            print(f"ERROR: No {parity} epochs found in {training_dir}{max_info}")
+            return 1
+
         max_info = f" (max_epoch={args.max_epoch})" if args.max_epoch is not None else ""
-        print(f"\nFound {len(epoch_dirs)} epochs to re-evaluate{max_info} (even first, then odd)")
+        print(f"\nFound {len(epoch_dirs)} epochs to re-evaluate{max_info} ({order_info})")
 
     # ── Data file paths from config ───────────────────────────────────────
     data_source = hydra_config.get("data_source", {})
@@ -513,7 +554,7 @@ def main():
                 attractor_radius=attractor_radius,
                 device=args.device,
                 output_dir=None,
-                verbose=False,
+                verbose=args.verbose,
                 decision_rule=decision_rule,
                 refine_invalids=args.refine_invalids,
                 refine_t_range=(args.refine_t_min, args.refine_t_max),

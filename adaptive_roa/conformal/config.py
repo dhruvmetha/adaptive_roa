@@ -63,6 +63,9 @@ class ConformalConfig:
     delta_min: float = 0.01
     delta_max: float = 0.49
 
+    # p_invalid veto during threshold optimization
+    use_p_invalid_veto: bool = True
+
     # Invalid endpoint refinement
     refine_invalids: bool = False
     refine_t_min: float = 0.7
@@ -91,6 +94,7 @@ class ConformalConfig:
             delta_grid_size=c.get("delta_grid_size", 100),
             delta_min=c.get("delta_min", 0.01),
             delta_max=c.get("delta_max", 0.49),
+            use_p_invalid_veto=c.get("use_p_invalid_veto", True),
             refine_invalids=c.get("refine_invalids", False),
             refine_t_min=c.get("refine_t_min", 0.7),
             refine_t_max=c.get("refine_t_max", 0.9),

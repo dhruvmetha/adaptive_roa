@@ -2,6 +2,8 @@
 
 defaults:
   - _base
+  - /model/family: unet
+  - /model/system_dims: quadrotor3d
   - _self_
 
 name: adaptive_quadrotor3d
@@ -25,8 +27,7 @@ samples_per_epoch: 500
 
 conformal:
   decision_rule: two_sided
-  attractor_radius: 0.2
-  optimize_mode: joint
+  attractor_radius: 0.3
 
 flow_matching:
   clamp_noise: false
@@ -41,17 +42,6 @@ system:
 
 flow_matcher:
   _target_: adaptive_roa.flow_matching.quadrotor_3d.latent_conditional.flow_matcher.Quadrotor3DLatentConditionalFlowMatcher
-
-model:
-  _target_: adaptive_roa.model.quadrotor3d_unet.Quadrotor3DUNet
-  embedded_dim: 13
-  latent_dim: ${latent_dim}
-  condition_dim: 13
-  time_emb_dim: 64
-  hidden_dims: [512, 1024, 1024, 512]
-  output_dim: 12
-  use_input_embeddings: false
-  input_emb_dim: 128
 
 adaptive_v2:
   system_name: quadrotor3d

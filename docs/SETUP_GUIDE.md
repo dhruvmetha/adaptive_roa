@@ -129,6 +129,14 @@ CUDA_VISIBLE_DEVICES=0 python scripts/run_adaptive.py system=cartpole_pybullet \
     n_epochs=1 \
     trainer.max_epochs=500 \
     batch_size=1024
+
+# Swap model family (system-specific dimensions are selected automatically)
+CUDA_VISIBLE_DEVICES=0 python scripts/run_adaptive.py system=cartpole_pybullet \
+    model/family=dit
+
+# Print fully resolved composed config (no training)
+python scripts/run_adaptive.py --cfg job --resolve \
+    system=cartpole_pybullet model/family=adaln
 ```
 
 ### Run adaptive sampling (Mountain Car):

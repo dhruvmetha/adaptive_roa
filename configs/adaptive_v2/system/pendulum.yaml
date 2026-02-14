@@ -2,6 +2,8 @@
 
 defaults:
   - _base
+  - /model/family: unet
+  - /model/system_dims: pendulum
   - _self_
 
 name: adaptive_pendulum
@@ -47,17 +49,6 @@ system:
 
 flow_matcher:
   _target_: adaptive_roa.flow_matching.pendulum.latent_conditional.flow_matcher.PendulumLatentConditionalFlowMatcher
-
-model:
-  _target_: adaptive_roa.model.pendulum_unet.PendulumUNet
-  embedded_dim: 3
-  latent_dim: ${latent_dim}
-  condition_dim: 3
-  time_emb_dim: 64
-  hidden_dims: [256, 512, 256]
-  output_dim: 2
-  use_input_embeddings: false
-  input_emb_dim: 64
 
 adaptive_v2:
   system_name: pendulum

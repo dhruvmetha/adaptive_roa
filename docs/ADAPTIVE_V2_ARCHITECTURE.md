@@ -3,6 +3,10 @@
 ## Unified entrypoint
 - Command: `python scripts/run_adaptive.py ...`
 - System selection: `system=<pendulum|cartpole_pybullet|quadrotor2d|quadrotor3d>`
+- Model family selection: `model/family=<unet|simple_mlp|adaln|dit>`
+- Model configs are composed from:
+  - `configs/adaptive_v2/model/family/*.yaml`
+  - `configs/adaptive_v2/model/system_dims/*.yaml`
 
 ## Pipeline components
 - Engine: `adaptive_roa/adaptive_v2/engine.py`

@@ -36,3 +36,12 @@
 ## Canonical invocation
 - Preferred: `python scripts/run_adaptive.py system=<pendulum|cartpole_pybullet|quadrotor2d|quadrotor3d> ...`
 - The script's Hydra config root is `configs/adaptive_v2/`, so `system=quadrotor2d` directly selects the config group.
+
+## Model configuration (clean break)
+- Adaptive v2 no longer uses per-system-per-family model files like `configs/adaptive_v2/model/pendulum_unet.yaml`.
+- Model config is now composed from two groups:
+  - `model/family=<unet|simple_mlp|adaln|dit>`
+  - system-selected `model/system_dims=<system>`
+- Examples:
+  - `python scripts/run_adaptive.py system=pendulum model/family=adaln`
+  - `python scripts/run_adaptive.py system=quadrotor3d model/family=dit`

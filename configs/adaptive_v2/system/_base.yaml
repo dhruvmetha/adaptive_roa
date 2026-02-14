@@ -22,6 +22,7 @@ initial_train_size: 300
 n_epochs: 10
 samples_per_epoch: 100
 warm_start: false
+eval_every: 1
 
 sampling_mode: ranked
 n_ranked_candidates: 1000
@@ -30,7 +31,7 @@ batch_size_sampling: 50
 max_samples_per_epoch: 50000
 
 batch_size: 1024
-val_batch_size: 50000
+val_batch_size: 30000
 num_workers: 4
 latent_dim: 0
 
@@ -41,7 +42,7 @@ conformal:
   alpha_sampling: ${alpha_sampling}
   alpha_eval: 0.1
   num_mc_samples: 10
-  num_mc_samples_eval: 10
+  num_mc_samples_eval: 100
   attractor_radius: 0.2
 
   optimize_mode: delta
@@ -54,6 +55,9 @@ conformal:
   delta_grid_size: 100
   delta_min: 0.05
   delta_max: 0.45
+
+  # p_invalid veto during threshold optimization
+  use_p_invalid_veto: true
 
   # Invalid endpoint refinement
   refine_invalids: false
@@ -83,7 +87,7 @@ trainer:
     - _target_: lightning.pytorch.callbacks.EarlyStopping
       monitor: val_loss
       mode: min
-      patience: 2000
+      patience: 100
       verbose: true
 
 flow_matching:

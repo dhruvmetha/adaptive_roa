@@ -28,6 +28,7 @@ from adaptive_roa.adaptive_v2.strategy.direct import DirectAcquisitionStrategy
 from adaptive_roa.adaptive_v2.strategy.ranked import RankedAcquisitionStrategy
 from adaptive_roa.adaptive_v2.threshold.conformal_threshold import ConformalThresholdBackend
 from adaptive_roa.adaptive_v2.trainers.flow_matching_trainer import FlowMatchingTrainer
+from adaptive_roa.adaptive_v2.filters.confidence_filter import ConfidencePairFilter
 from adaptive_roa.adaptive_v2.types import AcquisitionResult, EpochArtifacts
 from adaptive_roa.conformal import ConformalConfig
 from adaptive_roa.conformal.calibrator import Calibrator
@@ -71,6 +72,8 @@ class AdaptiveEngine:
 
         self.system_name = cfg.adaptive_v2.get("system_name", "pendulum")
         self.smoke_mode = bool(cfg.adaptive_v2.get("smoke_mode", False))
+        self.filter_confident_pairs = bool(cfg.adaptive_v2.get("filter_confident_pairs", False))
+        self.filter_min_pairs = int(cfg.adaptive_v2.get("filter_min_pairs", 100))
         self.save_legacy_results_json = bool(cfg.adaptive_v2.get("save_legacy_results_json", False))
         self.system = hydra.utils.instantiate(cfg.system)
 
@@ -88,6 +91,12 @@ class AdaptiveEngine:
         self.threshold_backend = ConformalThresholdBackend(self.system, cfg, self.device)
         self.evaluator = FullROAEvaluator(self.system, cfg, self.device)
 
+    @staticmethod
+    def _count_file_rows(filepath: str) -> int:
+        """Count non-empty lines in a text file."""
+        with open(filepath) as f:
+            return sum(1 for line in f if line.strip())
+
     def run(self) -> dict[str, Any]:
         pl.seed_everything(self.seed, workers=True)
 
@@ -102,6 +111,8 @@ class AdaptiveEngine:
 
         epoch_results: list[dict[str, Any]] = []
         previous_best_checkpoint: str | None = None
+        # Track unfiltered row count for confidence filter (rows, not trajectories)
+        n_existing_rows = self._count_file_rows(dataset_files["train"])
 
         for epoch in range(n_epochs):
             print("\n" + "=" * 70)
@@ -258,6 +269,30 @@ class AdaptiveEngine:
 
             dataset_files = self.pool.build_all_datasets()
 
+            # n_existing_rows = rows from previous epochs (keep as-is)
+            # After build_all_datasets, file has old rows + new rows in order.
+            # Update n_existing_rows to total unfiltered count for next epoch.
+            n_total_rows = self._count_file_rows(dataset_files["train"])
+
+            filter_diagnostics = None
+            if self.filter_confident_pairs and not self.smoke_mode:
+                _, _, train_labels = self.pool.get_training_data()
+                pair_filter = ConfidencePairFilter(
+                    probability_backend=self.probability_backend,
+                    decision_rule=self.cfg.conformal.get("decision_rule", "two_sided"),
+                    min_pairs_floor=self.filter_min_pairs,
+                )
+                filtered_path, filter_diagnostics = pair_filter.filter_train_file(
+                    train_file=dataset_files["train"],
+                    threshold_state=threshold_state,
+                    labels=train_labels,
+                    n_existing=n_existing_rows,
+                    output_file=str(Path(dataset_files["train"]).parent / "train_filtered.txt"),
+                )
+                dataset_files["train"] = filtered_path
+
+            n_existing_rows = n_total_rows
+
             epoch_result = {
                 "epoch": int(epoch),
                 "train_trajectories": int(train_trajectories_this_epoch),
@@ -280,6 +315,7 @@ class AdaptiveEngine:
                 "test_unknown_rate": test_metrics.get("unknown_rate"),
                 "endpoint_error": endpoint_error,
                 "full_roa": full_roa_metrics,
+                "filter_diagnostics": _convert_numpy(filter_diagnostics.__dict__) if filter_diagnostics else None,
             }
             epoch_results.append(epoch_result)
 

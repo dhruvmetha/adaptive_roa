@@ -18,6 +18,10 @@ quat_loss_weight: 1.0
 val_ratio: 0.1
 test_ratio: 0.1
 
+adaptive_v2:
+  filter_confident_pairs: true
+  filter_min_pairs: 100
+
 initial_train_size: 300
 n_epochs: 10
 samples_per_epoch: 100

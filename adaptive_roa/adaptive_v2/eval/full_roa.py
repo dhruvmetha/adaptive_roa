@@ -279,13 +279,100 @@ def _predict_qhat_prediction_sets(
     in_set_failure = score_failure <= q_hat
     in_set_unknown = score_unknown <= q_hat
 
-    pred = np.full(n, -1, dtype=np.int8)
-    invalid_mask = (p_invalid >= effective_invalid_threshold) | in_set_unknown
+    pred = np.full(n, -1, dtype=np.int8)  # default: uncertain
+    invalid_mask = p_invalid >= effective_invalid_threshold
+    pred[invalid_mask] = -2  # truly invalid (high p_invalid)
+
+    non_invalid = ~invalid_mask
+    success_only = in_set_success & ~in_set_failure & ~in_set_unknown & non_invalid
+    failure_only = ~in_set_success & in_set_failure & ~in_set_unknown & non_invalid
+    pred[success_only] = 1
+    pred[failure_only] = 0
+    # Everything else (including in_set_unknown, both in set, etc.) stays uncertain (-1)
+
+    set_sizes = in_set_success.astype(int) + in_set_failure.astype(int) + in_set_unknown.astype(int)
+
+    true_in_set = np.zeros(n, dtype=bool)
+    true_in_set[y_true == 1] = in_set_success[y_true == 1]
+    true_in_set[y_true == -1] = in_set_failure[y_true == -1]
+    true_in_set[y_true == 0] = in_set_unknown[y_true == 0]
+
+    extras = {
+        "q_hat": float(q_hat),
+        "invalid_threshold": effective_invalid_threshold,
+        "coverage": float(np.mean(true_in_set)),
+        "avg_set_size": float(np.mean(set_sizes[non_invalid])) if np.any(non_invalid) else 0.0,
+        "n_pred_success": int(np.sum(pred == 1)),
+        "n_pred_failure": int(np.sum(pred == 0)),
+    }
+    return pred, extras
+
+
+def _predict_qhat_multi_class(
+    p_success: np.ndarray,
+    p_failure: np.ndarray,
+    p_invalid: np.ndarray,
+    y_true: np.ndarray,
+    lambda_star: float,
+    delta: float,
+    q_hat_success: float,
+    q_hat_failure: float,
+    decision_rule: str,
+    invalid_threshold: float | None,
+    unknown_mode: str,
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """Prediction using per-class q_hat values with configurable unknown handling.
+
+    Args:
+        unknown_mode: One of "min", "max", "skip".
+            - "min": unknown in set if score_unknown <= min(q_hat_success, q_hat_failure)
+            - "max": unknown in set if score_unknown <= max(q_hat_success, q_hat_failure)
+            - "skip": unknown never in set
+    """
+    n = len(p_success)
+    effective_invalid_threshold = float((lambda_star - delta) if invalid_threshold is None else invalid_threshold)
+
+    if decision_rule == "two_sided":
+        score_success = nonconformity_scores_batch_two_sided(
+            p_success, p_failure, np.ones(n, dtype=int), lambda_star, delta
+        )
+        score_failure = nonconformity_scores_batch_two_sided(
+            p_success, p_failure, -np.ones(n, dtype=int), lambda_star, delta
+        )
+        score_unknown = nonconformity_scores_batch_two_sided(
+            p_success, p_failure, np.zeros(n, dtype=int), lambda_star, delta
+        )
+    else:
+        score_success = nonconformity_scores_batch_one_sided(
+            p_success, np.ones(n, dtype=int), lambda_star, delta
+        )
+        score_failure = nonconformity_scores_batch_one_sided(
+            p_success, -np.ones(n, dtype=int), lambda_star, delta
+        )
+        score_unknown = nonconformity_scores_batch_one_sided(
+            p_success, np.zeros(n, dtype=int), lambda_star, delta
+        )
+
+    in_set_success = score_success <= q_hat_success
+    in_set_failure = score_failure <= q_hat_failure
+
+    if unknown_mode == "min":
+        q_hat_unknown = min(q_hat_success, q_hat_failure)
+        in_set_unknown = score_unknown <= q_hat_unknown
+    elif unknown_mode == "max":
+        q_hat_unknown = max(q_hat_success, q_hat_failure)
+        in_set_unknown = score_unknown <= q_hat_unknown
+    else:  # "skip"
+        q_hat_unknown = None
+        in_set_unknown = np.zeros(n, dtype=bool)
+
+    pred = np.full(n, -1, dtype=np.int8)  # default: uncertain
+    invalid_mask = p_invalid >= effective_invalid_threshold
     pred[invalid_mask] = -2
 
     non_invalid = ~invalid_mask
-    success_only = in_set_success & ~in_set_failure & non_invalid
-    failure_only = ~in_set_success & in_set_failure & non_invalid
+    success_only = in_set_success & ~in_set_failure & ~in_set_unknown & non_invalid
+    failure_only = ~in_set_success & in_set_failure & ~in_set_unknown & non_invalid
     pred[success_only] = 1
     pred[failure_only] = 0
 
@@ -297,7 +384,10 @@ def _predict_qhat_prediction_sets(
     true_in_set[y_true == 0] = in_set_unknown[y_true == 0]
 
     extras = {
-        "q_hat": float(q_hat),
+        "q_hat_success": float(q_hat_success),
+        "q_hat_failure": float(q_hat_failure),
+        "q_hat_unknown": float(q_hat_unknown) if q_hat_unknown is not None else None,
+        "unknown_mode": unknown_mode,
         "invalid_threshold": effective_invalid_threshold,
         "coverage": float(np.mean(true_in_set)),
         "avg_set_size": float(np.mean(set_sizes[non_invalid])) if np.any(non_invalid) else 0.0,
@@ -357,6 +447,8 @@ def evaluate_full_roa_fast(
     lambda_star: float | None = None,
     delta: float = 0.05,
     q_hat: float | None = None,
+    q_hat_success: float | None = None,
+    q_hat_failure: float | None = None,
     attractor_radius: float = 0.2,
     device: str = "cuda",
     output_dir: str | None = None,
@@ -520,6 +612,27 @@ def evaluate_full_roa_fast(
         pred_qhat = None
         metrics_qhat = None
 
+    # Multi-class conformal prediction (per-class q_hat)
+    metrics_mc = {}
+    pred_mc_all = {}
+    if q_hat_success is not None and q_hat_failure is not None:
+        for unknown_mode in ("min", "max", "skip"):
+            pred_mc, mc_extras = _predict_qhat_multi_class(
+                p_success, p_failure, p_invalid, y_all,
+                lambda_star=float(lambda_star),
+                delta=float(delta),
+                q_hat_success=float(q_hat_success),
+                q_hat_failure=float(q_hat_failure),
+                decision_rule=effective_rule,
+                invalid_threshold=invalid_threshold,
+                unknown_mode=unknown_mode,
+            )
+            mc_metrics = _classification_metrics_from_predictions(pred_mc, y_all)
+            mc_metrics.update(mc_extras)
+            key = f"qhat_multi_class_{unknown_mode}"
+            metrics_mc[key] = mc_metrics
+            pred_mc_all[key] = pred_mc
+
     if verbose:
         mc_p_inv_mean = float(np.mean(p_invalid))
         mc_p_inv_median = float(np.median(p_invalid))
@@ -535,6 +648,12 @@ def evaluate_full_roa_fast(
                   f"acc={metrics_qhat['accuracy']:.4f}  "
                   f"coverage={metrics_qhat.get('coverage', 0):.4f}  "
                   f"avg_set={metrics_qhat.get('avg_set_size', 0):.2f}")
+        for mc_key, mc_m in metrics_mc.items():
+            mode_label = mc_key.replace("qhat_multi_class_", "mc_")
+            print(f"  [Full ROA] {mode_label:10s}:  F1={mc_m['f1']:.4f}  "
+                  f"acc={mc_m['accuracy']:.4f}  "
+                  f"coverage={mc_m.get('coverage', 0):.4f}  "
+                  f"avg_set={mc_m.get('avg_set_size', 0):.2f}")
 
     mask_invalid = pred_conformal == -2
     mask_uncertain = pred_conformal == -1
@@ -584,6 +703,34 @@ def evaluate_full_roa_fast(
         error_stats_qhat = None
         mc_sample_qhat = None
 
+    # Compute error stats for multi-class regions
+    mc_error_stats = {}
+    mc_mc_sample_stats = {}
+    for mc_key, pred_mc in pred_mc_all.items():
+        mc_mask_invalid = pred_mc == -2
+        mc_mask_uncertain = pred_mc == -1
+        mc_mask_certain_success = pred_mc == 1
+        mc_mask_certain_failure = pred_mc == 0
+        mc_mask_certain = mc_mask_certain_success | mc_mask_certain_failure
+
+        mc_error_stats[mc_key] = {
+            "component_names": component_names,
+            "full": error_stats_full,
+            "certain": _compute_geodesic_error_stats(geodesic_errors, mc_mask_certain),
+            "certain_success": _compute_geodesic_error_stats(geodesic_errors, mc_mask_certain_success),
+            "certain_failure": _compute_geodesic_error_stats(geodesic_errors, mc_mask_certain_failure),
+            "uncertain": _compute_geodesic_error_stats(geodesic_errors, mc_mask_uncertain),
+            "invalid": _compute_geodesic_error_stats(geodesic_errors, mc_mask_invalid),
+        }
+        mc_mc_sample_stats[mc_key] = {
+            "full": mc_sample_full,
+            "certain": _compute_mc_sample_error_stats(mc_errors, mc_mask_certain),
+            "certain_success": _compute_mc_sample_error_stats(mc_errors, mc_mask_certain_success),
+            "certain_failure": _compute_mc_sample_error_stats(mc_errors, mc_mask_certain_failure),
+            "uncertain": _compute_mc_sample_error_stats(mc_errors, mc_mask_uncertain),
+            "invalid": _compute_mc_sample_error_stats(mc_errors, mc_mask_invalid),
+        }
+
     metrics = {
         "_doc": "Full ROA evaluation on held-out test set using MC sampling",
         "n_total": int(n_total),
@@ -591,6 +738,8 @@ def evaluate_full_roa_fast(
         "lambda_star": float(lambda_star),
         "delta": float(delta),
         "q_hat": float(q_hat) if q_hat is not None else None,
+        "q_hat_success": float(q_hat_success) if q_hat_success is not None else None,
+        "q_hat_failure": float(q_hat_failure) if q_hat_failure is not None else None,
         "lambda_delta": {
             "_doc": "Classification using conformal lambda +/- delta band: success if p>lambda+delta, failure if p<lambda-delta, uncertain otherwise",
             **metrics_conformal,
@@ -629,6 +778,17 @@ def evaluate_full_roa_fast(
         "endpoint_errors_qhat_regions": error_stats_qhat,
         "mc_sample_errors_qhat_regions": mc_sample_qhat,
     }
+
+    # Add multi-class metrics and error stats
+    for mc_key, mc_m in metrics_mc.items():
+        metrics[mc_key] = {
+            "_doc": f"Per-class conformal prediction sets ({mc_key.split('_')[-1]} unknown mode)",
+            **mc_m,
+        }
+    for mc_key in mc_error_stats:
+        metrics[f"endpoint_errors_{mc_key}_regions"] = mc_error_stats[mc_key]
+        metrics[f"mc_sample_errors_{mc_key}_regions"] = mc_mc_sample_stats[mc_key]
+
     if error_stats_qhat is not None:
         error_stats_qhat["_doc"] = "Same geodesic errors as endpoint_errors, but partitioned by qhat_prediction_sets regions instead"
     if mc_sample_qhat is not None:
@@ -702,6 +862,8 @@ class FullROAEvaluator:
             lambda_star=threshold_state.lambda_star,
             delta=threshold_state.delta_star,
             q_hat=threshold_state.q_hat_eval,
+            q_hat_success=threshold_state.q_hat_success_eval,
+            q_hat_failure=threshold_state.q_hat_failure_eval,
             attractor_radius=epoch_context.get(
                 "attractor_radius",
                 self.cfg.conformal.get("attractor_radius", resolve_system_hook(self.system).attractor_radius_default),

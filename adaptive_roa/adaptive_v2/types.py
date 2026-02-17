@@ -25,6 +25,8 @@ class ThresholdState:
     delta_star: float
     q_hat: float | None = None
     q_hat_eval: float | None = None
+    q_hat_success_eval: float | None = None
+    q_hat_failure_eval: float | None = None
 
 
 @dataclass

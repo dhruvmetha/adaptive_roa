@@ -174,11 +174,12 @@ def recompute_qhat(
     refine_num_steps: int = 100,
     refine_max_attempts: int = 5,
 ) -> tuple:
-    """Recompute q_hat using alpha_eval on calibration set.
+    """Recompute q_hat (global and per-class) using alpha_eval on calibration set.
 
     Returns:
-        Tuple of (q_hat, n_cal_total, n_cal_used).  q_hat is None if no
-        valid calibration points remain after filtering.
+        Tuple of (q_hat, q_hat_success, q_hat_failure, n_cal_total, n_cal_used).
+        q_hat is None if no valid calibration points remain after filtering.
+        q_hat_success/q_hat_failure are None if no cal points exist for that class.
     """
     X_cal, _, y_cal = load_eval_states(cal_set_file)
     n_cal_total = len(X_cal)
@@ -227,7 +228,7 @@ def recompute_qhat(
 
     if n_cal_used == 0:
         print("    WARNING: No valid calibration points after filtering!")
-        return None, n_cal_total, 0
+        return None, None, None, n_cal_total, 0
 
     cal_config = ConformalConfig(
         delta=delta,
@@ -245,7 +246,17 @@ def recompute_qhat(
         verbose=False,
     )
 
-    return q_hat, n_cal_total, n_cal_used
+    # Compute per-class q_hat values
+    q_hat_success, q_hat_failure, _mc_info = calibrator.calibrate_per_class(
+        p_success,
+        y_cal,
+        lambda_star,
+        delta,
+        p_failure=p_failure,
+        verbose=False,
+    )
+
+    return q_hat, q_hat_success, q_hat_failure, n_cal_total, n_cal_used
 
 
 # ── Results saving ────────────────────────────────────────────────────────────
@@ -253,6 +264,8 @@ def recompute_qhat(
 def save_epoch_results(
     output_dir: Path, epoch_num: int, metrics: dict,
     lambda_star: float, delta: float, q_hat: float,
+    q_hat_success: float | None = None,
+    q_hat_failure: float | None = None,
 ) -> Path:
     """Save re-evaluation results for an epoch."""
     epoch_dir = output_dir / f"epoch_{epoch_num:03d}"
@@ -264,6 +277,8 @@ def save_epoch_results(
             "lambda_star": lambda_star,
             "delta_star": delta,
             "q_hat_eval": q_hat,
+            "q_hat_success_eval": q_hat_success,
+            "q_hat_failure_eval": q_hat_failure,
         },
         "eval_metrics": metrics,
         "extra": {
@@ -515,7 +530,7 @@ def main():
             conformal_threshold = lambda_star - delta if filter_invalid_by_conformal else None
 
             print(f"  Recomputing q_hat (alpha_eval={alpha_eval})...")
-            q_hat, n_cal_total, n_cal_used = recompute_qhat(
+            q_hat, q_hat_success, q_hat_failure, n_cal_total, n_cal_used = recompute_qhat(
                 flow_matcher, system, cal_set_file,
                 lambda_star, delta, alpha_eval, num_mc_samples,
                 attractor_radius, decision_rule, args.device,
@@ -542,6 +557,11 @@ def main():
             else:
                 print(f"    q_hat: {q_hat:.4f} (from {n_cal_used} calibration points)")
 
+            if q_hat_success is not None and q_hat_failure is not None:
+                print(f"    q_hat_success: {q_hat_success:.4f}, q_hat_failure: {q_hat_failure:.4f}")
+            else:
+                print(f"    q_hat per-class: skipped (success={q_hat_success}, failure={q_hat_failure})")
+
             # 4. Run full ROA evaluation
             print("  Running full ROA evaluation...")
             metrics = evaluate_full_roa_fast(
@@ -551,6 +571,8 @@ def main():
                 lambda_star=lambda_star,
                 delta=delta,
                 q_hat=q_hat,
+                q_hat_success=q_hat_success,
+                q_hat_failure=q_hat_failure,
                 attractor_radius=attractor_radius,
                 device=args.device,
                 output_dir=None,
@@ -565,6 +587,8 @@ def main():
             # 5. Save results
             epoch_output_dir = save_epoch_results(
                 output_dir, epoch_num, metrics, lambda_star, delta, q_hat,
+                q_hat_success=q_hat_success,
+                q_hat_failure=q_hat_failure,
             )
             print(f"  Results saved to: {epoch_output_dir}")
 
@@ -574,11 +598,21 @@ def main():
                   f"Acc={qhat_m.get('accuracy', 0):.2%}, "
                   f"Sep%={qhat_m.get('invalid_pct', 0):.1%}, "
                   f"Coverage={qhat_m.get('coverage', 0):.2%}")
+            for mode in ("min", "max", "skip"):
+                mc_key = f"qhat_multi_class_{mode}"
+                mc_m = metrics.get(mc_key)
+                if mc_m:
+                    print(f"  [mc_{mode:4s} conformal] F1={mc_m.get('f1', 0):.2%}, "
+                          f"Acc={mc_m.get('accuracy', 0):.2%}, "
+                          f"Sep%={mc_m.get('invalid_pct', 0):.1%}, "
+                          f"Coverage={mc_m.get('coverage', 0):.2%}")
 
             per_epoch_info[f"epoch_{epoch_num:03d}"] = {
                 "lambda_star": lambda_star,
                 "delta_star": delta,
                 "q_hat_recomputed": q_hat,
+                "q_hat_success": q_hat_success,
+                "q_hat_failure": q_hat_failure,
                 "n_cal_total": n_cal_total,
                 "n_cal_used": n_cal_used,
                 "conformal_threshold": conformal_threshold,

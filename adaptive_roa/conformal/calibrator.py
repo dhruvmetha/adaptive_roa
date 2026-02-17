@@ -336,6 +336,85 @@ class Calibrator:
 
         return q_hat
 
+    def calibrate_per_class(
+        self,
+        p_success: np.ndarray,
+        y_true: np.ndarray,
+        lambda_star: float,
+        delta: float = None,
+        p_failure: Optional[np.ndarray] = None,
+        verbose: bool = True,
+    ) -> tuple:
+        """
+        Compute per-class calibration thresholds q_hat_success and q_hat_failure.
+
+        Splits the calibration set by true label and computes separate q_hat
+        values for each class, providing tighter coverage per class.
+
+        Args:
+            p_success: [N] array of estimated p(success|x) for calibration set
+            y_true: [N] array of TRUE labels for calibration set
+            lambda_star: Optimal decision boundary
+            delta: Uncertainty half-width (uses config.delta if None)
+            p_failure: [N] array of estimated p(failure|x), required for two_sided
+            verbose: Print debug information
+
+        Returns:
+            Tuple of (q_hat_success, q_hat_failure, info_dict).
+            q_hat_success/q_hat_failure are None if no calibration points exist
+            for that class.
+        """
+        alpha = self.config.alpha
+        if delta is None:
+            delta = self.config.delta
+
+        success_mask = y_true == 1
+        failure_mask = y_true == -1
+        n_success = int(np.sum(success_mask))
+        n_failure = int(np.sum(failure_mask))
+
+        q_hat_success = None
+        q_hat_failure = None
+
+        if n_success > 0:
+            scores_success = self.non_conformity_scores_batch(
+                p_success[success_mask],
+                y_true[success_mask],
+                lambda_star,
+                delta,
+                p_failure[success_mask] if p_failure is not None else None,
+            )
+            quantile_level_s = min((1 - alpha) * (n_success + 1) / n_success, 1.0)
+            q_hat_success = float(np.quantile(scores_success, quantile_level_s))
+
+        if n_failure > 0:
+            scores_failure = self.non_conformity_scores_batch(
+                p_success[failure_mask],
+                y_true[failure_mask],
+                lambda_star,
+                delta,
+                p_failure[failure_mask] if p_failure is not None else None,
+            )
+            quantile_level_f = min((1 - alpha) * (n_failure + 1) / n_failure, 1.0)
+            q_hat_failure = float(np.quantile(scores_failure, quantile_level_f))
+
+        info = {
+            "n_success_cal": n_success,
+            "n_failure_cal": n_failure,
+            "q_hat_success": q_hat_success,
+            "q_hat_failure": q_hat_failure,
+            "alpha": alpha,
+        }
+
+        if verbose:
+            print(f"\n    [per-class q_hat calibration]")
+            print(f"    Decision rule: {self.decision_rule}")
+            print(f"    Success cal points: {n_success}, Failure cal points: {n_failure}")
+            print(f"    q_hat_success: {q_hat_success:.4f}" if q_hat_success is not None else "    q_hat_success: None (no success cal points)")
+            print(f"    q_hat_failure: {q_hat_failure:.4f}" if q_hat_failure is not None else "    q_hat_failure: None (no failure cal points)")
+
+        return q_hat_success, q_hat_failure, info
+
     def get_prediction_set(
         self,
         p_success: float,

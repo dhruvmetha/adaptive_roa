@@ -57,6 +57,9 @@ class TrajectoryPool:
     def get_training_data(self):
         return self.dataset_builder.get_training_data()
 
+    def get_val_labels(self):
+        return self.dataset_builder.get_val_labels()
+
     def get_test_labels(self):
         return self.dataset_builder.get_test_labels()
 

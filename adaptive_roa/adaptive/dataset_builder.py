@@ -87,7 +87,7 @@ class AdaptiveDatasetBuilder:
         self.max_train_idx = self.data_source.n_trajectories
 
         print(f"Total trajectories available: {self.max_train_idx}")
-        print(f"Val/test will be {val_ratio:.0%}/{test_ratio:.0%} of training set (with overlap)")
+        print(f"Val will be {val_ratio:.0%} of training set (no overlap — FM trains on remaining {1-val_ratio:.0%})")
 
     def add_to_training(self, indices: List[int]):
         """
@@ -214,7 +214,10 @@ class AdaptiveDatasetBuilder:
 
     def build_train_dataset(self, filename: str = "train_endpoint_dataset.txt") -> str:
         """
-        Build training endpoint dataset file.
+        Build training endpoint dataset file (excludes val indices).
+
+        The first ``n_val`` indices of ``train_split`` are reserved for
+        validation, so FM gradient updates only use the remaining portion.
 
         Args:
             filename: Output filename
@@ -224,17 +227,21 @@ class AdaptiveDatasetBuilder:
         """
         output_path = self.output_dir / filename
 
+        train_indices = list(self.train_split)
+        n_val = max(1, int(len(train_indices) * self.val_ratio))
+        train_only = train_indices[n_val:]  # Exclude first n_val (val portion)
+
         n_pairs = self.data_source.save_endpoint_dataset(
-            list(self.train_split),
+            train_only,
             str(output_path),
             mode="train"
         )
 
-        print(f"Built training dataset: {n_pairs} pairs from {len(self.train_split)} trajectories")
+        print(f"Built training dataset: {n_pairs} pairs from {len(train_only)} trajectories (excl. {n_val} val)")
         return str(output_path)
 
     def build_val_dataset(self, filename: str = "val_endpoint_dataset.txt") -> str:
-        """Build validation endpoint dataset file (subset of training with overlap)."""
+        """Build validation endpoint dataset file (no overlap with train)."""
         output_path = self.output_dir / filename
 
         # Take val_ratio of training indices
@@ -271,7 +278,7 @@ class AdaptiveDatasetBuilder:
 
     def build_all_datasets(self) -> Dict[str, str]:
         """
-        Build all dataset files (train, val, test).
+        Build all dataset files (train, val).
 
         Returns:
             Dict mapping split name to file path
@@ -279,20 +286,54 @@ class AdaptiveDatasetBuilder:
         return {
             'train': self.build_train_dataset(),
             'val': self.build_val_dataset(),
-            'test': self.build_test_dataset(),
         }
 
     def get_training_data(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Get training data as numpy arrays (for conformal prediction).
+        Get train-only data as numpy arrays (excludes val portion).
+
+        Returns the same indices used by build_train_dataset(), ensuring
+        alignment between the train file and returned arrays.
 
         Returns:
             Tuple of (start_states, end_states, labels)
         """
-        return self.data_source.build_endpoint_dataset(
-            list(self.train_split),
-            mode="train"
-        )
+        train_indices = list(self.train_split)
+        n_val = max(1, int(len(train_indices) * self.val_ratio))
+        train_only = train_indices[n_val:]
+        return self.data_source.build_endpoint_dataset(train_only, mode="train")
+
+    def get_val_data(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Get validation endpoint data as numpy arrays.
+
+        Returns the val portion (first ``n_val`` indices of ``train_split``),
+        which the FM never trains on.
+
+        Returns:
+            Tuple of (start_states, end_states, labels)
+        """
+        train_indices = list(self.train_split)
+        n_val = max(1, int(len(train_indices) * self.val_ratio))
+        val_indices = train_indices[:n_val]
+        return self.data_source.build_endpoint_dataset(val_indices, mode="train")
+
+    def get_val_labels(self) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Get validation start states and labels (for threshold optimization).
+
+        Returns the val portion (first ``n_val`` indices of ``train_split``),
+        which the FM never trains on — one entry per trajectory.
+
+        Returns:
+            Tuple of (start_states [N_val, dim], labels [N_val])
+        """
+        train_indices = list(self.train_split)
+        n_val = max(1, int(len(train_indices) * self.val_ratio))
+        val_indices = train_indices[:n_val]
+        starts = self.data_source.get_start_states(val_indices)
+        labels = self.data_source.get_labels(val_indices)
+        return starts, labels
 
     def get_test_data(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
@@ -313,15 +354,20 @@ class AdaptiveDatasetBuilder:
 
     def get_train_labels(self) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Get training start states and labels (for conformal prediction).
+        Get train-only start states and labels (excludes val portion).
+
+        Returns the same indices used by build_train_dataset(), ensuring
+        alignment between the train file and returned labels.
 
         Returns:
             Tuple of (start_states [N_traj, dim], labels [N_traj])
             Note: One per trajectory, not expanded
         """
-        indices = list(self.train_split)
-        starts = self.data_source.get_start_states(indices)
-        labels = self.data_source.get_labels(indices)
+        train_indices = list(self.train_split)
+        n_val = max(1, int(len(train_indices) * self.val_ratio))
+        train_only = train_indices[n_val:]
+        starts = self.data_source.get_start_states(train_only)
+        labels = self.data_source.get_labels(train_only)
         return starts, labels
 
     def get_test_labels(self) -> Tuple[np.ndarray, np.ndarray]:

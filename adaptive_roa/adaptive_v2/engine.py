@@ -18,7 +18,7 @@ from omegaconf import DictConfig, OmegaConf
 from adaptive_roa.adaptive.data_source import load_eval_states
 from adaptive_roa.adaptive.endpoint_evaluation import (
     compute_endpoint_prediction_error,
-    sample_endpoint_data_for_optimization,
+    sample_val_data_for_optimization,
 )
 from adaptive_roa.adaptive_v2.eval.full_roa import FullROAEvaluator
 from adaptive_roa.adaptive_v2.pool.trajectory_pool import TrajectoryPool
@@ -99,6 +99,9 @@ class AdaptiveEngine:
 
     def run(self) -> dict[str, Any]:
         pl.seed_everything(self.seed, workers=True)
+        import torch
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
         dataset_files = self.pool.initialize(int(self.cfg.get("initial_train_size", 100)))
 
@@ -150,10 +153,10 @@ class AdaptiveEngine:
             )
             need_d2_acquisition = n_d2_target > 0 and not skip_ranked_for_eval_off
 
-            X_train, y_train = sample_endpoint_data_for_optimization(
+            X_val, y_val = sample_val_data_for_optimization(
                 self.pool.dataset_builder,
             )
-            threshold_state = self.threshold_backend.optimize(X_train, y_train)
+            threshold_state = self.threshold_backend.optimize(X_val, y_val)
 
             if self.smoke_mode or not run_eval:
                 endpoint_error = {"skipped": True}
@@ -180,7 +183,7 @@ class AdaptiveEngine:
                 d1_labels = self.pool.get_labels(d1_indices)
                 q_hat = self.threshold_backend.calibrate_qhat(d1_states, d1_labels, threshold_state)
                 threshold_state.q_hat = q_hat
-                X_test, y_test = self.pool.get_test_labels()
+                X_test, y_test = self.pool.get_val_labels()
                 predictor = self.threshold_backend.predictor
                 if predictor is None:
                     raise RuntimeError("Threshold backend predictor missing after bind_model")

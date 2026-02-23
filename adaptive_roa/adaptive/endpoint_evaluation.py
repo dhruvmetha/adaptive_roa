@@ -43,6 +43,33 @@ def sample_endpoint_data_for_optimization(
     return start_states, labels
 
 
+def sample_val_data_for_optimization(
+    dataset_builder,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Get val-only endpoint data for lambda/delta optimization.
+
+    Uses the val portion of the dataset (FM never trained on this data),
+    ensuring threshold optimization is not biased by FM overfitting.
+
+    Args:
+        dataset_builder: AdaptiveDatasetBuilder with training data
+
+    Returns:
+        Tuple of (X [N, state_dim], y [N])
+        where X are start states and y are labels
+    """
+    start_states, end_states, labels = dataset_builder.get_val_data()
+
+    n_total = len(labels)
+    n_success = int(np.sum(labels == 1))
+    n_failure = int(np.sum(labels == -1))
+    print(f"    Val endpoint dataset: {n_total} total pairs")
+    print(f"    Labels: {n_success} success, {n_failure} failure")
+
+    return start_states, labels
+
+
 @torch.no_grad()
 def compute_endpoint_prediction_error(
     flow_matcher,

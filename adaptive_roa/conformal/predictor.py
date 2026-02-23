@@ -75,63 +75,102 @@ class ConformalPredictor:
 
     def optimize_thresholds(
         self,
-        X_train: Union[torch.Tensor, np.ndarray],
-        y_train: Union[torch.Tensor, np.ndarray],
+        X_val: Union[torch.Tensor, np.ndarray],
+        y_val: Union[torch.Tensor, np.ndarray],
         verbose: bool = True
     ) -> Tuple[float, float, Dict]:
         """
-        Optimize λ* and δ* on training data. NO q_hat calibration.
+        Optimize λ* and δ* on held-out val data. NO q_hat calibration.
 
-        This is the first step of the new two-phase fitting:
-        1. optimize_thresholds() - find optimal λ*/δ* on training data
-        2. calibrate_qhat() - calibrate q_hat on separate calibration data (e.g., D1)
+        The caller is responsible for passing val-only data (data the FM
+        never trained on). No internal split is performed here.
+
+        When ``config.optimize_objective == "f1"``, the optimization maximizes F1
+        subject to a minimum separatrix% using
+        ``optimize_lambda_delta_for_f1_targets`` (joint λ+δ search).
+
+        When ``config.optimize_objective == "loss"`` (default), the existing
+        w-weighted loss grid search runs on the val data.
 
         Args:
-            X_train: [N_train, state_dim] training states
-            y_train: [N_train] training labels (-1 or 1)
+            X_val: [N, state_dim] val states for threshold optimization
+            y_val: [N] labels (-1 or 1)
             verbose: Print optimization progress
 
         Returns:
             Tuple of (lambda_star, delta_star, optimization_info)
         """
         # Convert to numpy if needed
-        if isinstance(y_train, torch.Tensor):
-            y_train = y_train.cpu().numpy()
+        if isinstance(y_val, torch.Tensor):
+            y_val = y_val.cpu().numpy()
 
         optimize_mode = self.config.optimize_mode
         decision_rule = self.config.decision_rule
+        optimize_objective = self.config.optimize_objective
 
         if verbose:
+            obj_label = "F1-based" if optimize_objective == "f1" else "loss-based"
             print("=" * 60)
-            print("OPTIMIZING THRESHOLDS (λ*/δ*)")
+            print(f"OPTIMIZING THRESHOLDS ({obj_label})")
             print("=" * 60)
-            print(f"Training set: {len(y_train)} points")
+            n_pos = int(np.sum(y_val == 1))
+            n_neg = int(np.sum(y_val == -1))
+            print(f"Val data: {len(y_val)} points (pos={n_pos}, neg={n_neg})")
             print(f"Optimization mode: {optimize_mode}")
             print(f"Decision rule: {decision_rule}")
+            print(f"Objective: {optimize_objective}")
 
-        # Step 1: Estimate probabilities for training set
+        # Step 1: Estimate probabilities for val data (one MC pass)
         if verbose:
-            print(f"\n[1/2] Estimating probabilities for training set ({self.config.num_mc_samples} MC samples)...")
-        p_train_success, p_train_failure, p_train_invalid = self.prob_estimator.estimate(X_train)
+            print(f"\n[1/2] Estimating probabilities for val data ({self.config.num_mc_samples} MC samples)...")
+        p_success, p_failure, p_invalid = self.prob_estimator.estimate(X_val)
 
-        # Step 2: Optimize λ* or δ* depending on mode
-        p_failure_for_opt = p_train_failure if decision_rule == "two_sided" else None
+        # Step 2: Dispatch based on optimize_objective
+        if optimize_objective == "f1":
+            opt_info = self._optimize_f1(
+                p_success, p_failure, p_invalid, y_val, verbose
+            )
+        else:
+            opt_info = self._optimize_loss(
+                p_success, p_failure, p_invalid, y_val, verbose
+            )
+
+        if verbose:
+            print("=" * 60)
+            print("THRESHOLD OPTIMIZATION COMPLETE (q_hat NOT yet calibrated)")
+            print("=" * 60)
+
+        return self.lambda_star, self.delta_star, opt_info
+
+    def _optimize_loss(
+        self,
+        p_success_val: np.ndarray,
+        p_failure_val: np.ndarray,
+        p_invalid_val: np.ndarray,
+        y_val: np.ndarray,
+        verbose: bool,
+    ) -> Dict:
+        """Run the existing w-weighted loss grid search on the val split."""
+        optimize_mode = self.config.optimize_mode
+        decision_rule = self.config.decision_rule
+
+        p_failure_for_opt = p_failure_val if decision_rule == "two_sided" else None
 
         if optimize_mode == "delta":
             if verbose:
-                print(f"[2/2] Optimizing δ* via grid search with fixed λ=0.5 ({self.config.delta_grid_size} points)...")
+                print(f"[3/3] Optimizing δ* via grid search with fixed λ=0.5 ({self.config.delta_grid_size} points)...")
         elif optimize_mode == "joint":
             if verbose:
-                print(f"[2/2] Optimizing λ* and δ* jointly via 2D grid search "
+                print(f"[3/3] Optimizing λ* and δ* jointly via 2D grid search "
                       f"({self.config.lambda_grid_size}×{self.config.delta_grid_size} grid)...")
         else:
             if verbose:
-                print(f"[2/2] Optimizing λ* via grid search with fixed δ={self.config.delta} ({self.config.lambda_grid_size} points)...")
+                print(f"[3/3] Optimizing λ* via grid search with fixed δ={self.config.delta} ({self.config.lambda_grid_size} points)...")
 
-        p_invalid_for_opt = p_train_invalid if self.config.use_p_invalid_veto else None
+        p_invalid_for_opt = p_invalid_val if self.config.use_p_invalid_veto else None
 
         self.lambda_star, self.delta_star, opt_info = self.lambda_optimizer.optimize(
-            p_train_success, y_train, p_failure=p_failure_for_opt, p_invalid=p_invalid_for_opt
+            p_success_val, y_val, p_failure=p_failure_for_opt, p_invalid=p_invalid_for_opt
         )
 
         if verbose:
@@ -142,11 +181,71 @@ class ConformalPredictor:
             print(f"      → Best loss = {opt_info['best_loss']:.4f}")
             print(f"      → Misclass rate = {opt_info['best_misclass_rate']:.2%}")
             print(f"      → Unknown rate = {opt_info['best_unknown_rate']:.2%}")
-            print("=" * 60)
-            print("THRESHOLD OPTIMIZATION COMPLETE (q_hat NOT yet calibrated)")
-            print("=" * 60)
 
-        return self.lambda_star, self.delta_star, opt_info
+        return opt_info
+
+    def _optimize_f1(
+        self,
+        p_success_val: np.ndarray,
+        p_failure_val: np.ndarray,
+        p_invalid_val: np.ndarray,
+        y_val: np.ndarray,
+        verbose: bool,
+    ) -> Dict:
+        """Run F1-based joint λ+δ optimization on the val split."""
+        # Lazy import to avoid circular dependency:
+        # conformal.predictor → adaptive_v2.eval.full_roa → adaptive_v2.__init__
+        # → engine → conformal_threshold → conformal.__init__ → conformal.predictor
+        from adaptive_roa.adaptive_v2.eval.full_roa import optimize_lambda_delta_for_f1_targets
+
+        target_f1 = self.config.target_f1
+
+        if verbose:
+            print(f"[3/3] Optimizing λ* and δ* for F1 ≥ {target_f1:.2f} "
+                  f"({self.config.lambda_grid_size}×{self.config.delta_grid_size} grid)...")
+
+        results = optimize_lambda_delta_for_f1_targets(
+            p_success=p_success_val,
+            p_failure=p_failure_val,
+            p_invalid=p_invalid_val,
+            y_true=y_val,
+            target_f1s=[target_f1],
+            decision_rule=self.config.decision_rule,
+            lambda_range=(self.config.delta_min, 1 - self.config.delta_min),
+            delta_range=(self.config.delta_min, self.config.delta_max),
+            n_lambda_steps=self.config.lambda_grid_size,
+            n_delta_steps=self.config.delta_grid_size,
+        )
+
+        key = f"{target_f1:.2f}"
+        best = results[key]
+
+        self.lambda_star = best["lambda_star"]
+        self.delta_star = best["delta"]
+
+        if verbose:
+            attainable_str = "YES" if best["attainable"] else "NO (using best available)"
+            print(f"      → Target F1 ≥ {target_f1:.2f} attainable: {attainable_str}")
+            print(f"      → λ* = {self.lambda_star:.4f}")
+            print(f"      → δ* = {self.delta_star:.4f}")
+            print(f"      → Achieved F1 = {best['f1']:.4f}")
+            print(f"      → Separatrix% = {best['separatrix_pct']:.2%}")
+            print(f"      → Precision = {best['precision']:.4f}")
+            print(f"      → Recall = {best['recall']:.4f}")
+
+        opt_info = {
+            "objective": "f1",
+            "target_f1": target_f1,
+            "attainable": best["attainable"],
+            "best_f1": best["f1"],
+            "best_separatrix_pct": best["separatrix_pct"],
+            "best_loss": 1.0 - best["f1"],  # for compatibility with callers expecting best_loss
+            "best_misclass_rate": 1.0 - best.get("accuracy", 0.0),
+            "best_unknown_rate": best["separatrix_pct"],
+            "precision": best["precision"],
+            "recall": best["recall"],
+        }
+        return opt_info
 
     def calibrate_qhat(
         self,

@@ -66,6 +66,12 @@ class ConformalConfig:
     # p_invalid veto during threshold optimization
     use_p_invalid_veto: bool = True
 
+    # Threshold optimization objective: "loss" (w-weighted) or "f1" (F1-based)
+    optimize_objective: str = "loss"
+
+    # Target F1 for F1-based optimization (only used when optimize_objective="f1")
+    target_f1: float = 0.90
+
     # Invalid endpoint refinement
     refine_invalids: bool = False
     refine_t_min: float = 0.7
@@ -95,6 +101,8 @@ class ConformalConfig:
             delta_min=c.get("delta_min", 0.01),
             delta_max=c.get("delta_max", 0.49),
             use_p_invalid_veto=c.get("use_p_invalid_veto", True),
+            optimize_objective=c.get("optimize_objective", "loss"),
+            target_f1=c.get("target_f1", 0.90),
             refine_invalids=c.get("refine_invalids", False),
             refine_t_min=c.get("refine_t_min", 0.7),
             refine_t_max=c.get("refine_t_max", 0.9),
@@ -115,6 +123,8 @@ class ConformalConfig:
         assert self.lambda_grid_size > 1, f"lambda_grid_size must be > 1, got {self.lambda_grid_size}"
         assert self.delta_grid_size > 1, f"delta_grid_size must be > 1, got {self.delta_grid_size}"
         assert 0 < self.delta_min < self.delta_max < 0.5, f"delta_min/max must be in (0, 0.5) with min < max"
+        assert self.optimize_objective in ["loss", "f1"], f"optimize_objective must be 'loss' or 'f1', got {self.optimize_objective}"
+        assert 0 < self.target_f1 <= 1, f"target_f1 must be in (0, 1], got {self.target_f1}"
         if self.refine_invalids:
             assert 0 < self.refine_t_min < self.refine_t_max < 1.0, (
                 f"refine_t_min/max must be in (0, 1) with min < max, "

@@ -60,6 +60,91 @@ def _classification_metrics_from_predictions(pred_labels: np.ndarray, y_true: np
     }
 
 
+def optimize_lambda_delta_for_f1_targets(
+    p_success: np.ndarray,
+    p_failure: np.ndarray,
+    p_invalid: np.ndarray,
+    y_true: np.ndarray,
+    target_f1s: list[float],
+    decision_rule: str,
+    lambda_range: tuple[float, float] = (0.3, 0.7),
+    delta_range: tuple[float, float] = (0.01, 0.3),
+    n_lambda_steps: int = 41,
+    n_delta_steps: int = 30,
+    invalid_threshold: float | None = None,
+) -> dict[str, dict[str, Any]]:
+    """
+    Find (lambda, delta) achieving target F1 with minimum separatrix%.
+
+    Grid search over lambda and delta to find parameters that achieve
+    F1 >= target_f1 while minimizing separatrix percentage.
+
+    Args:
+        p_success: Array of success probabilities
+        p_failure: Array of failure probabilities
+        p_invalid: Array of invalid probabilities
+        y_true: True labels (1 for success, -1 for failure)
+        target_f1s: List of target F1 scores to optimize for
+        decision_rule: "one_sided" or "two_sided"
+        lambda_range: (min, max) for lambda search
+        delta_range: (min, max) for delta search
+        n_lambda_steps: Number of lambda grid points
+        n_delta_steps: Number of delta grid points
+        invalid_threshold: Optional threshold for invalid classification
+
+    Returns:
+        dict mapping str(target_f1) -> result dict with keys:
+            - lambda_star: optimal lambda
+            - delta: optimal delta
+            - f1: achieved F1
+            - separatrix_pct: separatrix percentage
+            - accuracy, precision, recall, specificity
+            - attainable: bool whether target_f1 was achievable
+    """
+    lambda_vals = np.linspace(lambda_range[0], lambda_range[1], n_lambda_steps)
+    delta_vals = np.linspace(delta_range[0], delta_range[1], n_delta_steps)
+
+    all_candidates = []
+
+    for lam in lambda_vals:
+        for d in delta_vals:
+            pred, _ = _predict_lambda_delta(
+                p_success, p_failure, p_invalid,
+                lambda_star=float(lam),
+                delta=float(d),
+                decision_rule=decision_rule,
+                invalid_threshold=invalid_threshold,
+            )
+            metrics = _classification_metrics_from_predictions(pred, y_true)
+            all_candidates.append({
+                "lambda_star": float(lam),
+                "delta": float(d),
+                "f1": metrics["f1"],
+                "separatrix_pct": metrics["separatrix_pct"],
+                "accuracy": metrics["accuracy"],
+                "precision": metrics["precision"],
+                "recall": metrics["recall"],
+                "specificity": metrics["specificity"],
+            })
+
+    all_candidates.sort(key=lambda x: (-x["f1"], x["separatrix_pct"]))
+
+    results = {}
+    for target in sorted(target_f1s, reverse=True):
+        matching = [c for c in all_candidates if c["f1"] >= target]
+
+        if matching:
+            best = min(matching, key=lambda x: x["separatrix_pct"])
+            best["attainable"] = True
+        else:
+            best = all_candidates[0].copy()
+            best["attainable"] = False
+
+        results[f"{target:.2f}"] = best
+
+    return results
+
+
 def _predict_lambda_delta(
     p_success: np.ndarray,
     p_failure: np.ndarray,

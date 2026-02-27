@@ -5,6 +5,10 @@ Unified re-evaluation script for all systems (Pendulum, CartPole, Quadrotor2D, Q
 Re-evaluates trained models from all epochs with configurable parameters.
 The system type is auto-detected from the training directory's Hydra config.
 
+Supports MC prediction caching: the first run computes and saves endpoint
+predictions to disk; subsequent runs with different thresholds (λ*, δ, α,
+attractor_radius) reuse the cache and skip all GPU work.
+
 Usage:
     # DEFAULT MODE: Use stored metrics (no re-evaluation)
     python scripts/reevaluate.py /path/to/training/output
@@ -29,6 +33,9 @@ Usage:
     # Custom output dir
     python scripts/reevaluate.py /path/to/training/output \
         --attractor_radius 0.25 --output_dir /custom/path
+
+    # Disable caching (always run GPU)
+    python scripts/reevaluate.py /path/to/training/output --force --no_cache
 """
 
 import argparse
@@ -44,6 +51,12 @@ import numpy as np
 import torch
 
 from adaptive_roa.adaptive_v2.eval.full_roa import evaluate_full_roa_fast
+from adaptive_roa.adaptive_v2.eval.mc_cache import (
+    MCCache,
+    compute_mc_predictions,
+    load_mc_cache,
+    save_mc_cache,
+)
 from adaptive_roa.adaptive_v2.eval.system_hooks import resolve_system_hook
 from adaptive_roa.adaptive.data_source import load_eval_states
 from adaptive_roa.conformal import ConformalConfig
@@ -154,7 +167,161 @@ def load_epoch_threshold_state(epoch_dir: Path) -> tuple[float, float]:
     return float(lambda_star), float(delta_star)
 
 
-# ── q_hat recomputation ──────────────────────────────────────────────────────
+# ── MC cache helpers ─────────────────────────────────────────────────────────
+
+def _cache_path(cache_dir: Path, epoch_num: int, dataset: str) -> Path:
+    """Return cache file path for a given epoch and dataset (cal/test)."""
+    return cache_dir / f"epoch_{epoch_num:03d}_{dataset}.npz"
+
+
+def get_or_compute_cache(
+    cache_dir: Path,
+    epoch_num: int,
+    dataset: str,
+    states_file: str,
+    flow_matcher,
+    system,
+    FlowMatcherClass,
+    epoch_dir: Path,
+    num_mc_samples: int,
+    attractor_radius: float,
+    batch_size: int,
+    device: str,
+    verbose: bool,
+    refine_invalids: bool,
+    refine_t_range: tuple,
+    refine_num_steps: int,
+    refine_max_attempts: int,
+    use_cache: bool = True,
+    force_recache: bool = False,
+) -> tuple[MCCache, "FlowMatcher | None"]:
+    """Load cache from disk or compute and save it.
+
+    Returns (cache, flow_matcher) — flow_matcher is loaded lazily only if
+    the cache needs to be computed.
+    """
+    path = _cache_path(cache_dir, epoch_num, dataset)
+
+    if use_cache and path.exists() and not force_recache:
+        cache = load_mc_cache(path)
+        # Validate MC samples match
+        if cache.num_mc_samples != num_mc_samples:
+            print(f"  [Cache] MC samples mismatch: cache has {cache.num_mc_samples}, "
+                  f"need {num_mc_samples}. Recomputing...")
+        else:
+            return cache, flow_matcher
+
+    if force_recache and path.exists():
+        print(f"  [Cache] Force recache: ignoring existing {dataset} cache")
+
+    # Need to compute — ensure flow_matcher is loaded
+    if flow_matcher is None:
+        print("  Loading checkpoint...")
+        flow_matcher = load_checkpoint(FlowMatcherClass, epoch_dir, device)
+
+    X_states, _, _ = load_eval_states(states_file)
+    print(f"  Computing MC cache for {dataset} set ({len(X_states)} states)...")
+    cache = compute_mc_predictions(
+        flow_matcher, system, X_states,
+        num_mc_samples=num_mc_samples,
+        attractor_radius=attractor_radius,
+        batch_size=batch_size,
+        device=device,
+        verbose=verbose,
+        refine_invalids=refine_invalids,
+        refine_t_range=refine_t_range,
+        refine_num_steps=refine_num_steps,
+        refine_max_attempts=refine_max_attempts,
+    )
+
+    if use_cache:
+        save_mc_cache(cache, path)
+
+    return cache, flow_matcher
+
+
+# ── q_hat from cache ─────────────────────────────────────────────────────────
+
+def recompute_qhat_from_cache(
+    cal_cache: MCCache,
+    cal_set_file: str,
+    system,
+    lambda_star: float,
+    delta: float,
+    alpha_eval: float,
+    attractor_radius: float,
+    decision_rule: str,
+    invalid_threshold: float = None,
+    filter_invalid_by_conformal: bool = False,
+    cal_k: int = None,
+) -> tuple:
+    """Recompute q_hat from cached MC predictions (no GPU needed).
+
+    Args:
+        cal_k: If set, use only the first K calibration points (indexed from
+            the beginning of the cal set file and corresponding cache).
+
+    Returns:
+        Tuple of (q_hat, n_cal_total, n_cal_used).
+    """
+    # Reclassify if radius changed
+    if abs(cal_cache.attractor_radius - attractor_radius) > 1e-9:
+        print(f"    Reclassifying cal cache: radius {cal_cache.attractor_radius} → {attractor_radius}")
+        cal_cache = cal_cache.reclassify(system, attractor_radius)
+
+    _, _, y_cal = load_eval_states(cal_set_file)
+    p_success, p_failure, p_invalid = cal_cache.probabilities()
+
+    # Slice to first K calibration points if requested
+    if cal_k is not None and cal_k < len(y_cal):
+        y_cal = y_cal[:cal_k]
+        p_success = p_success[:cal_k]
+        p_failure = p_failure[:cal_k]
+        p_invalid = p_invalid[:cal_k]
+
+    n_cal_total = len(y_cal)
+
+    # Filter out invalid points
+    if filter_invalid_by_conformal:
+        conformal_threshold = lambda_star - delta
+        valid_mask = p_invalid < conformal_threshold
+        p_success = p_success[valid_mask]
+        p_failure = p_failure[valid_mask]
+        y_cal = y_cal[valid_mask]
+        n_cal_used = int(np.sum(valid_mask))
+    elif invalid_threshold is not None:
+        valid_mask = p_invalid < invalid_threshold
+        p_success = p_success[valid_mask]
+        p_failure = p_failure[valid_mask]
+        y_cal = y_cal[valid_mask]
+        n_cal_used = int(np.sum(valid_mask))
+    else:
+        n_cal_used = n_cal_total
+
+    if n_cal_used == 0:
+        print("    WARNING: No valid calibration points after filtering!")
+        return None, n_cal_total, 0
+
+    cal_config = ConformalConfig(
+        delta=delta,
+        alpha=alpha_eval,
+        decision_rule=decision_rule,
+    )
+    calibrator = Calibrator(cal_config)
+
+    q_hat = calibrator.calibrate(
+        p_success,
+        y_cal,
+        lambda_star,
+        delta,
+        p_failure=p_failure,
+        verbose=False,
+    )
+
+    return q_hat, n_cal_total, n_cal_used
+
+
+# ── Legacy q_hat recomputation (no cache) ────────────────────────────────────
 
 def recompute_qhat(
     flow_matcher,
@@ -347,6 +514,16 @@ def main():
                         help="Max refinement iterations per invalid endpoint (default: 5)")
     parser.add_argument("--verbose", action="store_true",
                         help="Show tqdm progress bars during evaluation")
+    parser.add_argument("--cache_dir", type=Path, default=None,
+                        help="Directory for MC prediction cache (default: training_dir/mc_cache)")
+    parser.add_argument("--no_cache", action="store_true",
+                        help="Disable MC prediction caching (always run GPU)")
+    parser.add_argument("--force_recache", action="store_true",
+                        help="Force recomputation of MC caches even if they exist on disk")
+    parser.add_argument("--force_recache_cal", action="store_true",
+                        help="Force recomputation of calibration MC cache only (test cache reused)")
+    parser.add_argument("--cal_k", type=int, default=None,
+                        help="Use only the first K calibration points for q_hat (indexed from start of cal set)")
     args = parser.parse_args()
 
     training_dir = args.training_dir
@@ -371,6 +548,7 @@ def main():
         args.batch_size is not None,
         args.invalid_threshold is not None,
         args.refine_invalids,
+        args.cal_k is not None,
     ])
 
     if not params_changed and not args.force:
@@ -399,6 +577,8 @@ def main():
     print(f"  batch_size: {args.batch_size}")
     print(f"  invalid_threshold: {args.invalid_threshold}")
     print(f"  device: {args.device}")
+    if args.cal_k is not None:
+        print(f"  cal_k: {args.cal_k} (use first {args.cal_k} cal points for q_hat)")
     if args.refine_invalids:
         print(f"  refine_invalids: True (t~U[{args.refine_t_min}, {args.refine_t_max}], "
               f"steps={args.refine_num_steps}, max_attempts={args.refine_max_attempts})")
@@ -417,12 +597,16 @@ def main():
     num_mc_samples = args.num_mc_samples if args.num_mc_samples is not None else training_defaults["num_mc_samples_eval"]
     batch_size = args.batch_size if args.batch_size is not None else training_defaults["val_batch_size"]
 
+    use_cache = not args.no_cache
+    cache_dir = args.cache_dir or (training_dir / "mc_cache")
+
     print("\nEffective parameters:")
     print(f"  attractor_radius: {attractor_radius}")
     print(f"  alpha_eval: {alpha_eval}")
     print(f"  num_mc_samples: {num_mc_samples}")
     print(f"  batch_size: {batch_size}")
     print(f"  decision_rule: {decision_rule}")
+    print(f"  cache: {'enabled → ' + str(cache_dir) if use_cache else 'disabled'}")
 
     # ── Output directory ──────────────────────────────────────────────────
     if args.output_dir:
@@ -441,6 +625,8 @@ def main():
             name_parts.append(f"invthresh_{args.invalid_threshold}")
         if args.refine_invalids:
             name_parts.append(f"refine_t{args.refine_t_min}-{args.refine_t_max}_x{args.refine_max_attempts}")
+        if args.cal_k is not None:
+            name_parts.append(f"calk_{args.cal_k}")
         eval_name = "_".join(name_parts) if name_parts else "custom"
         output_dir = training_dir / "evaluations" / eval_name
 
@@ -516,30 +702,49 @@ def main():
         print(f"{'='*60}")
 
         try:
-            # 1. Load checkpoint
-            print("  Loading checkpoint...")
-            flow_matcher = load_checkpoint(FlowMatcherClass, epoch_dir, args.device)
-
-            # 2. Load threshold state (lambda_star, delta from training)
+            # 1. Load threshold state (lambda_star, delta from training)
             print("  Loading threshold state from v2 artifacts...")
             lambda_star, delta = load_epoch_threshold_state(epoch_dir)
             print(f"    lambda_star: {lambda_star}, delta: {delta}")
 
-            # 3. Recompute q_hat
             filter_invalid_by_conformal = not args.no_filter_invalid_by_conformal
             conformal_threshold = lambda_star - delta if filter_invalid_by_conformal else None
 
-            print(f"  Recomputing q_hat (alpha_eval={alpha_eval})...")
-            q_hat, q_hat_success, q_hat_failure, n_cal_total, n_cal_used = recompute_qhat(
-                flow_matcher, system, cal_set_file,
-                lambda_star, delta, alpha_eval, num_mc_samples,
-                attractor_radius, decision_rule, args.device,
+            # 2. Get or compute MC caches (lazy checkpoint loading)
+            flow_matcher = None  # loaded only if cache miss
+
+            cal_cache, flow_matcher = get_or_compute_cache(
+                cache_dir, epoch_num, "cal", cal_set_file,
+                flow_matcher, system, FlowMatcherClass, epoch_dir,
+                num_mc_samples, attractor_radius, batch_size, args.device,
+                args.verbose, args.refine_invalids,
+                (args.refine_t_min, args.refine_t_max),
+                args.refine_num_steps, args.refine_max_attempts,
+                use_cache=use_cache,
+                force_recache=args.force_recache or args.force_recache_cal,
+            )
+
+            test_cache, flow_matcher = get_or_compute_cache(
+                cache_dir, epoch_num, "test", test_set_file,
+                flow_matcher, system, FlowMatcherClass, epoch_dir,
+                num_mc_samples, attractor_radius, batch_size, args.device,
+                args.verbose, args.refine_invalids,
+                (args.refine_t_min, args.refine_t_max),
+                args.refine_num_steps, args.refine_max_attempts,
+                use_cache=use_cache,
+                force_recache=args.force_recache,
+            )
+
+            # 3. Recompute q_hat from cache (CPU only)
+            cal_k_info = f", cal_k={args.cal_k}" if args.cal_k is not None else ""
+            print(f"  Recomputing q_hat (alpha_eval={alpha_eval}{cal_k_info})...")
+            q_hat, q_hat_success, q_hat_failure, n_cal_total, n_cal_used = recompute_qhat_from_cache(
+                cal_cache, cal_set_file, system,
+                lambda_star, delta, alpha_eval, attractor_radius,
+                decision_rule,
                 invalid_threshold=args.invalid_threshold,
                 filter_invalid_by_conformal=filter_invalid_by_conformal,
-                refine_invalids=args.refine_invalids,
-                refine_t_range=(args.refine_t_min, args.refine_t_max),
-                refine_num_steps=args.refine_num_steps,
-                refine_max_attempts=args.refine_max_attempts,
+                cal_k=args.cal_k,
             )
 
             if q_hat is None:
@@ -562,7 +767,7 @@ def main():
             else:
                 print(f"    q_hat per-class: skipped (success={q_hat_success}, failure={q_hat_failure})")
 
-            # 4. Run full ROA evaluation
+            # 4. Run full ROA evaluation (uses cache → CPU only)
             print("  Running full ROA evaluation...")
             metrics = evaluate_full_roa_fast(
                 flow_matcher, system, test_set_file,
@@ -582,6 +787,7 @@ def main():
                 refine_t_range=(args.refine_t_min, args.refine_t_max),
                 refine_num_steps=args.refine_num_steps,
                 refine_max_attempts=args.refine_max_attempts,
+                mc_cache=test_cache,
             )
 
             # 5. Save results
@@ -594,10 +800,11 @@ def main():
 
             # Print summary metrics
             qhat_m = metrics.get("qhat_prediction_sets", {})
-            print(f"  [q_hat conformal] F1={qhat_m.get('f1', 0):.2%}, "
-                  f"Acc={qhat_m.get('accuracy', 0):.2%}, "
-                  f"Sep%={qhat_m.get('invalid_pct', 0):.1%}, "
-                  f"Coverage={qhat_m.get('coverage', 0):.2%}")
+            if qhat_m:
+                print(f"  [q_hat conformal] F1={qhat_m.get('f1', 0):.2%}, "
+                      f"Acc={qhat_m.get('accuracy', 0):.2%}, "
+                      f"Sep%={qhat_m.get('invalid_pct', 0):.1%}, "
+                      f"Coverage={qhat_m.get('coverage', 0):.2%}")
             for mode in ("min", "max", "skip"):
                 mc_key = f"qhat_multi_class_{mode}"
                 mc_m = metrics.get(mc_key)
@@ -620,6 +827,8 @@ def main():
 
         except Exception as e:
             print(f"  ERROR evaluating epoch {epoch_num}: {e}")
+            import traceback
+            traceback.print_exc()
             skipped_epochs.append(epoch_num)
             continue
 
@@ -630,6 +839,7 @@ def main():
         "decision_rule": decision_rule,
         "evaluation_timestamp": datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
         "mode": "re-evaluated",
+        "cache_dir": str(cache_dir) if use_cache else None,
         "parameters": {
             "attractor_radius": attractor_radius,
             "alpha_eval": alpha_eval,
@@ -643,6 +853,7 @@ def main():
             "refine_t_max": args.refine_t_max,
             "refine_num_steps": args.refine_num_steps,
             "refine_max_attempts": args.refine_max_attempts,
+            "cal_k": args.cal_k,
         },
         "training_defaults": training_defaults,
         "per_epoch": per_epoch_info,
@@ -657,6 +868,8 @@ def main():
     print("RE-EVALUATION COMPLETE")
     print(f"{'='*70}")
     print(f"Results saved to: {output_dir}")
+    if use_cache:
+        print(f"MC cache: {cache_dir}")
     if skipped_epochs:
         print(f"Skipped epochs: {skipped_epochs}")
     print(f"\nTo compile metrics and generate plots, run:")

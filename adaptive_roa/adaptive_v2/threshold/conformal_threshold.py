@@ -32,22 +32,16 @@ class ConformalThresholdBackend:
         if self.predictor is None:
             raise RuntimeError("Threshold backend used before bind_model")
 
-        threshold_mode = self.cfg.conformal.get("threshold_mode", "dynamic")
-        if threshold_mode == "fixed":
-            lambda_star = float(self.cfg.conformal.get("fixed_lambda_star", 0.5))
-            delta_star = float(self.cfg.conformal.get("fixed_delta_star", 0.1))
-            self.predictor.lambda_star = lambda_star
-            self.predictor.delta_star = delta_star
-        else:
-            self.predictor.optimize_thresholds(
-                X_train,
-                y_train,
-                verbose=self.cfg.conformal.get("verbose", True),
-            )
-            lambda_star = float(self.predictor.lambda_star)
-            delta_star = float(self.predictor.delta_star)
+        self.predictor.optimize_thresholds(
+            X_train,
+            y_train,
+            verbose=self.cfg.conformal.get("verbose", True),
+        )
 
-        return ThresholdState(lambda_star=lambda_star, delta_star=delta_star)
+        return ThresholdState(
+            lambda_star=float(self.predictor.lambda_star),
+            delta_star=float(self.predictor.delta_star),
+        )
 
     def calibrate_qhat(
         self,

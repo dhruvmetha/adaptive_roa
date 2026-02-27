@@ -109,31 +109,41 @@ class ConformalPredictor:
         optimize_objective = self.config.optimize_objective
 
         if verbose:
-            obj_label = "F1-based" if optimize_objective == "f1" else "loss-based"
+            obj_labels = {
+                "f1": "F1-based", "jstat": "J-statistic-based",
+                "loss": "loss-based", "fixed": "fixed (no optimization)",
+            }
+            obj_label = obj_labels.get(optimize_objective, "loss-based")
             print("=" * 60)
             print(f"OPTIMIZING THRESHOLDS ({obj_label})")
             print("=" * 60)
-            n_pos = int(np.sum(y_val == 1))
-            n_neg = int(np.sum(y_val == -1))
-            print(f"Val data: {len(y_val)} points (pos={n_pos}, neg={n_neg})")
-            print(f"Optimization mode: {optimize_mode}")
-            print(f"Decision rule: {decision_rule}")
-            print(f"Objective: {optimize_objective}")
 
-        # Step 1: Estimate probabilities for val data (one MC pass)
-        if verbose:
-            print(f"\n[1/2] Estimating probabilities for val data ({self.config.num_mc_samples} MC samples)...")
-        p_success, p_failure, p_invalid = self.prob_estimator.estimate(X_val)
-
-        # Step 2: Dispatch based on optimize_objective
-        if optimize_objective == "f1":
-            opt_info = self._optimize_f1(
-                p_success, p_failure, p_invalid, y_val, verbose
-            )
+        # Fast path: fixed thresholds — no MC sampling, no grid search
+        if optimize_objective == "fixed":
+            opt_info = self._optimize_fixed(y_val, verbose)
         else:
-            opt_info = self._optimize_loss(
-                p_success, p_failure, p_invalid, y_val, verbose
-            )
+            if verbose:
+                n_pos = int(np.sum(y_val == 1))
+                n_neg = int(np.sum(y_val == -1))
+                print(f"Val data: {len(y_val)} points (pos={n_pos}, neg={n_neg})")
+                print(f"Optimization mode: {optimize_mode}")
+                print(f"Decision rule: {decision_rule}")
+                print(f"Objective: {optimize_objective}")
+
+            # Step 1: Estimate probabilities for val data (one MC pass)
+            if verbose:
+                print(f"\n[1/2] Estimating probabilities for val data ({self.config.num_mc_samples} MC samples)...")
+            p_success, p_failure, p_invalid = self.prob_estimator.estimate(X_val)
+
+            # Step 2: Dispatch based on optimize_objective
+            if optimize_objective == "f1":
+                opt_info = self._optimize_f1(
+                    p_success, p_failure, p_invalid, y_val, verbose
+                )
+            else:
+                opt_info = self._optimize_loss(
+                    p_success, p_failure, p_invalid, y_val, verbose
+                )
 
         if verbose:
             print("=" * 60)
@@ -141,6 +151,21 @@ class ConformalPredictor:
             print("=" * 60)
 
         return self.lambda_star, self.delta_star, opt_info
+
+    def _optimize_fixed(self, y_val: np.ndarray, verbose: bool) -> Dict:
+        """Use fixed thresholds from config — no MC sampling, no grid search."""
+        self.lambda_star = self.config.fixed_lambda_star
+        self.delta_star = self.config.fixed_delta_star
+
+        if verbose:
+            print(f"Using fixed thresholds: λ* = {self.lambda_star:.4f}, δ* = {self.delta_star:.4f}")
+
+        return {
+            "objective": "fixed",
+            "best_loss": 0.0,
+            "best_misclass_rate": 0.0,
+            "best_unknown_rate": 0.0,
+        }
 
     def _optimize_loss(
         self,
@@ -150,9 +175,14 @@ class ConformalPredictor:
         y_val: np.ndarray,
         verbose: bool,
     ) -> Dict:
-        """Run the existing w-weighted loss grid search on the val split."""
+        """Run the w-weighted loss grid search on the val split.
+
+        Works for both "loss" (misclass-based) and "jstat" (J-statistic-based)
+        objectives — the LambdaOptimizer dispatches internally.
+        """
         optimize_mode = self.config.optimize_mode
         decision_rule = self.config.decision_rule
+        optimize_objective = self.config.optimize_objective
 
         p_failure_for_opt = p_failure_val if decision_rule == "two_sided" else None
 
@@ -179,7 +209,8 @@ class ConformalPredictor:
             print(f"      → λ* = {self.lambda_star:.4f}" + (" (fixed)" if optimize_mode == "delta" else ""))
             print(f"      → δ* = {self.delta_star:.4f}" + (" (fixed)" if optimize_mode == "lambda" else ""))
             print(f"      → Best loss = {opt_info['best_loss']:.4f}")
-            print(f"      → Misclass rate = {opt_info['best_misclass_rate']:.2%}")
+            error_label = "1-J (Youden)" if optimize_objective == "jstat" else "Misclass rate"
+            print(f"      → {error_label} = {opt_info['best_misclass_rate']:.4f}")
             print(f"      → Unknown rate = {opt_info['best_unknown_rate']:.2%}")
 
         return opt_info
@@ -322,202 +353,6 @@ class ConformalPredictor:
             print("=" * 60)
 
         return self.q_hat
-
-    def fit(
-        self,
-        X_train: Union[torch.Tensor, np.ndarray],
-        y_train: Union[torch.Tensor, np.ndarray],
-        X_cal: Union[torch.Tensor, np.ndarray],
-        y_cal: Union[torch.Tensor, np.ndarray],
-        verbose: bool = True
-    ) -> Dict:
-        """
-        Fit conformal predictor on labeled data.
-
-        Steps:
-        1. Estimate p(success|x) for training states
-        2. Optimize λ* to minimize weighted loss
-        3. Estimate p(success|x) for calibration states
-        4. Calibrate q_hat for coverage guarantee
-
-        Args:
-            X_train: [N_train, state_dim] training states
-            y_train: [N_train] training labels (-1 or 1)
-            X_cal: [N_cal, state_dim] calibration states
-            y_cal: [N_cal] calibration labels (-1 or 1)
-            verbose: Print fitting progress
-
-        Returns:
-            Dict with fitting information
-        """
-        # Convert to numpy if needed
-        if isinstance(y_train, torch.Tensor):
-            y_train = y_train.cpu().numpy()
-        if isinstance(y_cal, torch.Tensor):
-            y_cal = y_cal.cpu().numpy()
-
-        optimize_mode = self.config.optimize_mode
-        decision_rule = self.config.decision_rule
-
-        if verbose:
-            print("=" * 60)
-            print("FITTING CONFORMAL PREDICTOR")
-            print("=" * 60)
-            print(f"Training set: {len(y_train)} points")
-            print(f"Calibration set: {len(y_cal)} points")
-            print(f"Optimization mode: {optimize_mode}")
-            print(f"Decision rule: {decision_rule}")
-
-        # Step 1: Estimate probabilities for training set
-        if verbose:
-            print(f"\n[1/4] Estimating probabilities for training set ({self.config.num_mc_samples} MC samples)...")
-        p_train_success, p_train_failure, p_train_invalid = self.prob_estimator.estimate(X_train)
-
-        # Step 2: Optimize λ* or δ* depending on mode
-        # Pass p_failure for two_sided decision rule (CartPole), None for one_sided (pendulum)
-        p_failure_for_opt = p_train_failure if decision_rule == "two_sided" else None
-
-        if optimize_mode == "delta":
-            if verbose:
-                print(f"[2/4] Optimizing δ* via grid search with fixed λ=0.5 ({self.config.delta_grid_size} points)...")
-        elif optimize_mode == "joint":
-            if verbose:
-                print(f"[2/4] Optimizing λ* and δ* jointly via 2D grid search "
-                      f"({self.config.lambda_grid_size}×{self.config.delta_grid_size} grid)...")
-        else:
-            if verbose:
-                print(f"[2/4] Optimizing λ* via grid search with fixed δ={self.config.delta} ({self.config.lambda_grid_size} points)...")
-
-        p_invalid_for_opt = p_train_invalid if self.config.use_p_invalid_veto else None
-
-        self.lambda_star, self.delta_star, opt_info = self.lambda_optimizer.optimize(
-            p_train_success, y_train, p_failure=p_failure_for_opt, p_invalid=p_invalid_for_opt
-        )
-
-        if verbose:
-            if not self.config.use_p_invalid_veto:
-                print("      (p_invalid veto disabled)")
-            print(f"      → λ* = {self.lambda_star:.4f}" + (" (fixed)" if optimize_mode == "delta" else ""))
-            print(f"      → δ* = {self.delta_star:.4f}" + (" (fixed)" if optimize_mode == "lambda" else ""))
-            print(f"      → Best loss = {opt_info['best_loss']:.4f}")
-            print(f"      → Misclass rate = {opt_info['best_misclass_rate']:.2%}")
-            print(f"      → Unknown rate = {opt_info['best_unknown_rate']:.2%}")
-
-        # Step 3: Estimate probabilities for calibration set
-        if verbose:
-            print(f"[3/4] Estimating probabilities for calibration set...")
-        p_cal_success, p_cal_failure, _ = self.prob_estimator.estimate(X_cal)
-
-        # Step 4: Calibrate q_hat
-        # Pass p_failure for two_sided decision rule (CartPole), None for one_sided (pendulum)
-        p_failure_for_cal = p_cal_failure if decision_rule == "two_sided" else None
-        
-        if verbose:
-            print(f"[4/4] Calibrating q_hat (α={self.config.alpha}, coverage={1-self.config.alpha:.0%})...")
-        self.q_hat = self.calibrator.calibrate(
-            p_cal_success, y_cal, self.lambda_star, self.delta_star, p_failure_for_cal,
-            verbose=verbose
-        )
-        if verbose:
-            print(f"      → q_hat = {self.q_hat:.4f}")
-
-        # Store fit info
-        self.fit_info = {
-            'lambda_star': self.lambda_star,
-            'delta_star': self.delta_star,
-            'q_hat': self.q_hat,
-            'n_train': len(y_train),
-            'n_cal': len(y_cal),
-            'optimization_info': opt_info,
-            'optimize_mode': optimize_mode,
-            'decision_rule': decision_rule,
-        }
-
-        if verbose:
-            print("=" * 60)
-            print("FITTING COMPLETE")
-            print("=" * 60)
-
-        return self.fit_info
-
-    def fit_with_fixed_thresholds(
-        self,
-        X_cal: Union[torch.Tensor, np.ndarray],
-        y_cal: Union[torch.Tensor, np.ndarray],
-        lambda_star: float,
-        delta_star: float,
-        verbose: bool = True
-    ) -> Dict:
-        """
-        Fit conformal predictor with fixed thresholds (skip optimization).
-
-        Only calibrates q_hat using the fixed λ* and δ* values.
-        Use this when you want to skip the threshold optimization step
-        and use predetermined thresholds.
-
-        Args:
-            X_cal: [N_cal, state_dim] calibration states
-            y_cal: [N_cal] calibration labels (-1 or 1)
-            lambda_star: Fixed decision boundary
-            delta_star: Fixed uncertainty half-width
-            verbose: Print fitting progress
-
-        Returns:
-            Dict with fitting information
-        """
-        if isinstance(y_cal, torch.Tensor):
-            y_cal = y_cal.cpu().numpy()
-
-        decision_rule = self.config.decision_rule
-
-        if verbose:
-            print("=" * 60)
-            print("FITTING WITH FIXED THRESHOLDS (no optimization)")
-            print("=" * 60)
-            print(f"Calibration set: {len(y_cal)} points")
-            print(f"Fixed λ* = {lambda_star:.4f}")
-            print(f"Fixed δ* = {delta_star:.4f}")
-            print(f"Decision rule: {decision_rule}")
-
-        # Set fixed thresholds
-        self.lambda_star = lambda_star
-        self.delta_star = delta_star
-
-        # Step 1: Estimate probabilities for calibration set
-        if verbose:
-            print(f"\n[1/2] Estimating probabilities for calibration set ({self.config.num_mc_samples} MC samples)...")
-        p_cal_success, p_cal_failure, _ = self.prob_estimator.estimate(X_cal)
-
-        # Step 2: Calibrate q_hat with fixed thresholds
-        p_failure_for_cal = p_cal_failure if decision_rule == "two_sided" else None
-
-        if verbose:
-            print(f"[2/2] Calibrating q_hat (α={self.config.alpha}, coverage={1-self.config.alpha:.0%})...")
-        self.q_hat = self.calibrator.calibrate(
-            p_cal_success, y_cal, self.lambda_star, self.delta_star, p_failure_for_cal,
-            verbose=verbose
-        )
-        if verbose:
-            print(f"      → q_hat = {self.q_hat:.4f}")
-
-        # Store fit info
-        self.fit_info = {
-            'lambda_star': self.lambda_star,
-            'delta_star': self.delta_star,
-            'q_hat': self.q_hat,
-            'n_train': 0,  # No training data used (no optimization)
-            'n_cal': len(y_cal),
-            'optimization_info': None,  # No optimization performed
-            'optimize_mode': 'fixed',
-            'decision_rule': decision_rule,
-        }
-
-        if verbose:
-            print("=" * 60)
-            print("FITTING COMPLETE")
-            print("=" * 60)
-
-        return self.fit_info
 
     def predict(
         self,

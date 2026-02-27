@@ -60,6 +60,43 @@ def _classification_metrics_from_predictions(pred_labels: np.ndarray, y_true: np
     }
 
 
+def _conservative_metrics(pred_labels: np.ndarray, y_true: np.ndarray) -> dict[str, Any]:
+    """Compute full-coverage metrics by classifying separatrix points as failure.
+
+    This gives a safety-aware F1: uncertain/invalid points are treated as
+    "not in ROA", which is the conservative default for a controller that
+    should not attempt stabilization from uncertain states.
+
+    Precision is unchanged from the original (only committed positives count).
+    Recall drops for every true-positive point hiding in the separatrix.
+    """
+    # Map: success(1) stays 1, everything else (0, -1, -2) becomes failure
+    y_pred_full = np.where(pred_labels == 1, 1, -1)
+
+    tp = int(np.sum((y_pred_full == 1) & (y_true == 1)))
+    tn = int(np.sum((y_pred_full == -1) & (y_true == -1)))
+    fp = int(np.sum((y_pred_full == 1) & (y_true == -1)))
+    fn = int(np.sum((y_pred_full == -1) & (y_true == 1)))
+
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+    f1 = 2.0 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+    accuracy = (tp + tn) / len(y_true) if len(y_true) > 0 else 0.0
+
+    return {
+        "accuracy": float(accuracy),
+        "precision": float(precision),
+        "recall": float(recall),
+        "specificity": float(specificity),
+        "f1": float(f1),
+        "tp": tp,
+        "tn": tn,
+        "fp": fp,
+        "fn": fn,
+    }
+
+
 def optimize_lambda_delta_for_f1_targets(
     p_success: np.ndarray,
     p_failure: np.ndarray,
@@ -383,6 +420,8 @@ def _predict_qhat_multi_class(
     true_in_set[y_true == -1] = in_set_failure[y_true == -1]
     true_in_set[y_true == 0] = in_set_unknown[y_true == 0]
 
+    confident_mask = (pred == 1) | (pred == 0)
+
     extras = {
         "q_hat_success": float(q_hat_success),
         "q_hat_failure": float(q_hat_failure),
@@ -390,7 +429,9 @@ def _predict_qhat_multi_class(
         "unknown_mode": unknown_mode,
         "invalid_threshold": effective_invalid_threshold,
         "coverage": float(np.mean(true_in_set)),
+        "coverage_confident": float(np.mean(true_in_set[confident_mask])) if np.any(confident_mask) else 0.0,
         "avg_set_size": float(np.mean(set_sizes[non_invalid])) if np.any(non_invalid) else 0.0,
+        "median_set_size": float(np.median(set_sizes[non_invalid])) if np.any(non_invalid) else 0.0,
         "n_pred_success": int(np.sum(pred == 1)),
         "n_pred_failure": int(np.sum(pred == 0)),
     }
@@ -459,8 +500,15 @@ def evaluate_full_roa_fast(
     refine_t_range: tuple[float, float] = (0.7, 0.9),
     refine_num_steps: int = 100,
     refine_max_attempts: int = 5,
+    mc_cache: "MCCache | None" = None,
 ) -> dict[str, Any]:
-    """Fast batched full-ROA evaluation with v2-compatible outputs."""
+    """Fast batched full-ROA evaluation with v2-compatible outputs.
+
+    If ``mc_cache`` is provided, the expensive GPU MC sampling loop is skipped
+    entirely and predictions are derived from cached endpoints/labels.  When
+    ``attractor_radius`` differs from the cache's radius, labels are
+    recomputed from cached endpoints on the CPU.
+    """
     from tqdm import tqdm
 
     hook = resolve_system_hook(system)
@@ -475,71 +523,97 @@ def evaluate_full_roa_fast(
         lambda_star = 0.5
 
     if verbose:
-        refine_str = (
-            f", refine t~U[{refine_t_range[0]}, {refine_t_range[1]}] max_attempts={refine_max_attempts}"
-            if refine_invalids else ""
-        )
-        print(f"  [Full ROA] N={n_total} eval states ({n_success_true} success, {n_failure_true} failure), "
-              f"K={num_mc_samples} MC samples, batch={batch_size}{refine_str}")
         q_hat_str = f"{q_hat:.4f}" if q_hat is not None else "None"
+        if mc_cache is not None:
+            print(f"  [Full ROA] N={n_total} eval states ({n_success_true} success, "
+                  f"{n_failure_true} failure), using MC cache (K={mc_cache.num_mc_samples})")
+        else:
+            refine_str = (
+                f", refine t~U[{refine_t_range[0]}, {refine_t_range[1]}] max_attempts={refine_max_attempts}"
+                if refine_invalids else ""
+            )
+            print(f"  [Full ROA] N={n_total} eval states ({n_success_true} success, {n_failure_true} failure), "
+                  f"K={num_mc_samples} MC samples, batch={batch_size}{refine_str}")
         print(f"  [Full ROA] λ*={lambda_star:.4f}, δ={delta:.4f}, "
               f"q_hat={q_hat_str}, rule={effective_rule}")
 
-    X_tensor = torch.from_numpy(X_all).float().to(device)
-    end_tensor = torch.from_numpy(end_states_all).float().to(device)
+    # ── Use cache if available ───────────────────────────────────────────
+    if mc_cache is not None:
+        assert mc_cache.n_states == n_total, (
+            f"Cache size mismatch: cache has {mc_cache.n_states} states, "
+            f"eval file has {n_total}"
+        )
+        # Reclassify if attractor radius changed
+        if abs(mc_cache.attractor_radius - attractor_radius) > 1e-9:
+            if verbose:
+                print(f"  [Full ROA] Reclassifying cache: radius {mc_cache.attractor_radius} → {attractor_radius}")
+            mc_cache = mc_cache.reclassify(system, attractor_radius)
 
-    mc_labels = np.zeros((n_total, num_mc_samples), dtype=np.int8)
-    pred_sum = np.zeros((n_total, end_states_all.shape[1]), dtype=np.float64)
-    mc_errors = np.zeros((n_total, num_mc_samples), dtype=np.float32)
+        num_mc_samples = mc_cache.num_mc_samples
+        mc_labels = mc_cache.mc_labels
+        # Derive pred_sum and mc_errors from cached endpoints
+        pred_sum = mc_cache.mc_endpoints.sum(axis=1).astype(np.float64)  # [N, state_dim]
+        mc_errors = np.linalg.norm(
+            mc_cache.mc_endpoints - end_states_all[:, np.newaxis, :],
+            axis=2,
+        ).astype(np.float32)  # [N, K]
+    else:
+        # ── GPU MC sampling loop (original path) ─────────────────────────
+        X_tensor = torch.from_numpy(X_all).float().to(device)
+        end_tensor = torch.from_numpy(end_states_all).float().to(device)
 
-    cumulative_rstats = RefinementStats(
-        per_attempt_resolved=[0] * refine_max_attempts
-    ) if refine_invalids else None
+        mc_labels = np.zeros((n_total, num_mc_samples), dtype=np.int8)
+        pred_sum = np.zeros((n_total, end_states_all.shape[1]), dtype=np.float64)
+        mc_errors = np.zeros((n_total, num_mc_samples), dtype=np.float32)
 
-    n_batches = (n_total + batch_size - 1) // batch_size
-    total_steps = n_batches * num_mc_samples
+        cumulative_rstats = RefinementStats(
+            per_attempt_resolved=[0] * refine_max_attempts
+        ) if refine_invalids else None
 
-    flow_matcher.eval()
-    with torch.no_grad():
-      with tqdm(total=total_steps, desc="Full ROA eval", disable=not verbose) as pbar:
-        for batch_start in range(0, n_total, batch_size):
-            batch_end = min(batch_start + batch_size, n_total)
-            batch_inputs = X_tensor[batch_start:batch_end]
-            batch_actual = end_tensor[batch_start:batch_end]
+        n_batches = (n_total + batch_size - 1) // batch_size
+        total_steps = n_batches * num_mc_samples
 
-            for sample_idx in range(num_mc_samples):
-                pred = flow_matcher.predict_endpoint(batch_inputs)
-                labels_tensor = system.classify_attractor(pred, attractor_radius)
+        flow_matcher.eval()
+        with torch.no_grad():
+          with tqdm(total=total_steps, desc="Full ROA eval", disable=not verbose) as pbar:
+            for batch_start in range(0, n_total, batch_size):
+                batch_end = min(batch_start + batch_size, n_total)
+                batch_inputs = X_tensor[batch_start:batch_end]
+                batch_actual = end_tensor[batch_start:batch_end]
 
-                if refine_invalids:
-                    rstats = refine_invalid_endpoints(
-                        flow_matcher, system,
-                        pred, labels_tensor, batch_inputs,
-                        attractor_radius=attractor_radius,
-                        t_range=refine_t_range,
-                        num_steps=refine_num_steps,
-                        max_attempts=refine_max_attempts,
-                    )
-                    cumulative_rstats.accumulate(rstats)
+                for sample_idx in range(num_mc_samples):
+                    pred = flow_matcher.predict_endpoint(batch_inputs)
+                    labels_tensor = system.classify_attractor(pred, attractor_radius)
 
-                labels = labels_tensor.cpu().numpy()
-                mc_labels[batch_start:batch_end, sample_idx] = labels
-                pred_np = pred.cpu().numpy()
-                pred_sum[batch_start:batch_end] += pred_np
+                    if refine_invalids:
+                        rstats = refine_invalid_endpoints(
+                            flow_matcher, system,
+                            pred, labels_tensor, batch_inputs,
+                            attractor_radius=attractor_radius,
+                            t_range=refine_t_range,
+                            num_steps=refine_num_steps,
+                            max_attempts=refine_max_attempts,
+                        )
+                        cumulative_rstats.accumulate(rstats)
 
-                if hasattr(flow_matcher, "distance_manifold"):
-                    geodesic = flow_matcher.distance_manifold.dist(pred, batch_actual).cpu().numpy()
-                else:
-                    geodesic = pred_np - batch_actual.cpu().numpy()
-                mc_errors[batch_start:batch_end, sample_idx] = np.linalg.norm(geodesic, axis=1)
+                    labels = labels_tensor.cpu().numpy()
+                    mc_labels[batch_start:batch_end, sample_idx] = labels
+                    pred_np = pred.cpu().numpy()
+                    pred_sum[batch_start:batch_end] += pred_np
 
-                pbar.update(1)
+                    if hasattr(flow_matcher, "distance_manifold"):
+                        geodesic = flow_matcher.distance_manifold.dist(pred, batch_actual).cpu().numpy()
+                    else:
+                        geodesic = pred_np - batch_actual.cpu().numpy()
+                    mc_errors[batch_start:batch_end, sample_idx] = np.linalg.norm(geodesic, axis=1)
 
-    if refine_invalids and verbose and cumulative_rstats.n_initially_invalid > 0:
-        total_original = cumulative_rstats.n_initially_invalid
-        total_resolved = cumulative_rstats.n_resolved
-        resolve_rate = total_resolved / total_original * 100
-        print(f"  [Refine] {total_resolved}/{total_original} invalid MC samples resolved ({resolve_rate:.1f}%) [max_attempts={refine_max_attempts}]")
+                    pbar.update(1)
+
+        if refine_invalids and verbose and cumulative_rstats.n_initially_invalid > 0:
+            total_original = cumulative_rstats.n_initially_invalid
+            total_resolved = cumulative_rstats.n_resolved
+            resolve_rate = total_resolved / total_original * 100
+            print(f"  [Refine] {total_resolved}/{total_original} invalid MC samples resolved ({resolve_rate:.1f}%) [max_attempts={refine_max_attempts}]")
         print(f"           → success: {cumulative_rstats.n_resolved_success}, → failure: {cumulative_rstats.n_resolved_failure}")
         attempt_strs = [f"a{i+1}={c}" for i, c in enumerate(cumulative_rstats.per_attempt_resolved) if c > 0]
         if attempt_strs:
@@ -547,9 +621,10 @@ def evaluate_full_roa_fast(
 
     pred_mean = pred_sum / float(num_mc_samples)
 
-    pred_tensor = torch.from_numpy(pred_mean).float().to(device)
-    if hasattr(flow_matcher, "distance_manifold"):
-        geodesic_errors = flow_matcher.distance_manifold.dist(pred_tensor, end_tensor).cpu().numpy()
+    if flow_matcher is not None and hasattr(flow_matcher, "distance_manifold"):
+        pred_tensor = torch.from_numpy(pred_mean).float().to(device)
+        end_tensor_local = torch.from_numpy(end_states_all).float().to(device) if mc_cache is not None else end_tensor
+        geodesic_errors = flow_matcher.distance_manifold.dist(pred_tensor, end_tensor_local).cpu().numpy()
         component_names = list(flow_matcher.get_manifold_component_names())
     else:
         geodesic_errors = (pred_mean - end_states_all).astype(np.float32)
@@ -633,6 +708,13 @@ def evaluate_full_roa_fast(
             metrics_mc[key] = mc_metrics
             pred_mc_all[key] = pred_mc
 
+    # Conservative metrics: classify separatrix as failure (full-coverage, safety-aware)
+    metrics_conservative_ld = _conservative_metrics(pred_conformal, y_all)
+    if pred_qhat is not None:
+        metrics_conservative_qhat = _conservative_metrics(pred_qhat, y_all)
+    else:
+        metrics_conservative_qhat = None
+
     if verbose:
         mc_p_inv_mean = float(np.mean(p_invalid))
         mc_p_inv_median = float(np.median(p_invalid))
@@ -643,6 +725,9 @@ def evaluate_full_roa_fast(
               f"prec={metrics_conformal['precision']:.4f}  "
               f"recall={metrics_conformal['recall']:.4f}  "
               f"separatrix={metrics_conformal['separatrix_pct']:.1%}")
+        print(f"  [Full ROA] conservative: F1={metrics_conservative_ld['f1']:.4f}  "
+              f"prec={metrics_conservative_ld['precision']:.4f}  "
+              f"recall={metrics_conservative_ld['recall']:.4f}")
         if metrics_qhat is not None:
             print(f"  [Full ROA] q_hat sets:   F1={metrics_qhat['f1']:.4f}  "
                   f"acc={metrics_qhat['accuracy']:.4f}  "
@@ -756,6 +841,15 @@ def evaluate_full_roa_fast(
             "_doc": "Conformal prediction sets using calibrated q_hat for set-valued predictions with coverage guarantee",
             **metrics_qhat,
         } if metrics_qhat is not None else None,
+        "conservative_lambda_delta": {
+            "_doc": "Full-coverage safety-aware metrics: separatrix points classified as failure (not in ROA). "
+                    "Precision unchanged, recall penalized for true ROA points in separatrix.",
+            **metrics_conservative_ld,
+        },
+        "conservative_qhat": {
+            "_doc": "Full-coverage safety-aware metrics (q_hat variant): separatrix points classified as failure.",
+            **metrics_conservative_qhat,
+        } if metrics_conservative_qhat is not None else None,
         "endpoint_errors": {
             "_doc": "Mean geodesic distance between predicted and true endpoints, partitioned by lambda_delta regions",
             "component_names": component_names,

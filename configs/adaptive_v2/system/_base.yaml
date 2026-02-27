@@ -51,7 +51,6 @@ conformal:
 
   optimize_mode: joint
   decision_rule: two_sided
-  threshold_mode: ${threshold_mode}
 
   fixed_lambda_star: 0.5
   fixed_delta_star: 0.1
@@ -63,7 +62,7 @@ conformal:
   # p_invalid veto during threshold optimization
   use_p_invalid_veto: true
 
-  # Threshold optimization objective: "loss" (w-weighted) or "f1" (F1-based)
+  # Threshold optimization objective: "loss" (w-weighted), "f1" (F1-based), or "jstat" (J-statistic)
   optimize_objective: loss
   # Target F1 (only used when optimize_objective=f1)
   target_f1: 0.90

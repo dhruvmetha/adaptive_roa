@@ -18,3 +18,8 @@ attractor_analysis*
 
 **/env/
 **/*.egg-info/
+
+# Generated artifacts
+*.pdf
+Untitled
+telemetry-id

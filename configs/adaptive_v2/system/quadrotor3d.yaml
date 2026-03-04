@@ -15,8 +15,8 @@ data_source:
   base_dir: ${data_dir}/quadrotor3D_lqr
   trajectories_dir: ${data_source.base_dir}/trajectories
   train_test_splits_dir: ${data_source.base_dir}/train_test_splits
-  shuffled_indices_file: ${data_source.train_test_splits_dir}/shuffled_indices_${training_index}.txt
-  shuffled_labels_file: ${data_source.train_test_splits_dir}/shuffled_labels_${training_index}.txt
+  shuffled_indices_file: ${data_source.train_test_splits_dir}/all_shuffled_indices.txt
+  shuffled_labels_file: ${data_source.train_test_splits_dir}/all_shuffled_labels.txt
   eval_states_file: ${data_source.base_dir}/eval_states.txt
   cal_set_file: ${data_source.base_dir}/cal_set.txt
   test_set_file: ${data_source.base_dir}/test_set.txt

@@ -123,6 +123,23 @@ def extract_epoch_metrics(artifacts_path: Path, metric_type: str) -> dict | None
     conservative_metrics = eval_metrics.get(conservative_key, {}) if conservative_key else {}
     qhat_metrics = eval_metrics.get("qhat_prediction_sets", {})
 
+    # Extract endpoint errors
+    endpoint_errors = eval_metrics.get("endpoint_errors", {})
+    endpoint_error_data = {}
+    if endpoint_errors:
+        endpoint_error_data["component_names"] = endpoint_errors.get("component_names", [])
+        for region in ["full", "certain", "certain_success", "certain_failure", "uncertain", "invalid"]:
+            region_data = endpoint_errors.get(region, {})
+            if region_data:
+                endpoint_error_data[region] = {
+                    "n_points": region_data.get("n_points", 0),
+                    "mean": region_data.get("mean", 0),
+                    "median": region_data.get("median", 0),
+                    "variance": region_data.get("variance", 0),
+                    "mean_per_dim": region_data.get("mean_per_dim", []),
+                    "median_per_dim": region_data.get("median_per_dim", []),
+                }
+
     return {
         "epoch": epoch,
         "f1": metrics.get("f1", 0),
@@ -142,6 +159,7 @@ def extract_epoch_metrics(artifacts_path: Path, metric_type: str) -> dict | None
         "coverage": qhat_metrics.get("coverage"),
         "avg_set_size": qhat_metrics.get("avg_set_size"),
         "median_set_size": qhat_metrics.get("median_set_size"),
+        "endpoint_errors": endpoint_error_data,
     }
 
 
@@ -268,6 +286,88 @@ def format_summary_line(
     )
 
 
+def format_endpoint_errors_table(
+    epochs: list[dict],
+    traj_map: dict[int, int],
+    label: str | None = None,
+    regions: list[str] | None = None,
+    per_dim: bool = False,
+) -> str:
+    """Format endpoint errors as a markdown table.
+
+    Args:
+        regions: Which regions to show. Default: ["full", "certain_success", "certain_failure"]
+        per_dim: If True, show per-dimension breakdown instead of aggregate.
+    """
+    if regions is None:
+        regions = ["full", "certain_success", "certain_failure"]
+
+    lines = []
+    if label:
+        lines.append(f"#### {label} — Endpoint Errors")
+    lines.append("")
+
+    # Get component names from first epoch that has them
+    component_names = []
+    for m in epochs:
+        ee = m.get("endpoint_errors", {})
+        if ee.get("component_names"):
+            component_names = ee["component_names"]
+            break
+
+    if per_dim and component_names:
+        # Per-dimension table for each region
+        for region in regions:
+            region_label = region.replace("_", " ").title()
+            lines.append(f"**{region_label}:**")
+            lines.append("")
+
+            header = "| Trajectories | " + " | ".join(component_names) + " |"
+            sep_line = "|-------------|" + "|".join(["--------"] * len(component_names)) + "|"
+            lines.append(header)
+            lines.append(sep_line)
+
+            for m in epochs:
+                traj = traj_map.get(m["epoch"], "N/A")
+                ee = m.get("endpoint_errors", {})
+                region_data = ee.get(region, {})
+                dim_means = region_data.get("mean_per_dim", [])
+                if dim_means:
+                    cells = " | ".join(f"{v:.4f}" for v in dim_means)
+                    lines.append(f"| {traj} | {cells} |")
+                else:
+                    lines.append(f"| {traj} | " + " | ".join(["—"] * len(component_names)) + " |")
+
+            lines.append("")
+    else:
+        # Aggregate table: mean and median for each region
+        header = "| Trajectories"
+        sep_line = "|-------------"
+        for region in regions:
+            region_label = region.replace("_", " ").title()
+            header += f" | {region_label} Mean | {region_label} Med"
+            sep_line += "|--------|--------"
+        header += " |"
+        sep_line += "|"
+        lines.append(header)
+        lines.append(sep_line)
+
+        for m in epochs:
+            traj = traj_map.get(m["epoch"], "N/A")
+            ee = m.get("endpoint_errors", {})
+            row = f"| {traj}"
+            for region in regions:
+                region_data = ee.get(region, {})
+                mean = region_data.get("mean")
+                median = region_data.get("median")
+                row += f" | {mean:.4f}" if mean is not None else " | —"
+                row += f" | {median:.4f}" if median is not None else " | —"
+            row += " |"
+            lines.append(row)
+
+    return "\n".join(lines)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Extract evaluation results as markdown tables"
@@ -299,6 +399,27 @@ def main():
         "--compact",
         action="store_true",
         help="Only print the compact table (no epoch column)",
+    )
+    parser.add_argument(
+        "--errors",
+        action="store_true",
+        help="Also print endpoint error tables (mean/median geodesic distance)",
+    )
+    parser.add_argument(
+        "--errors-only",
+        action="store_true",
+        help="Only print endpoint error tables (skip classification metrics)",
+    )
+    parser.add_argument(
+        "--errors-per-dim",
+        action="store_true",
+        help="Show per-dimension endpoint error breakdown",
+    )
+    parser.add_argument(
+        "--errors-regions",
+        type=str,
+        default=None,
+        help="Comma-separated regions to show (default: full,certain_success,certain_failure)",
     )
     args = parser.parse_args()
 
@@ -356,6 +477,11 @@ def main():
           f"sampling_mode={run_info.get('sampling_mode')} -->")
     print()
 
+    # Parse error regions
+    error_regions = None
+    if args.errors_regions:
+        error_regions = [r.strip() for r in args.errors_regions.split(",")]
+
     # Extract and format
     metric_types = METRIC_TYPES if args.metric == "all" else [args.metric]
 
@@ -370,61 +496,76 @@ def main():
         else:
             section_label = label
 
-        if args.compact:
-            # Compact table without epoch column
-            has_cons_f1 = any(m.get("conservative_f1") is not None for m in epochs)
-            has_coverage = any(m.get("coverage") is not None for m in epochs)
-            has_set_size = any(m.get("avg_set_size") is not None for m in epochs)
+        if not args.errors_only:
+            if args.compact:
+                # Compact table without epoch column
+                has_cons_f1 = any(m.get("conservative_f1") is not None for m in epochs)
+                has_coverage = any(m.get("coverage") is not None for m in epochs)
+                has_set_size = any(m.get("avg_set_size") is not None for m in epochs)
 
-            print(f"#### {section_label}")
-            print()
-            header = "| Trajectories | Sep% | F1"
-            sep_line = "|-------------|------|------"
-            if has_cons_f1:
-                header += " | Cons. F1"
-                sep_line += "|----------"
-            if has_coverage:
-                header += " | Coverage"
-                sep_line += "|----------"
-            if has_set_size:
-                header += " | Avg Set | Med Set"
-                sep_line += "|---------|---------"
-            header += " | Precision | Recall | Specificity |"
-            sep_line += "|-----------|--------|-------------|"
-            print(header)
-            print(sep_line)
-            for m in epochs:
-                traj = traj_map.get(m["epoch"], "N/A")
-                sep_pct = m["separatrix_pct"] * 100
-                row = f"| {traj} | {sep_pct:.2f}% | {m['f1']:.4f}"
+                print(f"#### {section_label}")
+                print()
+                header = "| Trajectories | Sep% | F1"
+                sep_line = "|-------------|------|------"
                 if has_cons_f1:
-                    cf1 = m.get("conservative_f1")
-                    row += f" | {cf1:.4f}" if cf1 is not None else " | —"
+                    header += " | Cons. F1"
+                    sep_line += "|----------"
                 if has_coverage:
-                    cov = m.get("coverage")
-                    row += f" | {cov:.4f}" if cov is not None else " | —"
+                    header += " | Coverage"
+                    sep_line += "|----------"
                 if has_set_size:
-                    avg_ss = m.get("avg_set_size")
-                    med_ss = m.get("median_set_size")
-                    row += f" | {avg_ss:.2f}" if avg_ss is not None else " | —"
-                    row += f" | {med_ss:.1f}" if med_ss is not None else " | —"
-                row += f" | {m['precision']:.4f} | {m['recall']:.4f} | {m['specificity']:.4f} |"
-                print(row)
-        else:
-            table = format_markdown_table(epochs, traj_map, section_label, metric_type)
-            print(table)
+                    header += " | Avg Set | Med Set"
+                    sep_line += "|---------|---------"
+                header += " | Precision | Recall | Specificity |"
+                sep_line += "|-----------|--------|-------------|"
+                print(header)
+                print(sep_line)
+                for m in epochs:
+                    traj = traj_map.get(m["epoch"], "N/A")
+                    sep_pct = m["separatrix_pct"] * 100
+                    row = f"| {traj} | {sep_pct:.2f}% | {m['f1']:.4f}"
+                    if has_cons_f1:
+                        cf1 = m.get("conservative_f1")
+                        row += f" | {cf1:.4f}" if cf1 is not None else " | —"
+                    if has_coverage:
+                        cov = m.get("coverage")
+                        row += f" | {cov:.4f}" if cov is not None else " | —"
+                    if has_set_size:
+                        avg_ss = m.get("avg_set_size")
+                        med_ss = m.get("median_set_size")
+                        row += f" | {avg_ss:.2f}" if avg_ss is not None else " | —"
+                        row += f" | {med_ss:.1f}" if med_ss is not None else " | —"
+                    row += f" | {m['precision']:.4f} | {m['recall']:.4f} | {m['specificity']:.4f} |"
+                    print(row)
+            else:
+                table = format_markdown_table(epochs, traj_map, section_label, metric_type)
+                print(table)
 
-        print()
+            print()
 
-        # Summary line
-        if args.summary_at is not None:
-            summary = format_summary_line(epochs, traj_map, section_label, args.summary_at)
-            print("**Summary line (for summary table):**")
-            print()
-            print("| Method | Trajectories | F1 | Sep% | Cons. F1 | Coverage | Avg Set | Med Set | Precision | Recall |")
-            print("|--------|-------------|------|------|----------|----------|---------|---------|-----------|--------|")
-            print(summary)
-            print()
+            # Summary line
+            if args.summary_at is not None:
+                summary = format_summary_line(epochs, traj_map, section_label, args.summary_at)
+                print("**Summary line (for summary table):**")
+                print()
+                print("| Method | Trajectories | F1 | Sep% | Cons. F1 | Coverage | Avg Set | Med Set | Precision | Recall |")
+                print("|--------|-------------|------|------|----------|----------|---------|---------|-----------|--------|")
+                print(summary)
+                print()
+
+        # Endpoint error tables
+        if args.errors or args.errors_only:
+            has_errors = any(m.get("endpoint_errors", {}).get("full") for m in epochs)
+            if has_errors:
+                err_table = format_endpoint_errors_table(
+                    epochs, traj_map, section_label,
+                    regions=error_regions,
+                    per_dim=args.errors_per_dim,
+                )
+                print(err_table)
+                print()
+            else:
+                print(f"No endpoint error data found for {section_label}", file=sys.stderr)
 
     return 0
 

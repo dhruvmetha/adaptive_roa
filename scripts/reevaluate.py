@@ -254,15 +254,17 @@ def recompute_qhat_from_cache(
     invalid_threshold: float = None,
     filter_invalid_by_conformal: bool = False,
     cal_k: int = None,
+    multi_class: bool = True,
 ) -> tuple:
     """Recompute q_hat from cached MC predictions (no GPU needed).
 
     Args:
         cal_k: If set, use only the first K calibration points (indexed from
             the beginning of the cal set file and corresponding cache).
+        multi_class: If True, also compute per-class q_hat values.
 
     Returns:
-        Tuple of (q_hat, n_cal_total, n_cal_used).
+        Tuple of (q_hat, q_hat_success, q_hat_failure, n_cal_total, n_cal_used).
     """
     # Reclassify if radius changed
     if abs(cal_cache.attractor_radius - attractor_radius) > 1e-9:
@@ -300,7 +302,7 @@ def recompute_qhat_from_cache(
 
     if n_cal_used == 0:
         print("    WARNING: No valid calibration points after filtering!")
-        return None, n_cal_total, 0
+        return None, None, None, n_cal_total, 0
 
     cal_config = ConformalConfig(
         delta=delta,
@@ -318,7 +320,22 @@ def recompute_qhat_from_cache(
         verbose=False,
     )
 
-    return q_hat, n_cal_total, n_cal_used
+    # Per-class q_hat values
+    q_hat_success, q_hat_failure = None, None
+    if multi_class:
+        try:
+            q_hat_success, q_hat_failure, _ = calibrator.calibrate_per_class(
+                p_success,
+                y_cal,
+                lambda_star,
+                delta,
+                p_failure=p_failure,
+                verbose=False,
+            )
+        except Exception:
+            pass
+
+    return q_hat, q_hat_success, q_hat_failure, n_cal_total, n_cal_used
 
 
 # ── Legacy q_hat recomputation (no cache) ────────────────────────────────────
@@ -498,6 +515,8 @@ def main():
         action="store_true",
         help="Evaluate only odd-numbered epochs",
     )
+    parser.add_argument("--multi_class", action="store_true",
+                        help="Enable per-class (multi-class) q_hat calibration")
     parser.add_argument("--force", action="store_true",
                         help="Force re-evaluation even with no parameter changes")
     parser.add_argument("--no_filter_invalid_by_conformal", action="store_true",
@@ -745,6 +764,7 @@ def main():
                 invalid_threshold=args.invalid_threshold,
                 filter_invalid_by_conformal=filter_invalid_by_conformal,
                 cal_k=args.cal_k,
+                multi_class=args.multi_class,
             )
 
             if q_hat is None:

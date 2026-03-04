@@ -334,10 +334,13 @@ def _predict_qhat_prediction_sets(
     true_in_set[y_true == -1] = in_set_failure[y_true == -1]
     true_in_set[y_true == 0] = in_set_unknown[y_true == 0]
 
+    confident_mask = (pred == 1) | (pred == 0)
+
     extras = {
         "q_hat": float(q_hat),
         "invalid_threshold": effective_invalid_threshold,
         "coverage": float(np.mean(true_in_set)),
+        "coverage_confident": float(np.mean(true_in_set[confident_mask])) if np.any(confident_mask) else 0.0,
         "avg_set_size": float(np.mean(set_sizes[non_invalid])) if np.any(non_invalid) else 0.0,
         "n_pred_success": int(np.sum(pred == 1)),
         "n_pred_failure": int(np.sum(pred == 0)),

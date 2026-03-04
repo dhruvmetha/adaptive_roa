@@ -281,7 +281,7 @@ def plot_pendulum():
                  fontsize=15, fontweight="bold")
     fig.tight_layout(rect=[0, 0, 1, 0.95], h_pad=4.0)
     out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
-                                        "joint_comparison_pendulum.pdf"))
+                                        "results", "figures", "joint_comparison_pendulum.pdf"))
     fig.savefig(out)
     print(f"Saved: {out}")
     plt.close(fig)
@@ -302,7 +302,7 @@ def plot_quadrotor2d():
                  fontsize=15, fontweight="bold")
     fig.tight_layout(rect=[0, 0, 1, 0.93], w_pad=3.0)
     out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
-                                        "joint_comparison_quadrotor_2d.pdf"))
+                                        "results", "figures", "joint_comparison_quadrotor_2d.pdf"))
     fig.savefig(out)
     print(f"Saved: {out}")
     plt.close(fig)
@@ -329,7 +329,7 @@ def plot_cartpole():
                  fontsize=15, fontweight="bold")
     fig.tight_layout(rect=[0, 0, 1, 0.95], h_pad=4.0)
     out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
-                                        "joint_comparison_cartpole.pdf"))
+                                        "results", "figures", "joint_comparison_cartpole.pdf"))
     fig.savefig(out)
     print(f"Saved: {out}")
     plt.close(fig)
@@ -356,7 +356,7 @@ def plot_quadrotor3d_lambda_delta():
                  fontsize=15, fontweight="bold")
     fig.tight_layout(rect=[0, 0, 1, 0.95], h_pad=4.0)
     out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
-                                        "joint_comparison_quadrotor_3d_lambda_delta.pdf"))
+                                        "results", "figures", "joint_comparison_quadrotor_3d_lambda_delta.pdf"))
     fig.savefig(out)
     print(f"Saved: {out}")
     plt.close(fig)
@@ -383,7 +383,7 @@ def plot_quadrotor3d_qhat():
                  fontsize=15, fontweight="bold")
     fig.tight_layout(rect=[0, 0, 1, 0.95], h_pad=4.0)
     out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
-                                        "joint_comparison_quadrotor_3d_qhat.pdf"))
+                                        "results", "figures", "joint_comparison_quadrotor_3d_qhat.pdf"))
     fig.savefig(out)
     print(f"Saved: {out}")
     plt.close(fig)

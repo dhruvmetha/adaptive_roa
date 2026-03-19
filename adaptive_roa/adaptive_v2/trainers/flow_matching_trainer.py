@@ -53,6 +53,9 @@ class FlowMatchingTrainer:
         For local mode: uses trajectory index files (train_trajectories/val_trajectories).
         """
         if self.is_local:
+            # Get angle indices from system for proper wrapping
+            # (e.g., [0] for pendulum, [1] for cartpole, [2] for quadrotor2d, None for quadrotor3d)
+            angle_indices = getattr(self.system, 'angle_indices', None)
             return TrajectoryDataModule(
                 train_trajectory_file=dataset_files["train_trajectories"],
                 val_trajectory_file=dataset_files["val_trajectories"],
@@ -61,6 +64,7 @@ class FlowMatchingTrainer:
                 batch_size=self.cfg.get("batch_size", 256),
                 val_batch_size=self.cfg.get("val_batch_size", 2048),
                 num_workers=self.cfg.get("num_workers", 4),
+                angle_indices=angle_indices,
             )
 
         # Global: endpoint data module

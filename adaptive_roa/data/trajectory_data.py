@@ -37,12 +37,21 @@ class TrajectoryDataset(Dataset):
         trajectories_dir: str,
         trajectory_files: List,
         sequence_length: int = 32,
-        wrap_angles: bool = True,
+        angle_indices: Optional[List[int]] = None,
     ):
+        """
+        Args:
+            trajectories_dir: Directory containing trajectory files
+            trajectory_files: List of trajectory file paths
+            sequence_length: Fixed number of timesteps to subsample each trajectory to
+            angle_indices: List of state indices that are angles to wrap to [-pi, pi].
+                          None = no wrapping. E.g., [0] for pendulum, [1] for cartpole,
+                          [2] for quadrotor2d, [] for quadrotor3d (quaternion, no wrapping).
+        """
         self.trajectories_dir = Path(trajectories_dir)
         self.trajectory_files = trajectory_files
         self.sequence_length = sequence_length
-        self.wrap_angles = wrap_angles
+        self.angle_indices = angle_indices
 
         print(f"TrajectoryDataset: {len(self.trajectory_files)} trajectories, "
               f"sequence_length={sequence_length}")
@@ -76,10 +85,13 @@ class TrajectoryDataset(Dataset):
             indices = np.linspace(0, T - 1, self.sequence_length, dtype=int)
             return trajectory[indices]
 
-    def _wrap_angle(self, state: np.ndarray) -> np.ndarray:
-        """Wrap angle component (index 0) to [-pi, pi]."""
+    def _wrap_angles(self, state: np.ndarray) -> np.ndarray:
+        """Wrap angle components at specified indices to [-pi, pi]."""
+        if not self.angle_indices:
+            return state
         result = state.copy()
-        result[..., 0] = np.arctan2(np.sin(state[..., 0]), np.cos(state[..., 0]))
+        for idx in self.angle_indices:
+            result[..., idx] = np.arctan2(np.sin(state[..., idx]), np.cos(state[..., idx]))
         return result
 
     def __getitem__(self, idx):
@@ -89,8 +101,7 @@ class TrajectoryDataset(Dataset):
         # Subsample to fixed length
         trajectory = self._subsample(trajectory)
 
-        if self.wrap_angles:
-            trajectory = self._wrap_angle(trajectory)
+        trajectory = self._wrap_angles(trajectory)
 
         start_state = trajectory[0]
         end_state = trajectory[-1]
@@ -129,7 +140,7 @@ class TrajectoryDataModule(pl.LightningDataModule):
         val_batch_size: Optional[int] = None,
         num_workers: int = 4,
         pin_memory: bool = True,
-        wrap_angles: bool = True,
+        angle_indices: Optional[List[int]] = None,
     ):
         super().__init__()
         self.train_trajectory_file = train_trajectory_file
@@ -140,7 +151,7 @@ class TrajectoryDataModule(pl.LightningDataModule):
         self.val_batch_size = val_batch_size if val_batch_size is not None else batch_size
         self.num_workers = num_workers
         self.pin_memory = pin_memory
-        self.wrap_angles = wrap_angles
+        self.angle_indices = angle_indices
 
     def _read_trajectory_files(self, index_file: str) -> List[Path]:
         """Read trajectory index file → list of full paths."""
@@ -157,13 +168,13 @@ class TrajectoryDataModule(pl.LightningDataModule):
                 trajectories_dir=str(self.trajectories_dir),
                 trajectory_files=train_files,
                 sequence_length=self.sequence_length,
-                wrap_angles=self.wrap_angles,
+                angle_indices=self.angle_indices,
             )
             self.val_dataset = TrajectoryDataset(
                 trajectories_dir=str(self.trajectories_dir),
                 trajectory_files=val_files,
                 sequence_length=self.sequence_length,
-                wrap_angles=self.wrap_angles,
+                angle_indices=self.angle_indices,
             )
 
         if stage == "test" or stage is None:
@@ -173,7 +184,7 @@ class TrajectoryDataModule(pl.LightningDataModule):
                 trajectories_dir=str(self.trajectories_dir),
                 trajectory_files=val_files,
                 sequence_length=self.sequence_length,
-                wrap_angles=self.wrap_angles,
+                angle_indices=self.angle_indices,
             )
 
     def train_dataloader(self):

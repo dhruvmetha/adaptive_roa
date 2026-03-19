@@ -25,20 +25,6 @@ from flow_matching.utils import ModelWrapper
 from adaptive_roa.flow_matching.base.flow_matcher import BaseFlowMatcher
 
 
-def apply_conditioning(x: torch.Tensor, conditions: dict) -> None:
-    """
-    Apply conditioning to trajectory tensor.
-
-    Args:
-        x: Tensor [B, T, D] to apply conditioning to
-        conditions: Dict mapping timestep index → value tensor [B, D]
-    """
-    if conditions is None:
-        return
-    for t, val in conditions.items():
-        x[:, t] = val.clone()
-
-
 class TrajectoryVelocityWrapper(ModelWrapper):
     """
     Wraps the trajectory model for FB FM's RiemannianODESolver.
@@ -113,9 +99,9 @@ class TrajectoryFlowMatcherBase(BaseFlowMatcher):
     methods to work with [B, T, D] tensors.
 
     Key differences from BaseFlowMatcher:
-    - compute_flow_loss: operates on [B, T, D] trajectories with history masking
+    - compute_flow_loss: operates on [B, T, D] trajectories with history zeroing
     - predict_endpoint: uses RiemannianODESolver on [B, T, D], returns [:, -1, :]
-    - path.sample: called with [B, T, D] directly (t [B] broadcasts over T)
+    - path.sample: reshaped to [B*T, D] (FB FM requires t to be 1D)
 
     Subclasses must implement all abstract methods from BaseFlowMatcher.
     """

@@ -89,6 +89,10 @@ SLICES = {
         "xticklabels": [r"$-\pi$", r"$-\frac{\pi}{2}$", "0", r"$\frac{\pi}{2}$", r"$\pi$"],
         "yticks": [-2*np.pi, -np.pi, 0, np.pi, 2*np.pi],
         "yticklabels": [r"$-2\pi$", r"$-\pi$", "0", r"$\pi$", r"$2\pi$"],
+        "xticks_compact": [-np.pi, 0, np.pi],
+        "xticklabels_compact": [r"$-\pi$", "0", r"$\pi$"],
+        "yticks_compact": [-2*np.pi, 0, 2*np.pi],
+        "yticklabels_compact": [r"$-2\pi$", "0", r"$2\pi$"],
     },
     "x_xdot": {
         "sweep_indices": (0, 2),
@@ -100,6 +104,10 @@ SLICES = {
         "xticklabels": ["-6", "-3", "0", "3", "6"],
         "yticks": [-6, -3, 0, 3, 6],
         "yticklabels": ["-6", "-3", "0", "3", "6"],
+        "xticks_compact": [-6, 0, 6],
+        "xticklabels_compact": ["-6", "0", "6"],
+        "yticks_compact": [-6, 0, 6],
+        "yticklabels_compact": ["-6", "0", "6"],
     },
 }
 
@@ -507,7 +515,9 @@ def plot_discrete_vertical(all_data: dict, epoch: int, baselines: list,
 
     # Slice titles on top row
     for col_idx, slice_name in enumerate(slice_names):
-        short = r"$(\theta,\,\dot{\theta})$" if "theta_thetadot" in slice_name else r"$(x,\,\dot{x})$"
+        short = (r"$(q\!=\!0,\;\theta,\;\dot{q}\!=\!0,\;\dot{\theta})$"
+                 if "theta_thetadot" in slice_name
+                 else r"$(q,\;\theta\!=\!0,\;\dot{q},\;\dot{\theta}\!=\!0)$")
         axes[0, col_idx].set_title(short, fontsize=title_fs, fontweight="bold")
 
     # Row labels on left edge
@@ -721,7 +731,7 @@ def plot_error_horizontal(all_data: dict, epoch: int, baselines: list,
         Patch(facecolor="#440154", label="TN"),
         Patch(facecolor="#35B779", label="FP"),
         Patch(facecolor="#31688E", label="FN"),
-        Patch(facecolor="#D3D3D3", label="Separatrix"),
+        Patch(facecolor="#D3D3D3", label="Uncertain"),
     ]
     fig.legend(
         handles=legend_patches, loc="lower center",
@@ -785,7 +795,12 @@ def plot_error_vertical(all_data: dict, epoch: int, baselines: list,
 
         # helper: strip ticks/labels on interior edges
         def _strip_interior(ax, r, c):
-            _style_ax(ax, sl, fontsize=tick_fs)
+            # Use reduced ticks (extremes + midpoint), no tick marks
+            ax.set_xticks(sl["xticks_compact"])
+            ax.set_xticklabels(sl["xticklabels_compact"], fontsize=tick_fs, fontweight="bold")
+            ax.set_yticks(sl["yticks_compact"])
+            ax.set_yticklabels(sl["yticklabels_compact"], fontsize=tick_fs, fontweight="bold")
+            ax.tick_params(length=0)
             # y-axis
             if c == 0:
                 ax.set_ylabel(sl["ylabel"], fontsize=label_fs, fontweight="bold")
@@ -825,7 +840,9 @@ def plot_error_vertical(all_data: dict, epoch: int, baselines: list,
 
     # Slice titles
     for col_idx, slice_name in enumerate(slice_names):
-        short = r"$(\theta,\,\dot{\theta})$" if "theta_thetadot" in slice_name else r"$(x,\,\dot{x})$"
+        short = (r"$(q\!=\!0,\;\theta,\;\dot{q}\!=\!0,\;\dot{\theta})$"
+                 if "theta_thetadot" in slice_name
+                 else r"$(q,\;\theta\!=\!0,\;\dot{q},\;\dot{\theta}\!=\!0)$")
         axes[0, col_idx].set_title(short, fontsize=title_fs, fontweight="bold")
 
     # Row labels
@@ -844,7 +861,7 @@ def plot_error_vertical(all_data: dict, epoch: int, baselines: list,
         Patch(facecolor="#440154", edgecolor="0.4", linewidth=0.5, label="TN"),
         Patch(facecolor="#35B779", edgecolor="0.4", linewidth=0.5, label="FP"),
         Patch(facecolor="#31688E", edgecolor="0.4", linewidth=0.5, label="FN"),
-        Patch(facecolor="#D3D3D3", edgecolor="0.4", linewidth=0.5, label="Separatrix"),
+        Patch(facecolor="#D3D3D3", edgecolor="0.4", linewidth=0.5, label="Uncertain"),
     ]
     fig.legend(
         handles=legend_patches, loc="lower center",

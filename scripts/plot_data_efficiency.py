@@ -190,7 +190,7 @@ panels = [
     ('Pendulum (2D)',    pend_nonad, pend_adapt, pend_baselines),
     ('CartPole (4D)',    cart_nonad, cart_adapt, cart_baselines),
     ('Planar Quad (6D)', q2d_nonad,  q2d_adapt,  q2d_baselines),
-    ('3D Quad (13D)',    q3d_nonad,  q3d_adapt,  q3d_baselines),
+    ('Spatial Quad (13D)',    q3d_nonad,  q3d_adapt,  q3d_baselines),
 ]
 
 # Per-panel F1 y-limits: (ymin, ymax, major_tick_spacing)
@@ -311,7 +311,7 @@ for idx, (title, nonad, adapt, baselines) in enumerate(panels):
     ax_sep.set_ylim(ymin_sep, ymax_sep)
     ax_sep.yaxis.set_major_locator(mticker.MultipleLocator(ytick_sep))
     if idx == 0:
-        ax_sep.set_ylabel('Separatrix (%)', fontsize=8)
+        ax_sep.set_ylabel('Unc. (%)', fontsize=8)
     else:
         ax_sep.set_ylabel('')
         ax_sep.set_yticklabels([])
@@ -410,7 +410,7 @@ for idx, (title, nonad, adapt, baselines) in enumerate(panels):
     ax_sep.set_ylim(ymin_sep, ymax_sep)
     ax_sep.yaxis.set_major_locator(mticker.MultipleLocator(ytick_sep))
     if idx == 0:
-        ax_sep.set_ylabel('Separatrix (%)', fontsize=8)
+        ax_sep.set_ylabel('Unc. (%)', fontsize=8)
     else:
         ax_sep.set_ylabel('')
         ax_sep.set_yticklabels([])
@@ -667,7 +667,7 @@ def build_full_figure(f1_lims, use_hline=False):
         ax_sep.set_ylim(ymin_sep, ymax_sep)
         ax_sep.yaxis.set_major_locator(mticker.MultipleLocator(ytick_sep))
         if idx == 0:
-            ax_sep.set_ylabel('Separatrix (%)', fontsize=8)
+            ax_sep.set_ylabel('Unc. (%)', fontsize=8)
         else:
             ax_sep.set_ylabel('')
             ax_sep.set_yticklabels([])

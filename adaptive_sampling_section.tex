@@ -1,0 +1,68 @@
+\subsection{Adaptive Sampling}
+\label{sec:adaptive}
+
+Since evaluating $p_\theta(\cdot \mid x)$ is orders of magnitude cheaper
+than executing a rollout, candidate initial states can be screened
+before committing to the trajectory budget. The classifier
+(Section~\ref{sec:classification}) provides a natural acquisition
+signal: states receiving $\hat{y}(x) = \sep$ are precisely those where
+additional data is most informative, enabling targeted sampling that
+concentrates rollouts near the separatrix rather than spreading them
+uniformly across~$\mathcal{X}$.
+
+\textbf{Acquisition strategy: $\textsc{Direct}(r_{\mathrm{sep}})$.}
+Each acquisition round collects $N$ new trajectories, governed by a
+\emph{separatrix sampling ratio} $r_{\mathrm{sep}} \in [0,1]$.
+A fraction $(1 - r_{\mathrm{sep}})$ of the budget provides non-adaptive
+exploration: $N_{\mathrm{Unif}} = \lfloor (1 - r_{\mathrm{sep}}) N
+\rfloor$ initial states are drawn uniformly from~$\mathcal{X}$ and
+rolled out to obtain ground-truth labels. The remaining
+$N_{\mathrm{Sep}} = N - N_{\mathrm{Unif}}$ trajectories target the
+separatrix region via rejection sampling: candidates are drawn
+uniformly from~$\mathcal{X}$, screened by computing $\hat{y}(x)$
+via~\eqref{eq:threshold_rule}, and retained only if
+$\hat{y}(x) = \sep$; drawing and screening continue until
+$N_{\mathrm{Sep}}$ candidates are accepted and rolled out. Setting
+$r_{\mathrm{sep}} = 0$ recovers purely uniform sampling (the
+non-adaptive baseline), while $r_{\mathrm{sep}} = 1$ devotes the entire
+budget to the separatrix region. Alternative acquisition strategies
+that leverage the nonconformity score (Section~\ref{sec:conformal})
+are compared in Section~\ref{sec:experiments}.
+
+\textbf{Iterative procedure.}
+The pipeline applies $\textsc{Direct}(r_{\mathrm{sep}})$ over $E$
+iterations (Algorithm~\ref{alg:pipeline}). At each iteration the
+generative model is retrained on the accumulated dataset, thresholds
+$(\lambda^*, \delta^*)$ are re-optimized via~\eqref{eq:threshold_opt},
+and $N$ new trajectories are acquired via
+$\textsc{Direct}(r_{\mathrm{sep}})$ and appended to the training set.
+A final round of retraining and threshold optimization is performed
+after the last iteration.
+
+\begin{algorithm}[h]
+\caption{Adaptive \roa\ Estimation (Training)}
+\label{alg:pipeline}
+\footnotesize
+\SetAlgoLined
+\KwIn{Seed trajectories $\mathcal{D}_0$,
+  pool of candidate initial states $\mathcal{P}$,
+  rollout budget $N$ per iteration, ratio $r_{\mathrm{sep}}$,
+  iterations $E$}
+\KwOut{Trained model $p_\theta$, optimized thresholds
+  $(\lambda^*, \delta^*)$}
+
+$\mathcal{D}_{\mathrm{train}} \leftarrow
+  \text{pairs from } \mathcal{D}_0$\;
+
+\For{$e = 1$ \KwTo $E$}{
+    Train $p_\theta$ on $\mathcal{D}_{\mathrm{train}}$\;
+    Optimize $(\lambda^*, \delta^*)$
+      via~\eqref{eq:threshold_opt} on validation split\;
+    Acquire $N$ trajectories via
+      $\textsc{Direct}(r_{\mathrm{sep}})$ from $\mathcal{P}$\;
+    Add new pairs to $\mathcal{D}_{\mathrm{train}}$\;
+}
+Retrain $p_\theta$ and re-optimize
+  $(\lambda^*, \delta^*)$ on final
+  $\mathcal{D}_{\mathrm{train}}$\;
+\end{algorithm}

@@ -113,15 +113,15 @@ systems = [
     {"title": "Pendulum (2D)",     "adapt": pend_adapt, "nonad": pend_nonad},
     {"title": "CartPole (4D)",     "adapt": cart_adapt, "nonad": cart_nonad},
     {"title": "Planar Quad (6D)",  "adapt": q2d_adapt,  "nonad": q2d_nonad},
-    {"title": "3D Quad (13D)",     "adapt": q3d_adapt,  "nonad": q3d_nonad},
+    {"title": "Spatial Quad (13D)",     "adapt": q3d_adapt,  "nonad": q3d_nonad},
 ]
 
 # Row configs: (data_key, ylabel)
 rows = [
     ("f1",        r"F1 $\uparrow$"),
-    ("sep",       r"Sep% $\downarrow$"),
-    ("invalid",   r"Invalid% $\downarrow$"),
-    ("uncertain", r"Uncertain% $\downarrow$"),
+    ("sep",       r"Unc% $\downarrow$"),
+    ("invalid",   r"ME% $\downarrow$"),
+    ("uncertain", r"OU% $\downarrow$"),
 ]
 
 # ── Figure: 4 rows × 4 columns ───────────────────────────────────────────
@@ -211,9 +211,9 @@ plt.close(fig)
 # 2 rows × 2 columns
 # ══════════════════════════════════════════════════════════════════════════
 
-COLOR_SEP = "#2ca02c"   # green
-COLOR_INV = "#d62728"   # red
-COLOR_UNC = "#1f77b4"   # blue
+COLOR_UNC = "#2ca02c"   # green  — Uncertain% (Unc%)
+COLOR_ME  = "#d62728"   # red   — ME% (invalid)
+COLOR_OU  = "#1f77b4"   # blue  — OU% (uncertain)
 
 fig2, axes2 = plt.subplots(2, 2, figsize=(3.58, 2.8))
 fig2.subplots_adjust(wspace=0.12, hspace=0.55, top=0.93, bottom=0.18,
@@ -230,12 +230,12 @@ for idx, sys_cfg in enumerate(systems):
     inv = np.array(sys_cfg["adapt"]["invalid"])
     unc = np.array(sys_cfg["adapt"]["uncertain"])
 
-    ax.plot(x, sep, "-o", color=COLOR_SEP, markersize=2,
-            linewidth=1.0, label="Sep%", zorder=3)
-    ax.plot(x, inv, "--^", color=COLOR_INV, markersize=2,
-            linewidth=1.0, label="Invalid%", zorder=3)
-    ax.plot(x, unc, ":s", color=COLOR_UNC, markersize=2,
-            linewidth=1.0, label="Uncertain%", zorder=3)
+    ax.plot(x, sep, "-o", color=COLOR_UNC, markersize=2,
+            linewidth=1.0, label="Unc%", zorder=3)
+    ax.plot(x, inv, "--^", color=COLOR_ME, markersize=2,
+            linewidth=1.0, label="ME%", zorder=3)
+    ax.plot(x, unc, ":s", color=COLOR_OU, markersize=2,
+            linewidth=1.0, label="OU%", zorder=3)
 
     ax.set_title(sys_cfg["title"], fontweight="bold", pad=3, fontsize=8)
 

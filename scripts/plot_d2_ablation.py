@@ -47,7 +47,7 @@ systems = [
         "f1":  np.array([0.8547, 0.9261, 0.9300, 0.9329]),
         "sep": np.array([13.21,  9.62,   9.36,   6.00]),
     }),
-    ("3D Quad (13D)", {
+    ("Spatial Quad (13D)", {
         "f1":  np.array([0.9470, 0.9502, 0.9486, 0.9525]),
         "sep": np.array([25.31,  25.85,  24.27,  25.22]),
     }),
@@ -88,7 +88,7 @@ for idx, (name, d) in enumerate(systems):
     bars_sep = ax2.bar(x + bar_w / 2, d["sep"], bar_w,
                        color=COLOR_SEP, alpha=0.75,
                        edgecolor="white", linewidth=0.5, zorder=3)
-    ax2.set_ylabel(r"Sep. Rate (%) $\downarrow$", color=COLOR_SEP, fontweight="bold")
+    ax2.set_ylabel(r"Unc. (%) $\downarrow$", color=COLOR_SEP, fontweight="bold")
     ax2.tick_params(axis="y", colors=COLOR_SEP)
     sep_max = max(d["sep"]) * 1.30
     ax2.set_ylim(0, sep_max)
@@ -127,7 +127,7 @@ legend_handles = [
     Patch(facecolor=COLOR_SEP, alpha=0.75, edgecolor="white", linewidth=0.5),
     Patch(facecolor="0.65", alpha=0.85, edgecolor="white", linewidth=0.5, hatch="//"),
 ]
-legend_labels = [r"F1 $\uparrow$", r"Sep. Rate (%) $\downarrow$", "Non-adaptive baseline"]
+legend_labels = [r"F1 $\uparrow$", r"Unc. (%) $\downarrow$", "Non-adaptive baseline"]
 fig.legend(legend_handles, legend_labels, loc="upper center", ncol=3,
            frameon=True, fancybox=False, edgecolor="0.7",
            bbox_to_anchor=(0.5, 1.01), fontsize=10)

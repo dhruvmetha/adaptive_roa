@@ -64,6 +64,10 @@ SLICES = {
         "xticklabels": [r"$-\pi$", r"$-\frac{\pi}{2}$", "0", r"$\frac{\pi}{2}$", r"$\pi$"],
         "yticks": [-2*np.pi, -np.pi, 0, np.pi, 2*np.pi],
         "yticklabels": [r"$-2\pi$", r"$-\pi$", "0", r"$\pi$", r"$2\pi$"],
+        "xticks_compact": [-np.pi, 0, np.pi],
+        "xticklabels_compact": [r"$-\pi$", "0", r"$\pi$"],
+        "yticks_compact": [-2*np.pi, 0, 2*np.pi],
+        "yticklabels_compact": [r"$-2\pi$", "0", r"$2\pi$"],
         "gt_csv": _GT_DIR / "viz_theta_vs_thetadot.csv",
         "gt_ax0_col": "theta",      # CSV column for x-axis
         "gt_ax1_col": "theta_dot",  # CSV column for y-axis
@@ -78,6 +82,10 @@ SLICES = {
         "xticklabels": ["-6", "-3", "0", "3", "6"],
         "yticks": [-6, -3, 0, 3, 6],
         "yticklabels": ["-6", "-3", "0", "3", "6"],
+        "xticks_compact": [-6, 0, 6],
+        "xticklabels_compact": ["-6", "0", "6"],
+        "yticks_compact": [-6, 0, 6],
+        "yticklabels_compact": ["-6", "0", "6"],
         "gt_csv": _GT_DIR / "viz_x_vs_xdot.csv",
         "gt_ax0_col": "x",
         "gt_ax1_col": "x_dot",
@@ -280,7 +288,8 @@ def load_cache_file(slice_name: str):
 # ── Plotting helpers ──────────────────────────────────────────────────────────
 
 def _discrete_cmap():
-    colors = ["#d73027", "#fee08b", "#1a9850"]
+    # TP (success) / Uncertain / TN (failure) — matches error-analysis palette
+    colors = ["#440154", "#D3D3D3", "#FDE725"]
     cmap = mcolors.ListedColormap(colors)
     bounds = [-1.5, -0.5, 0.5, 1.5]
     norm = mcolors.BoundaryNorm(bounds, cmap.N)
@@ -289,7 +298,7 @@ def _discrete_cmap():
 
 def _prob_cmap():
     return mcolors.LinearSegmentedColormap.from_list(
-        "roa_prob", ["#d73027", "#fee08b", "#ffffbf", "#a6d96a", "#1a9850"]
+        "roa_prob", ["#440154", "#31688E", "#21918C", "#5EC962", "#FDE725"]
     )
 
 
@@ -423,9 +432,9 @@ def plot_combined(all_results: dict, epoch: int):
     # Color legend for success / uncertain / failure
     from matplotlib.patches import Patch
     legend_patches = [
-        Patch(facecolor="#1a9850", label="Success"),
-        Patch(facecolor="#fee08b", label="Uncertain"),
-        Patch(facecolor="#d73027", label="Failure"),
+        Patch(facecolor="#FDE725", label="Success"),
+        Patch(facecolor="#D3D3D3", label="Uncertain"),
+        Patch(facecolor="#440154", label="Failure"),
     ]
     fig.legend(
         handles=legend_patches, loc="lower center",

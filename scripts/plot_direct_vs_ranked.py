@@ -28,7 +28,7 @@ plt.rcParams.update({
 })
 
 # ---------- Data ----------
-systems = ["Pend.", "CartP.", "PQ-2D", "Q-3D"]
+systems = ["Pend.", "CartP.", "PQ-2D", "SQ-3D"]
 direct  = np.array([6.00,  0.99,  6.00, 25.22])
 ranked  = np.array([11.84, 1.64, 14.00, 24.85])
 
@@ -71,7 +71,7 @@ for i in range(len(systems)):
 # Axes
 ax.set_xticks(x)
 ax.set_xticklabels(systems, fontweight="bold")
-ax.set_ylabel("Sep. Rate (%)", fontweight="bold")
+ax.set_ylabel("Unc. (%)", fontweight="bold")
 ax.set_ylim(0, y_max * 1.22)
 ax.set_xlim(-0.5, len(systems) - 0.5)
 ax.spines["top"].set_visible(False)

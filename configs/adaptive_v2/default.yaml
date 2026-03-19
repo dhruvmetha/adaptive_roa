@@ -1,5 +1,6 @@
 defaults:
   - system: pendulum
+  - prediction_mode: global
   - trainer: flow_matching_trainer
   - probability: endpoint_mc
   - threshold: conformal_threshold

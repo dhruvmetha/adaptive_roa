@@ -276,16 +276,49 @@ class AdaptiveDatasetBuilder:
         print(f"Built test dataset: {n_pairs} pairs from {n_test} trajectories (subset of training)")
         return str(output_path)
 
+    def build_trajectory_index(self, indices: List[int], filename: str) -> str:
+        """
+        Write trajectory filenames for given indices to a file.
+
+        Used by local (trajectory) prediction mode — the data module reads
+        this file directly instead of reverse-engineering indices from
+        endpoint files.
+
+        Args:
+            indices: Trajectory indices to include
+            filename: Output filename
+
+        Returns:
+            Path to written file
+        """
+        output_path = self.output_dir / filename
+        with open(output_path, 'w') as f:
+            for idx in indices:
+                f.write(f"{self.data_source.trajectory_files[idx].name}\n")
+        return str(output_path)
+
     def build_all_datasets(self) -> Dict[str, str]:
         """
         Build all dataset files (train, val).
 
+        Returns endpoint files for global mode and trajectory index files
+        for local mode, keyed as:
+            'train', 'val' — endpoint pair files
+            'train_trajectories', 'val_trajectories' — trajectory filename lists
+
         Returns:
             Dict mapping split name to file path
         """
+        train_indices = list(self.train_split)
+        n_val = max(1, int(len(train_indices) * self.val_ratio))
+        train_only = train_indices[n_val:]
+        val_indices = train_indices[:n_val]
+
         return {
             'train': self.build_train_dataset(),
             'val': self.build_val_dataset(),
+            'train_trajectories': self.build_trajectory_index(train_only, "train_trajectories.txt"),
+            'val_trajectories': self.build_trajectory_index(val_indices, "val_trajectories.txt"),
         }
 
     def get_training_data(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:

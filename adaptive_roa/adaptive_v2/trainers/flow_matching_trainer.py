@@ -17,7 +17,7 @@ from adaptive_roa.data.cartpole_endpoint_data import CartPoleEndpointDataModule
 from adaptive_roa.data.pendulum_endpoint_data import PendulumEndpointDataModule
 from adaptive_roa.data.quadrotor2d_endpoint_data import Quadrotor2DEndpointDataModule
 from adaptive_roa.data.quadrotor3d_endpoint_data import Quadrotor3DEndpointDataModule
-from adaptive_roa.data.trajectory_data import TrajectoryEndpointDataModule
+from adaptive_roa.data.trajectory_data import TrajectoryDataModule
 
 
 # Global prediction mode: endpoint data modules (start → end pairs)
@@ -45,38 +45,45 @@ class FlowMatchingTrainer:
     def is_local(self) -> bool:
         return self.prediction_mode == "local"
 
-    def _create_datamodule(self, train_file: str, val_file: str):
+    def _create_datamodule(self, dataset_files: dict):
+        """
+        Create data module from dataset files dict.
+
+        For global mode: uses endpoint pair files (train/val).
+        For local mode: uses trajectory index files (train_trajectories/val_trajectories).
+        """
+        if self.is_local:
+            return TrajectoryDataModule(
+                train_trajectory_file=dataset_files["train_trajectories"],
+                val_trajectory_file=dataset_files["val_trajectories"],
+                trajectories_dir=self.cfg.data_source.trajectories_dir,
+                sequence_length=self.cfg.flow_matching.get("sequence_length", 32),
+                batch_size=self.cfg.get("batch_size", 256),
+                val_batch_size=self.cfg.get("val_batch_size", 2048),
+                num_workers=self.cfg.get("num_workers", 4),
+            )
+
+        # Global: endpoint data module
+        dm_cls = _DATAMODULES[self.system_name]
         kwargs = {
-            "data_file": train_file,
-            "validation_file": val_file,
-            "test_file": val_file,
+            "data_file": dataset_files["train"],
+            "validation_file": dataset_files["val"],
+            "test_file": dataset_files["val"],
             "batch_size": self.cfg.get("batch_size", 256),
             "val_batch_size": self.cfg.get("val_batch_size", 2048),
             "num_workers": self.cfg.get("num_workers", 4),
         }
-
-        if self.is_local:
-            # Local prediction: use trajectory data module
-            kwargs["trajectories_dir"] = self.cfg.data_source.trajectories_dir
-            kwargs["shuffled_indices_file"] = self.cfg.data_source.shuffled_indices_file
-            kwargs["sequence_length"] = self.cfg.flow_matching.get("sequence_length", 32)
-            return TrajectoryEndpointDataModule(**kwargs)
-
-        # Global prediction: use system-specific endpoint data module
-        dm_cls = _DATAMODULES[self.system_name]
         if self.system_name in {"quadrotor3d"}:
-            # Kept for compatibility with older datamodule signatures.
             kwargs["dataset_dir"] = self.cfg.system.get("dataset_dir")
         return dm_cls(**kwargs)
 
     def fit(
         self,
-        train_file: str,
-        val_file: str,
+        dataset_files: dict,
         output_dir: str,
         resume_checkpoint: str | None = None,
     ):
-        data_module = self._create_datamodule(train_file, val_file)
+        data_module = self._create_datamodule(dataset_files)
 
         use_loss_weights = self.cfg.flow_matching.get("use_loss_weights", False)
         use_manifold = self.cfg.flow_matching.get("use_manifold", True)

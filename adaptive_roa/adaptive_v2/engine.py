@@ -131,8 +131,7 @@ class AdaptiveEngine:
             resume_ckpt = previous_best_checkpoint if (warm_start and previous_best_checkpoint) else None
 
             model_handle = self.trainer.fit(
-                train_file=dataset_files["train"],
-                val_file=dataset_files["val"],
+                dataset_files=dataset_files,
                 output_dir=str(epoch_output_dir),
                 resume_checkpoint=resume_ckpt,
             )

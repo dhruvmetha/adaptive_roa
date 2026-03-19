@@ -2,7 +2,6 @@
 
 defaults:
   - _base
-  - /model/family: unet
   - /model/system_dims: quadrotor3d
   - _self_
 
@@ -42,6 +41,9 @@ system:
 
 flow_matcher:
   _target_: adaptive_roa.flow_matching.quadrotor_3d.latent_conditional.flow_matcher.Quadrotor3DLatentConditionalFlowMatcher
+
+flow_matcher_local:
+  _target_: adaptive_roa.flow_matching.quadrotor_3d.trajectory.flow_matcher.Quadrotor3DTrajectoryFlowMatcher
 
 adaptive_v2:
   system_name: quadrotor3d

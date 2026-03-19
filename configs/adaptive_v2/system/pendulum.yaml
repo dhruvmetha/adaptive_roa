@@ -2,7 +2,6 @@
 
 defaults:
   - _base
-  - /model/family: unet
   - /model/system_dims: pendulum
   - _self_
 
@@ -49,6 +48,9 @@ system:
 
 flow_matcher:
   _target_: adaptive_roa.flow_matching.pendulum.latent_conditional.flow_matcher.PendulumLatentConditionalFlowMatcher
+
+flow_matcher_local:
+  _target_: adaptive_roa.flow_matching.pendulum.trajectory.flow_matcher.PendulumTrajectoryFlowMatcher
 
 adaptive_v2:
   system_name: pendulum

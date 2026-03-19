@@ -2,7 +2,6 @@
 
 defaults:
   - _base
-  - /model/family: unet
   - /model/system_dims: cartpole_pybullet
   - _self_
 
@@ -36,6 +35,9 @@ system:
 
 flow_matcher:
   _target_: adaptive_roa.flow_matching.cartpole.latent_conditional.flow_matcher.CartPoleLatentConditionalFlowMatcher
+
+flow_matcher_local:
+  _target_: adaptive_roa.flow_matching.cartpole.trajectory.flow_matcher.CartPoleTrajectoryFlowMatcher
 
 adaptive_v2:
   system_name: cartpole_pybullet

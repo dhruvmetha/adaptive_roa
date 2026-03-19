@@ -1,4 +1,10 @@
 # @package _global_
 # Global prediction mode (default): direct endpoint prediction via flow matching
-# No overrides needed — system configs already define model + flow_matcher for global mode
+# Model family (unet, adaln, dit, etc.) is loaded here, not in system configs,
+# so local mode can set a completely different model without key conflicts.
+
+defaults:
+  - /model/family: unet
+  - _self_
+
 prediction_mode: global

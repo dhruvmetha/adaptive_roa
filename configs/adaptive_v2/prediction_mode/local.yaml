@@ -9,6 +9,11 @@
 #   system=quadrotor3d prediction_mode=local
 prediction_mode: local
 
+# Override flow_matcher target from system config's local target
+flow_matcher:
+  _target_: ${flow_matcher_local._target_}
+
+# Trajectory Transformer model — dims from system's model_dims
 model:
   _target_: adaptive_roa.model.temporal_transformer.TemporalTransformer
   sequence_length: ${flow_matching.sequence_length}

@@ -14,6 +14,7 @@ from .simple_flow_mlp import SimpleFlowMLP
 from .adaln_mlp import AdaLNResidualMLP
 from .dit_flow import DiTFlowModel
 from .dit_cross_attention import DiTCrossAttentionModel
+from .temporal_transformer import TemporalTransformer
 
 __all__ = [
     "UNet1D",
@@ -31,4 +32,5 @@ __all__ = [
     "AdaLNResidualMLP",
     "DiTFlowModel",
     "DiTCrossAttentionModel",
+    "TemporalTransformer",
 ]

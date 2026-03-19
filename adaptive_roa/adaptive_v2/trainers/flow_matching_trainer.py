@@ -17,6 +17,7 @@ from adaptive_roa.data.cartpole_endpoint_data import CartPoleEndpointDataModule
 from adaptive_roa.data.pendulum_endpoint_data import PendulumEndpointDataModule
 from adaptive_roa.data.quadrotor2d_endpoint_data import Quadrotor2DEndpointDataModule
 from adaptive_roa.data.quadrotor3d_endpoint_data import Quadrotor3DEndpointDataModule
+from adaptive_roa.data.trajectory_data import TrajectoryEndpointDataModule
 
 
 _DATAMODULES = {
@@ -24,6 +25,7 @@ _DATAMODULES = {
     "cartpole_pybullet": CartPoleEndpointDataModule,
     "quadrotor2d": Quadrotor2DEndpointDataModule,
     "quadrotor3d": Quadrotor3DEndpointDataModule,
+    "pendulum_trajectory": TrajectoryEndpointDataModule,
 }
 
 
@@ -51,6 +53,11 @@ class FlowMatchingTrainer:
         if self.system_name in {"quadrotor3d"}:
             # Kept for compatibility with older datamodule signatures.
             kwargs["dataset_dir"] = self.cfg.system.get("dataset_dir")
+        if self.system_name == "pendulum_trajectory":
+            # TrajectoryEndpointDataModule needs extra kwargs for trajectory loading
+            kwargs["trajectories_dir"] = self.cfg.data_source.trajectories_dir
+            kwargs["shuffled_indices_file"] = self.cfg.data_source.shuffled_indices_file
+            kwargs["sequence_length"] = self.cfg.flow_matching.get("sequence_length", 32)
         return dm_cls(**kwargs)
 
     def fit(
@@ -101,6 +108,9 @@ class FlowMatchingTrainer:
         }
         if self.system_name == "quadrotor3d":
             flow_matcher_kwargs["quat_loss_weight"] = self.cfg.flow_matching.get("quat_loss_weight", 1.0)
+        if self.system_name == "pendulum_trajectory":
+            flow_matcher_kwargs["sequence_length"] = self.cfg.flow_matching.get("sequence_length", 32)
+            flow_matcher_kwargs["history_length"] = self.cfg.flow_matching.get("history_length", 1)
 
         flow_matcher = hydra.utils.instantiate(self.cfg.flow_matcher, **flow_matcher_kwargs)
 

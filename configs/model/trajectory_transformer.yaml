@@ -1,0 +1,20 @@
+_target_: adaptive_roa.model.temporal_transformer.TemporalTransformer
+
+# Trajectory dimensions
+sequence_length: 32
+input_dim: 3             # Pendulum embedded: (sin θ, cos θ, θ̇_norm)
+output_dim: 2            # Tangent space: (dθ/dt, dθ̇/dt)
+latent_dim: 2            # Will be overridden by flow_matching.latent_dim
+condition_dim: 3         # Start state embedding: (sin θ, cos θ, θ̇_norm)
+
+# Transformer architecture
+hidden_dim: 256
+num_layers: 6
+num_heads: 8
+feedforward_dim: 1024    # 4x hidden_dim
+dropout: 0.1
+time_embed_dim: 256
+global_query_embed_dim: 256
+use_positional_encoding: true
+use_windowed_attention: false
+attention_window_size: 0

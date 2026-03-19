@@ -67,6 +67,9 @@ conformal:
   # Target F1 (only used when optimize_objective=f1)
   target_f1: 0.90
 
+  # Trajectory checking: check success/failure at every timestep (local mode only)
+  trajectory_checking: false
+
   # Invalid endpoint refinement
   refine_invalids: false
   refine_t_min: 0.7

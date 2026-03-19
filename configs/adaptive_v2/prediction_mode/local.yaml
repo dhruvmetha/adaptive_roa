@@ -33,3 +33,9 @@ model:
 flow_matching:
   sequence_length: 32
   history_length: 1
+
+# Enable per-timestep trajectory checking for MC evaluation
+# When true: classify trajectory at every timestep (first success/failure wins)
+# When false: check endpoint only (same as global mode)
+conformal:
+  trajectory_checking: true

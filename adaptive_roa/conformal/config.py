@@ -80,6 +80,11 @@ class ConformalConfig:
     fixed_lambda_star: float = 0.5
     fixed_delta_star: float = 0.1
 
+    # Trajectory checking: when True and using local prediction mode,
+    # classify trajectories at every timestep (first outcome wins)
+    # instead of only checking the endpoint
+    trajectory_checking: bool = False
+
     # Invalid endpoint refinement
     refine_invalids: bool = False
     refine_t_min: float = 0.7
@@ -123,6 +128,7 @@ class ConformalConfig:
             target_f1=c.get("target_f1", 0.90),
             fixed_lambda_star=c.get("fixed_lambda_star", 0.5),
             fixed_delta_star=c.get("fixed_delta_star", 0.1),
+            trajectory_checking=c.get("trajectory_checking", False),
             refine_invalids=c.get("refine_invalids", False),
             refine_t_min=c.get("refine_t_min", 0.7),
             refine_t_max=c.get("refine_t_max", 0.9),

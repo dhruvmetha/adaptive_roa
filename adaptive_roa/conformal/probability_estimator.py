@@ -117,27 +117,44 @@ class ProbabilityEstimator:
         n_batches = (N + batch_size - 1) // batch_size
         total_steps = n_batches * K
 
+        # Check if trajectory checking is available and enabled
+        use_trajectory_checking = (
+            self.config.trajectory_checking
+            and hasattr(self.flow_matcher, 'predict_trajectory')
+            and hasattr(self.flow_matcher, 'classify_trajectory')
+        )
+        if use_trajectory_checking and verbose:
+            print(f"      [MC] Using trajectory checking (per-timestep reachability)")
+
         with tqdm(total=total_steps, desc="MC estimation", disable=not verbose) as pbar:
             for batch_start in range(0, N, batch_size):
                 batch_end = min(batch_start + batch_size, N)
                 batch_states = states[batch_start:batch_end]
 
                 for _ in range(K):
-                    endpoints = self.flow_matcher.predict_endpoint(batch_states)
-                    labels = self.system.classify_attractor(
-                        endpoints, radius=self.config.attractor_radius
-                    )
-
-                    if refine_invalids:
-                        rstats = refine_invalid_endpoints(
-                            self.flow_matcher, self.system,
-                            endpoints, labels, batch_states,
-                            attractor_radius=self.config.attractor_radius,
-                            t_range=refine_t_range,
-                            num_steps=refine_num_steps,
-                            max_attempts=refine_max_attempts,
+                    if use_trajectory_checking:
+                        # Generate full trajectory, classify at every timestep
+                        trajectory = self.flow_matcher.predict_trajectory(batch_states)
+                        labels = self.flow_matcher.classify_trajectory(
+                            trajectory, attractor_radius=self.config.attractor_radius
                         )
-                        cumulative_rstats.accumulate(rstats)
+                    else:
+                        # Endpoint-only: predict endpoint, classify once
+                        endpoints = self.flow_matcher.predict_endpoint(batch_states)
+                        labels = self.system.classify_attractor(
+                            endpoints, radius=self.config.attractor_radius
+                        )
+
+                        if refine_invalids:
+                            rstats = refine_invalid_endpoints(
+                                self.flow_matcher, self.system,
+                                endpoints, labels, batch_states,
+                                attractor_radius=self.config.attractor_radius,
+                                t_range=refine_t_range,
+                                num_steps=refine_num_steps,
+                                max_attempts=refine_max_attempts,
+                            )
+                            cumulative_rstats.accumulate(rstats)
 
                     success_counts[batch_start:batch_end] += (labels == 1).int()
                     failure_counts[batch_start:batch_end] += (labels == -1).int()

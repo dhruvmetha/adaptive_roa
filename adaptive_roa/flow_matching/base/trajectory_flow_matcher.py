@@ -285,91 +285,6 @@ class TrajectoryFlowMatcherBase(BaseFlowMatcher):
 
         return loss
 
-    def predict_endpoint(
-        self,
-        start_states: torch.Tensor,
-        num_steps: int = 100,
-        latent: Optional[torch.Tensor] = None,
-        method: str = "euler",
-    ) -> torch.Tensor:
-        """
-        Predict endpoints via RiemannianODESolver on [B, T, D] trajectories.
-
-        Uses FB FM's solver which correctly handles manifold operations (projx,
-        proju, expmap) on [B, T, D] tensors. History is preserved by zeroing
-        velocity in the TrajectoryVelocityWrapper.
-
-        Args:
-            start_states: [B, state_dim] in raw coordinates
-            num_steps: Number of ODE integration steps
-            latent: Optional [B, latent_dim]
-            method: Integration method ("euler", "midpoint", "rk4")
-
-        Returns:
-            Predicted endpoints [B, state_dim] in raw coordinates
-        """
-        batch_size = start_states.shape[0]
-        device = start_states.device
-
-        was_training = self.training
-        self.eval()
-
-        try:
-            with torch.no_grad():
-                # Normalize start states
-                start_normalized = self.normalize_state(start_states)
-                start_embedded = self.embed_state_for_model(start_normalized)
-
-                # Sample latent
-                if latent is None:
-                    z = self.sample_latent(batch_size, device)
-                else:
-                    z = latent
-
-                # Sample noise trajectory [B, T, D]
-                x_init = self.sample_noisy_trajectory_input(batch_size, device)
-
-                # Project onto manifold, then pin history (so pin is not overwritten)
-                x_init = self.manifold.projx(x_init)
-                for t_idx in range(self.history_length):
-                    x_init[:, t_idx] = start_normalized.clone()
-
-                # Create velocity wrapper for the solver
-                velocity_model = TrajectoryVelocityWrapper(
-                    model=self.model,
-                    latent=z,
-                    condition=start_embedded,
-                    embed_fn=self.embed_state_for_model,
-                    history_length=self.history_length,
-                )
-
-                # Use RiemannianODESolver — handles projx/proju on [B, T, D]
-                solver = RiemannianODESolver(
-                    manifold=self.manifold,
-                    velocity_model=velocity_model,
-                )
-
-                final_trajectory = solver.sample(
-                    x_init=x_init,
-                    step_size=1.0 / num_steps,
-                    method=method,
-                    projx=True,
-                    proju=True,
-                    time_grid=torch.tensor([0.0, 1.0], device=device),
-                )
-
-                # Extract final timestep: [B, T, D] → [B, D]
-                final_normalized = final_trajectory[:, -1, :]
-
-                # Denormalize
-                final_raw = self.denormalize_state(final_normalized)
-
-                return final_raw
-
-        finally:
-            if was_training:
-                self.train()
-
     def predict_trajectory(
         self,
         start_states: torch.Tensor,
@@ -378,16 +293,16 @@ class TrajectoryFlowMatcherBase(BaseFlowMatcher):
         method: str = "euler",
     ) -> torch.Tensor:
         """
-        Predict full trajectories [B, T, D] in raw coordinates.
+        Core inference method: predict full trajectories [B, T, D] in raw coordinates.
 
-        Same as predict_endpoint but returns the full trajectory instead of
-        just the final timestep.
+        Uses RiemannianODESolver with per-timestep manifold operations.
+        predict_endpoint delegates to this and extracts the final timestep.
 
         Args:
             start_states: [B, state_dim] in raw coordinates
             num_steps: Number of ODE integration steps
             latent: Optional [B, latent_dim]
-            method: Integration method
+            method: Integration method ("euler", "midpoint", "rk4", "euler_riemannian")
 
         Returns:
             Predicted trajectories [B, T, state_dim] in raw coordinates
@@ -435,12 +350,35 @@ class TrajectoryFlowMatcherBase(BaseFlowMatcher):
                     time_grid=torch.tensor([0.0, 1.0], device=device),
                 )
 
-                # Denormalize full trajectory per-timestep
                 return self._denormalize_trajectory(final_trajectory)
 
         finally:
             if was_training:
                 self.train()
+
+    def predict_endpoint(
+        self,
+        start_states: torch.Tensor,
+        num_steps: int = 100,
+        latent: Optional[torch.Tensor] = None,
+        method: str = "euler",
+    ) -> torch.Tensor:
+        """
+        Predict endpoints by generating full trajectory and extracting final timestep.
+
+        Delegates to predict_trajectory — single generation, endpoint is [:, -1, :].
+
+        Args:
+            start_states: [B, state_dim] in raw coordinates
+            num_steps: Number of ODE integration steps
+            latent: Optional [B, latent_dim]
+            method: Integration method
+
+        Returns:
+            Predicted endpoints [B, state_dim] in raw coordinates
+        """
+        trajectory = self.predict_trajectory(start_states, num_steps, latent, method)
+        return trajectory[:, -1, :]
 
     def classify_trajectory(
         self,

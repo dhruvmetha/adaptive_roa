@@ -245,7 +245,9 @@ class TrajectoryFlowMatcherBase(BaseFlowMatcher):
         path_sample = self.path.sample(x_0=x0_flat, x_1=x1_flat, t=t_expanded)
 
         x_t = path_sample.x_t.reshape(B, T, D)
-        dx_t = path_sample.dx_t.reshape(B, T, D)
+        # dx_t may have different dim than D for mixed state/tangent manifolds (e.g., SO3: state=4, tangent=3)
+        tangent_dim = path_sample.dx_t.shape[-1]
+        dx_t = path_sample.dx_t.reshape(B, T, tangent_dim)
 
         # Fix #1: projx on interpolated state before embedding (matches ManifoldEmbeddingLayer)
         x_t = self.manifold.projx(x_t)

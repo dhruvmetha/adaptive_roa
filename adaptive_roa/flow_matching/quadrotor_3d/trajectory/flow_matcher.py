@@ -117,7 +117,7 @@ class Quadrotor3DTrajectoryFlowMatcher(TrajectoryFlowMatcherBase):
     def embed_state_for_model(self, state):
         return self.system.embed_state_for_model(state)
 
-    def predict_endpoint(self, start_states, num_steps=100, latent=None, method="euler"):
+    def predict_endpoint(self, start_states, num_steps=100, latent=None, method="euler_riemannian"):
         endpoints = super().predict_endpoint(start_states, num_steps, latent, method)
         # Always project quaternion and canonicalize
         if hasattr(self.system, "project_to_manifold"):

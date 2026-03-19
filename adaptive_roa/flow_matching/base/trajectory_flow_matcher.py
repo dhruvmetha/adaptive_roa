@@ -6,17 +6,21 @@ Extends BaseFlowMatcher to operate on [B, T, D] trajectory tensors instead of
 - Train a velocity field over full trajectory sequences with history pinning
 - Predict endpoints by generating trajectories and extracting the final timestep
 
-Key design decisions:
-- Manual ODE stepping (not RiemannianODESolver) because manifold operations
-  (projx, proju) must be applied per-timestep after reshaping [B, T, D] → [B*T, D]
-- History pinning: first `history_length` timesteps are conditioned on the start state
-  and their velocities are zeroed during both training and inference
+Uses FB FM's RiemannianODESolver for inference — Product manifold operations
+(projx, proju, expmap) correctly handle [B, T, D] tensors because they operate
+on the last dimension via [..., slice] indexing.
+
+History pinning: first `history_length` timesteps are conditioned on the start
+state. Their velocities are zeroed in the velocity wrapper, so they stay fixed
+during ODE integration (no need for re-pinning inside the loop).
 """
 
 import torch
 import torch.nn as nn
 from typing import Dict, Any, Optional
-from abc import abstractmethod
+
+from flow_matching.solver import RiemannianODESolver
+from flow_matching.utils import ModelWrapper
 
 from adaptive_roa.flow_matching.base.flow_matcher import BaseFlowMatcher
 
@@ -35,6 +39,72 @@ def apply_conditioning(x: torch.Tensor, conditions: dict) -> None:
         x[:, t] = val.clone()
 
 
+class TrajectoryVelocityWrapper(ModelWrapper):
+    """
+    Wraps the trajectory model for FB FM's RiemannianODESolver.
+
+    FB solver calls: velocity_model(x, t) → velocity
+    Our model needs: model(x_embedded, t, z, condition) → velocity
+
+    This wrapper bridges the gap by:
+    - Embedding x [B, T, D] per-timestep via embed_fn
+    - Passing fixed latent z and condition
+    - Zeroing history timestep velocities
+    """
+
+    def __init__(
+        self,
+        model: nn.Module,
+        latent: torch.Tensor,
+        condition: torch.Tensor,
+        embed_fn,
+        history_length: int = 1,
+    ):
+        super().__init__(model)
+        self.latent = latent
+        self.condition = condition
+        self.embed_fn = embed_fn
+        self.history_length = history_length
+
+    def forward(self, x: torch.Tensor, t: torch.Tensor, **extras) -> torch.Tensor:
+        """
+        Forward pass compatible with RiemannianODESolver.
+
+        Args:
+            x: Current trajectory [B, T, state_dim]
+            t: Time [B] or scalar
+
+        Returns:
+            Velocity [B, T, tangent_dim]
+        """
+        if t.dim() == 0:
+            t = t.unsqueeze(0).expand(x.shape[0])
+
+        # Embed per-timestep: [B, T, D] → [B*T, D] → embed → [B, T, embed_dim]
+        B, T, D = x.shape
+        x_flat = x.reshape(B * T, D)
+        x_embedded_flat = self.embed_fn(x_flat)
+        embed_dim = x_embedded_flat.shape[-1]
+        x_embedded = x_embedded_flat.reshape(B, T, embed_dim)
+
+        # Expand latent and condition to match batch size
+        batch_size = x.shape[0]
+        z = self.latent
+        cond = self.condition
+        if z.shape[0] == 1 and batch_size > 1:
+            z = z.expand(batch_size, -1)
+        if cond.shape[0] == 1 and batch_size > 1:
+            cond = cond.expand(batch_size, -1)
+
+        # Call model
+        velocity = self.model(x_embedded, t, z, cond)
+
+        # Zero history velocity — positions with zero velocity don't move
+        velocity[:, :self.history_length, :] = 0.0
+
+        return velocity
+
+
 class TrajectoryFlowMatcherBase(BaseFlowMatcher):
     """
     Base class for trajectory-level flow matching.
@@ -42,8 +112,12 @@ class TrajectoryFlowMatcherBase(BaseFlowMatcher):
     Adds trajectory-specific parameters and overrides the core training/inference
     methods to work with [B, T, D] tensors.
 
-    Subclasses must implement all abstract methods from BaseFlowMatcher plus
-    the trajectory-specific sample_noisy_trajectory_input method.
+    Key differences from BaseFlowMatcher:
+    - compute_flow_loss: operates on [B, T, D] trajectories with history masking
+    - predict_endpoint: uses RiemannianODESolver on [B, T, D], returns [:, -1, :]
+    - path.sample: called with [B, T, D] directly (t [B] broadcasts over T)
+
+    Subclasses must implement all abstract methods from BaseFlowMatcher.
     """
 
     def __init__(
@@ -90,8 +164,8 @@ class TrajectoryFlowMatcherBase(BaseFlowMatcher):
         """
         Sample noise for full trajectory [B, T, D].
 
-        Default implementation: sample per-timestep noise and optionally clamp/project.
-        Subclasses can override for system-specific behavior.
+        Default implementation: sample per-timestep noise, clamp, and project
+        onto manifold. projx operates on last dim so [B, T, D] works directly.
 
         Args:
             batch_size: Number of samples
@@ -105,11 +179,8 @@ class TrajectoryFlowMatcherBase(BaseFlowMatcher):
             noise = noise * self.noise_scale
         if self.clamp_noise:
             noise = torch.clamp(noise, -1.0, 1.0)
-        # Project each timestep onto manifold
-        B, T, D = noise.shape
-        noise_flat = noise.reshape(B * T, D)
-        noise_flat = self.manifold.projx(noise_flat)
-        noise = noise_flat.reshape(B, T, D)
+        # projx operates on last dim — handles [B, T, D] natively
+        noise = self.manifold.projx(noise)
         return noise
 
     def _normalize_trajectory(self, trajectory: torch.Tensor) -> torch.Tensor:
@@ -134,18 +205,12 @@ class TrajectoryFlowMatcherBase(BaseFlowMatcher):
         embed_dim = flat_emb.shape[-1]
         return flat_emb.reshape(B, T, embed_dim)
 
-    def _projx_trajectory(self, trajectory: torch.Tensor) -> torch.Tensor:
-        """Project trajectory per-timestep onto manifold."""
-        B, T, D = trajectory.shape
-        flat = trajectory.reshape(B * T, D)
-        flat_proj = self.manifold.projx(flat)
-        return flat_proj.reshape(B, T, D)
-
     def compute_flow_loss(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """
         Compute trajectory-level flow matching loss.
 
-        Operates on [B, T, D] trajectory tensors with history pinning.
+        Uses GeodesicProbPath.sample with [B, T, D] directly — t [B] broadcasts
+        over the T dimension. History timesteps masked from loss.
 
         Args:
             batch: Dictionary with 'trajectory' [B, T, D], 'start_state' [B, D]
@@ -170,14 +235,14 @@ class TrajectoryFlowMatcherBase(BaseFlowMatcher):
         for t_idx in range(self.history_length):
             x_noisy[:, t_idx] = start_normalized.clone()
 
-        # Project onto manifold per-timestep
-        x_noisy = self._projx_trajectory(x_noisy)
+        # Project onto manifold — works on [B, T, D] natively
+        x_noisy = self.manifold.projx(x_noisy)
 
-        # Sample random flow times
+        # Sample random flow times [B]
         t = torch.rand(batch_size, device=device)
 
-        # GeodesicProbPath interpolation
-        # Reshape to [B*T, D] for path.sample, then back to [B, T, D]
+        # GeodesicProbPath requires t to be 1D [batch], so reshape [B,T,D] → [B*T,D]
+        # with t expanded to [B*T] (same t for all timesteps within a trajectory)
         B, T, D = x_noisy.shape
         x0_flat = x_noisy.reshape(B * T, D)
         x1_flat = traj_normalized.reshape(B * T, D)
@@ -201,6 +266,7 @@ class TrajectoryFlowMatcherBase(BaseFlowMatcher):
         predicted_velocity = self.model(x_t_embedded, t, z, start_embedded)
 
         # Mask out history timesteps from loss (avoid in-place ops on computation graph)
+        T = x_noisy.shape[1]
         loss_mask = torch.ones(1, T, 1, device=device)
         loss_mask[:, :self.history_length, :] = 0.0
 
@@ -208,7 +274,6 @@ class TrajectoryFlowMatcherBase(BaseFlowMatcher):
         squared_error = (predicted_velocity - dx_t) ** 2 * loss_mask
         if self.use_loss_weights and self.loss_weights is not None:
             normalized_loss_weights = self.loss_weights / (self.loss_weights.mean() + 1e-12)
-            # weights: [tangent_dim] -> broadcast over [B, T, tangent_dim]
             squared_error = normalized_loss_weights.unsqueeze(0).unsqueeze(0) * squared_error
 
         # Mean over non-masked positions only
@@ -225,16 +290,17 @@ class TrajectoryFlowMatcherBase(BaseFlowMatcher):
         method: str = "euler",
     ) -> torch.Tensor:
         """
-        Predict endpoints by generating full trajectories and extracting final timestep.
+        Predict endpoints via RiemannianODESolver on [B, T, D] trajectories.
 
-        Uses manual ODE integration (Euler/midpoint) because manifold operations
-        must be applied per-timestep.
+        Uses FB FM's solver which correctly handles manifold operations (projx,
+        proju, expmap) on [B, T, D] tensors. History is preserved by zeroing
+        velocity in the TrajectoryVelocityWrapper.
 
         Args:
             start_states: [B, state_dim] in raw coordinates
             num_steps: Number of ODE integration steps
             latent: Optional [B, latent_dim]
-            method: "euler" or "midpoint"
+            method: Integration method ("euler", "midpoint", "rk4")
 
         Returns:
             Predicted endpoints [B, state_dim] in raw coordinates
@@ -258,55 +324,41 @@ class TrajectoryFlowMatcherBase(BaseFlowMatcher):
                     z = latent
 
                 # Sample noise trajectory [B, T, D]
-                x = self.sample_noisy_trajectory_input(batch_size, device)
+                x_init = self.sample_noisy_trajectory_input(batch_size, device)
 
                 # Pin history
                 for t_idx in range(self.history_length):
-                    x[:, t_idx] = start_normalized.clone()
+                    x_init[:, t_idx] = start_normalized.clone()
 
                 # Project onto manifold
-                x = self._projx_trajectory(x)
+                x_init = self.manifold.projx(x_init)
 
-                # Manual ODE integration from t=0 to t=1
-                dt = 1.0 / num_steps
+                # Create velocity wrapper for the solver
+                velocity_model = TrajectoryVelocityWrapper(
+                    model=self.model,
+                    latent=z,
+                    condition=start_embedded,
+                    embed_fn=self.embed_state_for_model,
+                    history_length=self.history_length,
+                )
 
-                for step in range(num_steps):
-                    t_val = step * dt
-                    t_tensor = torch.full((batch_size,), t_val, device=device)
+                # Use RiemannianODESolver — handles projx/proju on [B, T, D]
+                solver = RiemannianODESolver(
+                    manifold=self.manifold,
+                    velocity_model=velocity_model,
+                )
 
-                    if method == "midpoint":
-                        # Half step
-                        x_embedded = self._embed_trajectory(x)
-                        v_half = self.model(x_embedded, t_tensor, z, start_embedded)
-                        v_half[:, :self.history_length, :] = 0.0
+                final_trajectory = solver.sample(
+                    x_init=x_init,
+                    step_size=1.0 / num_steps,
+                    method=method,
+                    projx=True,
+                    proju=True,
+                    time_grid=torch.tensor([0.0, 1.0], device=device),
+                )
 
-                        x_mid = x + 0.5 * dt * v_half
-                        x_mid = self._projx_trajectory(x_mid)
-                        for t_idx in range(self.history_length):
-                            x_mid[:, t_idx] = start_normalized.clone()
-
-                        # Full step from midpoint
-                        t_mid = torch.full((batch_size,), t_val + 0.5 * dt, device=device)
-                        x_mid_embedded = self._embed_trajectory(x_mid)
-                        v = self.model(x_mid_embedded, t_mid, z, start_embedded)
-                        v[:, :self.history_length, :] = 0.0
-
-                        x = x + dt * v
-                    else:
-                        # Euler step
-                        x_embedded = self._embed_trajectory(x)
-                        v = self.model(x_embedded, t_tensor, z, start_embedded)
-                        v[:, :self.history_length, :] = 0.0
-
-                        x = x + dt * v
-
-                    # Project onto manifold and re-pin history
-                    x = self._projx_trajectory(x)
-                    for t_idx in range(self.history_length):
-                        x[:, t_idx] = start_normalized.clone()
-
-                # Extract final timestep
-                final_normalized = x[:, -1, :]  # [B, D]
+                # Extract final timestep: [B, T, D] → [B, D]
+                final_normalized = final_trajectory[:, -1, :]
 
                 # Denormalize
                 final_raw = self.denormalize_state(final_normalized)
@@ -327,11 +379,8 @@ class TrajectoryFlowMatcherBase(BaseFlowMatcher):
         """
         Forward pass through the model.
 
-        For trajectory FM, x_t may be [B, T, embed_dim] (trajectory) or
-        [B, embed_dim] (endpoint, for compatibility).
-
         Args:
-            x_t: Embedded state(s)
+            x_t: Embedded state(s) [B, T, embed_dim] or [B, embed_dim]
             t: Time [B]
             z: Latent [B, latent_dim]
             condition: Condition [B, condition_dim]

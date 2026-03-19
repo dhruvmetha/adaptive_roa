@@ -14,7 +14,6 @@ num_heads: 8
 feedforward_dim: 1024    # 4x hidden_dim
 dropout: 0.1
 time_embed_dim: 256
-global_query_embed_dim: 256
 use_positional_encoding: true
 use_windowed_attention: false
 attention_window_size: 0

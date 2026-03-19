@@ -28,6 +28,9 @@ samples_per_epoch: 100
 warm_start: false
 eval_every: 1
 
+# prediction_mode: "global" (endpoint FM) or "local" (trajectory FM via local dynamics)
+prediction_mode: global
+
 sampling_mode: ranked
 n_ranked_candidates: 50000
 d2_ratio: 0.5

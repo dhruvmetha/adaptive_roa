@@ -200,19 +200,20 @@ class TrajectoryFlowMatcherBase(BaseFlowMatcher):
         # Predict velocity: model(x_t_embedded, t, z, condition) -> [B, T, tangent_dim]
         predicted_velocity = self.model(x_t_embedded, t, z, start_embedded)
 
-        # Zero history velocity
-        predicted_velocity[:, :self.history_length, :] = 0.0
-        dx_t[:, :self.history_length, :] = 0.0
+        # Mask out history timesteps from loss (avoid in-place ops on computation graph)
+        loss_mask = torch.ones(1, T, 1, device=device)
+        loss_mask[:, :self.history_length, :] = 0.0
 
-        # Compute MSE loss
+        # Compute MSE loss with history mask
+        squared_error = (predicted_velocity - dx_t) ** 2 * loss_mask
         if self.use_loss_weights and self.loss_weights is not None:
             normalized_loss_weights = self.loss_weights / (self.loss_weights.mean() + 1e-12)
-            squared_error = (predicted_velocity - dx_t) ** 2
             # weights: [tangent_dim] -> broadcast over [B, T, tangent_dim]
-            weighted_error = normalized_loss_weights.unsqueeze(0).unsqueeze(0) * squared_error
-            loss = weighted_error.mean()
-        else:
-            loss = nn.functional.mse_loss(predicted_velocity, dx_t)
+            squared_error = normalized_loss_weights.unsqueeze(0).unsqueeze(0) * squared_error
+
+        # Mean over non-masked positions only
+        n_active = T - self.history_length
+        loss = squared_error.sum() / (batch_size * n_active * predicted_velocity.shape[-1])
 
         return loss
 

@@ -20,12 +20,12 @@ from adaptive_roa.data.quadrotor3d_endpoint_data import Quadrotor3DEndpointDataM
 from adaptive_roa.data.trajectory_data import TrajectoryEndpointDataModule
 
 
+# Global prediction mode: endpoint data modules (start → end pairs)
 _DATAMODULES = {
     "pendulum": PendulumEndpointDataModule,
     "cartpole_pybullet": CartPoleEndpointDataModule,
     "quadrotor2d": Quadrotor2DEndpointDataModule,
     "quadrotor3d": Quadrotor3DEndpointDataModule,
-    "pendulum_trajectory": TrajectoryEndpointDataModule,
 }
 
 
@@ -36,12 +36,16 @@ class FlowMatchingTrainer:
         self.cfg = cfg
         self.system = system
         self.system_name = system_name
+        self.prediction_mode = str(cfg.get("prediction_mode", "global"))
 
         if system_name not in _DATAMODULES:
             raise ValueError(f"Unsupported system for v2 trainer: {system_name}")
 
+    @property
+    def is_local(self) -> bool:
+        return self.prediction_mode == "local"
+
     def _create_datamodule(self, train_file: str, val_file: str):
-        dm_cls = _DATAMODULES[self.system_name]
         kwargs = {
             "data_file": train_file,
             "validation_file": val_file,
@@ -50,14 +54,19 @@ class FlowMatchingTrainer:
             "val_batch_size": self.cfg.get("val_batch_size", 2048),
             "num_workers": self.cfg.get("num_workers", 4),
         }
-        if self.system_name in {"quadrotor3d"}:
-            # Kept for compatibility with older datamodule signatures.
-            kwargs["dataset_dir"] = self.cfg.system.get("dataset_dir")
-        if self.system_name == "pendulum_trajectory":
-            # TrajectoryEndpointDataModule needs extra kwargs for trajectory loading
+
+        if self.is_local:
+            # Local prediction: use trajectory data module
             kwargs["trajectories_dir"] = self.cfg.data_source.trajectories_dir
             kwargs["shuffled_indices_file"] = self.cfg.data_source.shuffled_indices_file
             kwargs["sequence_length"] = self.cfg.flow_matching.get("sequence_length", 32)
+            return TrajectoryEndpointDataModule(**kwargs)
+
+        # Global prediction: use system-specific endpoint data module
+        dm_cls = _DATAMODULES[self.system_name]
+        if self.system_name in {"quadrotor3d"}:
+            # Kept for compatibility with older datamodule signatures.
+            kwargs["dataset_dir"] = self.cfg.system.get("dataset_dir")
         return dm_cls(**kwargs)
 
     def fit(
@@ -108,7 +117,7 @@ class FlowMatchingTrainer:
         }
         if self.system_name == "quadrotor3d":
             flow_matcher_kwargs["quat_loss_weight"] = self.cfg.flow_matching.get("quat_loss_weight", 1.0)
-        if self.system_name == "pendulum_trajectory":
+        if self.is_local:
             flow_matcher_kwargs["sequence_length"] = self.cfg.flow_matching.get("sequence_length", 32)
             flow_matcher_kwargs["history_length"] = self.cfg.flow_matching.get("history_length", 1)
 

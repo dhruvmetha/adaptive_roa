@@ -6,7 +6,7 @@ defaults:
   - /model/system_dims: pendulum
   - _self_
 
-name: adaptive_pendulum_trajectory
+name: adaptive_pendulum_local
 
 output_dir: ${exp_dir}/${name}_dhruv/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_threshold_mode_${threshold_mode}_adapt_iter_${n_epochs}_alpha_${alpha_sampling}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
 
@@ -69,5 +69,7 @@ system:
 flow_matcher:
   _target_: adaptive_roa.flow_matching.pendulum.trajectory.flow_matcher.PendulumTrajectoryFlowMatcher
 
+prediction_mode: local
+
 adaptive_v2:
-  system_name: pendulum_trajectory
+  system_name: pendulum

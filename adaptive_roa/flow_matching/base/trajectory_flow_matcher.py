@@ -85,8 +85,11 @@ class TrajectoryVelocityWrapper(ModelWrapper):
         # Call model
         velocity = self.model(x_embedded, t, z, cond)
 
-        # Zero history velocity — positions with zero velocity don't move
-        velocity[:, :self.history_length, :] = 0.0
+        # Zero history velocity via mask (safe for autograd)
+        if self.history_length > 0:
+            mask = torch.ones(1, T, 1, device=x.device)
+            mask[:, :self.history_length, :] = 0.0
+            velocity = velocity * mask
 
         return velocity
 

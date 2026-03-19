@@ -162,17 +162,26 @@ class Quadrotor3DTrajectoryFlowMatcher(TrajectoryFlowMatcherBase):
         hp = checkpoint.get("hyper_parameters", {})
         hydra_config = load_hydra_config(find_training_dir(checkpoint_path))
 
+        def _hp(key, default=None):
+            if key in hp:
+                return hp[key]
+            if default is not None:
+                return default
+            raise KeyError(f"Missing hyper_parameter '{key}' in checkpoint")
+
         mc = hp.get("model_config") or hp.get("config")
-        mc["latent_dim"] = int(hp["latent_dim"])
+        if mc is None:
+            raise KeyError("Checkpoint missing model config")
+        mc["latent_dim"] = int(_hp("latent_dim"))
 
         system = hp.get("system")
         if system is None:
-            system = Quadrotor3DSystem(dataset_dir=hp["system_dataset_dir"])
+            system = Quadrotor3DSystem(dataset_dir=_hp("system_dataset_dir"))
 
-        model = instantiate_model_from_config(mc, mc["latent_dim"])
+        model = instantiate_model_from_config(mc, int(_hp("latent_dim")))
         fm = cls(
             system=system, model=model, optimizer=None, scheduler=None,
-            model_config=mc, latent_dim=int(hp["latent_dim"]),
+            model_config=mc, latent_dim=int(_hp("latent_dim")),
             mae_val_frequency=int(hp.get("mae_val_frequency", 10)),
             use_loss_weights=bool(hp.get("use_loss_weights", False)),
             use_manifold=bool(hp.get("use_manifold", True)),

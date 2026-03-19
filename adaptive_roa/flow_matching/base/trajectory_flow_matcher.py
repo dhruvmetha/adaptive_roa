@@ -209,8 +209,12 @@ class TrajectoryFlowMatcherBase(BaseFlowMatcher):
         """
         Compute trajectory-level flow matching loss.
 
-        Uses GeodesicProbPath.sample with [B, T, D] directly — t [B] broadcasts
-        over the T dimension. History timesteps masked from loss.
+        Matches local_dynamics' compute_loss flow:
+        1. Sample noise, pin history, project BOTH noise and target onto manifold
+        2. path.sample for geodesic interpolation
+        3. projx on interpolated state, embed, model, proju on velocity
+        4. Zero history velocity in prediction (model learns to output zero there)
+        5. MSE loss on full trajectory including history (pred=0 vs target=nonzero)
 
         Args:
             batch: Dictionary with 'trajectory' [B, T, D], 'start_state' [B, D]
@@ -235,8 +239,9 @@ class TrajectoryFlowMatcherBase(BaseFlowMatcher):
         for t_idx in range(self.history_length):
             x_noisy[:, t_idx] = start_normalized.clone()
 
-        # Project onto manifold — works on [B, T, D] natively
+        # Fix #3: Project BOTH noise and target onto manifold (matches local_dynamics)
         x_noisy = self.manifold.projx(x_noisy)
+        traj_normalized = self.manifold.projx(traj_normalized)
 
         # Sample random flow times [B]
         t = torch.rand(batch_size, device=device)
@@ -253,6 +258,9 @@ class TrajectoryFlowMatcherBase(BaseFlowMatcher):
         x_t = path_sample.x_t.reshape(B, T, D)
         dx_t = path_sample.dx_t.reshape(B, T, D)
 
+        # Fix #1: projx on interpolated state before embedding (matches ManifoldEmbeddingLayer)
+        x_t = self.manifold.projx(x_t)
+
         # Embed interpolated trajectory for model input
         x_t_embedded = self._embed_trajectory(x_t)  # [B, T, embed_dim]
 
@@ -265,20 +273,24 @@ class TrajectoryFlowMatcherBase(BaseFlowMatcher):
         # Predict velocity: model(x_t_embedded, t, z, condition) -> [B, T, tangent_dim]
         predicted_velocity = self.model(x_t_embedded, t, z, start_embedded)
 
-        # Mask out history timesteps from loss (avoid in-place ops on computation graph)
-        T = x_noisy.shape[1]
-        loss_mask = torch.ones(1, T, 1, device=device)
-        loss_mask[:, :self.history_length, :] = 0.0
+        # Fix #1: proju on model output (matches ManifoldEmbeddingLayer)
+        # proju projects velocity to tangent space at x_t
+        predicted_velocity = self.manifold.proju(x_t, predicted_velocity)
 
-        # Compute MSE loss with history mask
-        squared_error = (predicted_velocity - dx_t) ** 2 * loss_mask
+        # Fix #2: Zero history velocity in prediction, keep in loss
+        # (matches local_dynamics: model is penalized for predicting nonzero at history)
+        # Use a mask to zero prediction without in-place ops on computation graph
+        history_mask = torch.ones(1, T, 1, device=device)
+        history_mask[:, :self.history_length, :] = 0.0
+        predicted_velocity = predicted_velocity * history_mask
+
+        # Compute MSE loss on full trajectory (including history positions)
+        squared_error = (predicted_velocity - dx_t) ** 2
         if self.use_loss_weights and self.loss_weights is not None:
             normalized_loss_weights = self.loss_weights / (self.loss_weights.mean() + 1e-12)
             squared_error = normalized_loss_weights.unsqueeze(0).unsqueeze(0) * squared_error
 
-        # Mean over non-masked positions only
-        n_active = T - self.history_length
-        loss = squared_error.sum() / (batch_size * n_active * predicted_velocity.shape[-1])
+        loss = squared_error.mean()
 
         return loss
 

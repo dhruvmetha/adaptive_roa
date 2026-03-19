@@ -9,6 +9,9 @@
 #   system=quadrotor3d prediction_mode=local
 prediction_mode: local
 
+# No latent z for local mode — noise trajectory provides stochasticity
+latent_dim: 0
+
 # Override flow_matcher target from system config's local target
 flow_matcher:
   _target_: ${flow_matcher_local._target_}

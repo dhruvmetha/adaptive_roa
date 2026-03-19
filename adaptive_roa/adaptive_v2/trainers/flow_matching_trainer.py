@@ -28,6 +28,14 @@ _DATAMODULES = {
     "quadrotor3d": Quadrotor3DEndpointDataModule,
 }
 
+# Local prediction mode: trajectory flow matcher classes per system
+_LOCAL_FLOW_MATCHERS = {
+    "pendulum": "adaptive_roa.flow_matching.pendulum.trajectory.flow_matcher.PendulumTrajectoryFlowMatcher",
+    "cartpole_pybullet": "adaptive_roa.flow_matching.cartpole.trajectory.flow_matcher.CartPoleTrajectoryFlowMatcher",
+    "quadrotor2d": "adaptive_roa.flow_matching.quadrotor_2d.trajectory.flow_matcher.Quadrotor2DTrajectoryFlowMatcher",
+    "quadrotor3d": "adaptive_roa.flow_matching.quadrotor_3d.trajectory.flow_matcher.Quadrotor3DTrajectoryFlowMatcher",
+}
+
 
 class FlowMatchingTrainer:
     """Adapter over legacy flow-matching training code paths."""
@@ -120,6 +128,11 @@ class FlowMatchingTrainer:
         if self.is_local:
             flow_matcher_kwargs["sequence_length"] = self.cfg.flow_matching.get("sequence_length", 32)
             flow_matcher_kwargs["history_length"] = self.cfg.flow_matching.get("history_length", 1)
+
+        # In local mode, auto-resolve flow_matcher target from system name
+        if self.is_local and self.system_name in _LOCAL_FLOW_MATCHERS:
+            with open_dict(self.cfg):
+                self.cfg.flow_matcher._target_ = _LOCAL_FLOW_MATCHERS[self.system_name]
 
         flow_matcher = hydra.utils.instantiate(self.cfg.flow_matcher, **flow_matcher_kwargs)
 

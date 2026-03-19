@@ -1,18 +1,21 @@
 # @package _global_
 # Local prediction mode: trajectory-level flow matching via local dynamics
 # Generates full trajectory [B, T, D], extracts final timestep as endpoint
+#
+# Usage:
+#   system=pendulum prediction_mode=local
+#   system=cartpole_pybullet prediction_mode=local
+#   system=quadrotor2d prediction_mode=local
+#   system=quadrotor3d prediction_mode=local
 prediction_mode: local
-
-flow_matcher:
-  _target_: adaptive_roa.flow_matching.pendulum.trajectory.flow_matcher.PendulumTrajectoryFlowMatcher
 
 model:
   _target_: adaptive_roa.model.temporal_transformer.TemporalTransformer
   sequence_length: ${flow_matching.sequence_length}
-  input_dim: 3
-  output_dim: 2
+  input_dim: ${model_dims.embedded_dim}
+  output_dim: ${model_dims.output_dim}
   latent_dim: ${latent_dim}
-  condition_dim: 3
+  condition_dim: ${model_dims.condition_dim}
   hidden_dim: 256
   num_layers: 6
   num_heads: 8

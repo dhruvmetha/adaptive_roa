@@ -277,7 +277,8 @@ class AdaptiveEngine:
             n_total_rows = self._count_file_rows(dataset_files["train"])
 
             filter_diagnostics = None
-            if self.filter_confident_pairs and not self.smoke_mode:
+            prediction_mode = str(self.cfg.get("prediction_mode", "global"))
+            if self.filter_confident_pairs and not self.smoke_mode and prediction_mode != "local":
                 _, _, train_labels = self.pool.get_training_data()
                 pair_filter = ConfidencePairFilter(
                     probability_backend=self.probability_backend,

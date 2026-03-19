@@ -220,14 +220,14 @@ class TrajectoryFlowMatcherBase(BaseFlowMatcher):
         # Sample noise [B, T, D]
         x_noisy = self.sample_noisy_trajectory_input(batch_size, device)
 
-        # Pin history timesteps with normalized start state
+        # Project BOTH noise and target onto manifold (matches local_dynamics)
+        x_noisy = self.manifold.projx(x_noisy)
+        traj_normalized = self.manifold.projx(traj_normalized)
+
+        # Pin history AFTER projx so pinned values are not overwritten
         start_normalized = self.normalize_state(start_states)
         for t_idx in range(self.history_length):
             x_noisy[:, t_idx] = start_normalized.clone()
-
-        # Fix #3: Project BOTH noise and target onto manifold (matches local_dynamics)
-        x_noisy = self.manifold.projx(x_noisy)
-        traj_normalized = self.manifold.projx(traj_normalized)
 
         # Sample random flow times [B]
         t = torch.rand(batch_size, device=device)
@@ -324,12 +324,10 @@ class TrajectoryFlowMatcherBase(BaseFlowMatcher):
                 # Sample noise trajectory [B, T, D]
                 x_init = self.sample_noisy_trajectory_input(batch_size, device)
 
-                # Pin history
+                # Project onto manifold, then pin history (so pin is not overwritten)
+                x_init = self.manifold.projx(x_init)
                 for t_idx in range(self.history_length):
                     x_init[:, t_idx] = start_normalized.clone()
-
-                # Project onto manifold
-                x_init = self.manifold.projx(x_init)
 
                 # Create velocity wrapper for the solver
                 velocity_model = TrajectoryVelocityWrapper(

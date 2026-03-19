@@ -191,9 +191,21 @@ class FlowMatchingTrainer:
 
         checkpoints = glob.glob(str(checkpoint_dir / "best*.ckpt"))
         if checkpoints:
-            flow_matcher = type(flow_matcher).load_from_checkpoint(
-                checkpoints[0],
-                device="cuda" if torch.cuda.is_available() else "cpu",
-            )
+            try:
+                flow_matcher = type(flow_matcher).load_from_checkpoint(
+                    checkpoints[0],
+                    device="cuda" if torch.cuda.is_available() else "cpu",
+                )
+            except Exception as e:
+                # Fallback: load state dict directly (e.g., when Hydra config not on disk)
+                print(f"Warning: load_from_checkpoint failed ({e}), loading state dict directly")
+                checkpoint = torch.load(checkpoints[0], map_location="cpu", weights_only=False)
+                state_dict = checkpoint["state_dict"]
+                model_state_dict = {
+                    k.replace("model.", ""): v
+                    for k, v in state_dict.items()
+                    if k.startswith("model.")
+                }
+                flow_matcher.model.load_state_dict(model_state_dict)
 
         return flow_matcher

@@ -370,6 +370,138 @@ class TrajectoryFlowMatcherBase(BaseFlowMatcher):
             if was_training:
                 self.train()
 
+    def predict_trajectory(
+        self,
+        start_states: torch.Tensor,
+        num_steps: int = 100,
+        latent: Optional[torch.Tensor] = None,
+        method: str = "euler",
+    ) -> torch.Tensor:
+        """
+        Predict full trajectories [B, T, D] in raw coordinates.
+
+        Same as predict_endpoint but returns the full trajectory instead of
+        just the final timestep.
+
+        Args:
+            start_states: [B, state_dim] in raw coordinates
+            num_steps: Number of ODE integration steps
+            latent: Optional [B, latent_dim]
+            method: Integration method
+
+        Returns:
+            Predicted trajectories [B, T, state_dim] in raw coordinates
+        """
+        batch_size = start_states.shape[0]
+        device = start_states.device
+
+        was_training = self.training
+        self.eval()
+
+        try:
+            with torch.no_grad():
+                start_normalized = self.normalize_state(start_states)
+                start_embedded = self.embed_state_for_model(start_normalized)
+
+                if latent is None:
+                    z = self.sample_latent(batch_size, device)
+                else:
+                    z = latent
+
+                x_init = self.sample_noisy_trajectory_input(batch_size, device)
+                x_init = self.manifold.projx(x_init)
+                for t_idx in range(self.history_length):
+                    x_init[:, t_idx] = start_normalized.clone()
+
+                velocity_model = TrajectoryVelocityWrapper(
+                    model=self.model,
+                    latent=z,
+                    condition=start_embedded,
+                    embed_fn=self.embed_state_for_model,
+                    history_length=self.history_length,
+                )
+
+                solver = RiemannianODESolver(
+                    manifold=self.manifold,
+                    velocity_model=velocity_model,
+                )
+
+                final_trajectory = solver.sample(
+                    x_init=x_init,
+                    step_size=1.0 / num_steps,
+                    method=method,
+                    projx=True,
+                    proju=True,
+                    time_grid=torch.tensor([0.0, 1.0], device=device),
+                )
+
+                # Denormalize full trajectory per-timestep
+                return self._denormalize_trajectory(final_trajectory)
+
+        finally:
+            if was_training:
+                self.train()
+
+    def classify_trajectory(
+        self,
+        trajectory: torch.Tensor,
+        attractor_radius: float = 0.1,
+    ) -> torch.Tensor:
+        """
+        Classify each trajectory by checking reachability at every timestep.
+
+        For each trajectory, iterates through timesteps:
+        - If classify_state returns SUCCESS (1) at any step → SUCCESS
+        - If classify_state returns FAILURE (-1) at any step → FAILURE
+        - If neither by end → UNCERTAIN (0, separatrix)
+
+        First definitive outcome wins (early exit per trajectory).
+
+        Args:
+            trajectory: [B, T, state_dim] in raw coordinates
+            attractor_radius: Radius for attractor check
+
+        Returns:
+            Labels [B] with 1 (success), -1 (failure), 0 (uncertain)
+        """
+        B, T, D = trajectory.shape
+        device = trajectory.device
+
+        # Initialize all as uncertain (0)
+        labels = torch.zeros(B, dtype=torch.long, device=device)
+        resolved = torch.zeros(B, dtype=torch.bool, device=device)
+
+        for t_idx in range(T):
+            if resolved.all():
+                break
+
+            state_t = trajectory[:, t_idx, :]  # [B, D]
+
+            # Check success: is_in_attractor returns [B] bool
+            in_attractor = self.system.is_in_attractor(state_t, radius=attractor_radius)
+            if isinstance(in_attractor, bool):
+                in_attractor = torch.tensor([in_attractor], device=device).expand(B)
+            if not isinstance(in_attractor, torch.Tensor):
+                in_attractor = torch.tensor(in_attractor, device=device)
+            in_attractor = in_attractor.bool()
+
+            new_success = in_attractor & ~resolved
+            labels[new_success] = 1
+            resolved[new_success] = True
+
+            # Check failure: classify_state returns [B] with -1 for failure
+            if hasattr(self.system, 'classify_state'):
+                state_labels = self.system.classify_state(state_t, attractor_radius)
+                if not isinstance(state_labels, torch.Tensor):
+                    state_labels = torch.tensor(state_labels, device=device)
+                is_failed = (state_labels == -1)
+
+                new_failure = is_failed & ~resolved
+                labels[new_failure] = -1
+                resolved[new_failure] = True
+
+        return labels
+
     def forward(
         self,
         x_t: torch.Tensor,

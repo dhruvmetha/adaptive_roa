@@ -369,6 +369,53 @@ class TrajectoryDataSource:
 
         return len(data)
 
+    def save_classification_dataset(
+        self,
+        indices: List[int],
+        output_file: str,
+        mode: str = "train"
+    ) -> int:
+        """
+        Build and save a (state, binary_label) classification dataset.
+
+        Format: space-separated, one line per state:
+            [start_state... label01]
+        where label01 = 1.0 for success (internal label 1) and 0.0 otherwise
+        (internal -1 failure). Uses the same per-trajectory state expansion as
+        the endpoint dataset (every state along a trajectory inherits the
+        trajectory's outcome), so the classifier and the flow matcher train on
+        the same data footprint.
+
+        SAFETY: refuses to write anywhere under DATA_DIR (source data is
+        read-only / shared).
+
+        Args:
+            indices: Trajectory indices to include
+            output_file: Output file path (must NOT be under DATA_DIR)
+            mode: "train" (all states per trajectory) or "test" (first only)
+
+        Returns:
+            Number of (state, label) rows written
+        """
+        import os as _os
+        from adaptive_roa.utils.env_config import get_data_dir
+
+        abs_out = _os.path.abspath(output_file)
+        data_dir = _os.path.abspath(get_data_dir())
+        if abs_out == data_dir or abs_out.startswith(data_dir + _os.sep):
+            raise ValueError(
+                f"Refusing to write dataset under DATA_DIR ({data_dir}): {abs_out}"
+            )
+
+        starts, _ends, labels = self.build_endpoint_dataset(indices, mode)
+        # internal labels {-1 failure, 1 success} -> binary {0.0, 1.0} for BCE
+        label01 = (np.asarray(labels) == 1).astype(np.float64).reshape(-1, 1)
+        data = np.hstack([starts, label01])
+
+        np.savetxt(output_file, data, fmt='%.8f')
+
+        return len(data)
+
     def get_state_dim(self) -> int:
         """Get state dimension from first trajectory."""
         traj = self.load_trajectory(0)

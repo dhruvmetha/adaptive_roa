@@ -258,6 +258,26 @@ class AdaptiveDatasetBuilder:
         print(f"Built validation dataset: {n_pairs} pairs from {n_val} trajectories (subset of training)")
         return str(output_path)
 
+    def build_train_classification_dataset(self, filename: str = "train_classification_dataset.txt") -> str:
+        """Build training (state, binary_label) classification dataset (excludes val portion)."""
+        output_path = self.output_dir / filename
+        train_indices = list(self.train_split)
+        n_val = max(1, int(len(train_indices) * self.val_ratio))
+        train_only = train_indices[n_val:]
+        n_rows = self.data_source.save_classification_dataset(train_only, str(output_path), mode="train")
+        print(f"Built training classification dataset: {n_rows} (state,label) rows from {len(train_only)} trajectories (excl. {n_val} val)")
+        return str(output_path)
+
+    def build_val_classification_dataset(self, filename: str = "val_classification_dataset.txt") -> str:
+        """Build validation (state, binary_label) classification dataset (no overlap with train)."""
+        output_path = self.output_dir / filename
+        train_indices = list(self.train_split)
+        n_val = max(1, int(len(train_indices) * self.val_ratio))
+        val_indices = train_indices[:n_val]
+        n_rows = self.data_source.save_classification_dataset(val_indices, str(output_path), mode="train")
+        print(f"Built validation classification dataset: {n_rows} (state,label) rows from {n_val} trajectories")
+        return str(output_path)
+
     def build_test_dataset(self, filename: str = "test_endpoint_dataset.txt") -> str:
         """Build test endpoint dataset file (subset of training with overlap)."""
         output_path = self.output_dir / filename
@@ -300,14 +320,16 @@ class AdaptiveDatasetBuilder:
                 f.write(f"{rel_path}\n")
         return str(output_path)
 
-    def build_all_datasets(self) -> Dict[str, str]:
+    def build_all_datasets(self, dataset_kind: str = "endpoint") -> Dict[str, str]:
         """
         Build all dataset files (train, val).
 
-        Returns endpoint files for global mode and trajectory index files
-        for local mode, keyed as:
+        dataset_kind="endpoint" (default): endpoint-pair files for flow matching
+        plus trajectory index files for local mode, keyed as:
             'train', 'val' — endpoint pair files
             'train_trajectories', 'val_trajectories' — trajectory filename lists
+        dataset_kind="classification": (state, binary_label) files for the
+        discriminative classifier, keyed as 'train', 'val'.
 
         Returns:
             Dict mapping split name to file path
@@ -316,6 +338,12 @@ class AdaptiveDatasetBuilder:
         n_val = max(1, int(len(train_indices) * self.val_ratio))
         train_only = train_indices[n_val:]
         val_indices = train_indices[:n_val]
+
+        if dataset_kind == "classification":
+            return {
+                'train': self.build_train_classification_dataset(),
+                'val': self.build_val_classification_dataset(),
+            }
 
         return {
             'train': self.build_train_dataset(),

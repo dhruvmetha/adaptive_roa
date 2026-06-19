@@ -28,7 +28,7 @@ samples_per_epoch: 100
 warm_start: false
 eval_every: 1
 
-sampling_mode: ranked
+sampling_mode: direct  # conformal | ranked | direct
 n_ranked_candidates: 50000
 d2_ratio: 0.5
 batch_size_sampling: 50

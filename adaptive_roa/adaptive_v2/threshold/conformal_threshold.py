@@ -7,6 +7,7 @@ from typing import Any
 import numpy as np
 
 from adaptive_roa.conformal import ConformalConfig, ConformalPredictor
+from adaptive_roa.conformal.estimator_factory import build_probability_estimator
 from adaptive_roa.adaptive_v2.types import ThresholdState
 
 
@@ -21,11 +22,16 @@ class ConformalThresholdBackend:
 
     def bind_model(self, model_handle: Any) -> None:
         conf = ConformalConfig.from_hydra(self.cfg)
+        predictor_type = str(self.cfg.get("predictor", "generative"))
+        estimator = build_probability_estimator(
+            predictor_type, model_handle, self.system, conf, self.device
+        )
         self.predictor = ConformalPredictor(
             flow_matcher=model_handle,
             system=self.system,
             config=conf,
             device=self.device,
+            probability_estimator=estimator,
         )
 
     def optimize(self, X_train: np.ndarray, y_train: np.ndarray) -> ThresholdState:

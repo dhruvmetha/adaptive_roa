@@ -44,7 +44,8 @@ class ConformalPredictor:
         flow_matcher,
         system,
         config: ConformalConfig,
-        device: str = "cuda"
+        device: str = "cuda",
+        probability_estimator=None,
     ):
         """
         Initialize conformal predictor.
@@ -60,9 +61,12 @@ class ConformalPredictor:
         self.config = config
         self.device = device
 
-        # Components
-        self.prob_estimator = ProbabilityEstimator(
-            flow_matcher, system, config, device
+        # Components — allow an injected estimator (e.g. a classifier) so the
+        # predictor stays agnostic to how probabilities are produced.
+        self.prob_estimator = (
+            probability_estimator
+            if probability_estimator is not None
+            else ProbabilityEstimator(flow_matcher, system, config, device)
         )
         self.lambda_optimizer = LambdaOptimizer(config)
         self.calibrator = Calibrator(config)

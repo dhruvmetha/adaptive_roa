@@ -1,0 +1,3 @@
+# @package _global_
+# Generative predictor (default): flow matching + outcome-based classification.
+predictor: generative

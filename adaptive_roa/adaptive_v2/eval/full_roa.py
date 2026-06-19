@@ -933,6 +933,152 @@ def evaluate_full_roa_fast(
     return metrics
 
 
+@torch.no_grad()
+def evaluate_full_roa_classifier(
+    classifier,
+    system,
+    eval_states_file: str,
+    lambda_star: float | None = None,
+    delta: float = 0.05,
+    attractor_radius: float = 0.2,
+    device: str = "cuda",
+    batch_size: int = 8192,
+    output_dir: str | None = None,
+    verbose: bool = True,
+    invalid_threshold: float | None = None,
+    decision_rule: str | None = None,
+) -> dict[str, Any]:
+    """Full-ROA evaluation for a discriminative classifier (single forward pass).
+
+    Reuses the model-agnostic threshold/metric helpers; produces the same
+    top-level metric keys as ``evaluate_full_roa_fast`` so downstream artifact
+    handling is unchanged. Flow-matching-only fields (geodesic / MC-sample
+    errors, q_hat prediction sets) are ``None`` (a classifier has no generated
+    endpoints and ``p_invalid`` is identically 0).
+    """
+    effective_rule = decision_rule
+    hook = None
+    if effective_rule is None or output_dir:
+        hook = resolve_system_hook(system)
+        if effective_rule is None:
+            effective_rule = hook.decision_rule
+
+    X_all, _end_states_all, y_all = load_eval_states(eval_states_file)
+    n_total = len(y_all)
+    n_success_true = int(np.sum(y_all == 1))
+    n_failure_true = int(np.sum(y_all == -1))
+
+    if lambda_star is None:
+        lambda_star = 0.5
+
+    classifier.eval()
+    X_tensor = torch.from_numpy(X_all).float().to(device)
+    probs = []
+    for start in range(0, n_total, batch_size):
+        logits = classifier(X_tensor[start:start + batch_size])
+        if logits.dim() > 1:
+            logits = logits.squeeze(-1)
+        probs.append(torch.sigmoid(logits))
+    p_success = torch.cat(probs).to(torch.float64).cpu().numpy()
+    p_failure = 1.0 - p_success
+    p_invalid = np.zeros_like(p_success)
+
+    pred_conformal, conformal_extras = _predict_lambda_delta(
+        p_success, p_failure, p_invalid, float(lambda_star), float(delta),
+        decision_rule=effective_rule, invalid_threshold=invalid_threshold,
+    )
+    metrics_conformal = _classification_metrics_from_predictions(pred_conformal, y_all)
+    metrics_conformal.update(conformal_extras)
+
+    pred_fixed, fixed_extras = _predict_fixed_threshold(p_success, p_failure, p_invalid)
+    metrics_fixed = _classification_metrics_from_predictions(pred_fixed, y_all)
+    metrics_fixed.update(fixed_extras)
+
+    pred_lambda_only, lambda_only_extras = _predict_lambda_only(
+        p_success, p_failure, p_invalid, float(lambda_star),
+        decision_rule=effective_rule, invalid_threshold=invalid_threshold,
+    )
+    metrics_lambda_only = _classification_metrics_from_predictions(pred_lambda_only, y_all)
+    metrics_lambda_only.update(lambda_only_extras)
+
+    metrics_conservative_ld = _conservative_metrics(pred_conformal, y_all)
+
+    if verbose:
+        print(f"  [Full ROA / classifier] N={n_total} ({n_success_true} success, {n_failure_true} failure), "
+              f"λ*={lambda_star:.4f}, δ={delta:.4f}, rule={effective_rule}")
+        print(f"  [Full ROA / classifier] p_success mean={np.mean(p_success):.4f}")
+        print(f"  [Full ROA / classifier] λ±δ:  F1={metrics_conformal['f1']:.4f}  "
+              f"acc={metrics_conformal['accuracy']:.4f}  prec={metrics_conformal['precision']:.4f}  "
+              f"recall={metrics_conformal['recall']:.4f}  uncertain={metrics_conformal['uncertain_pct']:.1%}")
+        print(f"  [Full ROA / classifier] conservative: F1={metrics_conservative_ld['f1']:.4f}  "
+              f"recall={metrics_conservative_ld['recall']:.4f}")
+
+    metrics = {
+        "_doc": "Full ROA evaluation on held-out test set using a discriminative classifier (single forward pass)",
+        "predictor": "classifier",
+        "n_total": int(n_total),
+        "num_mc_samples": 1,
+        "lambda_star": float(lambda_star),
+        "delta": float(delta),
+        "q_hat": None,
+        "q_hat_success": None,
+        "q_hat_failure": None,
+        "lambda_delta": {
+            "_doc": "Classification using lambda +/- delta band: success if p>lambda+delta, failure if p<lambda-delta, uncertain otherwise",
+            **metrics_conformal,
+        },
+        "fixed_threshold": {
+            "_doc": "Fixed threshold baseline: success if p_success>0.6",
+            **metrics_fixed,
+        },
+        "lambda_only": {
+            "_doc": "Lambda-only classification (delta=0): success if p>lambda, failure if p<lambda",
+            **metrics_lambda_only,
+        },
+        "qhat_prediction_sets": None,
+        "conservative_lambda_delta": {
+            "_doc": "Full-coverage safety-aware metrics: uncertain points classified as failure (not in ROA).",
+            **metrics_conservative_ld,
+        },
+        "conservative_qhat": None,
+        "endpoint_errors": None,
+        "mc_sample_errors": None,
+        "endpoint_errors_qhat_regions": None,
+        "mc_sample_errors_qhat_regions": None,
+    }
+
+    if output_dir:
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        np.savez(
+            str(out / "full_roa_per_point.npz"),
+            start_states=X_all, p_success=p_success, p_failure=p_failure,
+            p_invalid=p_invalid, true_labels=y_all, lambda_star=lambda_star,
+            delta=delta, attractor_radius=attractor_radius,
+        )
+        if hook is not None:
+            hook.maybe_plot(
+                start_states=X_all, p_success=p_success, true_labels=y_all,
+                lambda_star=float(lambda_star), delta=float(delta),
+                output_file=str(out / "full_roa_projections.png"),
+            )
+            if X_all.shape[1] >= 2:
+                i, j = hook.projection_dims
+                fig, ax = plt.subplots(figsize=(6, 5))
+                sc = ax.scatter(X_all[:, i], X_all[:, j], c=p_success, s=2, cmap="RdYlBu", vmin=0.0, vmax=1.0)
+                ax.set_xlabel(hook.projection_labels[0])
+                ax.set_ylabel(hook.projection_labels[1])
+                ax.set_title("p(success) — classifier")
+                ax.grid(True, alpha=0.3)
+                cbar = plt.colorbar(sc, ax=ax)
+                cbar.set_label("p_success")
+                fig.tight_layout()
+                fig.savefig(str(out / "full_roa_heatmap.png"), dpi=150, bbox_inches="tight")
+                plt.close(fig)
+
+    return metrics
+
+
 @dataclass
 class FullROAEvaluator:
     """Evaluator adapter used by the v2 engine."""
@@ -947,6 +1093,25 @@ class FullROAEvaluator:
         threshold_state: ThresholdState,
         epoch_context: dict[str, Any],
     ) -> dict[str, Any]:
+        predictor_type = str(self.cfg.get("predictor", "generative"))
+        if predictor_type == "classifier":
+            return evaluate_full_roa_classifier(
+                classifier=model_handle,
+                system=self.system,
+                eval_states_file=epoch_context["eval_states_file"],
+                lambda_star=threshold_state.lambda_star,
+                delta=threshold_state.delta_star,
+                attractor_radius=epoch_context.get(
+                    "attractor_radius",
+                    self.cfg.conformal.get("attractor_radius", resolve_system_hook(self.system).attractor_radius_default),
+                ),
+                device=self.device,
+                batch_size=epoch_context.get("batch_size", self.cfg.get("val_batch_size", 8192)),
+                output_dir=epoch_context.get("output_dir"),
+                verbose=epoch_context.get("verbose", True),
+                invalid_threshold=epoch_context.get("invalid_threshold", None),
+                decision_rule=epoch_context.get("decision_rule", self.cfg.conformal.get("decision_rule", None)),
+            )
         return evaluate_full_roa_fast(
             flow_matcher=model_handle,
             system=self.system,

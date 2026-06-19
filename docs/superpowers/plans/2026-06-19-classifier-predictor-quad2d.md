@@ -147,3 +147,11 @@ $PY scripts/run_adaptive.py system=quadrotor2d predictor=classifier \
 - Generative path untouched when `predictor=generative` (factory default + None-injection fallback).
 - No DATA_DIR writes (Task 4 assert).
 - Imbalance handled (pos_weight, Tasks 5/6).
+
+## Status (2026-06-19)
+
+- Tasks 0–10 **implemented + unit/smoke tested** (13 tests green via the arcmg python). Each task committed separately on `direct-classification`.
+- Task 11: quad2d classifier pipeline **validated end-to-end** (smoke EXIT=0, F1≈0.59 at 1 epoch); all outputs under EXP_DIR, **nothing written to DATA_DIR** (verified).
+- **NFS fix:** classifier DataLoader uses `num_workers=0` (workers crashed on `rmtree` of `.nfs*` temp dirs, Errno 16). Data is in-memory so workers add no value.
+- **Full run launched** (background): `n_epochs=60 initial_train_size=2000 samples_per_epoch=500 classifier.max_epochs=80` → self-terminates ~epoch 36 when the 20k-trajectory pool exhausts. Log: `/tmp/clf_quad2d_full.log`. Output dir under `EXP_DIR/adaptive_quadrotor2d/outputs/...sampling_mode_direct/<ts>/`.
+- Generative side-by-side (`predictor=generative`, same config) NOT yet run — much slower (MC + ODE); deferred.

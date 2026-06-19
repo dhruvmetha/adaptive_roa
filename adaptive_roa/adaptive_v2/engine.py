@@ -168,7 +168,8 @@ class AdaptiveEngine:
             )
             threshold_state = self.threshold_backend.optimize(X_val, y_val)
 
-            if self.smoke_mode or not run_eval:
+            if self.smoke_mode or not run_eval or self.predictor_type == "classifier":
+                # classifier has no generated endpoints -> no endpoint-prediction error
                 endpoint_error = {"skipped": True}
             else:
                 endpoint_error = compute_endpoint_prediction_error(

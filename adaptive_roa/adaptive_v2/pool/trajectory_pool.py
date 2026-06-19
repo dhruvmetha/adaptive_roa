@@ -34,9 +34,9 @@ class TrajectoryPool:
             test_ratio=test_ratio,
         )
 
-    def initialize(self, initial_train_size: int) -> dict[str, str]:
+    def initialize(self, initial_train_size: int, dataset_kind: str = "endpoint") -> dict[str, str]:
         self.dataset_builder.get_initial_training_set(initial_train_size)
-        return self.dataset_builder.build_all_datasets()
+        return self.dataset_builder.build_all_datasets(dataset_kind=dataset_kind)
 
     def sample_candidates_without_marking(
         self,
@@ -51,8 +51,8 @@ class TrajectoryPool:
     def add_to_training_balanced(self, indices: list[int]) -> None:
         self.dataset_builder.add_to_training_balanced(indices)
 
-    def build_all_datasets(self) -> dict[str, str]:
-        return self.dataset_builder.build_all_datasets()
+    def build_all_datasets(self, dataset_kind: str = "endpoint") -> dict[str, str]:
+        return self.dataset_builder.build_all_datasets(dataset_kind=dataset_kind)
 
     def get_training_data(self):
         return self.dataset_builder.get_training_data()

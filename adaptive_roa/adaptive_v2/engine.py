@@ -28,6 +28,8 @@ from adaptive_roa.adaptive_v2.strategy.direct import DirectAcquisitionStrategy
 from adaptive_roa.adaptive_v2.strategy.ranked import RankedAcquisitionStrategy
 from adaptive_roa.adaptive_v2.threshold.conformal_threshold import ConformalThresholdBackend
 from adaptive_roa.adaptive_v2.trainers.flow_matching_trainer import FlowMatchingTrainer
+from adaptive_roa.adaptive_v2.trainers.classifier_trainer import ClassifierTrainer
+from adaptive_roa.adaptive_v2.probability.classifier_prob import ClassifierProbabilityBackend
 from adaptive_roa.adaptive_v2.filters.confidence_filter import ConfidencePairFilter
 from adaptive_roa.adaptive_v2.types import AcquisitionResult, EpochArtifacts
 from adaptive_roa.conformal import ConformalConfig
@@ -86,8 +88,14 @@ class AdaptiveEngine:
             val_ratio=cfg.get("val_ratio", 0.1),
             test_ratio=cfg.get("test_ratio", 0.1),
         )
-        self.trainer = FlowMatchingTrainer(cfg, self.system, self.system_name)
-        self.probability_backend = EndpointMCProbabilityBackend(self.system, cfg, self.device)
+        self.predictor_type = str(cfg.get("predictor", "generative"))
+        if self.predictor_type == "classifier":
+            self.trainer = ClassifierTrainer(cfg, self.system, self.system_name)
+            self.probability_backend = ClassifierProbabilityBackend(self.system, cfg, self.device)
+        else:
+            self.trainer = FlowMatchingTrainer(cfg, self.system, self.system_name)
+            self.probability_backend = EndpointMCProbabilityBackend(self.system, cfg, self.device)
+        # Threshold optimization and full-ROA eval branch internally on cfg.predictor.
         self.threshold_backend = ConformalThresholdBackend(self.system, cfg, self.device)
         self.evaluator = FullROAEvaluator(self.system, cfg, self.device)
 
@@ -103,7 +111,10 @@ class AdaptiveEngine:
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-        dataset_files = self.pool.initialize(int(self.cfg.get("initial_train_size", 100)))
+        dataset_kind = "classification" if self.predictor_type == "classifier" else "endpoint"
+        dataset_files = self.pool.initialize(
+            int(self.cfg.get("initial_train_size", 100)), dataset_kind=dataset_kind
+        )
 
         n_epochs = int(self.cfg.get("n_epochs", 10))
         samples_per_epoch = int(self.cfg.get("samples_per_epoch", 50))
@@ -269,7 +280,7 @@ class AdaptiveEngine:
             full_roa_metrics["q_hat_eval"] = float(q_hat_eval) if q_hat_eval is not None else None
             full_roa_metrics["n_cal_eval"] = int(n_cal_eval)
 
-            dataset_files = self.pool.build_all_datasets()
+            dataset_files = self.pool.build_all_datasets(dataset_kind=dataset_kind)
 
             # n_existing_rows = rows from previous epochs (keep as-is)
             # After build_all_datasets, file has old rows + new rows in order.
@@ -278,7 +289,8 @@ class AdaptiveEngine:
 
             filter_diagnostics = None
             prediction_mode = str(self.cfg.get("prediction_mode", "global"))
-            if self.filter_confident_pairs and not self.smoke_mode and prediction_mode != "local":
+            if (self.filter_confident_pairs and not self.smoke_mode
+                    and prediction_mode != "local" and self.predictor_type != "classifier"):
                 _, _, train_labels = self.pool.get_training_data()
                 pair_filter = ConfidencePairFilter(
                     probability_backend=self.probability_backend,

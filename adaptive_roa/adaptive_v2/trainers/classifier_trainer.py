@@ -41,7 +41,9 @@ class ClassifierTrainer:
             train_file=dataset_files["train"],
             val_file=dataset_files["val"],
             batch_size=self.cfg.get("batch_size", 1024),
-            num_workers=self.cfg.get("num_workers", 4),
+            # Data is pre-loaded into in-memory tensors; worker processes add no
+            # value and break on NFS (rmtree of `.nfs*` temp dirs => Errno 16).
+            num_workers=0,
         )
         data_module.setup()  # compute pos_weight before building the module
 
@@ -86,7 +88,7 @@ class ClassifierTrainer:
             gradient_clip_val=trainer_cfg.get("gradient_clip_val", 1.0),
             log_every_n_steps=trainer_cfg.get("log_every_n_steps", 10),
             check_val_every_n_epoch=1,
-            enable_progress_bar=bool(trainer_cfg.get("enable_progress_bar", False)),
+            enable_progress_bar=False,
             enable_model_summary=False,
             callbacks=callbacks,
             logger=logger,

@@ -612,15 +612,15 @@ def evaluate_full_roa_fast(
 
                     pbar.update(1)
 
-        if refine_invalids and verbose and cumulative_rstats.n_initially_invalid > 0:
+        if refine_invalids and verbose and cumulative_rstats is not None and cumulative_rstats.n_initially_invalid > 0:
             total_original = cumulative_rstats.n_initially_invalid
             total_resolved = cumulative_rstats.n_resolved
             resolve_rate = total_resolved / total_original * 100
             print(f"  [Refine] {total_resolved}/{total_original} invalid MC samples resolved ({resolve_rate:.1f}%) [max_attempts={refine_max_attempts}]")
-        print(f"           → success: {cumulative_rstats.n_resolved_success}, → failure: {cumulative_rstats.n_resolved_failure}")
-        attempt_strs = [f"a{i+1}={c}" for i, c in enumerate(cumulative_rstats.per_attempt_resolved) if c > 0]
-        if attempt_strs:
-            print(f"           per-attempt: {', '.join(attempt_strs)}")
+            print(f"           → success: {cumulative_rstats.n_resolved_success}, → failure: {cumulative_rstats.n_resolved_failure}")
+            attempt_strs = [f"a{i+1}={c}" for i, c in enumerate(cumulative_rstats.per_attempt_resolved) if c > 0]
+            if attempt_strs:
+                print(f"           per-attempt: {', '.join(attempt_strs)}")
 
     pred_mean = pred_sum / float(num_mc_samples)
 

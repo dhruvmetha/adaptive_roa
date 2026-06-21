@@ -171,3 +171,24 @@ On quad2d (hardest ROA), the generative FM's full outcome distribution yields ma
 
 ## Run log (cont.)
 - **06:25** quad2d FM COMPLETE (10ep): adaptive cons **0.619** / random 0.535 → FM beats classifier on quad2d coverage by **+0.20** at convergence (clf 0.421). quad3d classifier adaptive 0.785 > random 0.761 (H2 holds on quad3d too at full epochs). Pendulum FM climbing (0.963, 6-7/10 ep) — converging below classifier 0.996. Remaining: clf_q3d_a (ep9), fm_pend_a/r (slow). Story locked; numbers stable.
+
+## STUDY COMPLETE — 07:05
+All 14 runs done (pendulum FM cancelled at 6-7/10 ep, near-converged ~0.96; conclusion unaffected). Queue empty. Final figure: clf_vs_fm_summary.png.
+
+### FINAL conservative F1 (best) — the coverage metric
+| system | clf-adapt | clf-rand | FM-adapt | FM-rand |
+|---|---|---|---|---|
+| pendulum | 0.996 | 0.978 | 0.963~ | 0.954~ |
+| cartpole | 0.972 | 0.907 | 0.970 | 0.829 |
+| quad2d (HARD) | 0.421 | 0.344 | **0.619** | 0.535 |
+| quad3d | 0.785 | 0.761 | n/a | n/a |
+(~ pendulum FM near-converged)
+
+### One-line answer
+Classifier+threshold+adaptive ≥ flow-matching on confident accuracy & compute on ALL systems, and ≥ on coverage for 3/4; FM's only win is full-coverage on the hardest boundary (quad2d, +0.20). The "power of flow matching" = modeling the outcome distribution (separatrix/multimodality), which only pays off when the ROA boundary is genuinely hard — at ~100× the eval cost, and infeasible at quad3d grid scale.
+
+### Suggested next experiments (for the user)
+1. **Hybrid:** classifier for the bulk + FM only on the classifier's abstain band → cheap + max coverage on quad2d.
+2. **Start-states / grid-matched classifier training** (parked design item) to attack the quad2d coverage ceiling at the data level.
+3. **Multi-seed** for significance; **warm_start=True** to denoise per-epoch curves.
+4. quad2d FM at full mc_eval (we used reduced=5) to confirm its coverage edge isn't understated.

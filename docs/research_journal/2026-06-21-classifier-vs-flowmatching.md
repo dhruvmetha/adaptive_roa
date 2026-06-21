@@ -105,3 +105,21 @@ quad3d FM: NOT submitted fresh (MC eval on 990k grid infeasible). Will reference
 - **H2 (adaptive > non-adaptive): ACCEPT (classifier).** Best conservative F1: pendulum +0.018, cartpole +0.065, quad2d +0.077 — adaptive wins on all 3; margin grows with problem difficulty. (FM side pending.)
 - **H5 (coverage ceiling): REFINE → ceiling is system-dependent, not universal.** pendulum/cartpole reach cons F1 0.97–1.0 (no ceiling); only quad2d collapses (0.42). So the conservative-F1 problem is NOT intrinsic to the discriminative classifier — it appears specifically where the ROA boundary is geometrically hard (quad2d; quad3d TBD). Band (confident) F1 is high everywhere (0.91–0.999): the classifier is reliably correct on what it commits to; what varies across systems is how much of the ROA it must abstain on.
 - **H1 (classifier ≥ FM committed accuracy): pending FM completion.**
+
+## Run log (cont.)
+- **03:20** Built results.json-based analyzer (buffering-proof; tags via .hydra/overrides). Classifier pend/cp/quad2d DONE; quad3d classifier ep~3-5 (healthy, was just buffered stdout). FM all 6 running (3-7 ep), conservative F1 climbing each epoch.
+
+## EVIDENCE snapshot @03:20 (best / final, tonight-only)
+| system | clf-adapt cons | clf-rand cons | FM-adapt cons | FM-rand cons | (FM ep) |
+|---|---|---|---|---|---|
+| pendulum | 0.996 | 0.978 | 0.937 | 0.917 | 3/10 |
+| cartpole | 0.972 | 0.907 | 0.910 | 0.771 | 5-7/8 |
+| quad2d | 0.421 | 0.344 | 0.478 | 0.461 | 4-5/10 |
+| quad3d | 0.736* | 0.757* | (not run) | (not run) | clf ep3-5 |
+(* quad3d classifier still running; *=current best, not final)
+
+### Emerging findings
+1. **ROA difficulty is about boundary geometry/controller, NOT state dimension.** Conservative-F1 difficulty ordering: quad2d (≈0.4, hardest) ≫ quad3d (≈0.74) ≈ cartpole (≈0.95) > pendulum (≈1.0). quad2d is 6-D but RL-controlled with long messy trajectories → complex ROA boundary; quad3d is 13-D but LQR with short clean trajectories → smoother boundary. **Refutes the intuition that higher-dim = harder ROA.**
+2. **Classifier ≥ FM on conservative F1 so far for pendulum & cartpole** (clf 0.996/0.972 vs FM 0.937/0.910). FM still undertrained (fewer epochs); will re-check at FM convergence before any H1 verdict.
+3. **Classifier band F1 ≥ FM band F1**, margin largest on quad2d (clf 0.93 vs FM 0.82) — discriminative model is sharper on the confident region.
+- **H2 holds on quad3d too?** clf adaptive 0.736 vs random 0.757 at current epochs — INCONCLUSIVE/possibly reversed; quad3d still running, recheck at completion.

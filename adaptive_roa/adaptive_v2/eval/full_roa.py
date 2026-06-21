@@ -972,6 +972,8 @@ def evaluate_full_roa_classifier(
         lambda_star = 0.5
 
     classifier.eval()
+    if hasattr(classifier, "to"):
+        classifier.to(device)  # ensure model is on the eval device (standalone/reeval calls)
     X_tensor = torch.from_numpy(X_all).float().to(device)
     probs = []
     for start in range(0, n_total, batch_size):

@@ -1,5 +1,6 @@
 """Task 5 tests: AdaptiveClassificationDataModule."""
 import numpy as np
+import pytest
 import torch
 
 from adaptive_roa.data.adaptive_classification_data import AdaptiveClassificationDataModule
@@ -29,3 +30,13 @@ def test_batches_and_pos_weight(tmp_path):
     assert batch["inputs"].shape == (4, 6)
     assert batch["inputs"].dtype == torch.float32
     assert batch["label"].dtype == torch.float32
+
+
+def test_empty_file_raises(tmp_path):
+    empty = tmp_path / "empty.txt"
+    empty.write_text("")
+    val = tmp_path / "val.txt"
+    _write(val, np.random.randn(2, 6), np.array([0.0, 1.0]))
+    dm = AdaptiveClassificationDataModule(str(empty), str(val), batch_size=4, num_workers=0)
+    with pytest.raises(ValueError):
+        dm.setup()

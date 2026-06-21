@@ -42,6 +42,8 @@ class AdaptiveClassificationDataModule(pl.LightningDataModule):
     @staticmethod
     def _load(path: str):
         data = np.loadtxt(path)
+        if data.size == 0:
+            raise ValueError(f"Classification dataset file is empty: {path}")
         if data.ndim == 1:
             data = data.reshape(1, -1)
         states = data[:, :-1].astype(np.float32)

@@ -51,6 +51,8 @@ class ClassifierProbabilityEstimator:
         Extra ``refine_*`` kwargs are accepted for signature parity with the
         MC estimator and ignored (no generation => nothing to refine).
         """
+        if hasattr(self.model, "to"):
+            self.model.to(self.device)  # keep model on the same device as inputs
         if torch.is_tensor(states):
             x = states.to(device=self.device, dtype=torch.float32)
         else:

@@ -123,3 +123,9 @@ quad3d FM: NOT submitted fresh (MC eval on 990k grid infeasible). Will reference
 2. **Classifier ≥ FM on conservative F1 so far for pendulum & cartpole** (clf 0.996/0.972 vs FM 0.937/0.910). FM still undertrained (fewer epochs); will re-check at FM convergence before any H1 verdict.
 3. **Classifier band F1 ≥ FM band F1**, margin largest on quad2d (clf 0.93 vs FM 0.82) — discriminative model is sharper on the confident region.
 - **H2 holds on quad3d too?** clf adaptive 0.736 vs random 0.757 at current epochs — INCONCLUSIVE/possibly reversed; quad3d still running, recheck at completion.
+
+## Run log (cont.)
+- **04:25** quad2d FM converging higher: FM cons F1 adaptive **0.570** / random **0.494** vs classifier 0.421/0.344 — **FM beats classifier on quad2d conservative F1** (coverage), while classifier keeps higher band F1 (0.93 vs 0.86). cartpole FM adaptive 0.935 (< clf 0.972). quad3d classifier ~done (cons ~0.76, adaptive≈random). FM pend/quad2d still climbing (4-8 ep).
+
+### H3 update — FM's distinct power IS showing on the hardest boundary
+On quad2d (hardest ROA), the generative FM's full outcome distribution yields materially better full-coverage (conservative) F1 than the binary classifier (+0.15 adaptive, +0.15 random). Mechanism: FM resolves separatrix/boundary states via MC outcome distribution instead of abstaining. The classifier remains sharper on the confident region (band F1). → **H3 leaning ACCEPT for hard systems; the two models trade off coverage (FM) vs confident-precision (classifier).** Re-confirm at FM convergence.

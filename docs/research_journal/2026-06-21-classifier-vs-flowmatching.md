@@ -90,3 +90,18 @@ quad3d FM: NOT submitted fresh (MC eval on 990k grid infeasible). Will reference
 ## Run log (cont.)
 - **01:50** Fixed pre-existing FM-eval crash (refine_invalids=False -> None rstats). Committed.
 - **01:55** Submitted 14 jobs (8 classifier + 6 FM). FM jobs use num_workers=0 (NFS) + reduced mc_eval.
+
+## Run log (cont.)
+- **02:25** Classifier 6/8 done (pend, cp, quad2d). quad3d classifier FAILED (Hydra override word-split artifact in submit helper) → resubmitted directly (164302/3), now RUNNING. FM all 6 mid-run (2-6 epochs).
+
+## EVIDENCE — Classifier, best-over-epochs (band = non-abstained F1; cons = conservative/full-coverage F1)
+| system | adaptive band | random band | **adaptive cons** | **random cons** |
+|---|---|---|---|---|
+| pendulum | 0.999 | 0.980 | **0.996** | 0.978 |
+| cartpole | 0.992 | 0.987 | **0.972** | 0.907 |
+| quad2d   | 0.932 | 0.909 | **0.421** | 0.344 |
+
+### Verdicts (interim, classifier only)
+- **H2 (adaptive > non-adaptive): ACCEPT (classifier).** Best conservative F1: pendulum +0.018, cartpole +0.065, quad2d +0.077 — adaptive wins on all 3; margin grows with problem difficulty. (FM side pending.)
+- **H5 (coverage ceiling): REFINE → ceiling is system-dependent, not universal.** pendulum/cartpole reach cons F1 0.97–1.0 (no ceiling); only quad2d collapses (0.42). So the conservative-F1 problem is NOT intrinsic to the discriminative classifier — it appears specifically where the ROA boundary is geometrically hard (quad2d; quad3d TBD). Band (confident) F1 is high everywhere (0.91–0.999): the classifier is reliably correct on what it commits to; what varies across systems is how much of the ROA it must abstain on.
+- **H1 (classifier ≥ FM committed accuracy): pending FM completion.**

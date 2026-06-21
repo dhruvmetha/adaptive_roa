@@ -168,3 +168,6 @@ On quad2d (hardest ROA), the generative FM's full outcome distribution yields ma
 - FM run at reduced mc_eval (5–20) and reduced quad2d scale; FM numbers are mildly pessimistic but the qualitative pattern is robust (FM still climbing only slowly at 8 ep).
 - warm_start=False → per-epoch curves are noisy; verdicts use best-over-epochs.
 - Single seed per cell. Directional, not significance-tested.
+
+## Run log (cont.)
+- **06:25** quad2d FM COMPLETE (10ep): adaptive cons **0.619** / random 0.535 → FM beats classifier on quad2d coverage by **+0.20** at convergence (clf 0.421). quad3d classifier adaptive 0.785 > random 0.761 (H2 holds on quad3d too at full epochs). Pendulum FM climbing (0.963, 6-7/10 ep) — converging below classifier 0.996. Remaining: clf_q3d_a (ep9), fm_pend_a/r (slow). Story locked; numbers stable.

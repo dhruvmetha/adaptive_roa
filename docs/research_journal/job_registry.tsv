@@ -1,0 +1,15 @@
+jobid	name	config
+164288	clf_pend_a	system=pendulum sampling_mode=ranked d2_ratio=1.0 initial_train_size=50 samples_per_epoch=50 n_epochs=10
+164289	clf_pend_r	system=pendulum sampling_mode=direct d2_ratio=0.0 initial_train_size=50 samples_per_epoch=50 n_epochs=10
+164290	clf_cp_a	system=cartpole_pybullet sampling_mode=ranked d2_ratio=1.0 initial_train_size=300 samples_per_epoch=100 n_epochs=8
+164291	clf_cp_r	system=cartpole_pybullet sampling_mode=direct d2_ratio=0.0 initial_train_size=300 samples_per_epoch=100 n_epochs=8
+164292	clf_q2d_a	system=quadrotor2d sampling_mode=ranked d2_ratio=1.0 initial_train_size=3000 samples_per_epoch=1000 n_epochs=10
+164293	clf_q2d_r	system=quadrotor2d sampling_mode=direct d2_ratio=0.0 initial_train_size=3000 samples_per_epoch=1000 n_epochs=10
+164294	clf_q3d_a	system=quadrotor3d sampling_mode=ranked d2_ratio=1.0 initial_train_size=10000 samples_per_epoch=10000 n_epochs=10 data_source.shuffled_indices_file=/common/users/shared/pracsys/genMoPlan/data_trajectories/quadrotor3D_lqr/train_test_splits/all_shuffled_indices.txt data_source.shuffled_labels_file=/common/users/shared/pracsys/genMoPlan/data_trajectories/quadrotor3D_lqr/train_test_splits/all_shuffled_labels.txt
+164295	clf_q3d_r	system=quadrotor3d sampling_mode=direct d2_ratio=0.0 initial_train_size=10000 samples_per_epoch=10000 n_epochs=10 data_source.shuffled_indices_file=/common/users/shared/pracsys/genMoPlan/data_trajectories/quadrotor3D_lqr/train_test_splits/all_shuffled_indices.txt data_source.shuffled_labels_file=/common/users/shared/pracsys/genMoPlan/data_trajectories/quadrotor3D_lqr/train_test_splits/all_shuffled_labels.txt
+164296	fm_pend_a	system=pendulum sampling_mode=ranked d2_ratio=1.0 initial_train_size=50 samples_per_epoch=50 n_epochs=10 conformal.num_mc_samples_eval=20
+164297	fm_pend_r	system=pendulum sampling_mode=direct d2_ratio=0.0 initial_train_size=50 samples_per_epoch=50 n_epochs=10 conformal.num_mc_samples_eval=20
+164298	fm_cp_a	system=cartpole_pybullet sampling_mode=ranked d2_ratio=1.0 initial_train_size=300 samples_per_epoch=100 n_epochs=8 conformal.num_mc_samples_eval=20
+164299	fm_cp_r	system=cartpole_pybullet sampling_mode=direct d2_ratio=0.0 initial_train_size=300 samples_per_epoch=100 n_epochs=8 conformal.num_mc_samples_eval=20
+164300	fm_q2d_a	system=quadrotor2d sampling_mode=ranked d2_ratio=1.0 initial_train_size=3000 samples_per_epoch=1000 n_epochs=10 conformal.num_mc_samples_eval=5 n_ranked_candidates=5000 trainer.max_epochs=200
+164301	fm_q2d_r	system=quadrotor2d sampling_mode=direct d2_ratio=0.0 initial_train_size=3000 samples_per_epoch=1000 n_epochs=10 conformal.num_mc_samples_eval=5 trainer.max_epochs=200

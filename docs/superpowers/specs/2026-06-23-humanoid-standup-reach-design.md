@@ -61,12 +61,19 @@ deferred, per the user).
 - **`humanoid_data_bounds.pkl` does not exist** ⇒ the old `HumanoidSystem.__init__`
   raises `FileNotFoundError`; the scaffold is currently un-instantiable. We load bounds
   from `dataset_description.json` instead (as `Quadrotor3DSystem` does).
-- **FB FM `Sphere` manifold exists** (`flow_matching.utils.manifolds.Sphere`) with
-  `projx`, `expmap`, `logmap`, `dist`. The S² block has **intrinsic tangent dim 2**
-  (confirmed by the user), so inside `Product` it is entered as `(Sphere(), 3, 2)`
-  (representation 3, tangent 2) — exactly analogous to Quad3D's `(SE3(), 7, 6)`. ⇒ the
-  manifold **tangent space is 34 + 2 + 30 = 66**, and the model outputs **66-D** velocity
-  when `use_manifold=True` (67-D when flat), mirroring Quad3D's 12-vs-13 split.
+- **FB FM `Sphere` manifold** (`flow_matching.utils.manifolds.Sphere`): `projx`,
+  `expmap`, `logmap`, `dist`. **Empirically verified**: the FB FM `Product` constructor
+  **requires `state_dim == tangent_dim` for a `Sphere` block** — `(Sphere(), 3, 2)` raises
+  `"Sphere manifold must have state_dim == tangent_dim"`; the valid entry is
+  `(Sphere(), 3, 3)`. The sphere tangent is represented in **ambient 3-D** and projected
+  onto the 2-DOF tangent plane via `proju` (still geometrically S²-aware; `expmap`
+  preserves unit norm). ⇒ manifold **tangent space = 34 + 3 + 30 = 67**, so the model
+  **`output_dim = 67`** in BOTH `use_manifold` modes (no toggle-dependent output dim —
+  simpler than Quad3D's 12-vs-13, where SE3 genuinely reduces 7→6). Geometric note: S²
+  has 2 intrinsic DOF, but this library *declares* it ambient-3.
+- **`Product.dist` returns 65 components** for the humanoid distance manifold
+  (Euclidean 34 → 34, Sphere → 1 geodesic, Euclidean 30 → 30), so
+  `get_manifold_component_names()` must return **65** names.
 - **`adaptive_v2` is pool-based** (`TrajectoryDataSource` + `AdaptiveDatasetBuilder` over
   pre-collected trajectories) — **no live MuJoCo simulator** required.
 - **`flow_matcher_local`** (trajectory FM) is referenced only by
@@ -131,15 +138,28 @@ All new files; naming: class `HumanoidStandUpReach…`, dir/module `humanoid_sta
 `HumanoidStandUpReachLatentConditionalFlowMatcher(BaseFlowMatcher)` + `train.py`,
 `inference.py`, `__init__.py`.
 - `use_manifold: bool = True`:
-  - on → `Product([(Euclidean(), 34, 34), (Sphere(), 3, 2), (Euclidean(), 30, 30)])`
-    (tangent space 66) with `GeodesicProbPath` + `RiemannianODESolver`.
-  - off → flat `Euclidean(67)` (tangent 67) + standard ODE.
+  - on → `Product(input_dim=67, manifolds=[(Euclidean(), 34, 34), (Sphere(), 3, 3),
+    (Euclidean(), 30, 30)])` (tangent 67) with `GeodesicProbPath` + `RiemannianODESolver`.
+  - off → flat `Euclidean()` (tangent 67) + standard ODE.
 - **`_create_distance_manifold()` ALWAYS returns the S²-aware Product** (validation MAE /
-  distances are manifold-correct regardless of the toggle).
-- `predict_endpoint` → integrate, then `project_to_manifold` (unit-norm sphere block).
-- Model: `UniversalUNet`, input `142 = 67(embedded) + 67(condition) + 8(latent)`;
-  **`output_dim = 66`** (manifold tangent; the flat `use_manifold=False` / 67-D case is
-  reconciled in the flow matcher + loss-weight logic, as Quad3D does for 12-vs-13).
+  distances are manifold-correct regardless of the toggle); `manifold.dist` → 65 comps.
+- `get_manifold_component_names()` returns 65 names; `sample_noisy_input` mirrors Quad3D
+  (Gaussian + clamp on the 64 Euclidean dims; unit-normalized Gaussian on the 3 sphere
+  dims; then `manifold.projx`); `_get_start_states`/`_get_end_states` read
+  `batch["start_state"]`/`["end_state"]`; `normalize/denormalize/embed` delegate to system.
+- `predict_endpoint` overrides base to call `system.project_to_manifold` (unit-norm sphere
+  block) after integration, as Quad3D does for quaternions.
+- **Model: reuse `adaptive_roa.model.quadrotor3d_unet.Quadrotor3DUNet`** (it is generic —
+  parameterized purely by dims, `forward(x_t, t, z, condition)` concatenates
+  `[x_t, t_emb, z, condition]`). Config dims: `embedded_dim=67`, `condition_dim=67`,
+  `latent_dim=8`, **`output_dim=67`**, `time_emb_dim=64`, `hidden_dims` (e.g.
+  `[512,1024,1024,512]`). (Correction vs original spec note that said `UniversalUNet` —
+  `UniversalUNet.forward(x,t,condition)` has no latent arg, so it is incompatible with the
+  base FM's `self.model(x_t, t, z, condition)` call; Quad3D's UNet is the right template.)
+- The base `BaseFlowMatcher` provides `forward`, `_prepare_model_inputs`,
+  `compute_flow_loss`, `training_step`, `validation_step`, `configure_optimizers`,
+  `predict_endpoint` — humanoid FM inherits these and only overrides the system-specific
+  hooks listed above.
 - `train.py` mirrors Quad3D: build system from `dataset_dir`, instantiate data module,
   flow matcher, optimizer/scheduler/trainer from Hydra.
 
@@ -176,28 +196,36 @@ Extend `TrajectoryDataSource` / `AdaptiveDatasetBuilder` so candidates are
   correctly; S² block untouched by normalization.
 - **Data module:** comma-delimiter parsing; correct start/final extraction; each
   `query_mode`; **assert batches are never all-zeros**; S² rows are unit-norm.
-- **Flow matcher:** manifold on/off produce correct shapes (66 vs 67 tangent);
-  `predict_endpoint` returns unit-norm sphere block; `_create_distance_manifold` is
-  S²-aware even when `use_manifold=False`.
+- **Flow matcher:** model `output_dim=67`; manifold on/off both produce 67-D tangent /
+  67-D state; `predict_endpoint` returns unit-norm sphere block; `_create_distance_manifold`
+  is S²-aware even when `use_manifold=False` and `manifold.dist` returns 65 components.
 - **`tests/test_sphere_manifold.py` (independent Sphere verification):** `expmap`/`logmap`
   round-trip; `projx` idempotent + unit-norm preserving; tangent orthogonality
-  (`⟨x, projx_tangent(v)⟩≈0`); `dist` symmetry and agreement with `arccos` geodesic; and
-  confirm the **Sphere tangent_dim = 2** behavior inside `Product`. Record findings.
+  (`⟨x, proju(x,v)⟩≈0`); `dist` symmetry and agreement with `arccos` geodesic; confirm
+  `Product` requires `(Sphere(),3,3)` (rejects `(…,3,2)`) and `Sphere.dist` → 1 value /
+  pair. Record findings.
 
 ## 7. Out of scope
 - Trajectory / `local` flow matcher (`flow_matcher_local`).
 - Deleting the old `humanoid` scaffold (deferred).
 - Any live MuJoCo simulator (pool is purely over pre-collected trajectories).
 
-## 8. Open items to resolve during planning
-- Sphere tangent dim **resolved = 2** ⇒ `Product` entry `(Sphere(), 3, 2)`, model
-  `output_dim = 66`. **`Product` signature confirmed** from Quad3D:
+## 8. Resolved during planning (was: open items)
+- **Sphere tangent representation = ambient 3** (empirically: `Product` rejects
+  `(Sphere(),3,2)`, requires `(Sphere(),3,3)`) ⇒ model **`output_dim = 67`** in both
+  `use_manifold` modes; `manifold.dist` → 65 components. **`Product` signature confirmed**:
   `Product(input_dim=<representation>, manifolds=[(Manifold(), repr_dim, tangent_dim), …])`
-  — Quad3D uses `Product(input_dim=13, manifolds=[(SE3(), 7, 6), (Euclidean(), 6, 6)])`
-  with model `output_dim=12`, and the Product does logmap (repr→tangent) / expmap
-  (tangent→repr). Humanoid is the identical pattern (repr 67 → tangent 66), inherited for
-  free by replicating Quad3D's flow matcher.
-- `configs/model/system_dims` group wiring used by `adaptive_v2` (confirm path/name).
+  (Quad3D: `[(SE3(),7,6),(Euclidean(),6,6)]`, output 12). Humanoid:
+  `[(Euclidean(),34,34),(Sphere(),3,3),(Euclidean(),30,30)]`, output 67.
+- **Model: reuse `Quadrotor3DUNet`** (generic, latent-aware `forward(x_t,t,z,condition)`).
+  `UniversalUNet` is incompatible (no latent arg).
+- **Test convention**: `tests/` dir, `pytest.ini` (`testpaths=tests`, `addopts=-q`),
+  `conftest.py` adds repo root to `sys.path`; tests import `adaptive_roa.*` and run under
+  the repo conda env `/common/home/st1122/Projects/adaptive_roa/env`.
+- **`adaptive_v2` model dims** live in `configs/adaptive_v2/model/system_dims/<name>.yaml`
+  (Plan 2 adds `humanoid_standup_reach.yaml`).
+- **`evaluate_roa.py` routing**: config provides `system.module` + `system.class`
+  (the flow-matcher module/class), loaded via `importlib` (Plan 2).
 - Whether the adaptive pool ships Option A or B first (tradeoff call).
 - Test directory location / harness convention in this repo.
 

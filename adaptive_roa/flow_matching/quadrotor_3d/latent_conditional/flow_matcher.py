@@ -1,18 +1,19 @@
 """
 Quadrotor 3D Latent Conditional Flow Matching implementation using Facebook Flow Matching library
 
-Manifold: ℝ³ × SO(3) × ℝ⁶
-- Representation dimension: 13D (3 position + 4 quaternion + 6 velocity)
-- Tangent dimension: 12D (3 position + 3 rotation + 6 velocity)
+Manifold: SE(3) × ℝ⁶
+- Representation dimension: 13D (7 pose [3 position + 4 quaternion] + 6 velocity)
+- Tangent dimension: 12D (6 SE(3) twist [3 v + 3 ω] + 6 velocity)
 
 State components:
-- Position: ℝ³ (x, y, z) - 3D representation, 3D tangent
-- Orientation: SO(3) via unit quaternion (qw, qx, qy, qz) - 4D representation, 3D tangent
+- Pose: SE(3) via translation + unit quaternion (x, y, z, qw, qx, qy, qz) - 7D representation,
+        6D twist tangent [v_x, v_y, v_z, ω_x, ω_y, ω_z]. Translation and orientation are
+        coupled along the SE(3) geodesic (screw motion via the left Jacobian), matching genMoPlan.
 - Linear velocity: ℝ³ (ẋ, ẏ, ż) - 3D representation, 3D tangent
 - Angular velocity: ℝ³ (p, q, r) - 3D representation, 3D tangent
 
 The model outputs 12D tangent velocities directly. FB FM's Product manifold with
-(SO3(), 4, 3) handles conversion between representation (13D) and tangent (12D) spaces.
+(SE3(), 7, 6) handles conversion between representation (13D) and tangent (12D) spaces.
 """
 import torch
 import torch.nn as nn
@@ -24,7 +25,7 @@ from flow_matching.path import GeodesicProbPath
 from flow_matching.path.scheduler import CondOTScheduler
 from flow_matching.solver import RiemannianODESolver
 from flow_matching.utils import ModelWrapper
-from flow_matching.utils.manifolds import Product, Euclidean, SO3
+from flow_matching.utils.manifolds import Product, Euclidean, SE3
 
 from adaptive_roa.flow_matching.base.flow_matcher import BaseFlowMatcher
 from adaptive_roa.systems.base import DynamicalSystem
@@ -33,19 +34,19 @@ from adaptive_roa.systems.base import DynamicalSystem
 class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
     """
     Quadrotor 3D Latent Conditional Flow Matching using Facebook FM:
-    - Uses GeodesicProbPath for geodesic interpolation on ℝ³ × SO(3) × ℝ⁶
+    - Uses GeodesicProbPath for geodesic interpolation on SE(3) × ℝ⁶
     - Uses RiemannianODESolver for manifold-aware ODE integration
     - Neural net takes embedded state x_t (13D), time t, latent z, and start condition
     - Predicts velocity directly in 12D tangent space
 
     Manifold structure (Product manifold):
-    - Euclidean(3): Position (x, y, z) - state indices 0-2, tangent indices 0-2
-    - SO3(4, 3): Quaternion (qw, qx, qy, qz) - state indices 3-6, tangent indices 3-5
+    - SE3(7, 6): Pose (x, y, z, qw, qx, qy, qz) - state indices 0-6, tangent indices 0-5
+                 (twist [v_x, v_y, v_z, ω_x, ω_y, ω_z]; translation coupled to rotation)
     - Euclidean(6): Velocities (ẋ, ẏ, ż, p, q, r) - state indices 7-12, tangent indices 6-11
 
     Dimension summary:
-    - State/representation: 13D (3 + 4 + 6)
-    - Tangent/velocity: 12D (3 + 3 + 6)
+    - State/representation: 13D (7 + 6)
+    - Tangent/velocity: 12D (6 + 6)
 
     The Product manifold handles conversion via logmap (13D→12D) and expmap (12D→13D).
     """
@@ -78,7 +79,7 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
             latent_dim: Dimension of latent space
             mae_val_frequency: Compute MAE validation every N epochs
             use_loss_weights: If True, weight loss by normalization limits
-            use_manifold: If True, use SO(3) manifold for quaternion;
+            use_manifold: If True, use the SE(3) × ℝ⁶ manifold (pose coupled as SE(3));
                          If False, use pure Euclidean R^13 with post-hoc quaternion projection
             use_log_loss_weights: If True and use_loss_weights=True, use 1+log(limit) instead of limit
                                   for more balanced weight ratios across dimensions
@@ -109,8 +110,8 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
             # Apply quat_loss_weight to quaternion/rotation dimensions
             if quat_loss_weight != 1.0 and self.loss_weights is not None:
                 if use_manifold:
-                    # Manifold mode: 12D tangent (3 pos + 3 rot + 6 vel)
-                    # Rotation tangent dimensions are indices 3:6
+                    # Manifold mode: 12D tangent (6 SE(3) twist [3 v + 3 ω] + 6 vel)
+                    # Rotation (ω) tangent dimensions are indices 3:6
                     self.loss_weights[3:6] *= quat_loss_weight
                 else:
                     # Euclidean mode: 13D tangent (3 pos + 4 quat + 6 vel)
@@ -118,8 +119,8 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
                     self.loss_weights[3:7] *= quat_loss_weight
                 print(f"📊 Applied quat_loss_weight={quat_loss_weight} → updated weights: {self.loss_weights.tolist()}")
 
-        manifold_str = "ℝ³ × SO(3) × ℝ⁶" if use_manifold else "ℝ¹³ (Euclidean)"
-        tangent_str = "12D (3 pos + 3 rot + 6 vel)" if use_manifold else "13D (all Euclidean)"
+        manifold_str = "SE(3) × ℝ⁶" if use_manifold else "ℝ¹³ (Euclidean)"
+        tangent_str = "12D (6 SE(3) twist + 6 vel)" if use_manifold else "13D (all Euclidean)"
 
         print("✅ Initialized Quadrotor3D LCFM with Facebook Flow Matching:")
         print(f"   - Manifold: {manifold_str}")
@@ -135,11 +136,11 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
         Create manifold for Quadrotor 3D.
 
         If use_manifold=True:
-            Product manifold ℝ³ × SO(3) × ℝ⁶
-            - Euclidean(3): Position (x, y, z) - 3D
-            - SO3(4, 3): Quaternion representation - 4D state, 3D tangent
+            Product manifold SE(3) × ℝ⁶
+            - SE3(7, 6): Pose (x, y, z, qw, qx, qy, qz) - 7D state, 6D twist tangent
+                         (translation coupled to rotation along the SE(3) geodesic)
             - Euclidean(6): Linear + Angular velocity - 6D
-            Total: 13D state, 12D tangent (3 + 3 + 6)
+            Total: 13D state, 12D tangent (6 + 6)
 
         If use_manifold=False:
             Pure Euclidean ℝ¹³ (all dimensions treated as Euclidean)
@@ -148,8 +149,7 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
         """
         if self.use_manifold:
             return Product(input_dim=13, manifolds=[
-                (Euclidean(), 3),      # Position (x, y, z)
-                (SO3(), 4, 3),         # Quaternion (qw, qx, qy, qz) - 4D representation, 3D tangent
+                (SE3(), 7, 6),         # Pose (x, y, z, qw, qx, qy, qz) - 7D representation, 6D twist tangent
                 (Euclidean(), 6)       # Velocities (ẋ, ẏ, ż, p, q, r)
             ])
         else:
@@ -160,15 +160,15 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
         """
         Create manifold for distance computation (always true system manifold).
 
-        Always returns ℝ³ × SO(3) × ℝ⁶ regardless of use_manifold setting,
-        ensuring proper geodesic distances for quaternion components.
+        Always returns SE(3) × ℝ⁶ regardless of use_manifold setting. SE3.dist is
+        decoupled — per-axis translation distance plus the SO(3) geodesic angle — so
+        orientation distances stay geodesically correct.
 
         Returns:
-            Product manifold with SO(3) for proper orientation distances
+            Product manifold with SE(3) for proper pose distances
         """
         return Product(input_dim=13, manifolds=[
-            (Euclidean(), 3),      # Position (x, y, z)
-            (SO3(), 4, 3),         # Quaternion (qw, qx, qy, qz) - 4D representation, 3D tangent
+            (SE3(), 7, 6),         # Pose (x, y, z, qw, qx, qy, qz) - 7D representation, 6D twist tangent
             (Euclidean(), 6)       # Velocities (ẋ, ẏ, ż, p, q, r)
         ])
 
@@ -276,20 +276,19 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
         """
         Get names for manifold distance components.
 
-        For Quadrotor3D with ℝ³ × SO(3) × ℝ⁶:
-        - Euclidean(3) returns 3 distances (x, y, z)
-        - SO3 returns 1 distance (geodesic angle)
+        For Quadrotor3D with SE(3) × ℝ⁶:
+        - SE3 returns 4 distances: 3 per-axis translation (x, y, z) + 1 SO(3) geodesic angle
         - Euclidean(6) returns 6 distances (velocities)
 
-        Total: 10 components (not 13, because SO3.dist returns single geodesic angle)
+        Total: 10 components (SE3.dist is decoupled, so position is still per-axis)
 
         Returns:
             List of 10 component names
         """
         return [
-            # Euclidean position (3 values)
+            # SE3 translation (3 per-axis values)
             "pos_x", "pos_y", "pos_z",
-            # SO3 geodesic angle (1 value - angular distance between quaternions)
+            # SE3 SO(3) geodesic angle (1 value - angular distance between quaternions)
             "orientation_geodesic",
             # Euclidean velocities (6 values)
             "vel_x", "vel_y", "vel_z", "ang_p", "ang_q", "ang_r"
@@ -647,7 +646,7 @@ class Quadrotor3DLatentConditionalFlowMatcher(BaseFlowMatcher):
         flow_matcher.training_config = hydra_config
 
         # Success summary
-        manifold_str = "R3 x SO(3) x R6" if use_manifold else "R13 (Euclidean)"
+        manifold_str = "SE(3) x R6" if use_manifold else "R13 (Euclidean)"
         model_info = model.get_model_info() if hasattr(model, 'get_model_info') else {}
         print(f"\nModel loaded successfully!")
         print(f"   Checkpoint: {checkpoint_path.name}")

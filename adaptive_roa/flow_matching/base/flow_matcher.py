@@ -496,6 +496,7 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         For Product manifolds, the distance output may differ from state_dim:
         - Euclidean(n) returns n per-dimension distances
         - SO3(4, 3) returns 1 geodesic distance (not 4)
+        - SE3(7, 6) returns 4 distances (3 per-axis translation + 1 SO3 geodesic angle)
         - FlatTorus/S1 returns 1 geodesic distance per circle
 
         This is used to correctly initialize per-dimension validation metrics.
@@ -505,9 +506,10 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         """
         # Import manifold types for isinstance checks
         try:
-            from flow_matching.utils.manifolds import SO3, FlatTorus
+            from flow_matching.utils.manifolds import SO3, SE3, FlatTorus
         except ImportError:
             SO3 = None
+            SE3 = None
             FlatTorus = None
 
         # For Product manifolds, compute based on component structure
@@ -521,6 +523,8 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
                 # SO3 and FlatTorus return single geodesic distance, not per-dim
                 if SO3 is not None and isinstance(m, SO3):
                     total_dim += 1  # Single geodesic angle
+                elif SE3 is not None and isinstance(m, SE3):
+                    total_dim += 4  # 3 per-axis translation + 1 SO3 geodesic angle
                 elif FlatTorus is not None and isinstance(m, FlatTorus):
                     total_dim += 1  # Single geodesic distance
                 else:
@@ -957,7 +961,7 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
             # Compute geodesic errors per component using manifold distance [B, manifold_dist_dim]
             # This properly handles circular/manifold components (e.g., angles on S¹, quaternions on SO(3))
             # Note: manifold.dist() returns per-component distances, not per-state-dimension
-            # e.g., Quadrotor3D: 13D state → 10D distances (SO3 returns 1 geodesic, not 4)
+            # e.g., Quadrotor3D: 13D state → 10D distances (SE3 returns 4: 3 translation + 1 geodesic)
             pred_normalized = self.normalize_state(predicted_endpoints)
             true_normalized = self.normalize_state(true_endpoints)
             geodesic_errors = self.manifold.dist(pred_normalized, true_normalized)
@@ -1135,7 +1139,7 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         Uses distance_manifold (true system manifold) for proper geodesic distances,
         even when training uses Euclidean manifold (use_manifold=False).
 
-        For Quadrotor3D: Returns 10 values (3 Euclidean + 1 SO3 geodesic + 6 Euclidean)
+        For Quadrotor3D: Returns 10 values (SE3: 3 translation + 1 SO3 geodesic; + 6 Euclidean)
         For Pendulum: Returns 2 values (1 circular + 1 Euclidean)
         For CartPole: Returns 4 values
 

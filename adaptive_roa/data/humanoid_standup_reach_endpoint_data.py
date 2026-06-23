@@ -84,17 +84,45 @@ class HumanoidStandUpReachEndpointDataset(Dataset):
         }
 
 
+class HumanoidStandUpReachDirectFileDataset(Dataset):
+    def __init__(self, data_file: str):
+        data = np.loadtxt(data_file)  # pool writes space-separated
+        if data.ndim == 1:
+            data = data[None, :]
+        n = data.shape[1]
+        if n not in (134, 135):
+            raise ValueError(f"{data_file}: expected 134 or 135 columns, got {n}")
+        self.starts = data[:, :67].astype(np.float32)
+        self.ends = data[:, 67:134].astype(np.float32)
+
+    def __len__(self):
+        return len(self.starts)
+
+    def __getitem__(self, idx):
+        return {
+            "start_state": torch.from_numpy(_unit_sphere(self.starts[idx])),
+            "end_state": torch.from_numpy(_unit_sphere(self.ends[idx])),
+        }
+
+
 class HumanoidStandUpReachEndpointDataModule(pl.LightningDataModule):
-    def __init__(self, train_indices_file: str, val_indices_file: str, test_indices_file: str,
-                 trajectories_dir: str, query_mode: str = "random_intermediate",
+    def __init__(self, train_indices_file: str = None, val_indices_file: str = None,
+                 test_indices_file: str = None, trajectories_dir: str = None,
+                 data_file: str = None, validation_file: str = None, test_file: str = None,
+                 query_mode: str = "random_intermediate",
                  batch_size: int = 256, val_batch_size: Optional[int] = None,
                  num_workers: int = 4, pin_memory: bool = True,
-                 max_train_samples: Optional[int] = None, max_val_samples: Optional[int] = None):
+                 dataset_dir: str = None, max_train_samples: Optional[int] = None,
+                 max_val_samples: Optional[int] = None):
         super().__init__()
+        self.use_direct_file = data_file is not None
         self.train_indices_file = train_indices_file
         self.val_indices_file = val_indices_file
         self.test_indices_file = test_indices_file
         self.trajectories_dir = trajectories_dir
+        self.data_file = data_file
+        self.validation_file = validation_file
+        self.test_file = test_file
         self.query_mode = query_mode
         self.batch_size = batch_size
         self.val_batch_size = val_batch_size or batch_size
@@ -106,14 +134,21 @@ class HumanoidStandUpReachEndpointDataModule(pl.LightningDataModule):
         self.embedded_dim = 67
 
     def setup(self, stage: Optional[str] = None):
-        if stage in ("fit", None):
-            self.train_dataset = HumanoidStandUpReachEndpointDataset(
-                self.train_indices_file, self.trajectories_dir, self.query_mode, self.max_train_samples)
-            self.val_dataset = HumanoidStandUpReachEndpointDataset(
-                self.val_indices_file, self.trajectories_dir, self.query_mode, self.max_val_samples)
-        if stage in ("test", None):
-            self.test_dataset = HumanoidStandUpReachEndpointDataset(
-                self.test_indices_file, self.trajectories_dir, self.query_mode)
+        if self.use_direct_file:
+            if stage in ("fit", None):
+                self.train_dataset = HumanoidStandUpReachDirectFileDataset(self.data_file)
+                self.val_dataset = HumanoidStandUpReachDirectFileDataset(self.validation_file)
+            if stage in ("test", None):
+                self.test_dataset = HumanoidStandUpReachDirectFileDataset(self.test_file)
+        else:
+            if stage in ("fit", None):
+                self.train_dataset = HumanoidStandUpReachEndpointDataset(
+                    self.train_indices_file, self.trajectories_dir, self.query_mode, self.max_train_samples)
+                self.val_dataset = HumanoidStandUpReachEndpointDataset(
+                    self.val_indices_file, self.trajectories_dir, self.query_mode, self.max_val_samples)
+            if stage in ("test", None):
+                self.test_dataset = HumanoidStandUpReachEndpointDataset(
+                    self.test_indices_file, self.trajectories_dir, self.query_mode)
 
     def _loader(self, ds, bs, shuffle):
         return DataLoader(ds, batch_size=bs, shuffle=shuffle, num_workers=self.num_workers,

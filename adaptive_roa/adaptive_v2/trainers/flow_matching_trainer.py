@@ -14,6 +14,7 @@ from lightning.pytorch.loggers import TensorBoardLogger
 from omegaconf import OmegaConf, open_dict
 
 from adaptive_roa.data.cartpole_endpoint_data import CartPoleEndpointDataModule
+from adaptive_roa.data.humanoid_standup_reach_endpoint_data import HumanoidStandUpReachEndpointDataModule
 from adaptive_roa.data.pendulum_endpoint_data import PendulumEndpointDataModule
 from adaptive_roa.data.quadrotor2d_endpoint_data import Quadrotor2DEndpointDataModule
 from adaptive_roa.data.quadrotor3d_endpoint_data import Quadrotor3DEndpointDataModule
@@ -26,6 +27,7 @@ _DATAMODULES = {
     "cartpole_pybullet": CartPoleEndpointDataModule,
     "quadrotor2d": Quadrotor2DEndpointDataModule,
     "quadrotor3d": Quadrotor3DEndpointDataModule,
+    "humanoid_standup_reach": HumanoidStandUpReachEndpointDataModule,
 }
 
 
@@ -77,7 +79,7 @@ class FlowMatchingTrainer:
             "val_batch_size": self.cfg.get("val_batch_size", 2048),
             "num_workers": self.cfg.get("num_workers", 4),
         }
-        if self.system_name in {"quadrotor3d"}:
+        if self.system_name in {"quadrotor3d", "humanoid_standup_reach"}:
             kwargs["dataset_dir"] = self.cfg.system.get("dataset_dir")
         return dm_cls(**kwargs)
 

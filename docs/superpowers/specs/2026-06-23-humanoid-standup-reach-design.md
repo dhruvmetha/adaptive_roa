@@ -178,17 +178,39 @@ All new files; naming: class `HumanoidStandUpReach…`, dir/module `humanoid_sta
   `prediction_mode=global`, `adaptive_v2.system_name`. Plus a run config mirroring
   `adaptive_vs_baselines_quadrotor3d.yaml` if needed for launching.
 
-### 5.5 Adaptive intermediate-state pool
-Extend `TrajectoryDataSource` / `AdaptiveDatasetBuilder` so candidates are
-`(state_t → final_state, label)` over **intermediate** states (today they emit starts).
-- **Option A (default):** on-the-fly intermediate sampling from the 150k train
-  trajectories (FPS / stratified / random over collected rows). No new artifact;
-  seed-reproducible.
-- **Option B:** pre-generate a `train_fps.txt` pool via an FPS pass over train-split
-  rollout states (mirrors `eval_fps.txt`). Reproducible, matches eval exactly; adds a
-  generation script + large artifact + GPU step.
-- Make the source pluggable; choose by practical tradeoff during implementation. The
-  delimiter / no-zero-fill rule applies to trajectory loading here too.
+### 5.5 Adaptive intermediate-state acquisition (candidate = sub-trajectory start)
+**Clarified semantics (user):** an intermediate state at row `t` of trajectory `i` IS the
+start state of the sub-trajectory `t…end`, so it is a valid acquisition candidate. The
+candidate identity becomes a **`(traj_idx i, start_row t)` pair** (today's behavior is the
+special case `t=0`). On selection, the **remaining tail** `rows[t…end]` is added to
+training, expanding to `(rows[t..end-1] → final)` pairs. Scoring/uncertainty for a
+candidate uses the state at row `t` (the sub-trajectory's start).
+
+This requires reworking the candidate identity through the pool → strategy → engine path
+(today it is a bare trajectory index):
+- **`AdaptiveDatasetBuilder` / `TrajectoryDataSource`:** generalize the existing `used`
+  **marking** set from trajectory indices `i` to **`(i, row)` candidate identities** and use
+  marking for dedup (user's suggestion). A candidate `(i, t)` is *available* iff
+  `(i, t) ∉ used`. On selection of `(i, t)`, the **new** training pairs are the not-yet-marked
+  tail rows — `{rows[r] → final : r ∈ [t, end-1], (i, r) ∉ used}` — and those `(i, r)` are
+  then marked. Because adding `(i, t)` marks the whole tail's start-rows `t…end-1`, a later
+  `(i, t')` with `t' ≥ t` is already marked (skipped), while `t' < t` adds only the new prefix
+  `rows[t'…t-1]` → final. Marking yields overlap-free dedup with no separate bookkeeping
+  (today's trajectory-level marking is the `t=0`-marks-all special case).
+- **`sample_candidates_without_marking`** returns candidate **states** (row `t` of each
+  sampled `(i,t)`) for scoring + the `(i,t)` identities; `mark_indices_as_used` /
+  `add_to_training_balanced` operate on `(i,t)` pairs.
+- **Strategy / `UncertainSampler`:** carry `(i,t)` identities instead of bare indices.
+- **Labels:** a candidate `(i,t)` inherits trajectory `i`'s success/timeout label.
+
+**Candidate enumeration (the A/B tradeoff, now over `(i,t)`):**
+- **Option A (default):** on-the-fly sampling of `(i, t)` candidates from available
+  trajectories/rows (random or stratified). No artifact; seed-reproducible; cheap.
+- **Option B:** a pre-built FPS candidate pool (`train_fps`-style) giving coverage-balanced
+  `(i, t)` candidates. Matches the eval FPS construction; adds a generation step + artifact.
+- Keep the enumeration pluggable; A is the default. The comma-delimiter / no-zero-fill rule
+  applies to trajectory loading here too. Backward-compat: the bare-index path must still
+  work (it is exactly `t=0` for every candidate).
 
 ## 6. Testing strategy (TDD)
 - **System:** normalization round-trip (`denorm(norm(x))≈x`) per dim; `classify_attractor`

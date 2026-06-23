@@ -506,11 +506,12 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
         """
         # Import manifold types for isinstance checks
         try:
-            from flow_matching.utils.manifolds import SO3, SE3, FlatTorus
+            from flow_matching.utils.manifolds import SO3, SE3, FlatTorus, Sphere
         except ImportError:
             SO3 = None
             SE3 = None
             FlatTorus = None
+            Sphere = None
 
         # For Product manifolds, compute based on component structure
         # Use distance_manifold (true system manifold) not training manifold
@@ -527,6 +528,8 @@ class BaseFlowMatcher(pl.LightningModule, ABC):
                     total_dim += 4  # 3 per-axis translation + 1 SO3 geodesic angle
                 elif FlatTorus is not None and isinstance(m, FlatTorus):
                     total_dim += 1  # Single geodesic distance
+                elif Sphere is not None and isinstance(m, Sphere):
+                    total_dim += 1  # Single geodesic angle
                 else:
                     # Euclidean and other manifolds return per-dimension distances
                     total_dim += dimensions[i]

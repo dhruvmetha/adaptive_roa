@@ -13,3 +13,7 @@ jobid	name	config
 164299	fm_cp_r	system=cartpole_pybullet sampling_mode=direct d2_ratio=0.0 initial_train_size=300 samples_per_epoch=100 n_epochs=8 conformal.num_mc_samples_eval=20
 164300	fm_q2d_a	system=quadrotor2d sampling_mode=ranked d2_ratio=1.0 initial_train_size=3000 samples_per_epoch=1000 n_epochs=10 conformal.num_mc_samples_eval=5 n_ranked_candidates=5000 trainer.max_epochs=200
 164301	fm_q2d_r	system=quadrotor2d sampling_mode=direct d2_ratio=0.0 initial_train_size=3000 samples_per_epoch=1000 n_epochs=10 conformal.num_mc_samples_eval=5 trainer.max_epochs=200
+164947 fm_q3d_a	K20_rerun
+164948 fm_q3d_r	K20_rerun
+164949 fm_q2d_a20	K20_rerun
+164950 fm_q2d_r20	K20_rerun

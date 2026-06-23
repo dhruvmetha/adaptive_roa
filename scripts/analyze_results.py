@@ -42,9 +42,9 @@ def scan(since_hhmm="2026-06-21"):
         runs += glob.glob(os.path.join(base, "adaptive_*", "outputs", "*", "*"))
     rows = {}
     for run in runs:
-        # tonight's batch only: dir basename like 2026-06-21_0[1-9]-..
+        # study runs: 2026-06-21 (overnight) + 2026-06-22 (K=20 re-runs)
         bn = os.path.basename(run)
-        if not re.match(r"2026-06-21_0[1-9]", bn):
+        if not re.match(r"2026-06-2[12]_", bn):
             continue
         eps = sorted(glob.glob(os.path.join(run, "epoch_*")))
         if not eps:

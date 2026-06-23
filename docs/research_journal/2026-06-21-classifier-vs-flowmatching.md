@@ -192,3 +192,37 @@ Classifier+threshold+adaptive ≥ flow-matching on confident accuracy & compute 
 2. **Start-states / grid-matched classifier training** (parked design item) to attack the quad2d coverage ceiling at the data level.
 3. **Multi-seed** for significance; **warm_start=True** to denoise per-epoch curves.
 4. quad2d FM at full mc_eval (we used reduced=5) to confirm its coverage edge isn't understated.
+
+---
+# UPDATE 2026-06-22/23 — K=20 FM re-runs, eval-cost correction, FPR/FNR, H6
+
+## Correction: FM eval is NOT infeasible (earlier claim was wrong)
+Measured directly: **quad3d FM full-ROA eval at K=20 on the 990k grid = ~14 min** (660 batches × 1.27s; batches 1500 states × 20 samples). The expensive part is FM **training** (~3 h/epoch at the 100k scale, to convergence on growing data), NOT eval. Reframes H4: the compute asymmetry is real but lives in *training* + per-query MC, ~10–50×, not "intractable eval." (Eval ~14 min is fine.)
+
+## quad2d FM at K=20 (completed 10/10) — confirms & strengthens FM's only clear win
+adaptive band 0.932 / **cons 0.681** (vs K=5's 0.619), random cons 0.612. Classifier quad2d cons = 0.421. → **FM beats classifier on quad2d coverage by +0.26, robust to K.** More MC samples also shrink the invalid region (K5→K20: 15.3%→~10–12%).
+
+## quad3d FM — timed out, relaunched 48h
+First attempt (12h cap) reached only 4/10 epochs (~3 h/epoch). Trajectory: cons 0.683→0.732→0.771→0.760 (plateau ~0.77); invalid 30%→~20%. Classifier quad3d cons = 0.785. → **near-tie, classifier marginally ahead; FM's invalid region shrinks with training but persists ~20%.** Relaunched both modes with --time=48:00:00 (partitions are infinite-time; 12h was a self-imposed cap). **FM's coverage advantage does NOT cleanly generalize to 13-D quad3d** — generative endpoint cost (invalid region + 3h/epoch) offsets it.
+
+## Confident-set FPR / FNR (best epoch, adaptive)
+| system | model | FPR(conf) | FNR(conf) | abstain% (=invalid+uncertain) |
+|---|---|---:|---:|---:|
+| pendulum | clf / FM | 0.11 / 0.04 | 0.10 / 1.65 | 0.4 / 6.3 |
+| cartpole | clf / FM | 0.22 / 0.05 | 0.62 / 0.45 | 1.7 / 5.7 |
+| quad2d | clf / FM | 0.03 / 0.24 | 11.67 / 11.62 | 9.9 / 18.5 |
+| quad3d | clf | 0.24 | 5.37 | 19.4 |
+- **FPR is tiny for both everywhere (≤0.24%)** — both models are safe (rarely call a failure "success"). FNR dominates (50–400× FPR) and scales with difficulty.
+- **Abstention = separatrix_pct = invalid_pct + uncertain_pct.** (Correction: uncertain_pct alone undercounts FM, which carries a large invalid region.) **Classifier abstains LESS than FM on every system**; FM's confident FPR/FNR ≈ classifier's. FM's distinguishing cost is *more hesitation*, not worse confident predictions.
+- FM invalid region composition (quad2d, p_inv>0.5): ~90% true-failure / ~9% true-success ≈ grid base rate (not a clean failure detector).
+
+## H6 (NEW) — FM amortizes across success conditions; classifier is condition-locked
+The classifier bakes the success condition into its training labels → change goal/radius/attractor ⇒ re-label + **retrain** (cost scales linearly with #conditions). FM learns `p(endpoint|state)` (dynamics, condition-free) → success condition applied at inference ⇒ **one model serves all conditions** (literally why reevaluate.py's MC cache reclassifies at new radius without re-running). **This is FM's structural advantage, invisible to our single-condition benchmark.** Status: ACCEPT by construction; quantify via a radius/goal-sweep eval.
+
+## "What to change" (recommendations)
+1. **Multi-condition eval** (radius/goal sweep) — the only setup where FM's amortization (H6) shows; current benchmark is FM's worst case.
+2. **Give FM its best shot**: refine_invalids=True + adequate K + converge (invalid region is partly fixable artifact).
+3. **Compute-matched** (not just data-matched) comparison — FM uses ~100×; what can the classifier do with that budget?
+4. **Start-states / grid-matched classifier training** — tests whether quad2d ceiling (cons 0.42) is data not model (H5); also removes the ~2% train/test leakage.
+5. **Hybrid**: classifier for the confident bulk + FM only on the abstain band.
+6. **Calibration (ECE) + multi-seed + warm_start** for rigor.

@@ -1,0 +1,4 @@
+# @package _global_.system
+# Humanoid get-up: ℝ³⁴ × S² × ℝ³⁰ (67-D). Bounds from dataset_description.json.
+_target_: adaptive_roa.systems.humanoid_standup_reach.HumanoidStandUpReachSystem
+dataset_dir: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}/humanoid_get_up_medium

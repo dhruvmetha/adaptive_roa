@@ -1,0 +1,10 @@
+# Generic latent-conditional UNet (reused from quadrotor3d) sized for 67-D humanoid.
+_target_: adaptive_roa.model.quadrotor3d_unet.Quadrotor3DUNet
+embedded_dim: 67
+latent_dim: ${latent_dim}
+condition_dim: 67
+time_emb_dim: 64
+hidden_dims: [512, 1024, 1024, 512]
+output_dim: 67          # ambient tangent (34 Euclid + 3 Sphere-ambient + 30 Euclid)
+use_input_embeddings: false
+input_emb_dim: 128

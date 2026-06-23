@@ -1,0 +1,101 @@
+# Humanoid StandUpReach Latent Conditional Flow Matching (Facebook FM)
+# Manifold ℝ³⁴ × S² × ℝ³⁰, GeodesicProbPath, RiemannianODESolver. State 67-D, tangent 67-D.
+
+defaults:
+  - system: humanoid_standup_reach
+  - _self_
+
+net_id: ${net_id:}
+user_base: ${exp_dir:}
+shared_data: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}
+
+name: humanoid_standup_reach_latent_conditional_fm
+seed: 42
+batch_size: 256
+val_batch_size: 1024
+base_lr: 1e-4
+num_workers: 4
+latent_dim: 8
+
+flow_matcher:
+  _target_: adaptive_roa.flow_matching.humanoid_standup_reach.latent_conditional.flow_matcher.HumanoidStandUpReachLatentConditionalFlowMatcher
+
+model:
+  _target_: adaptive_roa.model.quadrotor3d_unet.Quadrotor3DUNet
+  embedded_dim: 67
+  latent_dim: ${latent_dim}
+  condition_dim: 67
+  time_emb_dim: 64
+  hidden_dims: [512, 1024, 1024, 512]
+  output_dim: 67
+  use_input_embeddings: false
+  input_emb_dim: 128
+
+data:
+  _target_: adaptive_roa.data.humanoid_standup_reach_endpoint_data.HumanoidStandUpReachEndpointDataModule
+  train_indices_file: ${shared_data}/humanoid_get_up_medium/train_test_splits/shuffled_indices_0.txt
+  val_indices_file: ${shared_data}/humanoid_get_up_medium/train_test_splits/shuffled_indices_1.txt
+  test_indices_file: ${shared_data}/humanoid_get_up_medium/train_test_splits/shuffled_indices_2.txt
+  trajectories_dir: ${shared_data}/humanoid_get_up_medium/trajectories
+  query_mode: random_intermediate
+  batch_size: ${batch_size}
+  val_batch_size: ${val_batch_size}
+  num_workers: ${num_workers}
+
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: ${base_lr}
+  weight_decay: 1e-5
+  betas: [0.9, 0.999]
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  mode: min
+  factor: 0.5
+  patience: 10
+  min_lr: 1e-6
+
+trainer:
+  _target_: lightning.pytorch.Trainer
+  max_epochs: 500
+  accelerator: gpu
+  devices: [0]
+  precision: 32
+  gradient_clip_val: 1.0
+  log_every_n_steps: 10
+  check_val_every_n_epoch: 1
+  enable_progress_bar: true
+  enable_model_summary: true
+  logger:
+    _target_: lightning.pytorch.loggers.TensorBoardLogger
+    save_dir: "${hydra:runtime.output_dir}"
+    name: ""
+    version: null
+  callbacks:
+    - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+      dirpath: "${hydra:runtime.output_dir}/version_0/checkpoints"
+      monitor: val_loss
+      mode: min
+      save_top_k: 3
+      save_last: true
+      filename: "epoch{epoch:02d}-val_loss{val_loss:.4f}"
+      auto_insert_metric_name: false
+    - _target_: lightning.pytorch.callbacks.EarlyStopping
+      monitor: val_loss
+      mode: min
+      patience: 50
+      verbose: true
+
+flow_matching:
+  latent_dim: ${latent_dim}
+  num_integration_steps: 100
+  mae_val_frequency: 10
+  use_loss_weights: false
+  use_manifold: true
+  clamp_noise: true
+  zero_latent: true
+  noise_scale: 1.0
+
+hydra:
+  run:
+    dir: outputs/${name}/${now:%Y-%m-%d_%H-%M-%S}

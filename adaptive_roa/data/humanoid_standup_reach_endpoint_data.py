@@ -37,8 +37,9 @@ def _unit_sphere(vec: np.ndarray) -> np.ndarray:
 
 class HumanoidStandUpReachEndpointDataset(Dataset):
     def __init__(self, shuffled_indices_file: str, trajectories_dir: str,
-                 query_mode: str = "random_intermediate", max_samples: int = None):
-        assert query_mode in ("start", "random_intermediate", "all_intermediate")
+                 query_mode: str = "random_intermediate", max_samples: Optional[int] = None):
+        if query_mode not in ("start", "random_intermediate", "all_intermediate"):
+            raise ValueError(f"invalid query_mode: {query_mode}")
         self.query_mode = query_mode
         self.trajectories_dir = Path(trajectories_dir)
         with open(shuffled_indices_file) as f:
@@ -88,7 +89,7 @@ class HumanoidStandUpReachEndpointDataModule(pl.LightningDataModule):
                  trajectories_dir: str, query_mode: str = "random_intermediate",
                  batch_size: int = 256, val_batch_size: Optional[int] = None,
                  num_workers: int = 4, pin_memory: bool = True,
-                 max_train_samples: int = None, max_val_samples: int = None):
+                 max_train_samples: Optional[int] = None, max_val_samples: Optional[int] = None):
         super().__init__()
         self.train_indices_file = train_indices_file
         self.val_indices_file = val_indices_file

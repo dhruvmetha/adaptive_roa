@@ -1,6 +1,7 @@
 # tests/test_humanoid_standup_reach_flow_matcher.py
 import torch
 import pytest
+from pathlib import Path
 
 from adaptive_roa.systems.humanoid_standup_reach import HumanoidStandUpReachSystem
 from adaptive_roa.model.quadrotor3d_unet import Quadrotor3DUNet
@@ -9,6 +10,8 @@ from adaptive_roa.flow_matching.humanoid_standup_reach.latent_conditional.flow_m
 )
 
 DATASET_DIR = "/common/users/shared/pracsys/genMoPlan/data_trajectories/humanoid_get_up_medium"
+
+pytestmark = pytest.mark.skipif(not Path(DATASET_DIR).exists(), reason="shared humanoid dataset not available")
 
 
 def _build(use_manifold=True):

@@ -1,5 +1,6 @@
 # tests/test_humanoid_standup_reach_train_config.py
 import torch
+import pytest
 from hydra import initialize_config_dir, compose
 from omegaconf import OmegaConf
 import hydra
@@ -8,6 +9,9 @@ from pathlib import Path
 from adaptive_roa.utils.env_config import get_net_id, get_exp_dir, get_shared_data_base
 
 CONFIG_DIR = str(Path(__file__).resolve().parents[1] / "configs")
+
+_DATASET_DIR = "/common/users/shared/pracsys/genMoPlan/data_trajectories/humanoid_get_up_medium"
+pytestmark = pytest.mark.skipif(not Path(_DATASET_DIR).exists(), reason="shared humanoid dataset not available")
 
 
 def _register_resolvers():

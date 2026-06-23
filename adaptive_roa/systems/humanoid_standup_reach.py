@@ -39,7 +39,8 @@ class HumanoidStandUpReachSystem(DynamicalSystem):
         achieved = info["achieved_bounds"]
         per_min = np.asarray(achieved["per_dimension_min"], dtype=np.float32)
         per_max = np.asarray(achieved["per_dimension_max"], dtype=np.float32)
-        assert per_min.shape == (67,) and per_max.shape == (67,), "expected 67-length bounds"
+        if per_min.shape != (67,) or per_max.shape != (67,):
+            raise ValueError("expected 67-length bounds")
         center = (per_max + per_min) / 2.0
         half = (per_max - per_min) / 2.0
         half[half < 1e-6] = 1.0  # guard degenerate dims

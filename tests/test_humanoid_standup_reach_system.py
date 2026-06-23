@@ -2,10 +2,13 @@
 import numpy as np
 import torch
 import pytest
+from pathlib import Path
 
 from adaptive_roa.systems.humanoid_standup_reach import HumanoidStandUpReachSystem
 
 DATASET_DIR = "/common/users/shared/pracsys/genMoPlan/data_trajectories/humanoid_get_up_medium"
+
+pytestmark = pytest.mark.skipif(not Path(DATASET_DIR).exists(), reason="shared humanoid dataset not available")
 
 
 @pytest.fixture(scope="module")

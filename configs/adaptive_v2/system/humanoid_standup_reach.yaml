@@ -17,8 +17,10 @@ data_source:
   base_dir: ${data_dir}/humanoid_get_up_medium
   trajectories_dir: ${data_source.base_dir}/trajectories
   train_test_splits_dir: ${data_source.base_dir}/train_test_splits
-  shuffled_indices_file: ${data_source.train_test_splits_dir}/all_shuffled_indices.txt
-  shuffled_labels_file: ${data_source.train_test_splits_dir}/all_shuffled_labels.txt
+  # Use the 150k TRAIN split for acquisition pool (not all_shuffled_*) to prevent
+  # train/eval leakage and reduce the pool to a manageable scale for intermediate mode.
+  shuffled_indices_file: ${data_source.train_test_splits_dir}/shuffled_indices.txt
+  shuffled_labels_file: ${data_source.train_test_splits_dir}/shuffled_labels.txt
   # FPS primary; start_states alternative commented
   eval_states_file: ${data_source.train_test_splits_dir}/eval_fps.txt
   cal_set_file: ${data_source.train_test_splits_dir}/cal_set_fps.txt
@@ -31,9 +33,17 @@ initial_train_size: 2000
 n_epochs: 30
 samples_per_epoch: 500
 
+# Explicit zero prevents any local test-set build from the acquisition pool,
+# keeping the train-set / FPS eval-set split clean.
+test_ratio: 0
+
 conformal:
   decision_rule: two_sided
   attractor_radius: 1.0
+  # Cap rows loaded from the 320MB cal / 1.3GB test FPS files to avoid OOM and
+  # slow epoch starts.  50k rows gives stable q_hat estimates; set to null to
+  # disable the cap (loads all rows, original behaviour).
+  max_eval_rows: 50000
 
 optimizer:
   lr: 5e-4

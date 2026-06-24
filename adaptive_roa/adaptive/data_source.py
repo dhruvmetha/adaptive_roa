@@ -17,7 +17,8 @@ MAX_ROWS = 10000
 
 def load_eval_states(
     filepath: str,
-    label_mapping: Optional[Dict[int, int]] = None
+    label_mapping: Optional[Dict[int, int]] = None,
+    max_rows: Optional[int] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Load eval_states.txt file containing start states, end states, and labels.
@@ -36,6 +37,10 @@ def load_eval_states(
         filepath: Path to eval_states.txt file
         label_mapping: Optional mapping from external labels (0/1) to internal format.
                       Default: {0: -1, 1: 1} (0 → failure, 1 → success)
+        max_rows: Optional maximum number of rows to load (passed to np.loadtxt).
+                  Default None loads all rows (unchanged behaviour).  Use to cap
+                  large FPS files (e.g. the 1.3GB humanoid test set) without
+                  reading the entire file into memory.
 
     Returns:
         Tuple of:
@@ -46,8 +51,11 @@ def load_eval_states(
     if label_mapping is None:
         label_mapping = {0: -1, 1: 1}
 
-    # Load data (comma-separated)
-    data = np.loadtxt(filepath, delimiter=',')
+    # Load data (comma-separated); max_rows=None → numpy loads all rows (default)
+    loadtxt_kwargs: dict = {"delimiter": ","}
+    if max_rows is not None:
+        loadtxt_kwargs["max_rows"] = max_rows
+    data = np.loadtxt(filepath, **loadtxt_kwargs)
 
     n_cols = data.shape[1]
 

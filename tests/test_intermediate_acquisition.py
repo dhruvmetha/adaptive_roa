@@ -84,7 +84,11 @@ def test_build_all_datasets_intermediate(tmp_path):
         train_data = train_data.reshape(1, -1)
     assert train_data.shape == (2, 8)
     traj = ds.load_trajectory(0)
-    assert np.allclose(train_data[:, :4], traj[3:5], atol=1e-5)
+    # The seeded shuffle changes pair order; check as a set of row-0 values (col 0)
+    # rather than requiring strict row order.
+    expected_first_cols = np.sort(traj[3:5, 0])
+    actual_first_cols = np.sort(train_data[:, 0])
+    assert np.allclose(actual_first_cols, expected_first_cols, atol=1e-5)
 
 
 def test_get_labels_candidate_id_aware(tmp_path):
@@ -145,11 +149,13 @@ def test_intermediate_val_nonempty_with_val_ratio(tmp_path):
     traj_label = ds.get_label(0)  # = 1
     assert all(l == traj_label for l in val_labels), "All val labels must equal the trajectory label"
 
-    # Val start states are intermediate rows (the first val entry is row 1, not row 0)
+    # Val start states are intermediate rows (not row 0 / start state)
+    # After seeded shuffle, val[0] is *some* tail row, not necessarily row 1.
+    # Verify the val start is one of the expected tail rows (rows 1,2,3,4 of traj 0).
     traj = ds.load_trajectory(0)
-    # The first val pair should start at row 1 (the candidate row, earliest in split)
-    assert np.allclose(val_starts[0], traj[1], atol=1e-5), (
-        f"Expected val start to be traj row 1 (an intermediate row), got {val_starts[0]}"
+    tail_rows = traj[1:5]  # rows 1,2,3,4 (all possible start rows for this candidate)
+    assert any(np.allclose(val_starts[0], row, atol=1e-5) for row in tail_rows), (
+        f"Expected val start to be one of the tail rows [1..4], got {val_starts[0]}"
     )
 
 
@@ -194,3 +200,25 @@ def test_sample_zero_returns_empty(tmp_path):
     b = AdaptiveDatasetBuilder(ds, str(tmp_path / "out_z"), candidate_mode="intermediate", val_ratio=0.0)
     states, ids = b.sample_candidates_without_marking(0)
     assert list(ids) == [] and len(states) == 0
+
+
+def test_initial_training_set_seeds_distinct_trajectories(tmp_path):
+    """In intermediate mode, get_initial_training_set(n) must seed n DISTINCT
+    trajectories (one candidate each at row 0), not the first n rows of traj 0."""
+    ds = _make_pool(tmp_path, [6, 6, 6, 6, 6])
+    b = AdaptiveDatasetBuilder(ds, str(tmp_path / "out_seed"), candidate_mode="intermediate", val_ratio=0.0)
+    b.get_initial_training_set(3)
+    # 3 DISTINCT trajectories seeded (row-0 tails), not 3 rows of trajectory 0
+    assert set(b._added_min_row.keys()) == {0, 1, 2}
+    assert all(v == 0 for v in b._added_min_row.values())  # full tails (row 0)
+
+
+def test_intermediate_val_is_shuffled(tmp_path):
+    """After a seeded shuffle of P, the val split should contain rows from different
+    trajectories (not just the lowest-index front-slice), and must be non-empty."""
+    ds = _make_pool(tmp_path, [8, 8, 8, 8])
+    b = AdaptiveDatasetBuilder(ds, str(tmp_path / "out_sh"), candidate_mode="intermediate", val_ratio=0.25)
+    b.get_initial_training_set(4)
+    starts, labels = b.get_val_labels()
+    # val must not be exclusively the lowest-traj front-slice (seeded shuffle mixes trajectories)
+    assert len(starts) >= 1

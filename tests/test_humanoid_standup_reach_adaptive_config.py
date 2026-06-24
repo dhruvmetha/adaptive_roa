@@ -28,3 +28,31 @@ def test_adaptive_config_composes():
     assert str(cfg.data_source.cal_set_file).endswith("cal_set_fps.txt")
     assert cfg.get("candidate_mode") == "intermediate"
     assert int(cfg.model_dims.output_dim) == 67
+
+
+def test_humanoid_adaptive_config_scale_hardening():
+    """Verify scale-hardening config additions: test_ratio=0, 150k train pool,
+    and max_eval_rows cap for FPS cal/test files."""
+    import os
+    _resolvers()
+    with initialize_config_dir(version_base=None, config_dir=CONFIG_DIR):
+        cfg = compose(config_name="default", overrides=["system=humanoid_standup_reach"])
+
+    # test_ratio must be 0 (no leakage through local test-set build)
+    assert int(cfg.get("test_ratio", 0)) == 0
+
+    # Acquisition pool must point at the 150k TRAIN split (not all_shuffled_*)
+    # Use basename check so the assertion is RED if the old all_* path is used
+    assert os.path.basename(str(cfg.data_source.shuffled_indices_file)) == "shuffled_indices.txt", (
+        "Acquisition pool must use the 150k train split (shuffled_indices.txt), "
+        f"got: {cfg.data_source.shuffled_indices_file}"
+    )
+    assert os.path.basename(str(cfg.data_source.shuffled_labels_file)) == "shuffled_labels.txt", (
+        "Acquisition pool must use the 150k train split (shuffled_labels.txt), "
+        f"got: {cfg.data_source.shuffled_labels_file}"
+    )
+
+    # FPS eval row cap must exist in conformal section
+    assert cfg.conformal.get("max_eval_rows") is not None, (
+        "conformal.max_eval_rows must be set to cap 1.3GB FPS test/cal file loads"
+    )

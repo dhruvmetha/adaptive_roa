@@ -237,7 +237,8 @@ class AdaptiveEngine:
             n_cal_eval = 0
             cal_file = self.cfg.data_source.get("cal_set_file", None)
             if run_eval and cal_file:
-                X_cal_eval, _, y_cal_eval = load_eval_states(cal_file)
+                _max_eval_rows = self.cfg.conformal.get("max_eval_rows", None)
+                X_cal_eval, _, y_cal_eval = load_eval_states(cal_file, max_rows=_max_eval_rows)
                 cal_probs = self.probability_backend.estimate(X_cal_eval)
                 eval_conformal = ConformalConfig(
                     delta=threshold_state.delta_star,

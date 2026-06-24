@@ -3,6 +3,7 @@ Adaptive Dataset Builder for incremental training.
 
 Manages trajectory indices and builds endpoint datasets for flow matching training.
 """
+import random
 import numpy as np
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict
@@ -63,6 +64,7 @@ class AdaptiveDatasetBuilder:
         val_ratio: float = 0.1,
         test_ratio: float = 0.1,
         candidate_mode: str = "start",
+        seed: int = 42,
     ):
         """
         Initialize dataset builder.
@@ -74,6 +76,7 @@ class AdaptiveDatasetBuilder:
             test_ratio: Fraction of training set to use for testing (with overlap)
             candidate_mode: "start" (default, byte-identical to legacy behaviour) or
                             "intermediate" (maps opaque candidate-ids to (traj_idx, row)).
+            seed: RNG seed for val/test split shuffle in intermediate mode (default 42).
         """
         self.data_source = data_source
         self.output_dir = Path(output_dir)
@@ -83,6 +86,7 @@ class AdaptiveDatasetBuilder:
         self.val_ratio = val_ratio
         self.test_ratio = test_ratio
         self.candidate_mode = candidate_mode
+        self.seed = seed
 
         # Tracks indices added to training (used for sampling available candidates)
         self.used_indices: set = set()
@@ -311,17 +315,33 @@ class AdaptiveDatasetBuilder:
         """
         Get initial training set of n trajectories (sequential from index 0).
 
+        In ``start`` mode: adds trajectory indices 0..n-1 (byte-identical to
+        legacy behaviour).
+
+        In ``intermediate`` mode: seeds n DISTINCT trajectories, each at row 0
+        (full tail), so that the initial dataset covers n different trajectories
+        rather than n rows within trajectory 0.
+
         Args:
             n: Number of trajectories for initial training
 
         Returns:
-            List of trajectory indices
+            List of trajectory indices (start mode) or candidate-ids (intermediate mode)
         """
-        # Take first n indices (0, 1, 2, ..., n-1)
         n_actual = min(n, self.max_train_idx)
         if n_actual < n:
             print(f"WARNING: Only {n_actual} trajectories available (requested {n})")
 
+        if self.candidate_mode == "intermediate":
+            # Seed n distinct trajectories at row 0 (full tails).
+            # Passing list(range(n)) would encode integers 0..n-1 as candidate-ids
+            # (traj_idx * MAX_ROWS + row) which maps to very small traj/row values
+            # — wrong. Explicitly convert trajectory index i to its row-0 candidate-id.
+            cids = [self.traj_row_to_candidate(i, 0) for i in range(n_actual)]
+            self.add_to_training_balanced(cids)
+            return cids
+
+        # ---- start mode (unchanged) ----
         indices = list(range(n_actual))
         self.add_to_training_balanced(indices)
         return indices
@@ -509,6 +529,14 @@ class AdaptiveDatasetBuilder:
             label = self.data_source.get_label(traj_i)
             for s, e in zip(starts, ends):
                 P.append((s, e, label))
+
+        # Seeded shuffle so val/test draw is representative across all trajectories
+        # rather than being biased toward the lowest-index trajectories' earliest rows.
+        # A fresh Random instance per call ensures every caller (build_train,
+        # build_val, get_val_labels, …) sees the identical shuffle, giving a
+        # consistent split without a persistent RNG attribute.
+        _rng = random.Random(self.seed if self.seed is not None else 42)
+        _rng.shuffle(P)
 
         N = len(P)
         # val: non-empty when val_ratio > 0 and N > 0

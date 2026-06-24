@@ -504,6 +504,7 @@ def evaluate_full_roa_fast(
     refine_num_steps: int = 100,
     refine_max_attempts: int = 5,
     mc_cache: "MCCache | None" = None,
+    max_eval_rows: int | None = None,
 ) -> dict[str, Any]:
     """Fast batched full-ROA evaluation with v2-compatible outputs.
 
@@ -511,13 +512,18 @@ def evaluate_full_roa_fast(
     entirely and predictions are derived from cached endpoints/labels.  When
     ``attractor_radius`` differs from the cache's radius, labels are
     recomputed from cached endpoints on the CPU.
+
+    ``max_eval_rows``: optional cap on how many rows to load from
+    ``eval_states_file`` (passed through to ``load_eval_states``).  Default
+    None loads all rows.  Use to cap large FPS files (e.g. 1.3 GB humanoid
+    test set) without reading the entire file into memory.
     """
     from tqdm import tqdm
 
     hook = resolve_system_hook(system)
     effective_rule = decision_rule or hook.decision_rule
 
-    X_all, end_states_all, y_all = load_eval_states(eval_states_file)
+    X_all, end_states_all, y_all = load_eval_states(eval_states_file, max_rows=max_eval_rows)
     n_total = len(y_all)
     n_success_true = int(np.sum(y_all == 1))
     n_failure_true = int(np.sum(y_all == -1))
@@ -1144,4 +1150,8 @@ class FullROAEvaluator:
             ),
             refine_num_steps=self.cfg.conformal.get("refine_num_steps", 100),
             refine_max_attempts=self.cfg.conformal.get("refine_max_attempts", 5),
+            max_eval_rows=epoch_context.get(
+                "max_eval_rows",
+                self.cfg.conformal.get("max_eval_rows", None),
+            ),
         )

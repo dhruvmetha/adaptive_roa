@@ -207,8 +207,21 @@ class TrajectoryDataSource:
         return result
 
     def get_trajectory_length(self, idx: int) -> int:
-        """Return the number of rows (time steps) in trajectory idx."""
-        return len(self.load_trajectory(idx))
+        """Return the number of rows (time steps) in trajectory idx.
+
+        Uses a cheap line-count (no full parse) when the trajectory is not
+        already cached.  A non-empty line == one time step, matching the
+        behaviour of ``load_trajectory`` exactly.
+        """
+        if idx in self._traj_cache:
+            return len(self._traj_cache[idx])
+        filepath = self.trajectory_files[idx]
+        count = 0
+        with open(filepath, "r") as f:
+            for line in f:
+                if line.strip():
+                    count += 1
+        return count
 
     def get_state_at(self, idx: int, row: int) -> np.ndarray:
         """Return the state vector at a specific row in trajectory idx."""

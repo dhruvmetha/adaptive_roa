@@ -66,7 +66,7 @@ class TrajectoryPool:
         return self.dataset_builder.get_test_labels()
 
     def get_labels(self, indices: list[int]):
-        return self.dataset_builder.data_source.get_labels(indices)
+        return self.dataset_builder.get_labels(indices)
 
     def get_statistics(self) -> dict[str, Any]:
         return self.dataset_builder.get_statistics()

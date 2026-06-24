@@ -327,16 +327,11 @@ class AdaptiveDatasetBuilder:
         output_path = self.output_dir / filename
 
         if self.candidate_mode == "intermediate":
-            all_starts = []
-            all_ends = []
-            for traj_i, min_row in sorted(self._added_min_row.items()):
-                starts, ends = self.data_source.get_all_endpoint_pairs_from_trajectory(
-                    traj_i, mode="train", start_row=min_row
-                )
-                all_starts.append(starts)
-                all_ends.append(ends)
-            if all_starts:
-                data = np.hstack([np.vstack(all_starts), np.vstack(all_ends)])
+            train, _val, _test = self._intermediate_split()
+            if train:
+                starts = np.vstack([p[0] for p in train])
+                ends = np.vstack([p[1] for p in train])
+                data = np.hstack([starts, ends])
             else:
                 state_dim = self.data_source.get_state_dim()
                 data = np.zeros((0, state_dim * 2), dtype=np.float32)
@@ -363,6 +358,21 @@ class AdaptiveDatasetBuilder:
         """Build validation endpoint dataset file (no overlap with train)."""
         output_path = self.output_dir / filename
 
+        if self.candidate_mode == "intermediate":
+            _train, val, _test = self._intermediate_split()
+            if val:
+                starts = np.vstack([p[0] for p in val])
+                ends = np.vstack([p[1] for p in val])
+                data = np.hstack([starts, ends])
+            else:
+                state_dim = self.data_source.get_state_dim()
+                data = np.zeros((0, state_dim * 2), dtype=np.float32)
+            np.savetxt(str(output_path), data, fmt='%.8f')
+            n_pairs = len(data)
+            print(f"Built intermediate validation dataset: {n_pairs} pairs")
+            return str(output_path)
+
+        # ---- start mode (unchanged) ----
         # Take val_ratio of training indices
         train_indices = list(self.train_split)
         n_val = max(1, int(len(train_indices) * self.val_ratio))
@@ -440,10 +450,60 @@ class AdaptiveDatasetBuilder:
         return str(output_path)
 
     def _build_empty_val_dataset(self, filename: str) -> str:
-        """Write an empty val file (used in intermediate mode where val is out of scope)."""
+        """Write an empty val file (used in start-mode when val is out of scope)."""
         output_path = self.output_dir / filename
         output_path.write_text("")
         return str(output_path)
+
+    # =========================================================================
+    # Intermediate-mode: single source of truth for train/val/test split
+    # =========================================================================
+
+    def _intermediate_split(self):
+        """Return (train_pairs, val_pairs, test_pairs) for intermediate mode.
+
+        Each element is a list of (start_state, end_state, label) tuples built
+        from the ordered pair list P:
+            P = [(rows[r], final_i, label_i)
+                 for each trajectory i in _added_min_row,
+                 for r in range(_added_min_row[i], len_i - 1)]
+
+        Slicing (P ordered as built):
+            n_val  = max(1, int(N * val_ratio))  if val_ratio > 0 and N > 0, else 0
+            n_test = int(N * test_ratio)          (plain floor, no max-1 guard)
+            val  = P[:n_val]
+            test = P[n_val : n_val + n_test]
+            train= P[n_val + n_test :]
+
+        This is the single source of truth; all intermediate-mode get_*/build_*
+        methods consume it.
+
+        Returns:
+            (train, val, test) — each a list of (start_arr, end_arr, label_int)
+        """
+        # Build P: list of (start_state, end_state, label)
+        P: List[Tuple[np.ndarray, np.ndarray, int]] = []
+        for traj_i, min_row in sorted(self._added_min_row.items()):
+            starts, ends = self.data_source.get_all_endpoint_pairs_from_trajectory(
+                traj_i, mode="train", start_row=min_row
+            )
+            label = self.data_source.get_label(traj_i)
+            for s, e in zip(starts, ends):
+                P.append((s, e, label))
+
+        N = len(P)
+        # val: non-empty when val_ratio > 0 and N > 0
+        if self.val_ratio > 0 and N > 0:
+            n_val = max(1, int(N * self.val_ratio))
+        else:
+            n_val = 0
+        # test: plain floor, no max(1,...) — matches task spec
+        n_test = int(N * self.test_ratio)
+
+        val = P[:n_val]
+        test = P[n_val:n_val + n_test]
+        train = P[n_val + n_test:]
+        return train, val, test
 
     def build_all_datasets(self, dataset_kind: str = "endpoint") -> Dict[str, str]:
         """
@@ -456,16 +516,17 @@ class AdaptiveDatasetBuilder:
         dataset_kind="classification": (state, binary_label) files for the
         discriminative classifier, keyed as 'train', 'val'.
 
-        In ``intermediate`` mode: the train file expands tail rows per
-        ``_added_min_row``; val/val_trajectories are empty files (val labels
-        remain trajectory-level and are out of scope for intermediate mode).
+        In ``intermediate`` mode: train and val files are built from the
+        intermediate-state pair split (non-empty val when val_ratio>0 and
+        data available); trajectory-index files are empty (local mode is out
+        of scope for intermediate).
 
         Returns:
             Dict mapping split name to file path
         """
         if self.candidate_mode == "intermediate":
             train_path = self.build_train_dataset()
-            val_path = self._build_empty_val_dataset("val_endpoint_dataset.txt")
+            val_path = self.build_val_dataset()
             if dataset_kind == "classification":
                 return {
                     'train': train_path,
@@ -505,26 +566,16 @@ class AdaptiveDatasetBuilder:
         Returns the same indices used by build_train_dataset(), ensuring
         alignment between the train file and returned arrays.
 
-        In ``intermediate`` mode: expands each trajectory i from
-        ``_added_min_row[i]`` to the penultimate row, all pointing to the
-        final state.  val_ratio is intentionally ignored in this mode.
+        In ``intermediate`` mode: returns the train slice from the
+        intermediate-state pair split (pairs after the val and test slices
+        are removed from the front).
 
         Returns:
             Tuple of (start_states, end_states, labels)
         """
         if self.candidate_mode == "intermediate":
-            all_starts = []
-            all_ends = []
-            all_labels = []
-            for traj_i, min_row in sorted(self._added_min_row.items()):
-                starts, ends = self.data_source.get_all_endpoint_pairs_from_trajectory(
-                    traj_i, mode="train", start_row=min_row
-                )
-                label = self.data_source.get_label(traj_i)
-                all_starts.append(starts)
-                all_ends.append(ends)
-                all_labels.extend([label] * len(starts))
-            if not all_starts:
+            train, _val, _test = self._intermediate_split()
+            if not train:
                 state_dim = self.data_source.get_state_dim()
                 return (
                     np.zeros((0, state_dim), dtype=np.float32),
@@ -532,9 +583,9 @@ class AdaptiveDatasetBuilder:
                     np.zeros(0, dtype=np.int64),
                 )
             return (
-                np.vstack(all_starts),
-                np.vstack(all_ends),
-                np.array(all_labels, dtype=np.int64),
+                np.vstack([p[0] for p in train]),
+                np.vstack([p[1] for p in train]),
+                np.array([p[2] for p in train], dtype=np.int64),
             )
 
         # ---- start mode (unchanged) ----
@@ -550,9 +601,28 @@ class AdaptiveDatasetBuilder:
         Returns the val portion (first ``n_val`` indices of ``train_split``),
         which the FM never trains on.
 
+        In ``intermediate`` mode: returns intermediate-state pairs from the
+        train-val split (non-empty when val_ratio > 0 and data available).
+
         Returns:
             Tuple of (start_states, end_states, labels)
         """
+        if self.candidate_mode == "intermediate":
+            _train, val, _test = self._intermediate_split()
+            if not val:
+                state_dim = self.data_source.get_state_dim()
+                return (
+                    np.zeros((0, state_dim), dtype=np.float32),
+                    np.zeros((0, state_dim), dtype=np.float32),
+                    np.zeros(0, dtype=np.int64),
+                )
+            return (
+                np.vstack([p[0] for p in val]),
+                np.vstack([p[1] for p in val]),
+                np.array([p[2] for p in val], dtype=np.int64),
+            )
+
+        # ---- start mode (unchanged) ----
         train_indices = list(self.train_split)
         n_val = max(1, int(len(train_indices) * self.val_ratio))
         val_indices = train_indices[:n_val]
@@ -565,9 +635,26 @@ class AdaptiveDatasetBuilder:
         Returns the val portion (first ``n_val`` indices of ``train_split``),
         which the FM never trains on — one entry per trajectory.
 
+        In ``intermediate`` mode: returns intermediate states (not necessarily
+        row 0) paired with their trajectory's label.
+
         Returns:
             Tuple of (start_states [N_val, dim], labels [N_val])
         """
+        if self.candidate_mode == "intermediate":
+            _train, val, _test = self._intermediate_split()
+            if not val:
+                state_dim = self.data_source.get_state_dim()
+                return (
+                    np.zeros((0, state_dim), dtype=np.float32),
+                    np.zeros(0, dtype=np.int64),
+                )
+            return (
+                np.vstack([p[0] for p in val]),
+                np.array([p[2] for p in val], dtype=np.int64),
+            )
+
+        # ---- start mode (unchanged) ----
         train_indices = list(self.train_split)
         n_val = max(1, int(len(train_indices) * self.val_ratio))
         val_indices = train_indices[:n_val]
@@ -610,13 +697,56 @@ class AdaptiveDatasetBuilder:
         labels = self.data_source.get_labels(train_only)
         return starts, labels
 
+    def get_labels(self, ids: List[int]) -> np.ndarray:
+        """
+        Get labels for a list of ids.
+
+        In ``start`` mode: ids are trajectory indices; delegates directly to
+        ``data_source.get_labels(ids)`` (byte-identical to previous behaviour
+        of ``TrajectoryPool.get_labels``).
+
+        In ``intermediate`` mode: ids are opaque candidate-ids; each is mapped
+        to its trajectory index via ``candidate_to_traj_row`` and the
+        trajectory label is returned.
+
+        Args:
+            ids: Trajectory indices (start mode) or candidate-ids (intermediate mode)
+
+        Returns:
+            labels [N] array
+        """
+        if self.candidate_mode == "intermediate":
+            return np.array(
+                [self.data_source.get_label(self.candidate_to_traj_row(cid)[0]) for cid in ids],
+                dtype=np.int64,
+            )
+        # ---- start mode (unchanged) ----
+        return self.data_source.get_labels(ids)
+
     def get_test_labels(self) -> Tuple[np.ndarray, np.ndarray]:
         """
         Get test start states and labels (subset of training with overlap).
 
+        In ``intermediate`` mode: returns intermediate-state pairs from the
+        test slice of the split; empty when test_ratio == 0 (the default).
+
         Returns:
-            Tuple of (start_states [N_traj, dim], labels [N_traj])
+            Tuple of (start_states [N, dim], labels [N])
         """
+        if self.candidate_mode == "intermediate":
+            _train, _val, test = self._intermediate_split()
+            if not test:
+                state_dim = self.data_source.get_state_dim()
+                return (
+                    np.zeros((0, state_dim), dtype=np.float32),
+                    np.zeros(0, dtype=np.int64),
+                )
+            return (
+                np.vstack([p[0] for p in test]),
+                np.array([p[2] for p in test], dtype=np.int64),
+            )
+
+        # ---- start mode (unchanged) ----
         # Take test_ratio of training indices (last portion)
         train_indices = list(self.train_split)
         n_test = max(1, int(len(train_indices) * self.test_ratio))

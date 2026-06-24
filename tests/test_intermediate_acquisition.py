@@ -85,3 +85,69 @@ def test_build_all_datasets_intermediate(tmp_path):
     assert train_data.shape == (2, 8)
     traj = ds.load_trajectory(0)
     assert np.allclose(train_data[:, :4], traj[3:5], atol=1e-5)
+
+
+def test_get_labels_candidate_id_aware(tmp_path):
+    """get_labels maps candidate-ids to trajectory labels in intermediate mode
+    and maps trajectory indices to labels in start mode."""
+    # Use two trajectories with the same label (both label=1 from _make_pool)
+    ds = _make_pool(tmp_path, [5, 6])
+    # --- intermediate mode ---
+    b_int = AdaptiveDatasetBuilder(ds, str(tmp_path / "out_gl_i"), candidate_mode="intermediate")
+    # candidate_id for traj 0 row 2
+    cid_0_2 = b_int.traj_row_to_candidate(0, 2)
+    # candidate_id for traj 1 row 1
+    cid_1_1 = b_int.traj_row_to_candidate(1, 1)
+    labels = b_int.get_labels([cid_0_2, cid_1_1])
+    assert labels.shape == (2,)
+    # Both trajectories have label 1 (internal: 1) from _make_pool
+    assert labels[0] == ds.get_label(0)
+    assert labels[1] == ds.get_label(1)
+
+    # --- start mode ---
+    b_st = AdaptiveDatasetBuilder(ds, str(tmp_path / "out_gl_s"), candidate_mode="start")
+    st_labels = b_st.get_labels([0, 1])
+    assert st_labels.shape == (2,)
+    assert st_labels[0] == ds.get_label(0)
+    assert st_labels[1] == ds.get_label(1)
+
+
+def test_intermediate_val_nonempty_with_val_ratio(tmp_path):
+    """In intermediate mode with val_ratio=0.2, build_all_datasets writes a
+    non-empty val endpoint file; get_val_labels returns non-empty labels that
+    are a subset of the trajectory's label set; val start states are
+    intermediate rows (not necessarily row 0)."""
+    # Single trajectory of length 6: rows 0..5, final=row5
+    # Candidate at row 1: tail pairs = rows 1,2,3,4 -> final (4 pairs)
+    # N=4, val_ratio=0.2: n_val = max(1, int(4*0.2)) = max(1,0) = 1
+    # val = P[:1] = pair for row 1 (start is traj row 1, NOT row 0)
+    ds = _make_pool(tmp_path, [6])
+    b = AdaptiveDatasetBuilder(
+        ds, str(tmp_path / "out_val"), candidate_mode="intermediate", val_ratio=0.2, test_ratio=0.0
+    )
+    cid_1 = b.traj_row_to_candidate(0, 1)
+    b.add_to_training_balanced([cid_1])
+
+    paths = b.build_all_datasets(dataset_kind="endpoint")
+
+    # Val file must be non-empty
+    val_data = np.loadtxt(paths["val"])
+    if val_data.ndim == 1:
+        val_data = val_data.reshape(1, -1)
+    assert val_data.shape[0] >= 1, "Val file must have at least one row"
+    # Val start states are 4-D (state_dim=4)
+    assert val_data.shape[1] == 8  # 4 start + 4 end
+
+    # get_val_labels: non-empty, labels subset of trajectory's label set {1}
+    val_starts, val_labels = b.get_val_labels()
+    assert len(val_starts) >= 1
+    assert len(val_labels) >= 1
+    traj_label = ds.get_label(0)  # = 1
+    assert all(l == traj_label for l in val_labels), "All val labels must equal the trajectory label"
+
+    # Val start states are intermediate rows (the first val entry is row 1, not row 0)
+    traj = ds.load_trajectory(0)
+    # The first val pair should start at row 1 (the candidate row, earliest in split)
+    assert np.allclose(val_starts[0], traj[1], atol=1e-5), (
+        f"Expected val start to be traj row 1 (an intermediate row), got {val_starts[0]}"
+    )

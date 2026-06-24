@@ -182,6 +182,11 @@ class AdaptiveDatasetBuilder:
             Tuple of (start_states [n, dim], trajectory_indices or candidate_ids)
         """
         if self.candidate_mode == "intermediate":
+            # Guard n<=0: matches start mode (min(n,...) -> [:0] -> []) and the
+            # old intermediate behaviour. Without this, the collect-until-n loop
+            # never terminates early (len starts at 0) and returns ALL candidates.
+            if n <= 0:
+                return np.array([]), []
             # Packed candidate-id scheme: iterate trajectories in index order,
             # then rows in ascending order.  Available non-terminal rows for
             # trajectory i are [0, _marked_from_row.get(i, length-1)).

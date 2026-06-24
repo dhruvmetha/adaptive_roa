@@ -174,6 +174,12 @@ def test_marking_is_not_global_scan(tmp_path, monkeypatch):
     b = AdaptiveDatasetBuilder(ds, str(tmp_path / "out_lz"), candidate_mode="intermediate", val_ratio=0.0)
     # Construction must not have force-loaded all 4 full trajectories (lazy length via line-count).
     loads_after_init = calls["load"]
+    # Packed scheme: NO flat registry / reverse-lookup / global used-set is built
+    # at init. These attributes existed under the old O(60M) flat scheme and must
+    # be gone — this is what actually guards the registry removal.
+    assert not hasattr(b, "_candidates"), "flat candidate registry must not exist"
+    assert not hasattr(b, "_cand_lookup"), "reverse lookup dict must not exist"
+    assert not hasattr(b, "_cid_used"), "global used-cid set must not exist"
     # mark one candidate; availability still works without a global registry
     cid = b.traj_row_to_candidate(2, 2)
     b.mark_indices_as_used([cid])
@@ -181,3 +187,10 @@ def test_marking_is_not_global_scan(tmp_path, monkeypatch):
     rows_traj2 = sorted(r for (i, r) in (b.candidate_to_traj_row(c) for c in ids) if i == 2)
     assert all(r < 2 for r in rows_traj2)  # rows >=2 of traj 2 are marked/unavailable
     assert loads_after_init == 0  # lengths came from a cheap line-count, not full load
+
+
+def test_sample_zero_returns_empty(tmp_path):
+    ds = _make_pool(tmp_path, [6, 6, 6])
+    b = AdaptiveDatasetBuilder(ds, str(tmp_path / "out_z"), candidate_mode="intermediate", val_ratio=0.0)
+    states, ids = b.sample_candidates_without_marking(0)
+    assert list(ids) == [] and len(states) == 0

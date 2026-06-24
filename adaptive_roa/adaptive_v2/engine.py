@@ -87,6 +87,7 @@ class AdaptiveEngine:
             output_dir=str(self.output_dir / "datasets"),
             val_ratio=cfg.get("val_ratio", 0.1),
             test_ratio=cfg.get("test_ratio", 0.1),
+            candidate_mode=str(cfg.get("candidate_mode", "start")),
         )
         self.predictor_type = str(cfg.get("predictor", "generative"))
         if self.predictor_type == "classifier":

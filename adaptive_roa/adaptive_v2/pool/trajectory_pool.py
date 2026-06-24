@@ -19,6 +19,7 @@ class TrajectoryPool:
         output_dir: str,
         val_ratio: float = 0.1,
         test_ratio: float = 0.1,
+        candidate_mode: str = "start",
     ):
         cfg = TrajectoryDataSourceConfig(
             trajectories_dir=data_source_cfg.trajectories_dir,
@@ -32,6 +33,7 @@ class TrajectoryPool:
             output_dir=output_dir,
             val_ratio=val_ratio,
             test_ratio=test_ratio,
+            candidate_mode=candidate_mode,
         )
 
     def initialize(self, initial_train_size: int, dataset_kind: str = "endpoint") -> dict[str, str]:

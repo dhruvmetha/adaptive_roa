@@ -62,6 +62,7 @@ class AdaptiveDatasetBuilder:
         output_dir: str,
         val_ratio: float = 0.1,
         test_ratio: float = 0.1,
+        candidate_mode: str = "start",
     ):
         """
         Initialize dataset builder.
@@ -71,6 +72,8 @@ class AdaptiveDatasetBuilder:
             output_dir: Directory for saving built datasets
             val_ratio: Fraction of training set to use for validation (with overlap)
             test_ratio: Fraction of training set to use for testing (with overlap)
+            candidate_mode: "start" (default, byte-identical to legacy behaviour) or
+                            "intermediate" (maps opaque candidate-ids to (traj_idx, row)).
         """
         self.data_source = data_source
         self.output_dir = Path(output_dir)
@@ -79,6 +82,7 @@ class AdaptiveDatasetBuilder:
         self.train_split = DatasetSplit()
         self.val_ratio = val_ratio
         self.test_ratio = test_ratio
+        self.candidate_mode = candidate_mode
 
         # Tracks indices added to training (used for sampling available candidates)
         self.used_indices: set = set()
@@ -88,6 +92,46 @@ class AdaptiveDatasetBuilder:
 
         print(f"Total trajectories available: {self.max_train_idx}")
         print(f"Val will be {val_ratio:.0%} of training set (no overlap — FM trains on remaining {1-val_ratio:.0%})")
+
+        # ---- intermediate mode state ----------------------------------------
+        if self.candidate_mode == "intermediate":
+            # Build the candidate registry: list of (traj_idx, row) for every
+            # non-terminal row in every available trajectory.
+            # candidate_id == index into this list (opaque outside this class).
+            self._candidates: List[Tuple[int, int]] = []
+            for traj_idx in range(self.max_train_idx):
+                traj_len = self.data_source.get_trajectory_length(traj_idx)
+                for row in range(traj_len - 1):   # non-terminal rows: 0 .. T-2
+                    self._candidates.append((traj_idx, row))
+
+            # Build a reverse index: (traj_idx, row) → candidate_id
+            self._cand_lookup: Dict[Tuple[int, int], int] = {
+                pair: cid for cid, pair in enumerate(self._candidates)
+            }
+
+            # Set of candidate-ids that have been used/marked
+            self._cid_used: set = set()
+
+            # Per-trajectory minimum added row (populated by add_to_training_balanced)
+            self._added_min_row: Dict[int, int] = {}
+
+    # =========================================================================
+    # Intermediate-mode helpers (candidate-id ↔ (traj_idx, row))
+    # =========================================================================
+
+    def traj_row_to_candidate(self, traj_idx: int, row: int) -> int:
+        """Return the opaque candidate-id for (traj_idx, row).
+
+        Only valid in ``candidate_mode="intermediate"``.
+        """
+        return self._cand_lookup[(traj_idx, row)]
+
+    def candidate_to_traj_row(self, cid: int) -> Tuple[int, int]:
+        """Return (traj_idx, row) for a candidate-id.
+
+        Only valid in ``candidate_mode="intermediate"``.
+        """
+        return self._candidates[cid]
 
     def add_to_training(self, indices: List[int]):
         """
@@ -123,8 +167,8 @@ class AdaptiveDatasetBuilder:
         return self.max_train_idx - len(self.used_indices)
 
     def sample_candidates_without_marking(
-        self, 
-        n: int, 
+        self,
+        n: int,
         exclude: set = None
     ) -> Tuple[np.ndarray, List[int]]:
         """
@@ -138,16 +182,37 @@ class AdaptiveDatasetBuilder:
             exclude: Optional set of indices to exclude (e.g., already sampled this epoch)
 
         Returns:
-            Tuple of (start_states [n, dim], trajectory_indices)
+            Tuple of (start_states [n, dim], trajectory_indices or candidate_ids)
         """
+        if self.candidate_mode == "intermediate":
+            # intermediate: candidate-id indexes into self._candidates
+            exclude_set = set(exclude) if exclude else set()
+            available_ids = [
+                cid for cid in range(len(self._candidates))
+                if cid not in self._cid_used and cid not in exclude_set
+            ]
+            if len(available_ids) == 0:
+                print("WARNING: No more candidates available!")
+                return np.array([]), []
+            n_actual = min(n, len(available_ids))
+            if n_actual < n:
+                print(f"WARNING: Only {n_actual} candidates remaining (requested {n})")
+            selected_ids = available_ids[:n_actual]
+            states = np.array([
+                self.data_source.get_state_at(traj_idx, row)
+                for traj_idx, row in (self._candidates[cid] for cid in selected_ids)
+            ])
+            return states, selected_ids
+
+        # ---- start mode (unchanged) ----
         # Get available indices as a set for efficient operations
         all_indices = set(range(self.max_train_idx))
         available_set = all_indices - self.used_indices
-        
+
         # Exclude indices if provided (for within-epoch deduplication)
         if exclude:
             available_set = available_set - exclude
-        
+
         # Convert to sorted list (maintains consistent ordering)
         available = sorted(available_set)
 
@@ -171,9 +236,22 @@ class AdaptiveDatasetBuilder:
         Call this ONLY when actually adding to training set.
         Discarded candidates should NOT be marked.
 
+        In ``intermediate`` mode: marking candidate-id (i, t) marks ALL
+        candidate-ids with traj==i and row>=t (the tail of the trajectory).
+
         Args:
-            indices: Trajectory indices to mark as used
+            indices: Trajectory indices (start mode) or candidate-ids (intermediate mode)
         """
+        if self.candidate_mode == "intermediate":
+            for cid in indices:
+                traj_i, row_t = self._candidates[cid]
+                # Mark all candidates in trajectory traj_i at or after row_t
+                for other_cid, (other_traj, other_row) in enumerate(self._candidates):
+                    if other_traj == traj_i and other_row >= row_t:
+                        self._cid_used.add(other_cid)
+            return
+
+        # ---- start mode (unchanged) ----
         for idx in indices:
             self.used_indices.add(idx)
 
@@ -183,9 +261,26 @@ class AdaptiveDatasetBuilder:
 
         Use this for balanced sampling strategy.
 
+        In ``intermediate`` mode: for each candidate-id (i, t), updates
+        per-trajectory ``_added_min_row[i] = min(existing, t)`` and then
+        marks the tail via ``mark_indices_as_used``.
+
         Args:
-            indices: Trajectory indices to add to training
+            indices: Trajectory indices (start mode) or candidate-ids (intermediate mode)
         """
+        if self.candidate_mode == "intermediate":
+            for cid in indices:
+                traj_i, row_t = self._candidates[cid]
+                # Update per-trajectory minimum added row
+                if traj_i in self._added_min_row:
+                    self._added_min_row[traj_i] = min(self._added_min_row[traj_i], row_t)
+                else:
+                    self._added_min_row[traj_i] = row_t
+                # Mark the tail (row_t and beyond) as used for this trajectory
+                self.mark_indices_as_used([cid])
+            return
+
+        # ---- start mode (unchanged) ----
         for idx in indices:
             if idx < self.max_train_idx:
                 self.train_split.add(idx)
@@ -359,9 +454,39 @@ class AdaptiveDatasetBuilder:
         Returns the same indices used by build_train_dataset(), ensuring
         alignment between the train file and returned arrays.
 
+        In ``intermediate`` mode: expands each trajectory i from
+        ``_added_min_row[i]`` to the penultimate row, all pointing to the
+        final state.  val_ratio is intentionally ignored in this mode.
+
         Returns:
             Tuple of (start_states, end_states, labels)
         """
+        if self.candidate_mode == "intermediate":
+            all_starts = []
+            all_ends = []
+            all_labels = []
+            for traj_i, min_row in sorted(self._added_min_row.items()):
+                starts, ends = self.data_source.get_all_endpoint_pairs_from_trajectory(
+                    traj_i, mode="train", start_row=min_row
+                )
+                label = self.data_source.get_label(traj_i)
+                all_starts.append(starts)
+                all_ends.append(ends)
+                all_labels.extend([label] * len(starts))
+            if not all_starts:
+                state_dim = self.data_source.get_state_dim()
+                return (
+                    np.zeros((0, state_dim), dtype=np.float32),
+                    np.zeros((0, state_dim), dtype=np.float32),
+                    np.zeros(0, dtype=np.int64),
+                )
+            return (
+                np.vstack(all_starts),
+                np.vstack(all_ends),
+                np.array(all_labels, dtype=np.int64),
+            )
+
+        # ---- start mode (unchanged) ----
         train_indices = list(self.train_split)
         n_val = max(1, int(len(train_indices) * self.val_ratio))
         train_only = train_indices[n_val:]

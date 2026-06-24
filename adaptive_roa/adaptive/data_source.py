@@ -139,6 +139,9 @@ class TrajectoryDataSource:
         # Start states: always load on-demand from trajectory files
         self.start_states = None
 
+        # Cache for loaded trajectories (keyed by idx) to avoid repeated disk reads
+        self._traj_cache: Dict[int, np.ndarray] = {}
+
         print(f"TrajectoryDataSource initialized:")
         print(f"  Trajectories: {self.n_trajectories}")
         print(f"  Directory: {self.trajectories_dir}")
@@ -163,7 +166,7 @@ class TrajectoryDataSource:
 
         Format: one label per line (0 or 1)
         """
-        raw_labels = np.loadtxt(filepath, dtype=int)
+        raw_labels = np.loadtxt(filepath, dtype=int, ndmin=1)
 
         # Map external labels to internal format (0 → -1, 1 → 1)
         self.labels = np.array([
@@ -177,12 +180,17 @@ class TrajectoryDataSource:
         """
         Load a single trajectory by index.
 
+        Results are cached internally to avoid repeated disk reads.
+
         Args:
             idx: Trajectory index (0 to n_trajectories-1)
 
         Returns:
             [T, state_dim] array of states over time
         """
+        if idx in self._traj_cache:
+            return self._traj_cache[idx]
+
         filepath = self.trajectory_files[idx]
 
         with open(filepath, 'r') as f:
@@ -194,7 +202,17 @@ class TrajectoryDataSource:
                 values = list(map(float, line.strip().split(',')))
                 trajectory.append(values)
 
-        return np.array(trajectory, dtype=np.float32)
+        result = np.array(trajectory, dtype=np.float32)
+        self._traj_cache[idx] = result
+        return result
+
+    def get_trajectory_length(self, idx: int) -> int:
+        """Return the number of rows (time steps) in trajectory idx."""
+        return len(self.load_trajectory(idx))
+
+    def get_state_at(self, idx: int, row: int) -> np.ndarray:
+        """Return the state vector at a specific row in trajectory idx."""
+        return self.load_trajectory(idx)[row]
 
     def load_trajectories(self, indices: List[int]) -> List[np.ndarray]:
         """
@@ -276,7 +294,8 @@ class TrajectoryDataSource:
     def get_all_endpoint_pairs_from_trajectory(
         self,
         idx: int,
-        mode: str = "train"
+        mode: str = "train",
+        start_row: int = 0,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Get all endpoint pairs from a single trajectory.
@@ -287,6 +306,8 @@ class TrajectoryDataSource:
         Args:
             idx: Trajectory index
             mode: "train" (all states) or "test" (first state only)
+            start_row: First row to include in training mode (default 0 = current behaviour).
+                       Ignored in "test" mode.
 
         Returns:
             Tuple of (start_states [N, dim], end_states [N, dim])
@@ -298,9 +319,9 @@ class TrajectoryDataSource:
             # Only first state → end state
             return traj[0:1], np.array([end_state])
         else:
-            # All states except last → end state
-            n_states = len(traj) - 1
-            starts = traj[:-1]
+            # All states from start_row (inclusive) up to but not including last → end state
+            starts = traj[start_row:-1]
+            n_states = len(starts)
             ends = np.tile(end_state, (n_states, 1))
             return starts, ends
 

@@ -10,6 +10,10 @@ from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Union
 from dataclasses import dataclass
 
+# Maximum rows per trajectory for packed candidate-id scheme.
+# Any trajectory longer than this will raise at get_trajectory_length time.
+MAX_ROWS = 10000
+
 
 def load_eval_states(
     filepath: str,
@@ -142,6 +146,10 @@ class TrajectoryDataSource:
         # Cache for loaded trajectories (keyed by idx) to avoid repeated disk reads
         self._traj_cache: Dict[int, np.ndarray] = {}
 
+        # Cache for trajectory lengths (keyed by idx); populated lazily via line-count
+        # without a full array parse — used by the packed candidate-id scheme.
+        self._length_cache: Dict[int, int] = {}
+
         print(f"TrajectoryDataSource initialized:")
         print(f"  Trajectories: {self.n_trajectories}")
         print(f"  Directory: {self.trajectories_dir}")
@@ -212,15 +220,29 @@ class TrajectoryDataSource:
         Uses a cheap line-count (no full parse) when the trajectory is not
         already cached.  A non-empty line == one time step, matching the
         behaviour of ``load_trajectory`` exactly.
+
+        Result is cached in ``_length_cache`` to avoid repeated file scans.
+        Raises ``ValueError`` if the trajectory has more rows than ``MAX_ROWS``
+        (packed candidate-id scheme invariant).
         """
         if idx in self._traj_cache:
-            return len(self._traj_cache[idx])
+            length = len(self._traj_cache[idx])
+            self._length_cache[idx] = length
+            return length
+        if idx in self._length_cache:
+            return self._length_cache[idx]
         filepath = self.trajectory_files[idx]
         count = 0
         with open(filepath, "r") as f:
             for line in f:
                 if line.strip():
                     count += 1
+        if count > MAX_ROWS:
+            raise ValueError(
+                f"Trajectory {idx} has {count} rows, which exceeds MAX_ROWS={MAX_ROWS}. "
+                f"Increase MAX_ROWS or pre-process the data."
+            )
+        self._length_cache[idx] = count
         return count
 
     def get_state_at(self, idx: int, row: int) -> np.ndarray:

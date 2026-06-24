@@ -7,7 +7,7 @@ import numpy as np
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict
 
-from adaptive_roa.adaptive.data_source import TrajectoryDataSource
+from adaptive_roa.adaptive.data_source import TrajectoryDataSource, MAX_ROWS
 
 
 class DatasetSplit:
@@ -95,22 +95,13 @@ class AdaptiveDatasetBuilder:
 
         # ---- intermediate mode state ----------------------------------------
         if self.candidate_mode == "intermediate":
-            # Build the candidate registry: list of (traj_idx, row) for every
-            # non-terminal row in every available trajectory.
-            # candidate_id == index into this list (opaque outside this class).
-            self._candidates: List[Tuple[int, int]] = []
-            for traj_idx in range(self.max_train_idx):
-                traj_len = self.data_source.get_trajectory_length(traj_idx)
-                for row in range(traj_len - 1):   # non-terminal rows: 0 .. T-2
-                    self._candidates.append((traj_idx, row))
+            # Packed candidate-id scheme: cid = traj_idx * MAX_ROWS + row
+            # No flat registry is built; lengths are computed lazily via line-count.
+            # See traj_row_to_candidate / candidate_to_traj_row for encoding.
 
-            # Build a reverse index: (traj_idx, row) → candidate_id
-            self._cand_lookup: Dict[Tuple[int, int], int] = {
-                pair: cid for cid, pair in enumerate(self._candidates)
-            }
-
-            # Set of candidate-ids that have been used/marked
-            self._cid_used: set = set()
+            # Per-trajectory smallest marked row (marks row and all later rows
+            # as used for that trajectory).  Absent key means nothing marked.
+            self._marked_from_row: Dict[int, int] = {}
 
             # Per-trajectory minimum added row (populated by add_to_training_balanced)
             self._added_min_row: Dict[int, int] = {}
@@ -122,16 +113,22 @@ class AdaptiveDatasetBuilder:
     def traj_row_to_candidate(self, traj_idx: int, row: int) -> int:
         """Return the opaque candidate-id for (traj_idx, row).
 
+        Packed encoding: ``cid = traj_idx * MAX_ROWS + row``.
+        O(1), no registry required.
+
         Only valid in ``candidate_mode="intermediate"``.
         """
-        return self._cand_lookup[(traj_idx, row)]
+        return traj_idx * MAX_ROWS + row
 
     def candidate_to_traj_row(self, cid: int) -> Tuple[int, int]:
         """Return (traj_idx, row) for a candidate-id.
 
+        Inverse of packed encoding: ``divmod(cid, MAX_ROWS)``.
+        O(1), no registry required.
+
         Only valid in ``candidate_mode="intermediate"``.
         """
-        return self._candidates[cid]
+        return divmod(cid, MAX_ROWS)
 
     def add_to_training(self, indices: List[int]):
         """
@@ -185,23 +182,38 @@ class AdaptiveDatasetBuilder:
             Tuple of (start_states [n, dim], trajectory_indices or candidate_ids)
         """
         if self.candidate_mode == "intermediate":
-            # intermediate: candidate-id indexes into self._candidates
+            # Packed candidate-id scheme: iterate trajectories in index order,
+            # then rows in ascending order.  Available non-terminal rows for
+            # trajectory i are [0, _marked_from_row.get(i, length-1)).
+            # We skip cids in exclude_set and collect until n are found.
             exclude_set = set(exclude) if exclude else set()
-            available_ids = [
-                cid for cid in range(len(self._candidates))
-                if cid not in self._cid_used and cid not in exclude_set
-            ]
-            if len(available_ids) == 0:
+            selected_ids = []
+            selected_states = []
+            for traj_idx in range(self.max_train_idx):
+                # Upper bound on available rows (exclusive): smallest marked row,
+                # or length-1 when nothing is marked (length-1 is the terminal row).
+                if traj_idx in self._marked_from_row:
+                    row_limit = self._marked_from_row[traj_idx]
+                else:
+                    traj_len = self.data_source.get_trajectory_length(traj_idx)
+                    row_limit = traj_len - 1
+                # Available rows are 0 .. row_limit-1 (non-terminal rows not marked)
+                for row in range(row_limit):
+                    cid = self.traj_row_to_candidate(traj_idx, row)
+                    if cid in exclude_set:
+                        continue
+                    selected_ids.append(cid)
+                    selected_states.append(self.data_source.get_state_at(traj_idx, row))
+                    if len(selected_ids) == n:
+                        break
+                if len(selected_ids) == n:
+                    break
+            if len(selected_ids) == 0:
                 print("WARNING: No more candidates available!")
                 return np.array([]), []
-            n_actual = min(n, len(available_ids))
-            if n_actual < n:
-                print(f"WARNING: Only {n_actual} candidates remaining (requested {n})")
-            selected_ids = available_ids[:n_actual]
-            states = np.array([
-                self.data_source.get_state_at(traj_idx, row)
-                for traj_idx, row in (self._candidates[cid] for cid in selected_ids)
-            ])
+            if len(selected_ids) < n:
+                print(f"WARNING: Only {len(selected_ids)} candidates remaining (requested {n})")
+            states = np.array(selected_states)
             return states, selected_ids
 
         # ---- start mode (unchanged) ----
@@ -244,11 +256,14 @@ class AdaptiveDatasetBuilder:
         """
         if self.candidate_mode == "intermediate":
             for cid in indices:
-                traj_i, row_t = self._candidates[cid]
-                # Mark all candidates in trajectory traj_i at or after row_t
-                for other_cid, (other_traj, other_row) in enumerate(self._candidates):
-                    if other_traj == traj_i and other_row >= row_t:
-                        self._cid_used.add(other_cid)
+                traj_i, row_t = self.candidate_to_traj_row(cid)
+                # Record the smallest marked row for this trajectory.
+                # All rows >= that value are considered used.
+                current = self._marked_from_row.get(
+                    traj_i,
+                    self.data_source.get_trajectory_length(traj_i) - 1
+                )
+                self._marked_from_row[traj_i] = min(current, row_t)
             return
 
         # ---- start mode (unchanged) ----
@@ -270,12 +285,11 @@ class AdaptiveDatasetBuilder:
         """
         if self.candidate_mode == "intermediate":
             for cid in indices:
-                traj_i, row_t = self._candidates[cid]
+                traj_i, row_t = self.candidate_to_traj_row(cid)
                 # Update per-trajectory minimum added row
-                if traj_i in self._added_min_row:
-                    self._added_min_row[traj_i] = min(self._added_min_row[traj_i], row_t)
-                else:
-                    self._added_min_row[traj_i] = row_t
+                traj_len = self.data_source.get_trajectory_length(traj_i)
+                current_added = self._added_min_row.get(traj_i, traj_len - 1)
+                self._added_min_row[traj_i] = min(current_added, row_t)
                 # Mark the tail (row_t and beyond) as used for this trajectory
                 self.mark_indices_as_used([cid])
             return

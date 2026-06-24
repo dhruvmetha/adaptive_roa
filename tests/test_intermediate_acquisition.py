@@ -151,3 +151,33 @@ def test_intermediate_val_nonempty_with_val_ratio(tmp_path):
     assert np.allclose(val_starts[0], traj[1], atol=1e-5), (
         f"Expected val start to be traj row 1 (an intermediate row), got {val_starts[0]}"
     )
+
+
+def test_packed_candidate_id_roundtrip(tmp_path):
+    ds = _make_pool(tmp_path, [5, 800, 7])  # middle traj is long
+    b = AdaptiveDatasetBuilder(ds, str(tmp_path / "out_pk"), candidate_mode="intermediate", val_ratio=0.0)
+    for (i, r) in [(0, 0), (1, 798), (2, 3)]:
+        cid = b.traj_row_to_candidate(i, r)
+        assert b.candidate_to_traj_row(cid) == (i, r)
+
+
+def test_marking_is_not_global_scan(tmp_path, monkeypatch):
+    # Build a pool; ensure construction does NOT load every trajectory's full array,
+    # and marking does not scan a 60M structure. We assert lengths are computed lazily:
+    ds = _make_pool(tmp_path, [6, 6, 6, 6])
+    calls = {"load": 0}
+    orig = ds.load_trajectory
+    def counting_load(idx):
+        calls["load"] += 1
+        return orig(idx)
+    monkeypatch.setattr(ds, "load_trajectory", counting_load)
+    b = AdaptiveDatasetBuilder(ds, str(tmp_path / "out_lz"), candidate_mode="intermediate", val_ratio=0.0)
+    # Construction must not have force-loaded all 4 full trajectories (lazy length via line-count).
+    loads_after_init = calls["load"]
+    # mark one candidate; availability still works without a global registry
+    cid = b.traj_row_to_candidate(2, 2)
+    b.mark_indices_as_used([cid])
+    _, ids = b.sample_candidates_without_marking(20)
+    rows_traj2 = sorted(r for (i, r) in (b.candidate_to_traj_row(c) for c in ids) if i == 2)
+    assert all(r < 2 for r in rows_traj2)  # rows >=2 of traj 2 are marked/unavailable
+    assert loads_after_init == 0  # lengths came from a cheap line-count, not full load

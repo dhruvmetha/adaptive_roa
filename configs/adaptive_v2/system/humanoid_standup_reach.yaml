@@ -21,10 +21,13 @@ data_source:
   # train/eval leakage and reduce the pool to a manageable scale for intermediate mode.
   shuffled_indices_file: ${data_source.train_test_splits_dir}/shuffled_indices.txt
   shuffled_labels_file: ${data_source.train_test_splits_dir}/shuffled_labels.txt
-  # FPS primary; start_states alternative commented
+  # FPS primary; start_states alternative commented.
+  # cal/test point at PRE-SHUFFLED copies so the max_eval_rows front-slice cap (below)
+  # is a representative random sample (the raw *_fps.txt are label-ordered along their
+  # length, so a front-slice of the raw files biases q_hat + ROA metrics).
   eval_states_file: ${data_source.train_test_splits_dir}/eval_fps.txt
-  cal_set_file: ${data_source.train_test_splits_dir}/cal_set_fps.txt
-  test_set_file: ${data_source.train_test_splits_dir}/test_set_fps.txt
+  cal_set_file: ${data_source.train_test_splits_dir}/cal_set_fps_shuffled.txt
+  test_set_file: ${data_source.train_test_splits_dir}/test_set_fps_shuffled.txt
   # eval_states_file: ${data_source.train_test_splits_dir}/eval_start_states.txt
   # cal_set_file: ${data_source.train_test_splits_dir}/cal_set_start_states.txt
   # test_set_file: ${data_source.train_test_splits_dir}/test_set_start_states.txt

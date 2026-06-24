@@ -24,8 +24,9 @@ def test_adaptive_config_composes():
     assert cfg.adaptive_v2.system_name == "humanoid_standup_reach"
     assert cfg.system._target_ == "adaptive_roa.systems.humanoid_standup_reach.HumanoidStandUpReachSystem"
     assert cfg.flow_matcher._target_.endswith("HumanoidStandUpReachLatentConditionalFlowMatcher")
-    assert str(cfg.data_source.test_set_file).endswith("test_set_fps.txt")
-    assert str(cfg.data_source.cal_set_file).endswith("cal_set_fps.txt")
+    # cal/test point at the pre-shuffled FPS copies so the max_eval_rows front-slice is representative
+    assert str(cfg.data_source.test_set_file).endswith("test_set_fps_shuffled.txt")
+    assert str(cfg.data_source.cal_set_file).endswith("cal_set_fps_shuffled.txt")
     assert cfg.get("candidate_mode") == "intermediate"
     assert int(cfg.model_dims.output_dim) == 67
 

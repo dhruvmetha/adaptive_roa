@@ -68,3 +68,20 @@ def test_marked_tail_unavailable(tmp_path):
     _, ids = b.sample_candidates_without_marking(10)
     rows = sorted(b.candidate_to_traj_row(c)[1] for c in ids)
     assert all(r < 2 for r in rows)  # only rows 0,1 remain available
+
+
+def test_build_all_datasets_intermediate(tmp_path):
+    """build_all_datasets in intermediate mode must not crash and must write tail pairs."""
+    ds = _make_pool(tmp_path, [6])  # rows 0..5, final=row5
+    b = AdaptiveDatasetBuilder(ds, str(tmp_path / "out_b"), candidate_mode="intermediate", val_ratio=0.0)
+    cid_3 = b.traj_row_to_candidate(0, 3)
+    b.add_to_training_balanced([cid_3])
+    paths = b.build_all_datasets(dataset_kind="endpoint")
+    assert "train" in paths
+    train_data = np.loadtxt(paths["train"])
+    # 2 pairs (rows 3, 4), each pair is [start(4), end(4)] = 8 columns
+    if train_data.ndim == 1:
+        train_data = train_data.reshape(1, -1)
+    assert train_data.shape == (2, 8)
+    traj = ds.load_trajectory(0)
+    assert np.allclose(train_data[:, :4], traj[3:5], atol=1e-5)

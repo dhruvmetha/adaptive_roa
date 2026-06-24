@@ -314,6 +314,10 @@ class AdaptiveDatasetBuilder:
         The first ``n_val`` indices of ``train_split`` are reserved for
         validation, so FM gradient updates only use the remaining portion.
 
+        In ``intermediate`` mode: writes tail-expanded pairs per trajectory
+        (from ``_added_min_row[i]`` to the penultimate row, all pointing to
+        final state).  val_ratio is intentionally ignored in this mode.
+
         Args:
             filename: Output filename
 
@@ -322,6 +326,26 @@ class AdaptiveDatasetBuilder:
         """
         output_path = self.output_dir / filename
 
+        if self.candidate_mode == "intermediate":
+            all_starts = []
+            all_ends = []
+            for traj_i, min_row in sorted(self._added_min_row.items()):
+                starts, ends = self.data_source.get_all_endpoint_pairs_from_trajectory(
+                    traj_i, mode="train", start_row=min_row
+                )
+                all_starts.append(starts)
+                all_ends.append(ends)
+            if all_starts:
+                data = np.hstack([np.vstack(all_starts), np.vstack(all_ends)])
+            else:
+                state_dim = self.data_source.get_state_dim()
+                data = np.zeros((0, state_dim * 2), dtype=np.float32)
+            np.savetxt(str(output_path), data, fmt='%.8f')
+            n_pairs = len(data)
+            print(f"Built intermediate training dataset: {n_pairs} pairs from {len(self._added_min_row)} trajectories")
+            return str(output_path)
+
+        # ---- start mode (unchanged) ----
         train_indices = list(self.train_split)
         n_val = max(1, int(len(train_indices) * self.val_ratio))
         train_only = train_indices[n_val:]  # Exclude first n_val (val portion)
@@ -415,6 +439,12 @@ class AdaptiveDatasetBuilder:
                 f.write(f"{rel_path}\n")
         return str(output_path)
 
+    def _build_empty_val_dataset(self, filename: str) -> str:
+        """Write an empty val file (used in intermediate mode where val is out of scope)."""
+        output_path = self.output_dir / filename
+        output_path.write_text("")
+        return str(output_path)
+
     def build_all_datasets(self, dataset_kind: str = "endpoint") -> Dict[str, str]:
         """
         Build all dataset files (train, val).
@@ -426,9 +456,30 @@ class AdaptiveDatasetBuilder:
         dataset_kind="classification": (state, binary_label) files for the
         discriminative classifier, keyed as 'train', 'val'.
 
+        In ``intermediate`` mode: the train file expands tail rows per
+        ``_added_min_row``; val/val_trajectories are empty files (val labels
+        remain trajectory-level and are out of scope for intermediate mode).
+
         Returns:
             Dict mapping split name to file path
         """
+        if self.candidate_mode == "intermediate":
+            train_path = self.build_train_dataset()
+            val_path = self._build_empty_val_dataset("val_endpoint_dataset.txt")
+            if dataset_kind == "classification":
+                return {
+                    'train': train_path,
+                    'val': val_path,
+                }
+            empty_traj_path = self._build_empty_val_dataset("val_trajectories.txt")
+            return {
+                'train': train_path,
+                'val': val_path,
+                'train_trajectories': self._build_empty_val_dataset("train_trajectories.txt"),
+                'val_trajectories': empty_traj_path,
+            }
+
+        # ---- start mode (unchanged) ----
         train_indices = list(self.train_split)
         n_val = max(1, int(len(train_indices) * self.val_ratio))
         train_only = train_indices[n_val:]

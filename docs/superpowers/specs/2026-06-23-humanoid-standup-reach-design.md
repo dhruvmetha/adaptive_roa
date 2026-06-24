@@ -201,7 +201,15 @@ This requires reworking the candidate identity through the pool → strategy →
   sampled `(i,t)`) for scoring + the `(i,t)` identities; `mark_indices_as_used` /
   `add_to_training_balanced` operate on `(i,t)` pairs.
 - **Strategy / `UncertainSampler`:** carry `(i,t)` identities instead of bare indices.
-- **Labels:** a candidate `(i,t)` inherits trajectory `i`'s success/timeout label.
+- **Labels:** a candidate `(i,t)` inherits trajectory `i`'s success/timeout label;
+  `get_labels` is **candidate-id-aware** in intermediate mode (maps cid → trajectory label).
+- **In-loop calibration (user-confirmed):** **λ/δ** (threshold optimization) use the **val
+  set** = **intermediate-state pairs** held out from the current train-val split (so the
+  calibration distribution matches the intermediate states acquisition scores). **q_hat**
+  uses the **cal set FILE** (`cal_set_fps.txt`, already wired via `data_source.cal_set_file`)
+  — not the in-loop val. So in intermediate mode `get_val_data`/`get_val_labels`/
+  `get_test_labels` and the FM train/val endpoint files are built from the intermediate-state
+  pair split (non-empty); the cal/test eval files stay the FPS sets.
 
 **Candidate enumeration (the A/B tradeoff, now over `(i,t)`):**
 - **Option A (default):** on-the-fly sampling of `(i, t)` candidates from available

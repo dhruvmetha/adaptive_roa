@@ -47,3 +47,8 @@ flow_matcher:
 
 adaptive_v2:
   system_name: humanoid_standup_reach
+  # candidate_mode=intermediate extends trajectory tails backward across epochs, so the
+  # built train file is NOT append-stable. The ConfidencePairFilter's incremental
+  # n_existing_rows prefix optimization assumes append-only growth, so disable it here.
+  # (Re-enabling needs a full-recompute filter for intermediate mode — follow-up.)
+  filter_confident_pairs: false

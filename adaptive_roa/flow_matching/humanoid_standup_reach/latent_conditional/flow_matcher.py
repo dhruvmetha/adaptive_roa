@@ -27,11 +27,13 @@ class HumanoidStandUpReachLatentConditionalFlowMatcher(BaseFlowMatcher):
     def __init__(self, system: DynamicalSystem, model: nn.Module, optimizer, scheduler,
                  model_config: Optional[dict] = None, latent_dim: int = 8,
                  mae_val_frequency: int = 10, use_loss_weights: bool = False,
-                 use_manifold: bool = True, clamp_noise: bool = True,
+                 use_manifold: bool = True, use_log_loss_weights: bool = False,
+                 clamp_noise: bool = True,
                  zero_latent: bool = False, val_error_log_file: Optional[str] = None,
                  noise_scale: float = 1.0):
         # Must be set before super().__init__ (it calls _create_manifold()).
         self.use_manifold = use_manifold
+        self.use_log_loss_weights = use_log_loss_weights
         super().__init__(system, model, optimizer, scheduler, model_config, latent_dim,
                          mae_val_frequency, use_loss_weights, clamp_noise, zero_latent,
                          val_error_log_file, noise_scale)

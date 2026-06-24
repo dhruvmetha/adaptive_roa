@@ -1,0 +1,49 @@
+# @package _global_
+
+defaults:
+  - _base
+  - /model/system_dims: humanoid_standup_reach
+  - _self_
+
+name: adaptive_humanoid_standup_reach
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_threshold_mode_${threshold_mode}_adapt_iter_${n_epochs}_alpha_${alpha_sampling}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
+
+use_manifold: true
+
+# Intermediate-state acquisition (candidate = sub-trajectory start)
+candidate_mode: intermediate
+
+data_source:
+  base_dir: ${data_dir}/humanoid_get_up_medium
+  trajectories_dir: ${data_source.base_dir}/trajectories
+  train_test_splits_dir: ${data_source.base_dir}/train_test_splits
+  shuffled_indices_file: ${data_source.train_test_splits_dir}/all_shuffled_indices.txt
+  shuffled_labels_file: ${data_source.train_test_splits_dir}/all_shuffled_labels.txt
+  # FPS primary; start_states alternative commented
+  eval_states_file: ${data_source.train_test_splits_dir}/eval_fps.txt
+  cal_set_file: ${data_source.train_test_splits_dir}/cal_set_fps.txt
+  test_set_file: ${data_source.train_test_splits_dir}/test_set_fps.txt
+  # eval_states_file: ${data_source.train_test_splits_dir}/eval_start_states.txt
+  # cal_set_file: ${data_source.train_test_splits_dir}/cal_set_start_states.txt
+  # test_set_file: ${data_source.train_test_splits_dir}/test_set_start_states.txt
+
+initial_train_size: 2000
+n_epochs: 30
+samples_per_epoch: 500
+
+conformal:
+  decision_rule: two_sided
+  attractor_radius: 1.0
+
+optimizer:
+  lr: 5e-4
+
+system:
+  _target_: adaptive_roa.systems.humanoid_standup_reach.HumanoidStandUpReachSystem
+  dataset_dir: ${data_dir}/humanoid_get_up_medium
+
+flow_matcher:
+  _target_: adaptive_roa.flow_matching.humanoid_standup_reach.latent_conditional.flow_matcher.HumanoidStandUpReachLatentConditionalFlowMatcher
+
+adaptive_v2:
+  system_name: humanoid_standup_reach

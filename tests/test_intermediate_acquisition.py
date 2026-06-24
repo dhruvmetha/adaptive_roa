@@ -221,4 +221,17 @@ def test_intermediate_val_is_shuffled(tmp_path):
     b.get_initial_training_set(4)
     starts, labels = b.get_val_labels()
     # val must not be exclusively the lowest-traj front-slice (seeded shuffle mixes trajectories)
-    assert len(starts) >= 1
+    assert len(starts) >= 2
+    # Identify each val start's trajectory by matching its row in the loaded trajectories,
+    # and assert the val split spans at least two distinct trajectories (genuine mixing).
+    trajs = [ds.load_trajectory(i) for i in range(4)]
+
+    def _which_traj(state):
+        for ti, t in enumerate(trajs):
+            if np.any(np.all(np.isclose(t, state, atol=1e-4), axis=1)):
+                return ti
+        return -1
+
+    val_trajs = {_which_traj(s) for s in starts}
+    val_trajs.discard(-1)
+    assert len(val_trajs) >= 2, f"seeded shuffle should mix trajectories in val, got {val_trajs}"

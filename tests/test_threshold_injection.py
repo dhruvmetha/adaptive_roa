@@ -11,6 +11,9 @@ def _cfg(predictor_type="classifier"):
     return OmegaConf.create({
         "predictor_type": predictor_type,
         "decision_rule": "one_sided",
+        "delta": 0.05,
+        "attractor_radius": 0.2,
+        "num_mc_samples": 10,
         "optimize_mode": "joint",
         "optimize_objective": "loss",
         "target_f1": 0.9,

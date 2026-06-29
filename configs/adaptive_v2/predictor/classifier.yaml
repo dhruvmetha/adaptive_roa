@@ -1,6 +1,10 @@
 # @package _global_
 defaults:
   - /probability: classifier_prob
+threshold:
+  decision_rule: one_sided
+calibration:
+  decision_rule: one_sided
 predictor:
   type: classifier
   trainer_target: adaptive_roa.adaptive_v2.trainers.classifier_trainer.ClassifierTrainer

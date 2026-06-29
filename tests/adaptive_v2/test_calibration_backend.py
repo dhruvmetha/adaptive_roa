@@ -16,6 +16,8 @@ def _cfg(decision_rule="two_sided"):
         "alpha": 0.1,
         "alpha_eval": 0.1,
         "decision_rule": decision_rule,
+        "attractor_radius": 0.2,
+        "num_mc_samples": 10,
         "verbose": False,
     })
 
@@ -49,7 +51,8 @@ def test_calibrate_returns_float():
 def test_calibrate_eval_uses_alpha_eval():
     cfg = OmegaConf.create({
         "delta": 0.05, "w": 0.9, "alpha": 0.1, "alpha_eval": 0.2,
-        "decision_rule": "one_sided", "verbose": False,
+        "decision_rule": "one_sided", "attractor_radius": 0.2, "num_mc_samples": 10,
+        "verbose": False,
     })
     backend = ConformalCalibrationBackend(cfg, system=None, device="cpu")
     backend.bind_model(_DummyClassifier(), predictor_type="classifier")

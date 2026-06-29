@@ -18,6 +18,8 @@ class ConformalCalibrationBackend:
         self.alpha = float(cfg.alpha)
         self.alpha_eval = float(cfg.alpha_eval)
         self.decision_rule = str(cfg.decision_rule)
+        self.attractor_radius = float(cfg.attractor_radius)
+        self.num_mc_samples = int(cfg.num_mc_samples)
         self.verbose = bool(cfg.verbose)
         self.system = system
         self.device = device
@@ -29,14 +31,16 @@ class ConformalCalibrationBackend:
             delta=self.delta,
             w=self.w,
             alpha=self.alpha,
-            attractor_radius=0.2,
+            attractor_radius=self.attractor_radius,
+            num_mc_samples=self.num_mc_samples,
             decision_rule=self.decision_rule,
         )
         conf_eval = ConformalConfig(
             delta=self.delta,
             w=self.w,
             alpha=self.alpha_eval,
-            attractor_radius=0.2,
+            attractor_radius=self.attractor_radius,
+            num_mc_samples=self.num_mc_samples,
             decision_rule=self.decision_rule,
         )
         estimator = build_probability_estimator(

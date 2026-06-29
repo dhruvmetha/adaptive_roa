@@ -6,4 +6,6 @@ calibration:
   alpha: 0.1
   alpha_eval: 0.1
   decision_rule: ${decision_rule}
+  attractor_radius: ${attractor_radius}
+  num_mc_samples: 10
   verbose: true

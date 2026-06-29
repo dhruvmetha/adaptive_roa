@@ -3,6 +3,9 @@ threshold:
   _target_: adaptive_roa.adaptive_v2.threshold.conformal_threshold.ConformalThresholdBackend
   predictor_type: ${predictor.type}
   decision_rule: ${decision_rule}
+  delta: 0.05
+  attractor_radius: ${attractor_radius}
+  num_mc_samples: 10
   optimize_mode: joint
   optimize_objective: loss
   target_f1: 0.90

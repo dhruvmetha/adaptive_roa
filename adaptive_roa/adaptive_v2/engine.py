@@ -106,7 +106,7 @@ class AdaptiveEngine:
 
         n_epochs = int(self.cfg.get("n_epochs", 10))
         samples_per_epoch = int(self.cfg.get("samples_per_epoch", 50))
-        d2_ratio = float(self.cfg.get("d2_ratio", 0.5))
+        d2_ratio = self.acquisition.d2_ratio
         warm_start = bool(self.cfg.get("warm_start", False))
         acquisition_mode = self.acquisition.mode
         eval_every = int(self.cfg.get("eval_every", 1))

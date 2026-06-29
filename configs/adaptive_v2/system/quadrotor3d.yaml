@@ -9,7 +9,7 @@ name: adaptive_quadrotor3d
 output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_warm_start_${warm_start}_manifold_${use_manifold}_adapt_iter_${n_epochs}/${now:%Y-%m-%d_%H-%M-%S}
 
 decision_rule: two_sided
-attractor_radius: 0.2
+attractor_radius: 0.3
 
 use_log_loss_weights: true
 

@@ -17,6 +17,9 @@ class ConformalThresholdBackend:
     def __init__(self, cfg: Any, system: Any, device: str):
         self.predictor_type = str(cfg.predictor_type)
         self.decision_rule = str(cfg.decision_rule)
+        self.delta = float(cfg.delta)
+        self.attractor_radius = float(cfg.attractor_radius)
+        self.num_mc_samples = int(cfg.num_mc_samples)
         self.optimize_mode = str(cfg.optimize_mode)
         self.optimize_objective = str(cfg.optimize_objective)
         self.target_f1 = float(cfg.target_f1)
@@ -34,10 +37,11 @@ class ConformalThresholdBackend:
 
     def _build_conformal_config(self) -> ConformalConfig:
         return ConformalConfig(
-            delta=self.fixed_delta_star,
+            delta=self.delta,
             w=0.9,
             alpha=0.1,
-            attractor_radius=0.2,
+            attractor_radius=self.attractor_radius,
+            num_mc_samples=self.num_mc_samples,
             optimize_mode=self.optimize_mode,
             optimize_objective=self.optimize_objective,
             target_f1=self.target_f1,

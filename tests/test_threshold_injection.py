@@ -7,18 +7,21 @@ from adaptive_roa.conformal.classifier_probability_estimator import ClassifierPr
 from adaptive_roa.adaptive_v2.threshold.conformal_threshold import ConformalThresholdBackend
 
 
-def _cfg(predictor: str):
+def _cfg(predictor_type="classifier"):
     return OmegaConf.create({
-        "predictor": predictor,
-        "val_batch_size": 2048,
-        "conformal": {
-            "delta": 0.05, "w": 0.9, "alpha_sampling": 0.1, "num_mc_samples": 10,
-            "attractor_radius": 0.2, "optimize_mode": "joint", "decision_rule": "one_sided",
-            "lambda_grid_size": 50, "delta_grid_size": 50, "delta_min": 0.05, "delta_max": 0.45,
-            "use_p_invalid_veto": True, "optimize_objective": "loss", "target_f1": 0.9,
-            "fixed_lambda_star": 0.5, "fixed_delta_star": 0.1,
-            "trajectory_checking": False, "refine_invalids": False, "verbose": False,
-        },
+        "predictor_type": predictor_type,
+        "decision_rule": "one_sided",
+        "optimize_mode": "joint",
+        "optimize_objective": "loss",
+        "target_f1": 0.9,
+        "lambda_grid_size": 50,
+        "delta_grid_size": 50,
+        "delta_min": 0.05,
+        "delta_max": 0.45,
+        "fixed_lambda_star": 0.5,
+        "fixed_delta_star": 0.1,
+        "use_p_invalid_veto": True,
+        "verbose": False,
     })
 
 
@@ -31,7 +34,10 @@ class _DummyClassifier:
 
 
 def test_predictor_uses_injected_estimator():
-    conf = ConformalConfig.from_hydra(_cfg("classifier"))
+    conf = ConformalConfig(
+        delta=0.05, w=0.9, alpha=0.1, attractor_radius=0.2,
+        decision_rule="one_sided",
+    )
     sentinel = object()
     pred = ConformalPredictor(
         flow_matcher=None, system=None, config=conf, device="cpu",
@@ -41,6 +47,6 @@ def test_predictor_uses_injected_estimator():
 
 
 def test_threshold_backend_builds_classifier_estimator():
-    backend = ConformalThresholdBackend(system=None, cfg=_cfg("classifier"), device="cpu")
+    backend = ConformalThresholdBackend(_cfg("classifier"), system=None, device="cpu")
     backend.bind_model(_DummyClassifier())
     assert isinstance(backend.predictor.prob_estimator, ClassifierProbabilityEstimator)

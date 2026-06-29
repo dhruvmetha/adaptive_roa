@@ -80,7 +80,7 @@ class AdaptiveEngine:
         from hydra.utils import get_class
         self.predictor_type = str(cfg.predictor.type)
         trainer_cls = get_class(cfg.predictor.trainer_target)
-        self.trainer             = trainer_cls(cfg.predictor, self.system, self.system_name)
+        self.trainer             = trainer_cls(cfg, self.system, self.system_name)
         self.probability_backend = _instantiate(cfg.probability,  self.system, self.device)
         self.threshold_backend   = _instantiate(cfg.threshold,    self.system, self.device)
         self.calibration_backend = _instantiate(cfg.calibration,  self.system, self.device)

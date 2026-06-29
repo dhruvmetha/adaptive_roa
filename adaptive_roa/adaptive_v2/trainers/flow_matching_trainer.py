@@ -44,6 +44,18 @@ class FlowMatchingTrainer:
             raise ValueError(f"Unsupported system for v2 trainer: {system_name}")
 
     @property
+    def _predictor_cfg(self):
+        pred = self.cfg.get("predictor")
+        return pred if pred is not None else self.cfg
+
+    @property
+    def _flow_matching_cfg(self):
+        pred = self._predictor_cfg
+        if "flow_matching" in pred:
+            return pred.flow_matching
+        return self.cfg.flow_matching
+
+    @property
     def is_local(self) -> bool:
         return self.prediction_mode == "local"
 
@@ -62,10 +74,10 @@ class FlowMatchingTrainer:
                 train_trajectory_file=dataset_files["train_trajectories"],
                 val_trajectory_file=dataset_files["val_trajectories"],
                 trajectories_dir=self.cfg.data_source.trajectories_dir,
-                sequence_length=self.cfg.flow_matching.get("sequence_length", 32),
-                batch_size=self.cfg.get("batch_size", 256),
-                val_batch_size=self.cfg.get("val_batch_size", 2048),
-                num_workers=self.cfg.get("num_workers", 4),
+                sequence_length=self._flow_matching_cfg.get("sequence_length", 32),
+                batch_size=self._predictor_cfg.get("batch_size", 256),
+                val_batch_size=self._predictor_cfg.get("val_batch_size", 2048),
+                num_workers=self._predictor_cfg.get("num_workers", self.cfg.get("num_workers", 4)),
                 angle_indices=angle_indices,
             )
 
@@ -75,9 +87,9 @@ class FlowMatchingTrainer:
             "data_file": dataset_files["train"],
             "validation_file": dataset_files["val"],
             "test_file": dataset_files["val"],
-            "batch_size": self.cfg.get("batch_size", 256),
-            "val_batch_size": self.cfg.get("val_batch_size", 2048),
-            "num_workers": self.cfg.get("num_workers", 4),
+            "batch_size": self._predictor_cfg.get("batch_size", 256),
+            "val_batch_size": self._predictor_cfg.get("val_batch_size", 2048),
+            "num_workers": self._predictor_cfg.get("num_workers", self.cfg.get("num_workers", 4)),
         }
         if self.system_name in {"quadrotor3d", "humanoid_standup_reach"}:
             kwargs["dataset_dir"] = self.cfg.system.get("dataset_dir")
@@ -91,12 +103,13 @@ class FlowMatchingTrainer:
     ):
         data_module = self._create_datamodule(dataset_files)
 
-        use_loss_weights = self.cfg.flow_matching.get("use_loss_weights", False)
-        use_manifold = self.cfg.flow_matching.get("use_manifold", True)
-        use_log_loss_weights = self.cfg.flow_matching.get("use_log_loss_weights", False)
-        clamp_noise = self.cfg.flow_matching.get("clamp_noise", True)
-        zero_latent = self.cfg.flow_matching.get("zero_latent", False)
-        noise_scale = self.cfg.flow_matching.get("noise_scale", 1.0)
+        flow_matching = self._flow_matching_cfg
+        use_loss_weights = flow_matching.get("use_loss_weights", False)
+        use_manifold = flow_matching.get("use_manifold", True)
+        use_log_loss_weights = flow_matching.get("use_log_loss_weights", False)
+        clamp_noise = flow_matching.get("clamp_noise", True)
+        zero_latent = flow_matching.get("zero_latent", False)
+        noise_scale = flow_matching.get("noise_scale", 1.0)
 
         if self.system_name == "quadrotor3d":
             model_output_dim = 12 if use_manifold else 13
@@ -117,8 +130,8 @@ class FlowMatchingTrainer:
             "optimizer": self.cfg.optimizer,
             "scheduler": self.cfg.scheduler,
             "model_config": OmegaConf.to_container(self.cfg.model, resolve=True),
-            "latent_dim": self.cfg.flow_matching.latent_dim,
-            "mae_val_frequency": self.cfg.flow_matching.mae_val_frequency,
+            "latent_dim": flow_matching.latent_dim,
+            "mae_val_frequency": flow_matching.mae_val_frequency,
             "use_loss_weights": use_loss_weights,
             "use_manifold": use_manifold,
             "use_log_loss_weights": use_log_loss_weights,
@@ -129,10 +142,10 @@ class FlowMatchingTrainer:
             "_recursive_": False,
         }
         if self.system_name == "quadrotor3d":
-            flow_matcher_kwargs["quat_loss_weight"] = self.cfg.flow_matching.get("quat_loss_weight", 1.0)
+            flow_matcher_kwargs["quat_loss_weight"] = flow_matching.get("quat_loss_weight", 1.0)
         if self.is_local:
-            flow_matcher_kwargs["sequence_length"] = self.cfg.flow_matching.get("sequence_length", 32)
-            flow_matcher_kwargs["history_length"] = self.cfg.flow_matching.get("history_length", 1)
+            flow_matcher_kwargs["sequence_length"] = flow_matching.get("sequence_length", 32)
+            flow_matcher_kwargs["history_length"] = flow_matching.get("history_length", 1)
 
         flow_matcher = hydra.utils.instantiate(self.cfg.flow_matcher, **flow_matcher_kwargs)
 
@@ -151,7 +164,7 @@ class FlowMatchingTrainer:
         checkpoint_dir = Path(output_dir) / "checkpoints"
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-        trainer_cfg = self.cfg.get("lightning_trainer", {})
+        trainer_cfg = self._predictor_cfg.get("lightning_trainer", {})
         callbacks = []
         for cb_cfg in trainer_cfg.get("callbacks", []):
             callback = hydra.utils.instantiate(cb_cfg)

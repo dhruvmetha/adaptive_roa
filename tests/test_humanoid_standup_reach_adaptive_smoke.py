@@ -98,21 +98,21 @@ def test_adaptive_engine_one_epoch_cpu(tmp_path, monkeypatch):
                 "system=humanoid_standup_reach",
                 # Computation device
                 "device=cpu",
-                "trainer.accelerator=cpu",
-                "trainer.devices=1",
-                "trainer.max_epochs=1",
+                "predictor.lightning_trainer.accelerator=cpu",
+                "predictor.lightning_trainer.devices=1",
+                "predictor.lightning_trainer.max_epochs=1",
                 # Tiny training sizes
                 "initial_train_size=8",
                 "samples_per_epoch=4",
-                "batch_size=4",
-                "val_batch_size=8",
-                "num_workers=0",
+                "predictor.batch_size=4",
+                "predictor.val_batch_size=8",
+                "+predictor.num_workers=0",
                 "n_epochs=1",
                 # Evaluate every epoch (required to exercise cal/test eval paths)
                 "eval_every=1",
                 # Tiny MC samples
-                "conformal.num_mc_samples=2",
-                "conformal.num_mc_samples_eval=2",
+                "probability.num_mc_samples=2",
+                "eval.num_mc_samples_eval=2",
                 # Override cal / test to tiny slices
                 f"data_source.cal_set_file={cal_small}",
                 f"data_source.test_set_file={test_small}",

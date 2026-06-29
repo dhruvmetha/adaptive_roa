@@ -11,5 +11,4 @@ eval:
   refine_t_max: 0.9
   refine_num_steps: 100
   refine_max_attempts: 5
-  max_eval_rows: null
   verbose: true

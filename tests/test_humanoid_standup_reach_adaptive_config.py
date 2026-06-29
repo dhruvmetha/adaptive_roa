@@ -53,7 +53,7 @@ def test_humanoid_adaptive_config_scale_hardening():
         f"got: {cfg.data_source.shuffled_labels_file}"
     )
 
-    # FPS eval row cap must exist in conformal section
-    assert cfg.conformal.get("max_eval_rows") is not None, (
-        "conformal.max_eval_rows must be set to cap 1.3GB FPS test/cal file loads"
+    # FPS eval row cap must exist in eval section
+    assert cfg.eval.max_eval_rows is not None, (
+        "eval.max_eval_rows must be set to cap 1.3GB FPS test/cal file loads"
     )

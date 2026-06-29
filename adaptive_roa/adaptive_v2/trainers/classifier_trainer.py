@@ -29,18 +29,23 @@ class ClassifierTrainer:
         self.system = system
         self.system_name = system_name
 
+    @property
+    def _predictor_cfg(self):
+        pred = self.cfg.get("predictor")
+        return pred if pred is not None else self.cfg
+
     def _embedded_dim(self) -> int:
         dummy = torch.zeros(1, int(self.system.state_dim))
         embedded = self.system.embed_state_for_model(self.system.normalize_state(dummy))
         return int(embedded.shape[-1])
 
     def fit(self, dataset_files: dict, output_dir: str, resume_checkpoint: str | None = None):
-        cls_cfg = self.cfg.get("classifier", {})
+        cls_cfg = self._predictor_cfg.get("classifier", {})
 
         data_module = AdaptiveClassificationDataModule(
             train_file=dataset_files["train"],
             val_file=dataset_files["val"],
-            batch_size=self.cfg.get("batch_size", 1024),
+            batch_size=self._predictor_cfg.get("batch_size", 1024),
             # Data is pre-loaded into in-memory tensors; worker processes add no
             # value and break on NFS (rmtree of `.nfs*` temp dirs => Errno 16).
             num_workers=0,
@@ -68,7 +73,7 @@ class ClassifierTrainer:
 
         checkpoint_dir = Path(output_dir) / "checkpoints"
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        trainer_cfg = self.cfg.get("lightning_trainer", {})
+        trainer_cfg = self._predictor_cfg.get("lightning_trainer", {})
 
         callbacks = [
             ModelCheckpoint(
@@ -79,7 +84,7 @@ class ClassifierTrainer:
         ]
         logger = CSVLogger(save_dir=output_dir, name="classifier_logs")
 
-        device = str(self.cfg.get("device", "cuda:0"))
+        device = str(self._predictor_cfg.get("device", self.cfg.get("device", "cuda:0")))
         use_gpu = device.startswith("cuda") and torch.cuda.is_available()
         trainer = pl.Trainer(
             max_epochs=int(cls_cfg.get("max_epochs", 200)),

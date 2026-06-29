@@ -3,6 +3,7 @@
 defaults:
   - _base
   - /model/system_dims: humanoid_standup_reach
+  - /prediction_mode: global
   - _self_
 
 name: adaptive_humanoid_standup_reach

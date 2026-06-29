@@ -85,6 +85,14 @@ class FMProbabilisticClassifier(ProbabilisticClassifier):
         if not path.exists():
             return None
         cache = load_mc_cache(str(path))
+        # Row-alignment guard: a cache that does not match the export's own states
+        # must not be trusted (it would silently misalign query_state with probs).
+        # Fall through to live recompute instead.
+        if cache.start_states.shape[0] != len(states):
+            return None
+        # Reclassify cached endpoints at the current eval radius (codebase standard:
+        # full_roa.py / reevaluate.py do the same before using a loaded cache).
+        cache = cache.reclassify(self.system, self.attractor_radius)
         ps, pf, pinv = cache.probabilities()
         return OutcomeProbabilities(p_success=ps, p_failure=pf, p_invalid=pinv)
 

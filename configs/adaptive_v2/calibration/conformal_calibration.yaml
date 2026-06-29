@@ -1,0 +1,9 @@
+# @package _global_
+calibration:
+  _target_: adaptive_roa.adaptive_v2.calibration.conformal_calibration.ConformalCalibrationBackend
+  delta: 0.05
+  w: 0.9
+  alpha: 0.1
+  alpha_eval: 0.1
+  decision_rule: ${decision_rule}
+  verbose: true

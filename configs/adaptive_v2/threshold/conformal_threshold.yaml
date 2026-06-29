@@ -1,5 +1,16 @@
 # @package _global_
-
-adaptive_v2:
-  threshold:
-    _target_: adaptive_roa.adaptive_v2.threshold.conformal_threshold.ConformalThresholdBackend
+threshold:
+  _target_: adaptive_roa.adaptive_v2.threshold.conformal_threshold.ConformalThresholdBackend
+  predictor_type: ${predictor.type}
+  decision_rule: ${decision_rule}
+  optimize_mode: joint
+  optimize_objective: loss
+  target_f1: 0.90
+  lambda_grid_size: 100
+  delta_grid_size: 100
+  delta_min: 0.05
+  delta_max: 0.45
+  fixed_lambda_star: 0.5
+  fixed_delta_star: 0.1
+  use_p_invalid_veto: true
+  verbose: true

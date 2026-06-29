@@ -1,5 +1,15 @@
 # @package _global_
-
-adaptive_v2:
-  eval:
-    _target_: adaptive_roa.adaptive_v2.eval.full_roa.FullROAEvaluator
+eval:
+  _target_: adaptive_roa.adaptive_v2.eval.full_roa.FullROAEvaluator
+  predictor_type: ${predictor.type}
+  alpha_eval: 0.1
+  attractor_radius: ${attractor_radius}
+  num_mc_samples_eval: 100
+  decision_rule: ${decision_rule}
+  refine_invalids: false
+  refine_t_min: 0.7
+  refine_t_max: 0.9
+  refine_num_steps: 100
+  refine_max_attempts: 5
+  max_eval_rows: null
+  verbose: true

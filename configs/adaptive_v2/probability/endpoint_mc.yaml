@@ -1,5 +1,11 @@
 # @package _global_
-
-adaptive_v2:
-  probability:
-    _target_: adaptive_roa.adaptive_v2.probability.endpoint_mc.EndpointMCProbabilityBackend
+probability:
+  _target_: adaptive_roa.adaptive_v2.probability.endpoint_mc.EndpointMCProbabilityBackend
+  attractor_radius: ${attractor_radius}
+  num_mc_samples: 10
+  refine_invalids: false
+  refine_t_min: 0.7
+  refine_t_max: 0.9
+  refine_num_steps: 100
+  refine_max_attempts: 5
+  trajectory_checking: false

@@ -1,0 +1,3 @@
+# @package _global_
+probability:
+  _target_: adaptive_roa.adaptive_v2.probability.classifier_prob.ClassifierProbabilityBackend

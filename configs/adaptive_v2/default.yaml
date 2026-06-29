@@ -1,11 +1,9 @@
 defaults:
   - system: pendulum
   - predictor: generative
-  - prediction_mode: global
-  - trainer: flow_matching_trainer
-  - probability: endpoint_mc
   - threshold: conformal_threshold
-  - strategy: auto
+  - calibration: conformal_calibration
+  - acquisition: direct
   - eval: full_roa
   - _self_
 

@@ -95,7 +95,11 @@ def write_split(out_dir, split, query_state, gt_label, probs, native_probs):
 def export_run(run_dir, out_dir, device="cuda", epochs=None):
     device = device if (device == "cpu" or torch.cuda.is_available()) else "cpu"
     cfg = load_cfg(run_dir)
-    predictor_type = str(cfg.get("predictor", "generative"))
+    predictor = cfg.get("predictor", {})
+    if isinstance(predictor, str):
+        predictor_type = predictor
+    else:
+        predictor_type = str(predictor.get("type", "generative"))
     system = resolve_system(cfg)
     pc_class = get_probabilistic_classifier_class(predictor_type)
     native = pc_class.native_probs

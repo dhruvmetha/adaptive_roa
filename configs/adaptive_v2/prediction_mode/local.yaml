@@ -37,5 +37,5 @@ flow_matching:
 # Enable per-timestep trajectory checking for MC evaluation
 # When true: classify trajectory at every timestep (first success/failure wins)
 # When false: check endpoint only (same as global mode)
-conformal:
+probability:
   trajectory_checking: true

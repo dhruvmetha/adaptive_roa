@@ -102,40 +102,6 @@ class ConformalConfig:
         tm = c.get("threshold_mode", "dynamic")
         return "fixed" if tm == "fixed" else "loss"
 
-    @classmethod
-    def from_hydra(cls, cfg) -> "ConformalConfig":
-        """Build a ConformalConfig from a Hydra DictConfig.
-
-        Maps ``cfg.conformal.*`` fields (and ``cfg.val_batch_size``) into the
-        dataclass, applying the same defaults used throughout the pipeline.
-        """
-        c = cfg.conformal
-        return cls(
-            delta=c.get("delta", 0.05),
-            w=c.get("w", 0.9),
-            alpha=c.get("alpha_sampling", 0.1),
-            num_mc_samples=c.get("num_mc_samples", 100),
-            mc_batch_size=cfg.get("val_batch_size", 2048),
-            attractor_radius=c.get("attractor_radius", 0.2),
-            optimize_mode=c.get("optimize_mode", "lambda"),
-            decision_rule=c.get("decision_rule", "two_sided"),
-            lambda_grid_size=c.get("lambda_grid_size", 100),
-            delta_grid_size=c.get("delta_grid_size", 100),
-            delta_min=c.get("delta_min", 0.01),
-            delta_max=c.get("delta_max", 0.49),
-            use_p_invalid_veto=c.get("use_p_invalid_veto", True),
-            optimize_objective=cls._resolve_objective(c),
-            target_f1=c.get("target_f1", 0.90),
-            fixed_lambda_star=c.get("fixed_lambda_star", 0.5),
-            fixed_delta_star=c.get("fixed_delta_star", 0.1),
-            trajectory_checking=c.get("trajectory_checking", False),
-            refine_invalids=c.get("refine_invalids", False),
-            refine_t_min=c.get("refine_t_min", 0.7),
-            refine_t_max=c.get("refine_t_max", 0.9),
-            refine_num_steps=c.get("refine_num_steps", 100),
-            refine_max_attempts=c.get("refine_max_attempts", 5),
-        )
-
     def __post_init__(self):
         """Validate configuration parameters."""
         assert 0 < self.delta < 0.5, f"delta must be in (0, 0.5), got {self.delta}"

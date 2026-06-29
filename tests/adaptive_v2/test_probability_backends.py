@@ -21,7 +21,7 @@ def _mc_cfg():
 
 
 def _clf_cfg():
-    return OmegaConf.create({})
+    return OmegaConf.create({"attractor_radius": 0.2})
 
 
 class _DummyClassifier:

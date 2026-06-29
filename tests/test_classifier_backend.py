@@ -14,8 +14,12 @@ class _DummyClassifier:
         return torch.zeros((x.shape[0], 1), dtype=torch.float32)
 
 
+def _cfg():
+    return OmegaConf.create({"attractor_radius": 0.2})
+
+
 def test_backend_returns_outcome_probabilities():
-    backend = ClassifierProbabilityBackend(OmegaConf.create({}), system=None, device="cpu")
+    backend = ClassifierProbabilityBackend(_cfg(), system=None, device="cpu")
     backend.bind_model(_DummyClassifier())
     out = backend.estimate(np.zeros((7, 6), dtype=np.float32))
     assert isinstance(out, OutcomeProbabilities)

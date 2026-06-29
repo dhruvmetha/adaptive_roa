@@ -13,6 +13,7 @@ class ClassifierProbabilityBackend:
     """Probability backend using a discriminative classifier (single forward pass)."""
 
     def __init__(self, cfg: Any, system: Any, device: str):
+        self.attractor_radius = float(cfg.attractor_radius)
         self.system = system
         self.device = device
         self.model_handle: Any = None
@@ -21,7 +22,7 @@ class ClassifierProbabilityBackend:
     def bind_model(self, model_handle: Any) -> None:
         self.model_handle = model_handle
         conformal_cfg = ConformalConfig(
-            delta=0.05, w=0.9, alpha=0.1, attractor_radius=0.2,
+            delta=0.05, w=0.9, alpha=0.1, attractor_radius=self.attractor_radius,
         )
         self.estimator = ClassifierProbabilityEstimator(
             model_handle, self.system, conformal_cfg, self.device

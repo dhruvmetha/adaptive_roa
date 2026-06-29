@@ -20,20 +20,16 @@ from adaptive_roa.adaptive.endpoint_evaluation import (
     compute_endpoint_prediction_error,
     sample_val_data_for_optimization,
 )
-from adaptive_roa.adaptive_v2.eval.full_roa import FullROAEvaluator
 from adaptive_roa.adaptive_v2.pool.trajectory_pool import TrajectoryPool
-from adaptive_roa.adaptive_v2.probability.endpoint_mc import EndpointMCProbabilityBackend
-from adaptive_roa.adaptive_v2.strategy.conformal import ConformalAcquisitionStrategy
-from adaptive_roa.adaptive_v2.strategy.direct import DirectAcquisitionStrategy
-from adaptive_roa.adaptive_v2.strategy.ranked import RankedAcquisitionStrategy
-from adaptive_roa.adaptive_v2.threshold.conformal_threshold import ConformalThresholdBackend
-from adaptive_roa.adaptive_v2.trainers.flow_matching_trainer import FlowMatchingTrainer
-from adaptive_roa.adaptive_v2.trainers.classifier_trainer import ClassifierTrainer
-from adaptive_roa.adaptive_v2.probability.classifier_prob import ClassifierProbabilityBackend
 from adaptive_roa.adaptive_v2.filters.confidence_filter import ConfidencePairFilter
 from adaptive_roa.adaptive_v2.types import AcquisitionResult, EpochArtifacts
-from adaptive_roa.conformal import ConformalConfig
-from adaptive_roa.conformal.calibrator import Calibrator
+
+
+def _instantiate(cfg_node, *args, **kwargs):
+    """Resolve _target_ from cfg_node and construct with cfg_node as first arg."""
+    from hydra.utils import get_class
+    cls = get_class(cfg_node._target_)
+    return cls(cfg_node, *args, **kwargs)
 
 
 def _convert_numpy(obj: Any) -> Any:
@@ -50,14 +46,6 @@ def _convert_numpy(obj: Any) -> Any:
     if isinstance(obj, list):
         return [_convert_numpy(v) for v in obj]
     return obj
-
-
-def _build_strategy(mode: str):
-    if mode == "ranked":
-        return RankedAcquisitionStrategy()
-    if mode == "conformal":
-        return ConformalAcquisitionStrategy()
-    return DirectAcquisitionStrategy()
 
 
 class AdaptiveEngine:
@@ -89,16 +77,15 @@ class AdaptiveEngine:
             test_ratio=cfg.get("test_ratio", 0.1),
             candidate_mode=str(cfg.get("candidate_mode", "start")),
         )
-        self.predictor_type = str(cfg.get("predictor", "generative"))
-        if self.predictor_type == "classifier":
-            self.trainer = ClassifierTrainer(cfg, self.system, self.system_name)
-            self.probability_backend = ClassifierProbabilityBackend(self.system, cfg, self.device)
-        else:
-            self.trainer = FlowMatchingTrainer(cfg, self.system, self.system_name)
-            self.probability_backend = EndpointMCProbabilityBackend(self.system, cfg, self.device)
-        # Threshold optimization and full-ROA eval branch internally on cfg.predictor.
-        self.threshold_backend = ConformalThresholdBackend(self.system, cfg, self.device)
-        self.evaluator = FullROAEvaluator(self.system, cfg, self.device)
+        from hydra.utils import get_class
+        self.predictor_type = str(cfg.predictor.type)
+        trainer_cls = get_class(cfg.predictor.trainer_target)
+        self.trainer             = trainer_cls(cfg.predictor, self.system, self.system_name)
+        self.probability_backend = _instantiate(cfg.probability,  self.system, self.device)
+        self.threshold_backend   = _instantiate(cfg.threshold,    self.system, self.device)
+        self.calibration_backend = _instantiate(cfg.calibration,  self.system, self.device)
+        self.acquisition         = _instantiate(cfg.acquisition)
+        self.evaluator           = _instantiate(cfg.eval,         self.system, self.device)
 
     @staticmethod
     def _count_file_rows(filepath: str) -> int:
@@ -121,7 +108,7 @@ class AdaptiveEngine:
         samples_per_epoch = int(self.cfg.get("samples_per_epoch", 50))
         d2_ratio = float(self.cfg.get("d2_ratio", 0.5))
         warm_start = bool(self.cfg.get("warm_start", False))
-        sampling_mode = str(self.cfg.get("sampling_mode", "conformal"))
+        acquisition_mode = self.acquisition.mode
         eval_every = int(self.cfg.get("eval_every", 1))
 
         epoch_results: list[dict[str, Any]] = []
@@ -156,11 +143,12 @@ class AdaptiveEngine:
 
             self.probability_backend.bind_model(model_handle)
             self.threshold_backend.bind_model(model_handle)
+            self.calibration_backend.bind_model(model_handle, predictor_type=self.predictor_type)
 
             n_d1_target = int(samples_per_epoch * (1.0 - d2_ratio))
             n_d2_target = samples_per_epoch - n_d1_target
             skip_ranked_for_eval_off = (
-                sampling_mode == "ranked" and eval_every <= 0 and d2_ratio <= 0.0
+                acquisition_mode == "ranked" and eval_every <= 0 and d2_ratio <= 0.0
             )
             need_d2_acquisition = n_d2_target > 0 and not skip_ranked_for_eval_off
 
@@ -178,7 +166,7 @@ class AdaptiveEngine:
                     dataset_builder=self.pool.dataset_builder,
                     batch_size=self.cfg.get("val_batch_size", 512),
                     device=self.device,
-                    verbose=self.cfg.conformal.get("verbose", True),
+                    verbose=self.calibration_backend.verbose,
                 )
 
             d1_states, d1_indices = self.pool.sample_candidates_without_marking(n_d1_target)
@@ -191,30 +179,24 @@ class AdaptiveEngine:
 
             q_hat = None
             test_metrics = {"coverage": None, "f1": None, "unknown_rate": None}
-            if sampling_mode == "conformal" and need_d2_acquisition:
+            if acquisition_mode == "conformal" and need_d2_acquisition:
                 d1_labels = self.pool.get_labels(d1_indices)
-                q_hat = self.threshold_backend.calibrate_qhat(d1_states, d1_labels, threshold_state)
+                q_hat = self.calibration_backend.calibrate(d1_states, d1_labels, threshold_state)
                 threshold_state.q_hat = q_hat
                 X_test, y_test = self.pool.get_val_labels()
                 predictor = self.threshold_backend.predictor
                 if predictor is None:
                     raise RuntimeError("Threshold backend predictor missing after bind_model")
-                test_metrics = predictor.evaluate(
-                    X_test,
-                    y_test,
-                    verbose=self.cfg.conformal.get("verbose", True),
-                )
-            elif sampling_mode == "conformal":
+                test_metrics = predictor.evaluate(X_test, y_test, verbose=self.calibration_backend.verbose)
+            elif acquisition_mode == "conformal":
                 print("Skipping q_hat calibration because d2_target=0")
 
             if need_d2_acquisition:
-                strategy = _build_strategy(sampling_mode)
-                acquisition = strategy.select(
+                acquisition = self.acquisition.select(
                     pool=self.pool,
                     probability_backend=self.probability_backend,
                     threshold_backend=self.threshold_backend,
                     threshold_state=threshold_state,
-                    cfg=self.cfg,
                     target_count=n_d2_target,
                     exclude=set(d1_indices),
                 )
@@ -232,30 +214,15 @@ class AdaptiveEngine:
                 self.pool.mark_indices_as_used(acquisition.d2_indices)
                 self.pool.add_to_training_balanced(acquisition.d2_indices)
 
-            # Held-out calibration for evaluation-time q_hat
             q_hat_eval = None
             n_cal_eval = 0
             cal_file = self.cfg.data_source.get("cal_set_file", None)
             if run_eval and cal_file:
-                _max_eval_rows = self.cfg.conformal.get("max_eval_rows", None)
-                X_cal_eval, _, y_cal_eval = load_eval_states(cal_file, max_rows=_max_eval_rows)
-                cal_probs = self.probability_backend.estimate(X_cal_eval)
-                eval_conformal = ConformalConfig(
-                    delta=threshold_state.delta_star,
-                    alpha=self.cfg.conformal.get("alpha_eval", 0.1),
-                    decision_rule=self.cfg.conformal.get("decision_rule", "two_sided"),
+                X_cal_eval, _, y_cal_eval = load_eval_states(
+                    cal_file, max_rows=self.evaluator.max_eval_rows
                 )
-                eval_calibrator = Calibrator(eval_conformal)
-                p_failure = cal_probs.p_failure if eval_conformal.decision_rule == "two_sided" else None
-                q_hat_eval = float(
-                    eval_calibrator.calibrate(
-                        cal_probs.p_success,
-                        y_cal_eval,
-                        threshold_state.lambda_star,
-                        threshold_state.delta_star,
-                        p_failure=p_failure,
-                        verbose=self.cfg.conformal.get("verbose", True),
-                    )
+                q_hat_eval = self.calibration_backend.calibrate_eval(
+                    X_cal_eval, y_cal_eval, threshold_state
                 )
                 n_cal_eval = len(X_cal_eval)
 
@@ -264,19 +231,13 @@ class AdaptiveEngine:
             if not run_eval:
                 full_roa_metrics: dict[str, Any] = {"skipped": True}
             else:
-                val_batch_size = int(self.cfg.get("val_batch_size", 2048))
-                print(f"[DEBUG] val_batch_size from config: {val_batch_size}")
                 full_roa_metrics = self.evaluator.evaluate_epoch(
                     model_handle,
                     threshold_state,
                     {
                         "eval_states_file": self.cfg.data_source.test_set_file,
-                        "num_mc_samples": int(self.cfg.conformal.get("num_mc_samples_eval", 20)),
-                        "batch_size": val_batch_size,
-                        "attractor_radius": float(self.cfg.conformal.get("attractor_radius", 0.2)),
+                        "batch_size": int(self.cfg.get("val_batch_size", 2048)),
                         "output_dir": str(epoch_output_dir),
-                        "verbose": bool(self.cfg.conformal.get("verbose", True)),
-                        "decision_rule": self.cfg.conformal.get("decision_rule", "two_sided"),
                     },
                 )
             full_roa_metrics["q_hat_training"] = float(q_hat) if q_hat is not None else None
@@ -297,7 +258,7 @@ class AdaptiveEngine:
                 _, _, train_labels = self.pool.get_training_data()
                 pair_filter = ConfidencePairFilter(
                     probability_backend=self.probability_backend,
-                    decision_rule=self.cfg.conformal.get("decision_rule", "two_sided"),
+                    decision_rule=self.calibration_backend.decision_rule,
                     min_pairs_floor=self.filter_min_pairs,
                 )
                 filtered_path, filter_diagnostics = pair_filter.filter_train_file(
@@ -314,7 +275,7 @@ class AdaptiveEngine:
             epoch_result = {
                 "epoch": int(epoch),
                 "train_trajectories": int(train_trajectories_this_epoch),
-                "sampling_mode": sampling_mode,
+                "sampling_mode": acquisition_mode,
                 "n_d1_added": int(len(d1_indices)),
                 "n_d2_added": int(len(acquisition.d2_indices)),
                 "n_d2_uncertain": int(len(acquisition.d2_indices) - acquisition.n_invalid_added),
@@ -327,7 +288,7 @@ class AdaptiveEngine:
                 "q_hat": float(q_hat) if q_hat is not None else None,
                 "q_hat_eval": float(q_hat_eval) if q_hat_eval is not None else None,
                 "n_cal_eval": int(n_cal_eval),
-                "optimize_mode": self.cfg.conformal.get("optimize_mode", "lambda"),
+                "optimize_mode": self.threshold_backend.optimize_mode,
                 "test_coverage": test_metrics.get("coverage"),
                 "test_f1": test_metrics.get("f1"),
                 "test_unknown_rate": test_metrics.get("unknown_rate"),
@@ -352,16 +313,16 @@ class AdaptiveEngine:
             epoch_artifacts = EpochArtifacts(
                 epoch=epoch,
                 train_trajectories=train_trajectories_this_epoch,
-                sampling_mode=sampling_mode,
+                sampling_mode=acquisition_mode,
                 threshold_state=threshold_state,
                 acquisition=acquisition,
                 endpoint_error=endpoint_error,
                 eval_metrics=full_roa_metrics,
-                d1_eval_metrics=test_metrics if sampling_mode == "conformal" else None,
+                d1_eval_metrics=test_metrics if acquisition_mode == "conformal" else None,
                 conformal_state=conformal_state,
                 extra={
                     "n_cal_eval": n_cal_eval,
-                    "optimize_mode": self.cfg.conformal.get("optimize_mode", "lambda"),
+                    "optimize_mode": self.threshold_backend.optimize_mode,
                 },
             )
             with open(epoch_output_dir / "artifacts_v2.json", "w") as f:

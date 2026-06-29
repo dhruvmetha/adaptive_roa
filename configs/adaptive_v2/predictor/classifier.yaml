@@ -1,17 +1,18 @@
 # @package _global_
-# Discriminative binary ROA classifier pathway (alternative to generative flow matching).
-# Predicts p(success | state) directly in one forward pass; feeds the same
-# threshold-optimization / acquisition / full-ROA-eval machinery as the generative path.
-predictor: classifier
-
-# A binary classifier is naturally one-sided (p_failure = 1 - p_success, p_invalid = 0).
-conformal:
-  decision_rule: one_sided
-
-classifier:
-  hidden_dims: [256, 512, 256]
-  dropout: 0.0
-  lr: 1.0e-3
-  weight_decay: 1.0e-5
-  max_epochs: 200
-  patience: 20
+defaults:
+  - /probability: classifier_prob
+predictor:
+  type: classifier
+  trainer_target: adaptive_roa.adaptive_v2.trainers.classifier_trainer.ClassifierTrainer
+  batch_size: 1024
+  val_batch_size: 2048
+  classifier:
+    hidden_dims: [256, 512, 256]
+    dropout: 0.0
+    lr: 1.0e-3
+    weight_decay: 1.0e-5
+    max_epochs: 200
+    patience: 20
+  lightning_trainer:
+    gradient_clip_val: 1.0
+    log_every_n_steps: 10

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -1087,13 +1086,25 @@ def evaluate_full_roa_classifier(
     return metrics
 
 
-@dataclass
 class FullROAEvaluator:
     """Evaluator adapter used by the v2 engine."""
 
-    system: Any
-    cfg: Any
-    device: str
+    def __init__(self, cfg: Any, system: Any, device: str):
+        self.predictor_type = str(cfg.predictor_type)
+        self.alpha_eval = float(cfg.alpha_eval)
+        self.attractor_radius = float(cfg.attractor_radius)
+        self.num_mc_samples_eval = int(cfg.num_mc_samples_eval)
+        self.decision_rule = str(cfg.decision_rule)
+        self.refine_invalids = bool(cfg.refine_invalids)
+        self.refine_t_min = float(cfg.refine_t_min)
+        self.refine_t_max = float(cfg.refine_t_max)
+        self.refine_num_steps = int(cfg.refine_num_steps)
+        self.refine_max_attempts = int(cfg.refine_max_attempts)
+        self.max_eval_rows = cfg.max_eval_rows  # may be None
+        self.verbose = bool(cfg.verbose)
+        self.system = system
+        self.device = device
+        self.cfg = cfg  # kept temporarily; removed in Task 8 cleanup
 
     def evaluate_epoch(
         self,
@@ -1101,57 +1112,41 @@ class FullROAEvaluator:
         threshold_state: ThresholdState,
         epoch_context: dict[str, Any],
     ) -> dict[str, Any]:
-        predictor_type = str(self.cfg.get("predictor", "generative"))
-        if predictor_type == "classifier":
+        if self.predictor_type == "classifier":
             return evaluate_full_roa_classifier(
                 classifier=model_handle,
                 system=self.system,
                 eval_states_file=epoch_context["eval_states_file"],
                 lambda_star=threshold_state.lambda_star,
                 delta=threshold_state.delta_star,
-                attractor_radius=epoch_context.get(
-                    "attractor_radius",
-                    self.cfg.conformal.get("attractor_radius", resolve_system_hook(self.system).attractor_radius_default),
-                ),
+                attractor_radius=epoch_context.get("attractor_radius", self.attractor_radius),
                 device=self.device,
                 batch_size=epoch_context.get("batch_size", self.cfg.get("val_batch_size", 8192)),
                 output_dir=epoch_context.get("output_dir"),
                 verbose=epoch_context.get("verbose", True),
                 invalid_threshold=epoch_context.get("invalid_threshold", None),
-                decision_rule=epoch_context.get("decision_rule", self.cfg.conformal.get("decision_rule", None)),
+                decision_rule=epoch_context.get("decision_rule", self.decision_rule),
             )
         return evaluate_full_roa_fast(
             flow_matcher=model_handle,
             system=self.system,
             eval_states_file=epoch_context["eval_states_file"],
-            num_mc_samples=epoch_context.get(
-                "num_mc_samples",
-                self.cfg.conformal.get("num_mc_samples_eval", 20),
-            ),
+            num_mc_samples=epoch_context.get("num_mc_samples", self.num_mc_samples_eval),
             batch_size=epoch_context.get("batch_size", self.cfg.get("val_batch_size", 2048)),
             lambda_star=threshold_state.lambda_star,
             delta=threshold_state.delta_star,
             q_hat=threshold_state.q_hat_eval,
             q_hat_success=threshold_state.q_hat_success_eval,
             q_hat_failure=threshold_state.q_hat_failure_eval,
-            attractor_radius=epoch_context.get(
-                "attractor_radius",
-                self.cfg.conformal.get("attractor_radius", resolve_system_hook(self.system).attractor_radius_default),
-            ),
+            attractor_radius=epoch_context.get("attractor_radius", self.attractor_radius),
             device=self.device,
             output_dir=epoch_context.get("output_dir"),
             verbose=epoch_context.get("verbose", True),
             invalid_threshold=epoch_context.get("invalid_threshold", None),
-            decision_rule=epoch_context.get("decision_rule", self.cfg.conformal.get("decision_rule", None)),
-            refine_invalids=self.cfg.conformal.get("refine_invalids", False),
-            refine_t_range=(
-                self.cfg.conformal.get("refine_t_min", 0.7),
-                self.cfg.conformal.get("refine_t_max", 0.9),
-            ),
-            refine_num_steps=self.cfg.conformal.get("refine_num_steps", 100),
-            refine_max_attempts=self.cfg.conformal.get("refine_max_attempts", 5),
-            max_eval_rows=epoch_context.get(
-                "max_eval_rows",
-                self.cfg.conformal.get("max_eval_rows", None),
-            ),
+            decision_rule=epoch_context.get("decision_rule", self.decision_rule),
+            refine_invalids=self.refine_invalids,
+            refine_t_range=(self.refine_t_min, self.refine_t_max),
+            refine_num_steps=self.refine_num_steps,
+            refine_max_attempts=self.refine_max_attempts,
+            max_eval_rows=epoch_context.get("max_eval_rows", self.max_eval_rows),
         )

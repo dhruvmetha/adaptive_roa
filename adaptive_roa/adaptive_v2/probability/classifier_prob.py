@@ -1,5 +1,3 @@
-"""Classifier probability backend (forward-pass, no Monte Carlo)."""
-
 from __future__ import annotations
 
 from typing import Any
@@ -12,18 +10,19 @@ from adaptive_roa.adaptive_v2.types import OutcomeProbabilities
 
 
 class ClassifierProbabilityBackend:
-    """Drop-in for EndpointMCProbabilityBackend, backed by a discriminative classifier."""
+    """Probability backend using a discriminative classifier (single forward pass)."""
 
-    def __init__(self, system: Any, cfg: Any, device: str):
+    def __init__(self, cfg: Any, system: Any, device: str):
         self.system = system
-        self.cfg = cfg
         self.device = device
         self.model_handle: Any = None
         self.estimator: ClassifierProbabilityEstimator | None = None
 
     def bind_model(self, model_handle: Any) -> None:
         self.model_handle = model_handle
-        conformal_cfg = ConformalConfig.from_hydra(self.cfg)
+        conformal_cfg = ConformalConfig(
+            delta=0.05, w=0.9, alpha=0.1, attractor_radius=0.2,
+        )
         self.estimator = ClassifierProbabilityEstimator(
             model_handle, self.system, conformal_cfg, self.device
         )
@@ -31,7 +30,6 @@ class ClassifierProbabilityBackend:
     def estimate(self, start_states: np.ndarray) -> OutcomeProbabilities:
         if self.estimator is None:
             raise RuntimeError("Probability backend used before bind_model")
-
         p_success, p_failure, p_invalid = self.estimator.estimate(start_states)
         return OutcomeProbabilities(
             p_success=np.asarray(p_success),

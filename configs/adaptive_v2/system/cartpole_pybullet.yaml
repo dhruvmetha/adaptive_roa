@@ -6,7 +6,13 @@ defaults:
   - _self_
 
 name: adaptive_cartpole_pybullet
-output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_threshold_mode_${threshold_mode}_adapt_iter_${n_epochs}_alpha_${alpha_sampling}_sampling_mode_${sampling_mode}_w_${w}/${now:%Y-%m-%d_%H-%M-%S}
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_warm_start_${warm_start}_manifold_${use_manifold}_adapt_iter_${n_epochs}/${now:%Y-%m-%d_%H-%M-%S}
+
+decision_rule: two_sided
+attractor_radius: 0.2
+
+threshold:
+  optimize_mode: joint
 
 data_source:
   base_dir: ${data_dir}/cartpole_pybullet
@@ -20,11 +26,6 @@ data_source:
 
 initial_train_size: 300
 n_epochs: 15
-
-conformal:
-  decision_rule: two_sided
-  attractor_radius: 0.2
-  optimize_mode: joint
 
 flow_matching:
   clamp_noise: false

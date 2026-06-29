@@ -6,9 +6,12 @@ defaults:
   - _self_
 
 name: adaptive_humanoid_standup_reach
-output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_threshold_mode_${threshold_mode}_adapt_iter_${n_epochs}_alpha_${alpha_sampling}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_warm_start_${warm_start}_manifold_${use_manifold}_adapt_iter_${n_epochs}/${now:%Y-%m-%d_%H-%M-%S}
 
 use_manifold: true
+
+decision_rule: two_sided
+attractor_radius: 1.0
 
 # Intermediate-state acquisition (candidate = sub-trajectory start)
 candidate_mode: intermediate
@@ -40,12 +43,7 @@ samples_per_epoch: 500
 # keeping the train-set / FPS eval-set split clean.
 test_ratio: 0
 
-conformal:
-  decision_rule: two_sided
-  attractor_radius: 1.0
-  # Cap rows loaded from the 320MB cal / 1.3GB test FPS files to avoid OOM and
-  # slow epoch starts.  50k rows gives stable q_hat estimates; set to null to
-  # disable the cap (loads all rows, original behaviour).
+eval:
   max_eval_rows: 50000
 
 optimizer:

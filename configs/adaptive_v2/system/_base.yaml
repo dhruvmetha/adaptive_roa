@@ -6,9 +6,6 @@ data_dir: ${data_dir:}
 training_index: 0
 device: cuda:0
 
-threshold_mode: dynamic
-alpha_sampling: 0.1
-w: 0.9
 use_manifold: false
 use_loss_weights: false
 use_log_loss_weights: false
@@ -28,81 +25,10 @@ samples_per_epoch: 100
 warm_start: false
 eval_every: 1
 
-sampling_mode: direct  # conformal | ranked | direct
-n_ranked_candidates: 50000
-d2_ratio: 0.5
-batch_size_sampling: 50
-max_samples_per_epoch: 50000
-
-batch_size: 1024
-val_batch_size: 30000
 num_workers: 4
-latent_dim: 0
-
-conformal:
-  verbose: true
-  delta: 0.05
-  w: ${w}
-  alpha_sampling: ${alpha_sampling}
-  alpha_eval: 0.1
-  num_mc_samples: 10
-  num_mc_samples_eval: 100
-  attractor_radius: 0.2
-
-  optimize_mode: joint
-  decision_rule: two_sided
-
-  fixed_lambda_star: 0.5
-  fixed_delta_star: 0.1
-  lambda_grid_size: 100
-  delta_grid_size: 100
-  delta_min: 0.05
-  delta_max: 0.45
-
-  # p_invalid veto during threshold optimization
-  use_p_invalid_veto: true
-
-  # Threshold optimization objective: "loss" (w-weighted), "f1" (F1-based), or "jstat" (J-statistic)
-  optimize_objective: loss
-  # Target F1 (only used when optimize_objective=f1)
-  target_f1: 0.90
-
-  # Trajectory checking: check success/failure at every timestep (local mode only)
-  trajectory_checking: false
-
-  # Invalid endpoint refinement
-  refine_invalids: false
-  refine_t_min: 0.7
-  refine_t_max: 0.9
-  refine_num_steps: 100
-  refine_max_attempts: 5
-
-trainer:
-  max_epochs: 1000
-  accelerator: gpu
-  devices: 1
-  precision: 32
-  gradient_clip_val: 1.0
-  log_every_n_steps: 10
-  check_val_every_n_epoch: 1
-  enable_progress_bar: true
-  enable_model_summary: true
-  callbacks:
-    - _target_: lightning.pytorch.callbacks.ModelCheckpoint
-      monitor: val_loss
-      mode: min
-      save_top_k: 1
-      save_last: true
-      filename: "best-{epoch:02d}-{val_loss:.4f}"
-      auto_insert_metric_name: false
-    - _target_: lightning.pytorch.callbacks.EarlyStopping
-      monitor: val_loss
-      mode: min
-      patience: 100
-      verbose: true
 
 flow_matching:
-  latent_dim: ${latent_dim}
+  latent_dim: 0
   num_integration_steps: 100
   mae_val_frequency: 10
   use_loss_weights: ${use_loss_weights}

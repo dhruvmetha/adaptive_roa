@@ -6,7 +6,10 @@ defaults:
   - _self_
 
 name: adaptive_quadrotor2d
-output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_threshold_mode_${threshold_mode}_adapt_iter_${n_epochs}_alpha_${alpha_sampling}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_warm_start_${warm_start}_manifold_${use_manifold}_adapt_iter_${n_epochs}/${now:%Y-%m-%d_%H-%M-%S}
+
+decision_rule: two_sided
+attractor_radius: 0.2
 
 data_source:
   base_dir: ${data_dir}/quadrotor2D_rl
@@ -21,10 +24,6 @@ data_source:
 initial_train_size: 2000
 samples_per_epoch: 500
 n_epochs: 201
-
-conformal:
-  decision_rule: two_sided
-  attractor_radius: 0.3
 
 flow_matching:
   clamp_noise: false

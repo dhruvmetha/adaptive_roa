@@ -38,7 +38,7 @@ def test_trainer_smoke(tmp_path):
         "device": "cpu", "batch_size": 16, "num_workers": 0,
         "classifier": {"hidden_dims": [16, 16], "lr": 1e-2, "max_epochs": 2,
                        "patience": 5, "weight_decay": 1e-5},
-        "trainer": {"gradient_clip_val": 1.0, "log_every_n_steps": 1, "enable_progress_bar": False},
+        "lightning_trainer": {"gradient_clip_val": 1.0, "log_every_n_steps": 1, "enable_progress_bar": False},
     })
 
     trainer = ClassifierTrainer(cfg, _FakeSystem(), system_name="fake")

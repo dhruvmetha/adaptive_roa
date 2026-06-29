@@ -68,7 +68,7 @@ class ClassifierTrainer:
 
         checkpoint_dir = Path(output_dir) / "checkpoints"
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        trainer_cfg = self.cfg.get("trainer", {})
+        trainer_cfg = self.cfg.get("lightning_trainer", {})
 
         callbacks = [
             ModelCheckpoint(

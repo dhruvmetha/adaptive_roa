@@ -151,7 +151,7 @@ class FlowMatchingTrainer:
         checkpoint_dir = Path(output_dir) / "checkpoints"
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-        trainer_cfg = self.cfg.get("trainer", {})
+        trainer_cfg = self.cfg.get("lightning_trainer", {})
         callbacks = []
         for cb_cfg in trainer_cfg.get("callbacks", []):
             callback = hydra.utils.instantiate(cb_cfg)

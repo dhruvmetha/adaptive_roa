@@ -1,0 +1,8 @@
+---
+description: Never add Cursor as a git co-author
+alwaysApply: true
+---
+
+# No Cursor Co-Author
+
+Never add `Co-authored-by: Cursor` (or any Cursor attribution) to git commit messages.

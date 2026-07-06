@@ -371,3 +371,11 @@ Generated analysis includes:
 - **Quantitative Analysis**: Automated statistical analysis of dynamical behavior
 - **Comparative Studies**: Multi-resolution and cross-model comparison tools
 - **Publication Ready**: Automated generation of high-quality visualizations and reports
+
+## SLURM Defaults
+- conda_env: /common/home/st1122/Projects/adaptive_roa/env
+- working_dir: /common/home/st1122/Projects/adaptive_roa
+- log_dir: /common/home/st1122/Projects/adaptive_roa/slurm_logs
+- conda_base: /common/home/st1122/miniforge3
+- default_mem: 40G
+- default_cpus: 16

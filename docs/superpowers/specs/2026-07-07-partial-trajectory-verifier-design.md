@@ -83,16 +83,67 @@ Each `<system>_T<T>` directory contains:
   Consistent in *meaning* (target = resolved terminal state).
 - **Motion field name:** `abs_dtheta/abs_dthetadot` (pendulum) vs `jump_mag`
   (others). The loader normalizes both to a single scalar "motion" column.
-- **Threshold source of truth:** dataset-description success/failure thresholds
-  differ slightly from `systems/` class values (e.g. cartpole 6.0/5.0/5.0 in
-  the description vs 5.9/4.9/4.9 in `systems/cartpole.py`). The verifier uses
-  **the `systems/` class values** as authoritative and logs any divergence.
+- **Resolution criteria source of truth:** the **`systems/` classes are the
+  single authoritative source** for success/failure sets (`classify_attractor`).
+  The dataset-description criteria were reconciled against the classes and the
+  classes were updated to the agreed values (see §2b). The verifier calls
+  `classify_attractor` directly.
+
+## 2b. Resolution criteria (finalized) & unresolved labeling
+
+Success/failure sets used by the verifier come from `system.classify_attractor`
+(`+1` success, `-1` failure, `0` separatrix/unresolved). The base classes were
+reviewed per-system against the dataset resolution rules and updated as follows:
+
+| System | Success | Failure | Base change |
+|---|---|---|---|
+| pendulum | L2 `< 0.1` to `[0,0]` (circular θ) | top equilibria `[±2.1,0]` @ `0.1` | none |
+| cartpole | L2 ball `< 0.1` | `\|x\|>5.9, \|ẋ\|>4.9, \|θ̇\|>4.9` | none |
+| quad2D | L2 `< 0.3` | `\|x\|>0.9, z<0.2, z>1.4, \|ẋ\|>0.9, \|ż\|>0.9, \|θ̇\|>7.5` | **failure updated** |
+| quad3D | Euclid `< 0.15` in **raw 13-D quaternion** state | `\|x\|>1.7, \|y\|>1.7, z<0.2, z>2.9, \|vel\|>2.9, \|rate\|>23.5` | **success (metric+radius) + failure updated** |
+| humanoid | `head[21] ≥ 1.2 ∧ ‖CoM vel[37:40]‖ ≤ 0.3` | none (base returns binary `-1`) | **success thresholds relaxed** |
+
+(quad3D success now uses raw 13-D Euclidean distance to the identity-quaternion
+goal, assuming `qw ≥ 0`-canonicalized states — replacing the old Euler-space
+`< 0.05` check.)
+
+**Unresolved labeling via pure-relabel subclasses.** Pendulum and humanoid have
+**no failure set** in the datasets, but their base `classify_attractor` returns
+`-1` for non-success states (pendulum: top equilibria; humanoid: everything not
+success). The other three systems already return `-1` only for a genuine
+out-of-bounds failure set and `0` for the unresolved region, so they need no
+change. The `partial_trajs` package therefore adds two thin subclasses that carry
+**no criteria logic** — they call the parent and remap `-1 → 0`:
+
+```python
+class PartialTrajPendulumSystem(PendulumSystem):
+    def classify_attractor(self, state, radius=...):
+        labels = super().classify_attractor(state, radius)
+        labels[labels == -1] = 0     # no failure set -> unresolved
+        return labels
+# (same pattern for HumanoidStandUpReachSystem)
+```
+
+Cartpole / quad2D / quad3D use their base class directly in the verifier.
+
+**Reevaluation impact:** the base-class edits change `classify_attractor` for
+quad2D / quad3D / humanoid, so existing ROA results for those three systems that
+were scored via `classify_attractor` will shift and need re-running. Pendulum and
+cartpole are unaffected.
+
+**Legacy cleanup (done):** the obsolete `humanoid.py` FM variant (its
+`HumanoidSystem`, `flow_matching/humanoid/`, `humanoid_endpoint_data.py`, and the
+`train_humanoid` / `system/humanoid` / archived configs — 9 paths total) was
+deleted; it was superseded by `humanoid_standup_reach` and had no active
+consumers.
 
 ## 3. Architecture
 
 New sibling package mirroring `flow_matching/` + `adaptive_v2/`. Dynamics model
 is a pluggable backend behind a shared verifier; all manifold/orientation logic
-is delegated to `systems/`.
+is delegated to `systems/`. Success/failure resolution uses `classify_attractor`
+on the base systems, with the two `partial_trajs` relabel-subclasses (§2b) for
+pendulum and humanoid.
 
 ```
 adaptive_roa/partial_trajs/
@@ -181,9 +232,12 @@ rather than duplication.
 
 `Verifier.rollout(x0, K)`: apply the dynamics model (`predict` deterministic /
 `sample` generative); after each of K steps check the **absorbing sets** via
-`system.classify_attractor` (success=+1, failure=-1); **early-stop** on either;
-if K elapse with neither -> **unresolved**. Thresholds come from `systems/`
-(authoritative), divergence from the description is logged.
+`system.classify_attractor` (success=+1, failure=-1, unresolved=0);
+**early-stop** on +1 or -1; if K elapse with only 0s -> **unresolved**. The
+`system` is the base class for cartpole/quad2D/quad3D and the §2b relabel
+subclass for pendulum/humanoid (so their non-success states are 0, never an
+absorbing failure). Criteria come from `classify_attractor` (single source of
+truth, §2b).
 
 ### Outcome aggregation
 

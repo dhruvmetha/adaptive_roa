@@ -4,6 +4,7 @@ Adaptive Dataset Builder for incremental training.
 Manages trajectory indices and builds endpoint datasets for flow matching training.
 """
 import random
+import warnings
 import numpy as np
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict
@@ -572,13 +573,29 @@ class AdaptiveDatasetBuilder:
             Dict mapping split name to file path
         """
         if self.candidate_mode == "intermediate":
+            if dataset_kind == "classification":
+                # build_train/val_dataset emit endpoint pairs (start,end), NOT
+                # (state,label) classification rows, so silently returning them
+                # here would hand malformed data to the classifier trainer.
+                raise NotImplementedError(
+                    "candidate_mode='intermediate' does not support "
+                    "dataset_kind='classification': the intermediate builders emit "
+                    "endpoint pairs (start,end), not (state,label) classification rows. "
+                    "Use dataset_kind='endpoint' (FM predictor), or candidate_mode='start' "
+                    "for the classifier predictor."
+                )
+            if self.test_ratio > 0:
+                # The intermediate test slice is not consumed by the full-ROA engine
+                # (which evaluates on the FPS test_set_file), so with test_ratio>0
+                # those pairs are excluded from training with nothing reading them.
+                warnings.warn(
+                    "candidate_mode='intermediate' with test_ratio>0: the intermediate "
+                    "test slice is unused by the full-ROA engine, so those pairs are "
+                    "silently dropped from training. Set test_ratio=0 for intermediate mode.",
+                    stacklevel=2,
+                )
             train_path = self.build_train_dataset()
             val_path = self.build_val_dataset()
-            if dataset_kind == "classification":
-                return {
-                    'train': train_path,
-                    'val': val_path,
-                }
             empty_traj_path = self._build_empty_val_dataset("val_trajectories.txt")
             return {
                 'train': train_path,

@@ -29,7 +29,29 @@ if not OmegaConf.has_resolver("shared_data_base"):
 from adaptive_roa.partial_trajs.systems import make_verifier_system
 from adaptive_roa.partial_trajs.data.datamodule import HorizonDataModule
 from adaptive_roa.partial_trajs.model.regressor import DynamicsRegressor
+from adaptive_roa.partial_trajs.model.generative import GenerativeDynamics
 from adaptive_roa.partial_trajs.eval.metrics import horizon_error_report
+
+
+def build_model(cfg: DictConfig, system):
+    """Build the dynamics backend selected by ``cfg.backend``."""
+    backend = str(cfg.get("backend", "deterministic"))
+    if backend == "deterministic":
+        return DynamicsRegressor(
+            system,
+            hidden_dims=list(cfg.hidden_dims),
+            lr=float(cfg.lr),
+            dropout=float(cfg.get("dropout", 0.0)),
+        )
+    if backend == "generative":
+        return GenerativeDynamics(
+            system,
+            hidden_dims=list(cfg.hidden_dims),
+            latent_dim=int(cfg.get("latent_dim", 1)),
+            num_integration_steps=int(cfg.get("num_integration_steps", 50)),
+            lr=float(cfg.lr),
+        )
+    raise ValueError(f"unknown backend {backend!r} (expected deterministic|generative)")
 
 
 @torch.no_grad()
@@ -64,12 +86,7 @@ def run(cfg: DictConfig):
         val_fraction=float(cfg.val_fraction),
         seed=int(cfg.get("seed", 0)),
     )
-    model = DynamicsRegressor(
-        system,
-        hidden_dims=list(cfg.hidden_dims),
-        lr=float(cfg.lr),
-        dropout=float(cfg.get("dropout", 0.0)),
-    )
+    model = build_model(cfg, system)
     trainer = pl.Trainer(
         max_epochs=int(cfg.max_epochs),
         accelerator=str(cfg.get("accelerator", "cpu")),

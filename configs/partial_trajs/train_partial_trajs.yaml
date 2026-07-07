@@ -11,6 +11,11 @@ system: pendulum
 dataset_dir: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}/partial_deterministic/pendulum_lqr/pendulum_lqr_50k_T25
 system_dataset_dir: null  # bounds source; null -> env-default deterministic dir
 
+# Dynamics backend: deterministic (regressor) | generative (conditional flow matching)
+backend: deterministic
+latent_dim: 1              # generative only
+num_integration_steps: 50  # generative only
+
 hidden_dims: [256, 512, 256]
 batch_size: 1024
 val_fraction: 0.2

@@ -279,15 +279,27 @@ strategy. No design change required to add C later.
 
 ## 7. Phasing (each phase independently runnable/verifiable)
 
-1. **Data + deterministic model + #1.** `horizon_dataset.py`, `description.py`,
-   `regressor.py`; train on **pendulum**; verify per-horizon T-step error (#1)
-   on the val split.
-2. **Verifier + ROA eval + #2.** `rollout.py`, `verifier/evaluate_roa.py` on
-   pendulum; ROA metrics + rollout final-state error; compare to baselines.
-3. **Generalize** to cartpole / quad2D / quad3D / humanoid (all system-agnostic;
-   humanoid is the only out-of-sample eval).
-4. **Generative backend** (`generative.py`) reusing the FM stack.
-5. *(later)* **Adaptive loop C** via the uncertainty seam.
+1. **[DONE]** **Data + deterministic model + #1.** `data/description.py`,
+   `data/horizon_dataset.py`, `data/datamodule.py`, `model/regressor.py`,
+   `train.py`; trains on **pendulum**, reports per-horizon T-step error (#1)
+   on val (stratified by freeze/motion). Verified via CLI + smoke test.
+2. **[DONE]** **Verifier + ROA eval + #2.** `verifier/rollout.py` (absorbing
+   resolution, deterministic + probabilistic), `verifier/evaluate_roa.py`
+   (ROA scores + rollout final-state error #2). Relabel-subclasses
+   (`systems/`) for pendulum/humanoid unresolved semantics.
+3. **[DONE — code]** **Generalize** to cartpole / quad2D / quad3D / humanoid:
+   no new code needed — `make_verifier_system` factory, description parser, and
+   dataset are all system-agnostic (`jump_mag` vs `abs_dtheta`, per-system
+   widths/dims). Remaining: per-system training/eval *runs* (config overrides).
+4. **[DONE]** **Generative backend** (`model/generative.py`): conditional
+   rectified-flow reusing `SimpleFlowMLP`; selected via `backend=generative`.
+   Verified via CLI. Full validation belongs with the noisy regime.
+5. *(later)* **Adaptive loop C** via the uncertainty seam (not built).
+
+**Test coverage:** 38 tests under `tests/partial_trajs/` (description, dataset
+split/lookup, datamodule, regressor, generative, rollout, metrics, evaluate,
+relabel-subclasses, backend selection, train smoke); full repo suite green
+(109 passed, 20 skipped).
 
 **First system:** pendulum — richest metadata, cheapest to iterate, reference
 dataset.

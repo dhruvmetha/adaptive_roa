@@ -195,15 +195,16 @@ class Quadrotor3DSystem(DynamicalSystem):
 
         return torch.cat([pos, euler, vel], dim=1)
 
-    def is_in_attractor(self, state, radius: float = 0.05):
+    def is_in_attractor(self, state, radius: float = 0.15):
         """
         Check if states are within attractor basin (hovering at goal)
 
-        Converts state to Euler representation and computes L2 distance from goal.
+        Computes L2 distance from the goal in the raw 13-D quaternion state space
+        (states are assumed canonicalized with qw >= 0).
 
         Args:
             state: States [B, 13] - numpy array or torch tensor
-            radius: Attractor radius (Euclidean distance threshold in Euler space)
+            radius: Attractor radius (Euclidean distance threshold in 13-D state space)
 
         Returns:
             Boolean tensor [B] indicating attractor membership
@@ -214,14 +215,9 @@ class Quadrotor3DSystem(DynamicalSystem):
         if state.dim() == 1:
             state = state.unsqueeze(0)
 
-        # Convert to Euler representation
-        state_euler = self.state_to_euler(state)
-
-        # Goal in Euler representation
-        goal_euler = torch.tensor(self.attractor_euler(), device=state.device, dtype=state.dtype)
-
-        # Compute L2 distance in Euler space
-        dist = torch.norm(state_euler - goal_euler.unsqueeze(0), dim=1)
+        # L2 distance in the raw 13-D quaternion state space
+        goal = torch.tensor(self.attractors()[0], device=state.device, dtype=state.dtype)
+        dist = torch.norm(state - goal.unsqueeze(0), dim=1)
 
         result = dist < radius
 
@@ -230,23 +226,23 @@ class Quadrotor3DSystem(DynamicalSystem):
 
         return result
 
-    def classify_attractor(self, state: torch.Tensor, radius: float = 0.05) -> torch.Tensor:
+    def classify_attractor(self, state: torch.Tensor, radius: float = 0.15) -> torch.Tensor:
         """
         Classify Quadrotor 3D states into three categories based on termination conditions
 
         Three-way classification:
-        1. SUCCESS (label=1): Within radius of goal state (in Euler space)
+        1. SUCCESS (label=1): Within radius of goal state (raw 13-D quaternion state)
         2. FAILURE (label=-1): Exceeded termination thresholds (system failed)
         3. SEPARATRIX (label=0): Between attractor and failure (uncertain region)
 
-        Termination thresholds from dataset_description.json:
-        - Position: |x| > 1.8, |y| > 1.8, z < 0.1 or z > 3.0
-        - Linear velocity: |ẋ| > 3.0, |ẏ| > 3.0, |ż| > 3.0
-        - Angular velocity: |p| > 24.0, |q| > 24.0, |r| > 24.0
+        Termination thresholds:
+        - Position: |x| > 1.7, |y| > 1.7, z < 0.2 or z > 2.9
+        - Linear velocity: |ẋ| > 2.9, |ẏ| > 2.9, |ż| > 2.9
+        - Angular velocity: |p| > 23.5, |q| > 23.5, |r| > 23.5
 
         Args:
             state: States [B, 13] as (x, y, z, qw, qx, qy, qz, ẋ, ẏ, ż, p, q, r)
-            radius: Attractor radius (default 0.05 from dataset)
+            radius: Attractor radius (default 0.15, Euclidean in 13-D state space)
 
         Returns:
             Integer tensor [B] with:
@@ -260,22 +256,17 @@ class Quadrotor3DSystem(DynamicalSystem):
         if state.dim() == 1:
             state = state.unsqueeze(0)
 
-        # Convert to Euler representation for attractor check
-        state_euler = self.state_to_euler(state)
-
-        # Goal in Euler representation
-        goal_euler = torch.tensor(self.attractor_euler(), device=state.device, dtype=state.dtype)
-
-        # Compute L2 distance in Euler space
-        dist = torch.norm(state_euler - goal_euler.unsqueeze(0), dim=1)
+        # L2 distance in the raw 13-D quaternion state space (qw >= 0 canonicalized)
+        goal = torch.tensor(self.attractors()[0], device=state.device, dtype=state.dtype)
+        dist = torch.norm(state - goal.unsqueeze(0), dim=1)
         in_attractor = dist < radius
 
         # Check termination thresholds (with small margin for overshoot)
-        # Position: |x| > 1.8, |y| > 1.8, z < 0.1 or z > 3.0
-        x_failed = torch.abs(state[:, 0]) > 1.75
-        y_failed = torch.abs(state[:, 1]) > 1.75
-        z_low_failed = state[:, 2] < 0.15
-        z_high_failed = state[:, 2] > 2.95
+        # Position: |x| > 1.7, |y| > 1.7, z < 0.2 or z > 2.9
+        x_failed = torch.abs(state[:, 0]) > 1.7
+        y_failed = torch.abs(state[:, 1]) > 1.7
+        z_low_failed = state[:, 2] < 0.2
+        z_high_failed = state[:, 2] > 2.9
 
         # Linear velocity: |ẋ| > 3.0, |ẏ| > 3.0, |ż| > 3.0
         xdot_failed = torch.abs(state[:, 7]) > 2.9

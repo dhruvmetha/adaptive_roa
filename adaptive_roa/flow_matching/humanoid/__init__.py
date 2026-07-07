@@ -1,1 +1,0 @@
-"""Humanoid Flow Matching Variants"""

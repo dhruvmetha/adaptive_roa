@@ -220,12 +220,12 @@ class Quadrotor2DSystem(DynamicalSystem):
         in_attractor = dist < radius
 
         # FAILURE: Exceeded termination thresholds (with small margin for overshoot)
-        x_failed = torch.abs(x) > 0.99
-        z_low_failed = z < 0.11
-        z_high_failed = z > 1.49
-        x_dot_failed = torch.abs(x_dot) > 0.99
-        z_dot_failed = torch.abs(z_dot) > 0.99
-        theta_dot_failed = torch.abs(theta_dot) > 7.9
+        x_failed = torch.abs(x) > 0.9
+        z_low_failed = z < 0.2
+        z_high_failed = z > 1.4
+        x_dot_failed = torch.abs(x_dot) > 0.9
+        z_dot_failed = torch.abs(z_dot) > 0.9
+        theta_dot_failed = torch.abs(theta_dot) > 7.5
         # theta has no termination threshold
 
         exceeded_thresholds = (x_failed | z_low_failed | z_high_failed |

@@ -1,8 +1,10 @@
 defaults:
   - system: pendulum
-  - predictor: generative
+  # threshold/calibration must precede predictor so a predictor group (e.g.
+  # classifier) can override their decision_rule; a later group wins.
   - threshold: conformal_threshold
   - calibration: conformal_calibration
+  - predictor: generative
   - acquisition: direct
   - eval: full_roa
   - _self_

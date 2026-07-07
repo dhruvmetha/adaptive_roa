@@ -27,6 +27,12 @@ eval_every: 1
 
 num_workers: 4
 
+# Default eval-row cap (null = load all). Lives here (not in eval/full_roa.yaml)
+# because the eval group loads after the system group; per-system overrides
+# (e.g. humanoid_standup_reach sets eval.max_eval_rows: 50000) must win.
+eval:
+  max_eval_rows: null
+
 flow_matching:
   latent_dim: 0
   num_integration_steps: 100

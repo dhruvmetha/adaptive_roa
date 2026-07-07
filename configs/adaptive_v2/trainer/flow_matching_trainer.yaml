@@ -1,5 +1,0 @@
-# @package _global_
-
-adaptive_v2:
-  trainer:
-    _target_: adaptive_roa.adaptive_v2.trainers.flow_matching_trainer.FlowMatchingTrainer

@@ -7,7 +7,9 @@ predictor:
   batch_size: 1024
   val_batch_size: 2048
   flow_matching:
-    latent_dim: 0
+    # Single source of truth: the system-level top-level flow_matching.latent_dim,
+    # which model/family/unet.yaml also reads. Keeps UNet + flow-matcher in sync.
+    latent_dim: ${flow_matching.latent_dim}
     num_integration_steps: 100
     mae_val_frequency: 10
     use_loss_weights: false

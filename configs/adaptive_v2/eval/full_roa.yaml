@@ -6,6 +6,9 @@ eval:
   attractor_radius: ${attractor_radius}
   num_mc_samples_eval: 100
   decision_rule: ${decision_rule}
+  # max_eval_rows default lives in system/_base.yaml (eval.max_eval_rows) so that
+  # per-system overrides survive: the eval group loads after the system group,
+  # so setting it here would clobber a system's override.
   refine_invalids: false
   refine_t_min: 0.7
   refine_t_max: 0.9

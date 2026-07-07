@@ -3,6 +3,7 @@
 defaults:
   - _base
   - /model/system_dims: quadrotor2d
+  - /prediction_mode: global
   - _self_
 
 name: adaptive_quadrotor2d

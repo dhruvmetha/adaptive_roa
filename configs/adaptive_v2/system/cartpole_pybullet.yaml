@@ -3,6 +3,7 @@
 defaults:
   - _base
   - /model/system_dims: cartpole_pybullet
+  - /prediction_mode: global
   - _self_
 
 name: adaptive_cartpole_pybullet

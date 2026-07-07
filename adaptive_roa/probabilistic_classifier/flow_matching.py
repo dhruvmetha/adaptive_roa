@@ -87,8 +87,12 @@ class FMProbabilisticClassifier(ProbabilisticClassifier):
         cache = load_mc_cache(str(path))
         # Row-alignment guard: a cache that does not match the export's own states
         # must not be trusted (it would silently misalign query_state with probs).
-        # Fall through to live recompute instead.
-        if cache.start_states.shape[0] != len(states):
+        # Check both the row count AND the actual state values (a same-length but
+        # reordered/different cache would otherwise pass). Fall through to live
+        # recompute on any mismatch.
+        cached = np.asarray(cache.start_states, dtype=np.float32)
+        query = np.asarray(states, dtype=np.float32)
+        if cached.shape != query.shape or not np.allclose(cached, query, atol=1e-5, rtol=0.0):
             return None
         # Reclassify cached endpoints at the current eval radius (codebase standard:
         # full_roa.py / reevaluate.py do the same before using a loaded cache).

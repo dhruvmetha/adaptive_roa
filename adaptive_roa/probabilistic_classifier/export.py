@@ -48,16 +48,24 @@ def epoch_num(d):
 
 
 def load_split_states(run_dir, split, predictor_type, system, cfg):
-    """Return (query_state[N,D], gt_label[N] or None).
+    """Return (query_state[N,D], gt_label[N] or None, end_state[N,D] or None).
 
-    gt_label is None for FM train/val (derived from endpoints + radius later).
+    gt_label is None whenever it must be derived from endpoints at the eval
+    radius (all FM splits). In that case end_state carries the endpoints for
+    cal/test; for FM train/val end_state is None and the endpoints are re-read
+    from the run dataset file later. For the classifier predictor the ground
+    truth is radius-independent, so gt_label is returned directly.
     """
     sd = int(system.state_dim)
     if split in ("cal", "test"):
         key = "cal_set_file" if split == "cal" else "test_set_file"
         path = str(cfg["data_source"][key])
-        states, _end, labels = load_eval_states(path)
-        return states, labels
+        states, end, labels = load_eval_states(path)
+        if predictor_type == "classifier":
+            return states, labels, None
+        # FM: reclassify endpoints at the eval radius so cal/test share the same
+        # radius-dependent basis as train/val (and as the MC probabilities).
+        return states, None, end.astype(np.float32)
     # train / val come from the run-level dataset files
     kind = _DATASET_KIND[predictor_type]
     path = str(Path(run_dir) / "datasets" / f"{split}_{kind}_dataset.txt")
@@ -65,9 +73,16 @@ def load_split_states(run_dir, split, predictor_type, system, cfg):
     states = data[:, :sd].astype(np.float32)
     if predictor_type == "classifier":
         labels = np.where(data[:, -1] > 0.5, 1, -1).astype(np.int64)
-        return states, labels
+        return states, labels, None
     # FM: derive labels from endpoint columns once radius is known (caller fills)
-    return states, None
+    return states, None, None
+
+
+def _labels_from_endpoints(end, system, radius):
+    """Classify endpoints at the eval radius -> {1: success, -1: failure, 0: invalid}."""
+    return system.classify_attractor(
+        torch.as_tensor(np.asarray(end), dtype=torch.float32), radius=radius
+    ).cpu().numpy().astype(np.int64)
 
 
 def _fm_labels_from_endpoints(run_dir, split, system, radius):
@@ -75,9 +90,7 @@ def _fm_labels_from_endpoints(run_dir, split, system, radius):
     kind = _DATASET_KIND["generative"]
     path = str(Path(run_dir) / "datasets" / f"{split}_{kind}_dataset.txt")
     end = _read_ws(path)[:, sd:2 * sd].astype(np.float32)
-    return system.classify_attractor(
-        torch.as_tensor(end, dtype=torch.float32), radius=radius
-    ).cpu().numpy().astype(np.int64)
+    return _labels_from_endpoints(end, system, radius)
 
 
 def write_split(out_dir, split, query_state, gt_label, probs, native_probs):
@@ -95,11 +108,22 @@ def write_split(out_dir, split, query_state, gt_label, probs, native_probs):
 def export_run(run_dir, out_dir, device="cuda", epochs=None):
     device = device if (device == "cpu" or torch.cuda.is_available()) else "cpu"
     cfg = load_cfg(run_dir)
-    predictor = cfg.get("predictor", {})
+    predictor = cfg.get("predictor", None)
+    if predictor is None:
+        raise ValueError(
+            f"run config at {run_dir} has no 'predictor' entry; refusing to guess "
+            f"the export type (classifier vs generative)."
+        )
     if isinstance(predictor, str):
         predictor_type = predictor
     else:
-        predictor_type = str(predictor.get("type", "generative"))
+        predictor_type = predictor.get("type", None)
+        if predictor_type is None:
+            raise ValueError(
+                f"run config predictor block at {run_dir} has no 'type'; "
+                f"cannot determine the export type."
+            )
+        predictor_type = str(predictor_type)
     system = resolve_system(cfg)
     pc_class = get_probabilistic_classifier_class(predictor_type)
     native = pc_class.native_probs
@@ -107,11 +131,13 @@ def export_run(run_dir, out_dir, device="cuda", epochs=None):
     splits = ["train", "val", "cal", "test"]
     split_states = {}
     split_labels = {}
+    split_ends = {}
     for split in splits:
         try:
-            states, labels = load_split_states(run_dir, split, predictor_type, system, cfg)
+            states, labels, ends = load_split_states(run_dir, split, predictor_type, system, cfg)
             split_states[split] = states
             split_labels[split] = labels
+            split_ends[split] = ends
         except (FileNotFoundError, KeyError, OSError) as e:
             print(f"[skip split {split}] {type(e).__name__}: {e}", flush=True)
 
@@ -134,10 +160,14 @@ def export_run(run_dir, out_dir, device="cuda", epochs=None):
             try:
                 states = split_states[split]
                 labels = split_labels[split]
-                if labels is None:  # FM train/val
-                    labels = _fm_labels_from_endpoints(
-                        run_dir, split, system, pc.attractor_radius
-                    )
+                if labels is None:  # FM: derive at the current eval radius
+                    ends = split_ends.get(split)
+                    if ends is not None:  # cal/test endpoints already in hand
+                        labels = _labels_from_endpoints(ends, system, pc.attractor_radius)
+                    else:  # train/val: endpoints live in the run dataset file
+                        labels = _fm_labels_from_endpoints(
+                            run_dir, split, system, pc.attractor_radius
+                        )
                 probs = pc.predict_cached(run_dir, ep, split, states)
                 if probs is None:
                     probs = pc.predict(states)
@@ -154,7 +184,14 @@ def export_run(run_dir, out_dir, device="cuda", epochs=None):
         "run_dir": str(run_dir),
         "predictor": predictor_type,
         "native_probs": list(native),
-        "gt_label_convention": {"1": "success", "-1": "failure", "0": "invalid (FM MC only)"},
+        "gt_label_convention": (
+            {"1": "success", "-1": "failure",
+             "basis": "classifier binary ground truth (radius-independent)"}
+            if predictor_type == "classifier"
+            else {"1": "success", "-1": "failure", "0": "invalid/separatrix",
+                  "basis": "system.classify_attractor(endpoint, eval radius) for ALL splits "
+                           "(train/val/cal/test), matching the MC probability basis"}
+        ),
         "prob_definitions": (
             "classifier: p_success = sigmoid(logit)"
             if predictor_type == "classifier"

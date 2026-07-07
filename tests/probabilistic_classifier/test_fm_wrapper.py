@@ -117,3 +117,27 @@ def test_predict_cached_length_mismatch_returns_none(tmp_path):
     # Pass N+1 states — should not match cache rows
     result = pc.predict_cached(str(tmp_path), 1, "val", np.zeros((N + 1, state_dim)))
     assert result is None
+
+
+def test_predict_cached_state_value_mismatch_returns_none(tmp_path):
+    """Same row count but different state VALUES must fall through (not misalign)."""
+    N, state_dim, K = 3, 2, 4
+    cache = MCCache(
+        start_states=np.zeros((N, state_dim), dtype=np.float32),
+        mc_endpoints=np.zeros((N, K, state_dim), dtype=np.float32),
+        mc_labels=np.zeros((N, K), dtype=np.int8),
+        attractor_radius=0.2,
+        num_mc_samples=K,
+    )
+    cache_dir = tmp_path / "mc_cache"
+    cache_dir.mkdir()
+    save_mc_cache(cache, str(cache_dir / "epoch_002_val.npz"))
+
+    pc = FMProbabilisticClassifier(
+        flow_matcher=None, system=None, device="cpu",
+        attractor_radius=0.2, num_mc_samples=K,
+    )
+    # Query states have the same shape as the cache but different values -> None
+    # (system=None, so reaching reclassify would raise; returning None proves the guard).
+    result = pc.predict_cached(str(tmp_path), 2, "val", np.ones((N, state_dim), dtype=np.float32))
+    assert result is None

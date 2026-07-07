@@ -1104,7 +1104,6 @@ class FullROAEvaluator:
         self.verbose = bool(cfg.verbose)
         self.system = system
         self.device = device
-        self.cfg = cfg  # kept temporarily; removed in Task 8 cleanup
 
     def evaluate_epoch(
         self,
@@ -1121,7 +1120,7 @@ class FullROAEvaluator:
                 delta=threshold_state.delta_star,
                 attractor_radius=epoch_context.get("attractor_radius", self.attractor_radius),
                 device=self.device,
-                batch_size=epoch_context.get("batch_size", self.cfg.get("val_batch_size", 8192)),
+                batch_size=epoch_context.get("batch_size", 8192),
                 output_dir=epoch_context.get("output_dir"),
                 verbose=epoch_context.get("verbose", True),
                 invalid_threshold=epoch_context.get("invalid_threshold", None),
@@ -1132,7 +1131,7 @@ class FullROAEvaluator:
             system=self.system,
             eval_states_file=epoch_context["eval_states_file"],
             num_mc_samples=epoch_context.get("num_mc_samples", self.num_mc_samples_eval),
-            batch_size=epoch_context.get("batch_size", self.cfg.get("val_batch_size", 2048)),
+            batch_size=epoch_context.get("batch_size", 2048),
             lambda_star=threshold_state.lambda_star,
             delta=threshold_state.delta_star,
             q_hat=threshold_state.q_hat_eval,

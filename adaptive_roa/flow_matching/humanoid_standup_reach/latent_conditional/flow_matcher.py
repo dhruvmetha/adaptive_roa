@@ -17,7 +17,8 @@ SPHERE_START, SPHERE_END = 34, 37
 _DIM_NAMES = (
     [f"joint_{i}" for i in range(21)] + ["head_height"]
     + [f"extremity_{i}" for i in range(12)]
-    + ["torso_vx", "torso_vy", "torso_vz"]
+    # dims 34:37 are the S² torso-vertical orientation unit vector, not velocities.
+    + ["torso_vertical_x", "torso_vertical_y", "torso_vertical_z"]
     + ["com_vx", "com_vy", "com_vz"]
     + [f"vel_{i}" for i in range(27)]
 )
@@ -140,7 +141,19 @@ class HumanoidStandUpReachLatentConditionalFlowMatcher(BaseFlowMatcher):
                     [p for p in checkpoint_dir.glob("*.ckpt") if p.name != "last.ckpt"]
             if not ckpts:
                 raise FileNotFoundError(f"No .ckpt files found in {checkpoint_dir}")
-            checkpoint_path = max(ckpts, key=lambda p: p.stat().st_mtime)
+            # Prefer the checkpoint with the lowest val_loss encoded in the filename
+            # (e.g. "best-05-0.1234.ckpt" or "epoch=..-val_loss=0.12.ckpt"); only fall
+            # back to newest-mtime when no filename carries a parseable val_loss.
+            import re as _re
+
+            def _val_loss_key(p):
+                floats = _re.findall(r"[-=](\d+\.\d+)", p.stem)
+                return float(floats[-1]) if floats else float("inf")
+
+            if any(_val_loss_key(p) != float("inf") for p in ckpts):
+                checkpoint_path = min(ckpts, key=_val_loss_key)
+            else:
+                checkpoint_path = max(ckpts, key=lambda p: p.stat().st_mtime)
         if not checkpoint_path.exists():
             raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 

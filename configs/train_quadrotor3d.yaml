@@ -42,14 +42,14 @@ model:
 data:
   _target_: adaptive_roa.data.quadrotor3d_endpoint_data.Quadrotor3DEndpointDataModule
   # Shuffled indices mode (uses existing train_test_splits)
-  train_indices_file: ${shared_data}/quadrotor3D_lqr/train_test_splits/shuffled_indices_0.txt
-  val_indices_file: ${shared_data}/quadrotor3D_lqr/train_test_splits/shuffled_indices_1.txt
-  test_indices_file: ${shared_data}/quadrotor3D_lqr/train_test_splits/shuffled_indices_2.txt
-  trajectories_dir: ${shared_data}/quadrotor3D_lqr/trajectories
+  train_indices_file: ${shared_data}/deterministic/quadrotor3D_lqr/train_test_splits/shuffled_indices_0.txt
+  val_indices_file: ${shared_data}/deterministic/quadrotor3D_lqr/train_test_splits/shuffled_indices_1.txt
+  test_indices_file: ${shared_data}/deterministic/quadrotor3D_lqr/train_test_splits/shuffled_indices_2.txt
+  trajectories_dir: ${shared_data}/deterministic/quadrotor3D_lqr/trajectories
   batch_size: ${batch_size}
   val_batch_size: ${val_batch_size}
   num_workers: ${num_workers}
-  dataset_dir: ${shared_data}/quadrotor3D_lqr
+  dataset_dir: ${shared_data}/deterministic/quadrotor3D_lqr
 
 # Optimizer: AdamW
 optimizer:

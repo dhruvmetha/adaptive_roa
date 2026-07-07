@@ -14,4 +14,4 @@ _target_: adaptive_roa.systems.cartpole.CartPoleSystem
 
 # Dataset directory containing dataset_description.json with bounds
 # Default: use data_dir resolver if available, else hardcoded fallback
-dataset_dir: ${data_dir:/common/users/shared/pracsys/genMoPlan/data_trajectories}/cartpole_pybullet
+dataset_dir: ${data_dir:/common/users/shared/pracsys/genMoPlan/data_trajectories}/deterministic/cartpole_pybullet

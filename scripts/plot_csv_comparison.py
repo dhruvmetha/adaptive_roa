@@ -33,7 +33,7 @@ import pandas as pd
 
 # ── Data paths ───────────────────────────────────────────────────────────────
 _GT_DIR = Path(
-    "/common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet"
+    "/common/users/shared/pracsys/genMoPlan/data_trajectories/deterministic/cartpole_pybullet"
 )
 _DR_DIR = Path(
     "/common/users/shared/pracsys/adaptive_roa_experiments/dhruv"

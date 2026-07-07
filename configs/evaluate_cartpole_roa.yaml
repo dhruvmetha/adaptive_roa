@@ -20,7 +20,7 @@ checkpoint:
 
 # Data: Eval states (start, end, label)
 data:
-  file: ${data_dir}/cartpole_pybullet/eval_states.txt
+  file: ${data_dir}/deterministic/cartpole_pybullet/eval_states.txt
   format: "x_s,θ_s,ẋ_s,θ̇_s,x_e,θ_e,ẋ_e,θ̇_e,label"  # Comma-separated format
 
 # Evaluation settings

@@ -1,2 +1,2 @@
 _target_: adaptive_roa.systems.quadrotor2d.Quadrotor2DSystem
-dataset_dir: ${data_dir}/quadrotor2D_rl
+dataset_dir: ${data_dir}/deterministic/quadrotor2D_rl

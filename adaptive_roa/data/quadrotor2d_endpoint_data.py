@@ -8,7 +8,7 @@ from tqdm import tqdm
 import os
 import lightning.pytorch as pl
 import random
-from adaptive_roa.utils.env_config import get_data_dir
+from adaptive_roa.utils.env_config import get_data_dir, get_noise_regime
 
 
 class Quadrotor2DEndpointDataset(Dataset):
@@ -44,7 +44,7 @@ class Quadrotor2DEndpointDataset(Dataset):
             max_samples: Maximum number of samples to load (for limiting dataset size).
         """
         if dataset_dir is None:
-            dataset_dir = f"{get_data_dir()}/quadrotor2D_rl"
+            dataset_dir = f"{get_data_dir()}/{get_noise_regime()}/quadrotor2D_rl"
         self.dataset_dir = Path(dataset_dir)
 
         if data_file is not None:
@@ -201,7 +201,7 @@ class Quadrotor2DEndpointDataModule(pl.LightningDataModule):
             max_val_samples: Limit validation samples
         """
         if dataset_dir is None:
-            dataset_dir = f"{get_data_dir()}/quadrotor2D_rl"
+            dataset_dir = f"{get_data_dir()}/{get_noise_regime()}/quadrotor2D_rl"
         super().__init__()
 
         self.dataset_dir = dataset_dir

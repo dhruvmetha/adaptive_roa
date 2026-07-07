@@ -15,8 +15,11 @@ attractor_radius: 0.2
 threshold:
   optimize_mode: joint
 
+dataset_name: cartpole_pybullet
+dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
+
 data_source:
-  base_dir: ${data_dir}/cartpole_pybullet
+  base_dir: ${dataset_root}
   trajectories_dir: ${data_source.base_dir}/trajectories
   train_test_splits_dir: ${data_source.base_dir}/train_test_splits
   shuffled_indices_file: ${data_source.train_test_splits_dir}/shuffled_indices_${training_index}.txt
@@ -33,7 +36,7 @@ flow_matching:
 
 system:
   _target_: adaptive_roa.systems.cartpole.CartPoleSystem
-  dataset_dir: ${data_dir}/cartpole_pybullet
+  dataset_dir: ${dataset_root}
 
 flow_matcher:
   _target_: adaptive_roa.flow_matching.cartpole.latent_conditional.flow_matcher.CartPoleLatentConditionalFlowMatcher

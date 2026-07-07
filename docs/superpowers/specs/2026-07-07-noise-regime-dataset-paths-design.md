@@ -60,7 +60,9 @@ with `noise_regime` defaulting to `deterministic`.
 
 ### 1. Python choke point — `adaptive_roa/utils/env_config.py`
 
-- Add `get_noise_regime()`: returns env var `NOISE_REGIME`, default `"deterministic"`.
+- Add `get_noise_regime()`: prefers the `NOISE_REGIME` **OS env var** (via
+  `os.environ`, since `get_env_config()` only reads the `.env` file), then the `.env`
+  value, else default `"deterministic"`.
 - Leave `get_data_dir()` and `get_shared_data_base()` returning the **raw** base
   (regime is NOT baked in).
 - Update each hardcoded fallback default (the `dataset_dir=None` branches) in:
@@ -88,17 +90,24 @@ with `noise_regime` defaulting to `deterministic`.
 
 ### 3. Non-adaptive pipelines
 
-Insert the `${noise_regime}` segment at each entry point that builds dataset paths,
-adding a local `noise_regime: deterministic` where one is not already in scope:
+The legacy `train_*` / `evaluate_*` pipelines pull shared, differently-packaged group
+configs (`configs/system/*.yaml` are `@package _global_.system`; `configs/data/*.yaml`
+have their own package) across multiple primary-config roots, and register their
+resolvers at ~9 scattered sites. Threading a switchable `noise_regime` node/resolver
+through all of them is fragile, and these pipelines have **no planned noisy variant**
+(noisy needs a new npz datamodule regardless). So insert a **literal `deterministic/`
+segment** here — the switchable seam lives in the two places that need it (adaptive_v2
+config var + Python `NOISE_REGIME` env). Files touched:
 
 - `configs/system/*.yaml` (cartpole, humanoid_standup_reach, mountain_car,
   pendulum_cartesian, pendulum, quadrotor2d, quadrotor3d)
-- `configs/data/*.yaml` (cartpole, humanoid, pendulum_cartesian, quadrotor3d endpoint data)
-- `configs/train_*.yaml`, `configs/evaluate_*.yaml`
-- `configs/adaptive_v2/prediction_mode/local.yaml` (comment/paths if any)
+- `configs/data/*.yaml` (cartpole, pendulum_cartesian, quadrotor3d endpoint data)
+- `configs/train_quadrotor3d.yaml`, `configs/train_humanoid_standup_reach.yaml`,
+  `configs/evaluate_cartpole_roa.yaml`, `configs/evaluate_humanoid_standup_reach_roa.yaml`
+- `configs/build_shuffled_endpoint_dataset.yaml` (the initial-dataset builder)
 
-These use a mix of `${data_dir:}`, `${shared_data_base:...}`, and `${shared_data}`
-prefixes; insert the regime segment after whichever prefix is used.
+The insertion anchors on the `}/‹dataset_name›` base boundary, so `${arcmg_datasets}/...`
+paths (a different data root) are untouched.
 
 ### 4. Scripts — `scripts/`
 

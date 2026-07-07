@@ -4,7 +4,7 @@ from adaptive_roa.systems.quadrotor3d import Quadrotor3DSystem
 from adaptive_roa.adaptive_v2.eval.full_roa import evaluate_full_roa_fast
 
 CKPT="/common/users/shared/pracsys/adaptive_roa_experiments/adaptive_quadrotor3d/outputs/training_index_0_d2_ratio_0_warm_start_False_manifold_False_threshold_mode_dynamic_adapt_iter_40_alpha_0.1_sampling_mode_ranked/2026-01-29_08-08-36/epoch_038/checkpoints/best-832-0.0129.ckpt"
-TEST="/common/users/shared/pracsys/genMoPlan/data_trajectories/quadrotor3D_lqr/test_set.txt"
+TEST="/common/users/shared/pracsys/genMoPlan/data_trajectories/deterministic/quadrotor3D_lqr/test_set.txt"
 dev="cuda:0"
 print("loading checkpoint...", flush=True)
 t0=time.time()

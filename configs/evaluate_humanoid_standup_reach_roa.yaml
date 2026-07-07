@@ -15,8 +15,8 @@ checkpoint:
 
 data:
   # FPS test set is primary; start_states alternative is commented.
-  file: ${data_dir}/humanoid_get_up_medium/train_test_splits/test_set_fps.txt
-  # file: ${data_dir}/humanoid_get_up_medium/train_test_splits/test_set_start_states.txt
+  file: ${data_dir}/deterministic/humanoid_get_up_medium/train_test_splits/test_set_fps.txt
+  # file: ${data_dir}/deterministic/humanoid_get_up_medium/train_test_splits/test_set_start_states.txt
   format: "67D start_state, 67D final_state, label"  # comma-separated, 135 cols
 
 evaluation:

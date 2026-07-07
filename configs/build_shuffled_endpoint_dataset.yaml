@@ -20,8 +20,8 @@ defaults:
   - system: pendulum_cartesian
 
 # Trajectory data paths
-data_dirs: ${data_dir}/pendulum_cartesian_50k/trajectories
-shuffled_idxs_file: ${data_dir}/pendulum_cartesian_50k/shuffled_indices.txt
+data_dirs: ${data_dir}/deterministic/pendulum_cartesian_50k/trajectories
+shuffled_idxs_file: ${data_dir}/deterministic/pendulum_cartesian_50k/shuffled_indices.txt
 dest_dir: ${arcmg_datasets}/pendulum_cartesian/incremental_endpoint_dataset
 
 # Processing range (slicing shuffled_indices.txt)

@@ -5,10 +5,10 @@ _target_: adaptive_roa.data.quadrotor3d_endpoint_data.Quadrotor3DEndpointDataMod
 
 # Shuffled indices mode (uses existing train_test_splits)
 # Each shuffled_indices_*.txt contains 20k trajectory filenames
-train_indices_file: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}/quadrotor3D_lqr/train_test_splits/shuffled_indices_0.txt
-val_indices_file: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}/quadrotor3D_lqr/train_test_splits/shuffled_indices_1.txt
-test_indices_file: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}/quadrotor3D_lqr/train_test_splits/shuffled_indices_2.txt
-trajectories_dir: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}/quadrotor3D_lqr/trajectories
+train_indices_file: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}/deterministic/quadrotor3D_lqr/train_test_splits/shuffled_indices_0.txt
+val_indices_file: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}/deterministic/quadrotor3D_lqr/train_test_splits/shuffled_indices_1.txt
+test_indices_file: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}/deterministic/quadrotor3D_lqr/train_test_splits/shuffled_indices_2.txt
+trajectories_dir: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}/deterministic/quadrotor3D_lqr/trajectories
 
 # DataLoader settings
 batch_size: 256
@@ -17,4 +17,4 @@ num_workers: 4
 pin_memory: true
 
 # Dataset directory
-dataset_dir: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}/quadrotor3D_lqr
+dataset_dir: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}/deterministic/quadrotor3D_lqr

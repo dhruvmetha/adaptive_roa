@@ -79,7 +79,7 @@ _EVAL_SUBDIR = "radius_0.075_alpha_0.1_mc_20_batch_100000"
 
 GT_FILE = Path(
     "/common/users/shared/pracsys/genMoPlan/data_trajectories/"
-    "pendulum_lqr_50k/eval_states.txt"
+    "deterministic/pendulum_lqr_50k/eval_states.txt"
 )
 
 RUNS = {
@@ -116,7 +116,7 @@ EXTENT = [*THETA_RANGE, *THETA_DOT_RANGE]
 
 # ── Training sample overlay paths ────────────────────────────────────────────
 _TRAJ_BASE = Path(
-    "/common/users/shared/pracsys/genMoPlan/data_trajectories/pendulum_lqr_50k"
+    "/common/users/shared/pracsys/genMoPlan/data_trajectories/deterministic/pendulum_lqr_50k"
 )
 SHUFFLED_INDICES_FILE = _TRAJ_BASE / "train_test_splits" / "shuffled_indices_0.txt"
 SHUFFLED_LABELS_FILE = _TRAJ_BASE / "train_test_splits" / "shuffled_labels_0.txt"

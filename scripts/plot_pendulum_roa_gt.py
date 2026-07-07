@@ -10,7 +10,7 @@ import numpy as np
 # ── Data ─────────────────────────────────────────────────────────────────────
 DATA_FILE = Path(
     "/common/users/shared/pracsys/genMoPlan/data_trajectories"
-    "/pendulum_lqr_50k/roa_labels.txt"
+    "/deterministic/pendulum_lqr_50k/roa_labels.txt"
 )
 OUTPUT_DIR = Path("results/figures")
 

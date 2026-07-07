@@ -170,6 +170,22 @@ def get_shared_data_base() -> str:
     return get_env_config().get("SHARED_DATA_BASE", default)
 
 
+def get_noise_regime() -> str:
+    """
+    Get the dataset noise regime ("deterministic" or "noisy").
+
+    Trajectory data is organized under a regime subdirectory:
+        {data_dir}/{noise_regime}/{dataset_name}/...
+
+    Direct (non-Hydra) instantiation reads this from the NOISE_REGIME env var
+    (or the .env file); Hydra pipelines use the ``noise_regime`` config value
+    instead. Both default to "deterministic".
+    """
+    return os.environ.get("NOISE_REGIME") or get_env_config().get(
+        "NOISE_REGIME", "deterministic"
+    )
+
+
 
 
 def get_user_path(*parts: str) -> str:

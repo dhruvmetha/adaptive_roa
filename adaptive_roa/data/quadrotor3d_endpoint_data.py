@@ -8,7 +8,7 @@ from tqdm import tqdm
 import os
 import lightning.pytorch as pl
 import random
-from adaptive_roa.utils.env_config import get_shared_data_base
+from adaptive_roa.utils.env_config import get_shared_data_base, get_noise_regime
 
 
 class Quadrotor3DEndpointDataset(Dataset):
@@ -44,7 +44,7 @@ class Quadrotor3DEndpointDataset(Dataset):
             max_samples: Maximum number of samples to load (for limiting dataset size).
         """
         if dataset_dir is None:
-            dataset_dir = f"{get_shared_data_base()}/quadrotor3D_lqr"
+            dataset_dir = f"{get_shared_data_base()}/{get_noise_regime()}/quadrotor3D_lqr"
         self.dataset_dir = Path(dataset_dir)
 
         if data_file is not None:
@@ -238,7 +238,7 @@ class Quadrotor3DEndpointDataModule(pl.LightningDataModule):
             max_val_samples: Limit validation samples
         """
         if dataset_dir is None:
-            dataset_dir = f"{get_shared_data_base()}/quadrotor3D_lqr"
+            dataset_dir = f"{get_shared_data_base()}/{get_noise_regime()}/quadrotor3D_lqr"
         super().__init__()
 
         self.dataset_dir = dataset_dir

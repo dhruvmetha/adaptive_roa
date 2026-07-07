@@ -33,10 +33,10 @@ model:
 
 data:
   _target_: adaptive_roa.data.humanoid_standup_reach_endpoint_data.HumanoidStandUpReachEndpointDataModule
-  train_indices_file: ${shared_data}/humanoid_get_up_medium/train_test_splits/shuffled_indices_0.txt
-  val_indices_file: ${shared_data}/humanoid_get_up_medium/train_test_splits/shuffled_indices_1.txt
-  test_indices_file: ${shared_data}/humanoid_get_up_medium/train_test_splits/shuffled_indices_2.txt
-  trajectories_dir: ${shared_data}/humanoid_get_up_medium/trajectories
+  train_indices_file: ${shared_data}/deterministic/humanoid_get_up_medium/train_test_splits/shuffled_indices_0.txt
+  val_indices_file: ${shared_data}/deterministic/humanoid_get_up_medium/train_test_splits/shuffled_indices_1.txt
+  test_indices_file: ${shared_data}/deterministic/humanoid_get_up_medium/train_test_splits/shuffled_indices_2.txt
+  trajectories_dir: ${shared_data}/deterministic/humanoid_get_up_medium/trajectories
   query_mode: random_intermediate
   batch_size: ${batch_size}
   val_batch_size: ${val_batch_size}

@@ -11,6 +11,9 @@ output_dir: ${exp_dir}/${name}_dhruv/outputs/training_index_${training_index}_wa
 
 shuffle_variant: 0
 
+dataset_name: pendulum_lqr_50k
+dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
+
 decision_rule: one_sided
 attractor_radius: 0.1
 
@@ -18,12 +21,12 @@ threshold:
   optimize_mode: joint
 
 data_source:
-  trajectories_dir: ${data_dir}/pendulum_lqr_50k/trajectories
-  shuffled_indices_file: ${data_dir}/pendulum_lqr_50k/train_test_splits/shuffled_indices_${shuffle_variant}.txt
-  shuffled_labels_file: ${data_dir}/pendulum_lqr_50k/train_test_splits/shuffled_labels_${shuffle_variant}.txt
-  eval_states_file: ${data_dir}/pendulum_lqr_50k/eval_states.txt
-  cal_set_file: ${data_dir}/pendulum_lqr_50k/cal_set.txt
-  test_set_file: ${data_dir}/pendulum_lqr_50k/test_set.txt
+  trajectories_dir: ${dataset_root}/trajectories
+  shuffled_indices_file: ${dataset_root}/train_test_splits/shuffled_indices_${shuffle_variant}.txt
+  shuffled_labels_file: ${dataset_root}/train_test_splits/shuffled_labels_${shuffle_variant}.txt
+  eval_states_file: ${dataset_root}/eval_states.txt
+  cal_set_file: ${dataset_root}/cal_set.txt
+  test_set_file: ${dataset_root}/test_set.txt
 
 initial_train_size: 100
 n_epochs: 19
@@ -35,7 +38,7 @@ flow_matching:
 
 system:
   _target_: adaptive_roa.systems.pendulum.PendulumSystem
-  dataset_dir: ${data_dir}/pendulum_lqr_50k
+  dataset_dir: ${dataset_root}
 
 flow_matcher:
   _target_: adaptive_roa.flow_matching.pendulum.latent_conditional.flow_matcher.PendulumLatentConditionalFlowMatcher

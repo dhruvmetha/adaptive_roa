@@ -3,6 +3,10 @@
 seed: 42
 exp_dir: ${exp_dir:}
 data_dir: ${data_dir:}
+# Dataset noise regime: "deterministic" (default) or "noisy". Trajectory data lives
+# under ${data_dir}/${noise_regime}/${dataset_name}/... Override on the CLI
+# (e.g. noise_regime=noisy) together with a matching dataset_name for noisy runs.
+noise_regime: deterministic
 training_index: 0
 device: cuda:0
 

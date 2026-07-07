@@ -113,7 +113,7 @@ OUTPUT_DIR = Path("results/videos_and_images/quadrotor2d")
 
 # ── Ground truth CSVs ────────────────────────────────────────────────────────
 _GT_DIR = Path(
-    "/common/users/shared/pracsys/genMoPlan/data_trajectories/quadrotor2D_rl"
+    "/common/users/shared/pracsys/genMoPlan/data_trajectories/deterministic/quadrotor2D_rl"
 )
 
 # ── Slice definitions ────────────────────────────────────────────────────────

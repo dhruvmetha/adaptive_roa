@@ -12,8 +12,11 @@ output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_warm_sta
 decision_rule: two_sided
 attractor_radius: 0.3
 
+dataset_name: quadrotor2D_rl
+dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
+
 data_source:
-  base_dir: ${data_dir}/quadrotor2D_rl
+  base_dir: ${dataset_root}
   trajectories_dir: ${data_source.base_dir}/trajectories
   train_test_splits_dir: ${data_source.base_dir}/train_test_splits
   shuffled_indices_file: ${data_source.train_test_splits_dir}/shuffled_indices_${training_index}.txt
@@ -31,7 +34,7 @@ flow_matching:
 
 system:
   _target_: adaptive_roa.systems.quadrotor2d.Quadrotor2DSystem
-  dataset_dir: ${data_dir}/quadrotor2D_rl
+  dataset_dir: ${dataset_root}
 
 flow_matcher:
   _target_: adaptive_roa.flow_matching.quadrotor_2d.latent_conditional.flow_matcher.Quadrotor2DLatentConditionalFlowMatcher

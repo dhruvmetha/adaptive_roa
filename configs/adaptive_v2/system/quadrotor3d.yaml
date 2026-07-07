@@ -14,8 +14,11 @@ attractor_radius: 0.3
 
 use_log_loss_weights: true
 
+dataset_name: quadrotor3D_lqr
+dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
+
 data_source:
-  base_dir: ${data_dir}/quadrotor3D_lqr
+  base_dir: ${dataset_root}
   trajectories_dir: ${data_source.base_dir}/trajectories
   train_test_splits_dir: ${data_source.base_dir}/train_test_splits
   shuffled_indices_file: ${data_source.train_test_splits_dir}/all_shuffled_indices.txt
@@ -37,7 +40,7 @@ optimizer:
 
 system:
   _target_: adaptive_roa.systems.quadrotor3d.Quadrotor3DSystem
-  dataset_dir: ${data_dir}/quadrotor3D_lqr
+  dataset_dir: ${dataset_root}
 
 flow_matcher:
   _target_: adaptive_roa.flow_matching.quadrotor_3d.latent_conditional.flow_matcher.Quadrotor3DLatentConditionalFlowMatcher

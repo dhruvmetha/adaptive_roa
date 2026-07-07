@@ -13,4 +13,4 @@
 _target_: adaptive_roa.systems.mountain_car.MountainCarSystem
 
 # Dataset directory containing dataset_description.json with bounds
-dataset_dir: ${data_dir:/common/users/shared/pracsys/genMoPlan/data_trajectories}/mountain_car_power_0p001
+dataset_dir: ${data_dir:/common/users/shared/pracsys/genMoPlan/data_trajectories}/deterministic/mountain_car_power_0p001

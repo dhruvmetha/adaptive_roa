@@ -76,7 +76,7 @@ OUTPUT_DIR = Path("results/videos_and_images/quadrotor3d")
 
 # ── Ground truth CSVs ────────────────────────────────────────────────────────
 _GT_DIR = Path(
-    "/common/users/shared/pracsys/genMoPlan/data_trajectories/quadrotor3D_lqr"
+    "/common/users/shared/pracsys/genMoPlan/data_trajectories/deterministic/quadrotor3D_lqr"
 )
 
 # CSV columns: x, y, z, qw, qx, qy, qz, x_dot, y_dot, z_dot, p, q, r,

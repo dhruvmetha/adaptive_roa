@@ -14,4 +14,4 @@
 _target_: adaptive_roa.systems.pendulum.PendulumSystem
 
 # Dataset directory containing dataset_description.json with bounds
-dataset_dir: ${data_dir:}/pendulum_lqr_50k
+dataset_dir: ${data_dir:}/deterministic/pendulum_lqr_50k

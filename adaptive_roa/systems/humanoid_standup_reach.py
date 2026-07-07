@@ -7,7 +7,7 @@ import numpy as np
 import torch
 
 from adaptive_roa.systems.base import DynamicalSystem, ManifoldComponent
-from adaptive_roa.utils.env_config import get_shared_data_base
+from adaptive_roa.utils.env_config import get_shared_data_base, get_noise_regime
 
 HEAD_HEIGHT_IDX = 21
 COM_VEL_START = 37
@@ -23,7 +23,7 @@ class HumanoidStandUpReachSystem(DynamicalSystem):
 
     def __init__(self, dataset_dir: str = None):
         if dataset_dir is None:
-            dataset_dir = f"{get_shared_data_base()}/humanoid_get_up_medium"
+            dataset_dir = f"{get_shared_data_base()}/{get_noise_regime()}/humanoid_get_up_medium"
         dataset_dir = Path(dataset_dir)
         self.dataset_dir = str(dataset_dir)
         json_path = dataset_dir / "dataset_description.json"

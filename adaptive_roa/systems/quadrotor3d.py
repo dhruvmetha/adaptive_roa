@@ -8,7 +8,7 @@ import numpy as np
 import json
 from pathlib import Path
 from adaptive_roa.systems.base import DynamicalSystem, ManifoldComponent
-from adaptive_roa.utils.env_config import get_shared_data_base
+from adaptive_roa.utils.env_config import get_shared_data_base, get_noise_regime
 from typing import List, Dict, Tuple
 
 
@@ -34,7 +34,7 @@ class Quadrotor3DSystem(DynamicalSystem):
                         If None, uses default path from environment.
         """
         if dataset_dir is None:
-            dataset_dir = f"{get_shared_data_base()}/quadrotor3D_lqr"
+            dataset_dir = f"{get_shared_data_base()}/{get_noise_regime()}/quadrotor3D_lqr"
 
         dataset_dir = Path(dataset_dir)
         self.dataset_dir = str(dataset_dir)

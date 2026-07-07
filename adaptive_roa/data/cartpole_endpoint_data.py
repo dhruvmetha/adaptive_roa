@@ -8,7 +8,7 @@ from tqdm import tqdm
 import os
 import lightning.pytorch as pl
 import random
-from adaptive_roa.utils.env_config import get_data_dir
+from adaptive_roa.utils.env_config import get_data_dir, get_noise_regime
 
 
 class CartPoleEndpointDataset(Dataset):
@@ -26,7 +26,7 @@ class CartPoleEndpointDataset(Dataset):
                         If None, uses default path.
         """
         if dataset_dir is None:
-            dataset_dir = f"{get_data_dir()}/cartpole_pybullet"
+            dataset_dir = f"{get_data_dir()}/{get_noise_regime()}/cartpole_pybullet"
         self.dataset_dir = Path(dataset_dir)
 
         # Load the endpoint data
@@ -122,7 +122,7 @@ class CartPoleEndpointDataModule(pl.LightningDataModule):
                         If None, uses default path.
         """
         if dataset_dir is None:
-            dataset_dir = f"{get_data_dir()}/cartpole_pybullet"
+            dataset_dir = f"{get_data_dir()}/{get_noise_regime()}/cartpole_pybullet"
         super().__init__()
         self.data_file = data_file
         self.validation_file = validation_file

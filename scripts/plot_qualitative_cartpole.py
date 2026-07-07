@@ -48,7 +48,7 @@ DEFAULT_EPOCHS = [15]
 
 # ── Ground truth CSVs ────────────────────────────────────────────────────────
 _GT_DIR = Path(
-    "/common/users/shared/pracsys/genMoPlan/data_trajectories/cartpole_pybullet"
+    "/common/users/shared/pracsys/genMoPlan/data_trajectories/deterministic/cartpole_pybullet"
 )
 
 # ── Slice definitions ────────────────────────────────────────────────────────

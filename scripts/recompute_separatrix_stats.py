@@ -54,7 +54,7 @@ RUNS = [
         "path": f"{BASE}/adaptive_pendulum_dhruv/outputs/training_index_0_d2_ratio_0.0_warm_start_False_threshold_mode_dynamic_adapt_iter_20_alpha_0.1_sampling_mode_ranked/2026-02-20_01-56-20",
         "eval": "radius_0.075_alpha_0.1_mc_20_batch_100000",
         "max_epoch": 8,
-        "test_set": f"{DATA_DIR}/pendulum_lqr_50k/test_set.txt",
+        "test_set": f"{DATA_DIR}/deterministic/pendulum_lqr_50k/test_set.txt",
     },
     {
         "name": "Pendulum Adaptive",
@@ -62,7 +62,7 @@ RUNS = [
         "path": f"{BASE}/adaptive_pendulum_dhruv/outputs/training_index_0_d2_ratio_1.0_warm_start_False_threshold_mode_dynamic_adapt_iter_20_alpha_0.1_sampling_mode_direct/2026-02-20_01-56-07",
         "eval": "radius_0.075_alpha_0.1_mc_20_batch_100000",
         "max_epoch": 8,
-        "test_set": f"{DATA_DIR}/pendulum_lqr_50k/test_set.txt",
+        "test_set": f"{DATA_DIR}/deterministic/pendulum_lqr_50k/test_set.txt",
     },
     {
         "name": "CartPole Non-adaptive",
@@ -70,7 +70,7 @@ RUNS = [
         "path": f"{BASE}/adaptive_cartpole_pybullet/outputs/training_index_0_d2_ratio_0.0_warm_start_False_manifold_False_threshold_mode_dynamic_adapt_iter_20_alpha_0.1_sampling_mode_ranked_w_0.9/2026-02-18_14-26-34",
         "eval": "radius_0.2_alpha_0.1_mc_20_batch_100000",
         "max_epoch": 14,
-        "test_set": f"{DATA_DIR}/cartpole_pybullet/test_set.txt",
+        "test_set": f"{DATA_DIR}/deterministic/cartpole_pybullet/test_set.txt",
     },
     {
         "name": "CartPole Adaptive",
@@ -78,7 +78,7 @@ RUNS = [
         "path": f"{BASE}/adaptive_cartpole_pybullet/outputs/training_index_0_d2_ratio_1.0_warm_start_False_manifold_False_threshold_mode_dynamic_adapt_iter_20_alpha_0.1_sampling_mode_direct_w_0.9/2026-02-18_14-26-32",
         "eval": "radius_0.2_alpha_0.1_mc_20_batch_100000",
         "max_epoch": 14,
-        "test_set": f"{DATA_DIR}/cartpole_pybullet/test_set.txt",
+        "test_set": f"{DATA_DIR}/deterministic/cartpole_pybullet/test_set.txt",
     },
     {
         "name": "Quadrotor2D Non-adaptive",
@@ -86,7 +86,7 @@ RUNS = [
         "path": f"{BASE}/adaptive_quadrotor2d/outputs/training_index_0_d2_ratio_0.0_warm_start_False_manifold_False_threshold_mode_dynamic_adapt_iter_10_alpha_0.1_sampling_mode_direct/2026-02-28_10-17-55",
         "eval": "radius_0.3_alpha_0.1_mc_10_batch_100000_calk_1000",
         "max_epoch": 9,
-        "test_set": f"{DATA_DIR}/quadrotor2D_rl/test_set.txt",
+        "test_set": f"{DATA_DIR}/deterministic/quadrotor2D_rl/test_set.txt",
     },
     {
         "name": "Quadrotor2D Adaptive",
@@ -94,7 +94,7 @@ RUNS = [
         "path": f"{BASE}/adaptive_quadrotor2d/outputs/training_index_0_d2_ratio_1.0_warm_start_False_manifold_False_threshold_mode_dynamic_adapt_iter_10_alpha_0.1_sampling_mode_direct/2026-02-28_10-05-32",
         "eval": "radius_0.3_alpha_0.1_mc_10_batch_100000_calk_1000",
         "max_epoch": 9,
-        "test_set": f"{DATA_DIR}/quadrotor2D_rl/test_set.txt",
+        "test_set": f"{DATA_DIR}/deterministic/quadrotor2D_rl/test_set.txt",
     },
     {
         "name": "Quadrotor3D Non-adaptive",
@@ -102,7 +102,7 @@ RUNS = [
         "path": f"{BASE}/adaptive_quadrotor3d/outputs/training_index_0_d2_ratio_0.0_warm_start_False_manifold_False_threshold_mode_dynamic_adapt_iter_15_alpha_0.1_sampling_mode_direct/2026-02-28_11-49-54",
         "eval": "radius_0.3_alpha_0.1_mc_10_batch_100000_calk_1000",
         "max_epoch": 14,
-        "test_set": f"{DATA_DIR}/quadrotor3D_lqr/test_set.txt",
+        "test_set": f"{DATA_DIR}/deterministic/quadrotor3D_lqr/test_set.txt",
     },
     {
         "name": "Quadrotor3D Adaptive",
@@ -110,7 +110,7 @@ RUNS = [
         "path": f"{BASE}/adaptive_quadrotor3d/outputs/training_index_0_d2_ratio_1.0_warm_start_False_manifold_False_threshold_mode_dynamic_adapt_iter_20_alpha_0.1_sampling_mode_direct/2026-02-26_12-02-36",
         "eval": "radius_0.3_alpha_0.1_mc_10_batch_100000_calk_1000",
         "max_epoch": 15,
-        "test_set": f"{DATA_DIR}/quadrotor3D_lqr/test_set.txt",
+        "test_set": f"{DATA_DIR}/deterministic/quadrotor3D_lqr/test_set.txt",
     },
 ]
 

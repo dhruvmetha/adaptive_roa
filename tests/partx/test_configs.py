@@ -73,3 +73,34 @@ def test_partx_gp_forces_one_sided_over_two_sided_system():
     assert cfg.decision_rule == "two_sided"
     assert cfg.threshold.decision_rule == "one_sided"
     assert cfg.calibration.decision_rule == "one_sided"
+
+
+def test_partx_pendulum_experiment_matches_adaptive_classification_schedule():
+    # Bake in the same training/validation schedule used by the real adaptive
+    # classification experiments (scripts/overnight_classifier_4systems.sh):
+    # pendulum grows 50 -> 500 (init=50, incr=50, n_epochs=10), fully adaptive
+    # (d2_ratio=1.0, no random D1 batch -- conformal coverage comes only from
+    # the held-out cal_set at eval time via calibrate_eval/q_hat_eval).
+    with initialize(version_base=None, config_path="../../configs/adaptive_v2"):
+        cfg = compose(config_name="default", overrides=["+experiment=partx_pendulum"])
+    assert cfg.initial_train_size == 50
+    assert cfg.samples_per_epoch == 50
+    assert cfg.n_epochs == 10
+    assert cfg.acquisition.mode == "partx"
+    assert cfg.acquisition.d2_ratio == 1.0
+    assert cfg.predictor.trainer_target.endswith("GPPredictorTrainer")
+    assert cfg.threshold.decision_rule == "one_sided"
+
+
+def test_partx_cartpole_experiment_matches_adaptive_classification_schedule():
+    # cartpole_pybullet grows 300 -> 1000 (init=300, incr=100, n_epochs=8),
+    # fully adaptive (d2_ratio=1.0), matching the classifier ranked runs.
+    with initialize(version_base=None, config_path="../../configs/adaptive_v2"):
+        cfg = compose(config_name="default", overrides=["+experiment=partx_cartpole"])
+    assert cfg.initial_train_size == 300
+    assert cfg.samples_per_epoch == 100
+    assert cfg.n_epochs == 8
+    assert cfg.acquisition.mode == "partx"
+    assert cfg.acquisition.d2_ratio == 1.0
+    assert cfg.predictor.trainer_target.endswith("GPPredictorTrainer")
+    assert cfg.threshold.decision_rule == "one_sided"

@@ -17,6 +17,8 @@ def test_partx_experiment_composes():
     assert cfg.probability._target_.endswith("GPProbabilityBackend")
     assert cfg.threshold.decision_rule == "one_sided"
     assert cfg.calibration.decision_rule == "one_sided"
+    assert cfg.threshold.optimize_objective == "fixed"
+    assert float(cfg.threshold.fixed_lambda_star) == 0.5
 
 
 def test_partx_gp_forces_one_sided_over_two_sided_system():

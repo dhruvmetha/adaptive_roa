@@ -3,6 +3,9 @@ defaults:
   - /probability: gp
 threshold:
   decision_rule: one_sided
+  optimize_objective: fixed
+  fixed_lambda_star: 0.5
+  fixed_delta_star: 0.1
 calibration:
   decision_rule: one_sided
 predictor:

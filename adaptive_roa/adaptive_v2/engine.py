@@ -179,7 +179,7 @@ class AdaptiveEngine:
 
             q_hat = None
             test_metrics = {"coverage": None, "f1": None, "unknown_rate": None}
-            if acquisition_mode == "conformal" and need_d2_acquisition:
+            if acquisition_mode in ("conformal", "partx") and need_d2_acquisition:
                 d1_labels = self.pool.get_labels(d1_indices)
                 q_hat = self.calibration_backend.calibrate(d1_states, d1_labels, threshold_state)
                 threshold_state.q_hat = q_hat
@@ -188,7 +188,7 @@ class AdaptiveEngine:
                 if predictor is None:
                     raise RuntimeError("Threshold backend predictor missing after bind_model")
                 test_metrics = predictor.evaluate(X_test, y_test, verbose=self.calibration_backend.verbose)
-            elif acquisition_mode == "conformal":
+            elif acquisition_mode in ("conformal", "partx"):
                 print("Skipping q_hat calibration because d2_target=0")
 
             if need_d2_acquisition:

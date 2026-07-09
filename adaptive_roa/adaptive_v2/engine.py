@@ -187,6 +187,11 @@ class AdaptiveEngine:
                 predictor = self.threshold_backend.predictor
                 if predictor is None:
                     raise RuntimeError("Threshold backend predictor missing after bind_model")
+                # calibrate() sets q_hat on calibration_backend's own ConformalPredictor
+                # instance, not on threshold_backend.predictor; mirror it here so
+                # evaluate() below (which requires lambda_star/delta_star/q_hat all set)
+                # doesn't raise. lambda_star/delta_star are already set by optimize().
+                predictor.q_hat = q_hat
                 test_metrics = predictor.evaluate(X_test, y_test, verbose=self.calibration_backend.verbose)
             elif acquisition_mode in ("conformal", "partx"):
                 print("Skipping q_hat calibration because d2_target=0")

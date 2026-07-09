@@ -8,6 +8,10 @@ eval:
     attractor_radius: ${attractor_radius}
     num_mc_samples_eval: 100
     decision_rule: ${decision_rule}
+    # max_eval_rows default lives in system/_base.yaml (eval.max_eval_rows); mirror
+    # it here because PartXEvaluator wraps FullROAEvaluator under eval.base, so the
+    # base evaluator reads cfg.base.max_eval_rows, not cfg.max_eval_rows directly.
+    max_eval_rows: ${eval.max_eval_rows}
     refine_invalids: false
     refine_t_min: 0.7
     refine_t_max: 0.9

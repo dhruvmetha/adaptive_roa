@@ -21,6 +21,40 @@ def test_partx_experiment_composes():
     assert float(cfg.threshold.fixed_lambda_star) == 0.5
 
 
+def test_partx_gp_optdelta_optimizes_delta_with_pinned_lambda():
+    # gp_optdelta is an A/B variant of gp: it keeps lambda*=0.5 pinned
+    # (optimize_delta() hardcodes lam=0.5) but grid-searches delta instead
+    # of using a fixed delta*=0.1 like the baseline gp.yaml.
+    with initialize(version_base=None, config_path="../../configs/adaptive_v2"):
+        cfg = compose(
+            config_name="default",
+            overrides=[
+                "system=pendulum",
+                "predictor=gp_optdelta",
+                "acquisition=partx",
+                "eval=partx",
+            ],
+        )
+    assert cfg.acquisition.mode == "partx"
+    assert cfg.predictor.trainer_target.endswith("GPPredictorTrainer")
+    assert cfg.threshold.optimize_mode == "delta"
+    assert cfg.threshold.optimize_objective == "loss"
+    assert cfg.threshold.decision_rule == "one_sided"
+
+    # Confirm the baseline gp config is undisturbed by the new variant.
+    with initialize(version_base=None, config_path="../../configs/adaptive_v2"):
+        baseline_cfg = compose(
+            config_name="default",
+            overrides=[
+                "system=pendulum",
+                "predictor=gp",
+                "acquisition=partx",
+                "eval=partx",
+            ],
+        )
+    assert baseline_cfg.threshold.optimize_objective == "fixed"
+
+
 def test_partx_gp_forces_one_sided_over_two_sided_system():
     # quadrotor2d defaults decision_rule to two_sided at the system level.
     # The gp predictor config must still force one_sided, since

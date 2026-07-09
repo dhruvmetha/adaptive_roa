@@ -1,0 +1,10 @@
+# @package _global_
+# Generative backend: conditional rectified-flow dynamics (GenerativeDynamics).
+# Hyperparameters mirror the adaptive flow-matching runs (predictor/generative.yaml
+# + system/_base.yaml): zero-latent, 100 integration steps, 1000 epochs.
+backend: generative
+latent_dim: 0
+num_integration_steps: 100
+batch_size: 1024
+max_epochs: 1000
+lr: 1.0e-3  # per-system override (quad3d/humanoid -> 5e-4) wins via defaults order

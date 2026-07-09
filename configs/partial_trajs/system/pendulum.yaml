@@ -1,0 +1,8 @@
+# @package _global_
+# Pendulum (S^1 x R). hidden_dims/attractor_radius mirror the adaptive experiment.
+system: pendulum
+horizon_T: 25
+dataset_dir: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}/partial_deterministic/pendulum_lqr/pendulum_lqr_50k_T${horizon_T}
+hidden_dims: [256, 512, 256]
+attractor_radius: 0.1
+eval_split_file: test_set.txt

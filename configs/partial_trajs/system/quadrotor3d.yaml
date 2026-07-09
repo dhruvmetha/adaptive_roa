@@ -1,0 +1,11 @@
+# @package _global_
+# Quadrotor 3D. hidden_dims/attractor_radius mirror the adaptive experiment.
+system: quadrotor3d
+horizon_T: 25
+dataset_dir: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}/partial_deterministic/quadrotor3D_lqr/quadrotor3D_lqr_T${horizon_T}
+hidden_dims: [512, 1024, 1024, 512]
+attractor_radius: 0.3
+eval_split_file: test_set.txt
+# Generative FM analog used lr 5e-4 for quad3d/humanoid; the deterministic
+# classifier analog used 1e-3 -> pass lr=1e-3 on the CLI for deterministic runs.
+lr: 5.0e-4

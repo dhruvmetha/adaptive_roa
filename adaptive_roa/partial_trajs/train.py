@@ -11,11 +11,15 @@ overall and stratified by freeze/motion.
 """
 from __future__ import annotations
 
+import glob
+from pathlib import Path
 from typing import Dict, Optional
 
 import hydra
 import lightning.pytorch as pl
 import torch
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
+from lightning.pytorch.loggers import CSVLogger
 from omegaconf import DictConfig, OmegaConf
 
 from adaptive_roa.utils.env_config import get_shared_data_base
@@ -75,8 +79,25 @@ def horizon_error_over_loader(model, system, loader, max_batches: Optional[int] 
     )
 
 
+def _resolve_output_dir(cfg: DictConfig) -> str:
+    """The training run directory: Hydra's output dir if running under @hydra.main,
+    else ``cfg.output_dir`` (used by tests that call ``run`` without Hydra)."""
+    try:
+        from hydra.core.hydra_config import HydraConfig
+
+        return HydraConfig.get().runtime.output_dir
+    except Exception:
+        return str(cfg.get("output_dir", "."))
+
+
 def run(cfg: DictConfig):
-    """Build system/data/model, fit, and return ``(model, metric#1 report)``."""
+    """Build system/data/model, fit, and return ``(model, metric#1 report)``.
+
+    When ``enable_checkpointing`` is set (real runs) the trainer mirrors the adaptive
+    ``ClassifierTrainer``: a best-val ``ModelCheckpoint`` (+ ``last.ckpt``),
+    ``EarlyStopping`` on ``val_loss``, a ``CSVLogger``, and gradient clipping; the
+    best-val weights are reloaded into the returned model after ``fit``.
+    """
     pl.seed_everything(int(cfg.get("seed", 0)), workers=True)
 
     system = make_verifier_system(str(cfg.system), cfg.get("system_dataset_dir"))
@@ -87,18 +108,46 @@ def run(cfg: DictConfig):
         seed=int(cfg.get("seed", 0)),
     )
     model = build_model(cfg, system)
+
+    checkpointing = bool(cfg.get("enable_checkpointing", True))
+    callbacks = []
+    logger = False
+    ckpt_dir: Optional[Path] = None
+    if checkpointing:
+        ckpt_dir = Path(_resolve_output_dir(cfg)) / "checkpoints"
+        ckpt_dir.mkdir(parents=True, exist_ok=True)
+        callbacks = [
+            ModelCheckpoint(
+                dirpath=str(ckpt_dir), monitor="val_loss", mode="min",
+                save_top_k=1, save_last=True, filename="best-{epoch:02d}-{val_loss:.4f}",
+            ),
+            EarlyStopping(monitor="val_loss", mode="min", patience=int(cfg.get("patience", 20))),
+        ]
+        logger = CSVLogger(save_dir=_resolve_output_dir(cfg), name="partial_trajs_logs")
+
     trainer = pl.Trainer(
         max_epochs=int(cfg.max_epochs),
         accelerator=str(cfg.get("accelerator", "cpu")),
         devices=cfg.get("devices", 1),
-        logger=False,
-        enable_checkpointing=bool(cfg.get("enable_checkpointing", True)),
+        logger=logger,
+        callbacks=callbacks,
+        enable_checkpointing=checkpointing,
         enable_progress_bar=bool(cfg.get("enable_progress_bar", True)),
+        gradient_clip_val=float(cfg.get("gradient_clip_val", 0.0)),
+        log_every_n_steps=int(cfg.get("log_every_n_steps", 50)),
         limit_train_batches=cfg.get("limit_train_batches", 1.0),
         limit_val_batches=cfg.get("limit_val_batches", 1.0),
     )
     dm.setup()
     trainer.fit(model, dm)
+
+    # Reload best-val weights into the in-memory model (load_from_checkpoint cannot
+    # reconstruct the system/mlp constructor args; mirrors ClassifierTrainer).
+    if ckpt_dir is not None:
+        best = glob.glob(str(ckpt_dir / "best*.ckpt"))
+        if best:
+            state = torch.load(best[0], map_location="cpu", weights_only=False)
+            model.load_state_dict(state["state_dict"], strict=False)
 
     report = horizon_error_over_loader(
         model, system, dm.val_dataloader(), max_batches=cfg.get("eval_max_batches")

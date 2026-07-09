@@ -1,29 +1,24 @@
-# Partial-trajectory deterministic T-step dynamics-model training.
-# Default: pendulum. Override system/dataset_dir/hidden_dims per system, e.g.
-#   system=cartpole dataset_dir=.../cartpole_pybullet/cartpole_pybullet_T25 \
-#   hidden_dims='[256,512,1024,512,256]'
+# Partial-trajectory deterministic/generative T-step dynamics-model training.
+#
+# Per-system and per-backend settings live in config groups (values mirror the
+# adaptive experiments). Select them on the CLI, e.g.:
+#   python adaptive_roa/partial_trajs/train.py system=humanoid_standup_reach
+#   python adaptive_roa/partial_trajs/train.py system=cartpole horizon_T=50 backend=deterministic
+#
+# Group files use `# @package _global_`, so composition flattens into the flat
+# top-level keys `train.run(cfg)` reads (system, dataset_dir, hidden_dims, lr, ...).
 
-# Backbone widths mirror the adaptive flow-MLP per-system mlp_hidden_dims:
-#   pendulum  [256,512,256]      cartpole/quad2D [256,512,1024,512,256]
-#   quad3D/humanoid [512,1024,1024,512]
+defaults:
+  - backend: generative
+  - system: pendulum
+  - _self_
 
-system: pendulum
-dataset_dir: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}/partial_deterministic/pendulum_lqr/pendulum_lqr_50k_T25
-system_dataset_dir: null  # bounds source; null -> env-default deterministic dir
+# Bounds source for the verifier system; null -> env-default deterministic dir.
+system_dataset_dir: null
 
-# Dynamics backend: deterministic (regressor) | generative (conditional flow matching)
-backend: deterministic
-latent_dim: 1              # generative only
-num_integration_steps: 50  # generative only
-
-hidden_dims: [256, 512, 256]
-batch_size: 1024
-val_fraction: 0.2
+# Runtime / trainer
 seed: 0
-lr: 1.0e-3
-dropout: 0.0
-
-max_epochs: 200
+val_fraction: 0.2
 accelerator: gpu
 devices: 1
 enable_checkpointing: true
@@ -31,6 +26,11 @@ enable_progress_bar: true
 limit_train_batches: 1.0
 limit_val_batches: 1.0
 eval_max_batches: null  # cap batches for the metric-#1 val report (null = all)
+
+# Checkpointing / logging (mirrors the adaptive ClassifierTrainer)
+patience: 20
+gradient_clip_val: 1.0
+log_every_n_steps: 10
 
 hydra:
   run:

@@ -1,0 +1,12 @@
+# @package _global_
+# Humanoid get-up (67D). hidden_dims/attractor_radius mirror the adaptive experiment.
+# Eval defaults to the fps eval variant; no failure set (non-success -> unresolved).
+system: humanoid_standup_reach
+horizon_T: 25
+dataset_dir: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}/partial_deterministic/humanoid_get_up_medium/humanoid_get_up_medium_T${horizon_T}
+hidden_dims: [512, 1024, 1024, 512]
+attractor_radius: 1.0
+eval_split_file: test_set_fps.txt
+# Generative FM analog used lr 5e-4 for quad3d/humanoid; the deterministic
+# classifier analog used 1e-3 -> pass lr=1e-3 on the CLI for deterministic runs.
+lr: 5.0e-4

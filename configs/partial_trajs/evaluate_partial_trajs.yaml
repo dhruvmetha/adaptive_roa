@@ -1,0 +1,34 @@
+# Standalone ROA evaluation for the partial-trajectory verifier.
+#
+# Point at a training run dir (auto-picks checkpoints/best*.ckpt, else last.ckpt).
+# The system/backend groups must match how the model was trained so build_model
+# reconstructs an identical architecture before loading the checkpoint weights.
+#   python adaptive_roa/partial_trajs/verifier/evaluate.py \
+#       system=pendulum run_dir=outputs/partial_trajs/pendulum/2026-07-09_12-00-00
+
+defaults:
+  - backend: generative
+  - system: pendulum
+  - _self_
+
+# Checkpoint source
+run_dir: ???            # training run dir (contains checkpoints/); required if checkpoint null
+checkpoint: null        # explicit .ckpt path; null -> pick best*/last under run_dir/checkpoints
+
+# Bounds source for the verifier system; null -> env-default deterministic dir.
+system_dataset_dir: null
+
+# What / how to evaluate
+eval_split: test        # test | cal | eval  (humanoid resolves to the _fps variant)
+num_samples: null       # null -> single deterministic rollout; >1 -> probabilistic
+radius: ${attractor_radius}   # adaptive per-system success/failure radius
+max_eval_rows: null     # cap eval rows (null = all)
+export_predictions: true
+output_dir: null        # null -> <run_dir>/eval/<eval_split>
+seed: 0
+
+hydra:
+  run:
+    dir: outputs/partial_trajs_eval/${system}/${now:%Y-%m-%d_%H-%M-%S}
+  job:
+    chdir: false

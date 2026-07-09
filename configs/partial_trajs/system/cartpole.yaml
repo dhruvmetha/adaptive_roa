@@ -1,0 +1,8 @@
+# @package _global_
+# CartPole (R^2 x S^1 x R). hidden_dims/attractor_radius mirror the adaptive experiment.
+system: cartpole
+horizon_T: 25
+dataset_dir: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}/partial_deterministic/cartpole_pybullet/cartpole_pybullet_T${horizon_T}
+hidden_dims: [256, 512, 1024, 512, 256]
+attractor_radius: 0.2
+eval_split_file: test_set.txt

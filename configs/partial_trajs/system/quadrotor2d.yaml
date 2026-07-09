@@ -1,0 +1,8 @@
+# @package _global_
+# Quadrotor 2D. hidden_dims/attractor_radius mirror the adaptive experiment.
+system: quadrotor2d
+horizon_T: 25
+dataset_dir: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_trajectories}/partial_deterministic/quadrotor2D_rl/quadrotor2D_rl_T${horizon_T}
+hidden_dims: [256, 512, 1024, 512, 256]
+attractor_radius: 0.3
+eval_split_file: test_set.txt

@@ -1,7 +1,9 @@
 # @package _global_
-# partX on cartpole_pybullet, using the same training/validation schedule as the
-# real adaptive classification experiments (scripts/overnight_classifier_4systems.sh):
-# initial_train_size=300, samples_per_epoch=100, n_epochs=8 (grows 300 -> 1000).
+# partX on cartpole_pybullet, matching the FM (generative) adaptive experiments.
+# Training/validation amounts are inherited from the system config
+# (configs/adaptive_v2/system/cartpole_pybullet.yaml, samples_per_epoch from
+# system/_base.yaml) — the FM systems' schedule: initial_train_size=300,
+# samples_per_epoch=100, n_epochs=15.
 #
 # Usage:
 #   python scripts/run_adaptive.py +experiment=partx_cartpole
@@ -11,7 +13,3 @@ defaults:
   - override /predictor: gp
   - override /acquisition: partx
   - override /eval: partx
-
-initial_train_size: 300
-samples_per_epoch: 100
-n_epochs: 8

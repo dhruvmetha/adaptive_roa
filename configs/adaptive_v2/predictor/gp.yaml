@@ -1,6 +1,10 @@
 # @package _global_
 defaults:
   - /probability: gp
+threshold:
+  decision_rule: one_sided
+calibration:
+  decision_rule: one_sided
 predictor:
   type: classifier                      # reuse classification data path + skips
   trainer_target: adaptive_roa.partx.trainer.GPPredictorTrainer

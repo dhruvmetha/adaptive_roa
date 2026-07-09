@@ -17,11 +17,11 @@ def load_xy(path: str, state_dim: int):
     uniq = set(np.unique(labels).tolist())
     if uniq <= {0.0, 1.0}:                      # {0,1} scheme: 0=failure, 1=success
         keep = np.ones(len(labels), dtype=bool)
+        y01 = (labels[keep] > 0.5).astype(np.int64)
     else:                                        # signed scheme: keep only ±1
         keep = np.isin(labels, [1.0, -1.0])
+        y01 = (labels[keep] == 1.0).astype(np.int64)
     X = X[keep]
-    y01 = (labels[keep] == 1.0).astype(np.int64) if not (uniq <= {0.0, 1.0}) \
-        else (labels[keep] > 0.5).astype(np.int64)
     return X, y01
 
 

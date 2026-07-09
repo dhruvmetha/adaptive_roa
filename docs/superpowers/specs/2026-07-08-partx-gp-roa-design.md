@@ -185,11 +185,13 @@ Given MC-point posteriors `(m_i, s2_i)` in a region and `c = z_alpha` (from `alp
 - Else `"r"` (remaining → subdivide). `alpha` is Part-X's region-classification percentile.
 
 ### 5.7 Bayesian RoA-volume bound (`bounds.py`)
-- Point-estimate: `V_hat = Σ_leaf mean_i[ link(m_i/sqrt(1+s2_i)) ] · volume(leaf)` over MC points
-  (RoA volume fraction; falsification fraction = `1 − V_hat`).
 - Credible interval (Part-X R×M): draw `R` posterior samples of `f` at the MC points
   (`f ~ N(m, s2)`), threshold at 0 to get an RoA indicator, integrate per draw → `R` volume samples;
   report `[quantile_{α/2}, quantile_{1-α/2}]`. `R`, `M` configurable.
+- Point-estimate: `volume` is the posterior mean of the RoA-indicator draws, i.e. the mean of the
+  same `R` volume samples used for the credible interval — so `ci_low <= volume <= ci_high` holds by
+  construction. Per-leaf `per_region[*].frac_in` is a separate, labeled diagnostic: the per-leaf
+  integrated-predictive estimate `mean_i[ Φ(m_i/sqrt(1+s2_i)) ]` over MC points.
 - Returns per-region contributions + totals + CI; consumed by `eval.py`.
 
 ### 5.8 Level-set acquisition (`acquisition.py`)

@@ -26,7 +26,7 @@ class PartXAcquisitionStrategy:
         if target_count <= 0:
             return AcquisitionResult(diagnostics={"skipped_reason": "target_count_zero"})
 
-        system = getattr(pool, "system", None) or probability_backend.system
+        system = probability_backend.system
         latent_fn = probability_backend.latent_posterior
         if self.tree is None:
             self.tree = PartitionTree(
@@ -65,6 +65,7 @@ class PartXAcquisitionStrategy:
         # expose diagnostics to the evaluator without changing the engine signature
         try:
             probability_backend.model_handle.partx_diag = diagnostics
+            probability_backend.model_handle.partx_tree = self.tree
         except Exception:
             pass
 

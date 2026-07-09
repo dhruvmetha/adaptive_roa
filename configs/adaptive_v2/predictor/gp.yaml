@@ -1,0 +1,11 @@
+# @package _global_
+defaults:
+  - /probability: gp
+predictor:
+  type: classifier                      # reuse classification data path + skips
+  trainer_target: adaptive_roa.partx.trainer.GPPredictorTrainer
+  gp:
+    n_inducing: 128
+    kernel: matern52
+    n_iters: 300
+    lr: 0.1

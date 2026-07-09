@@ -1,0 +1,16 @@
+# @package _global_
+acquisition:
+  _target_: adaptive_roa.partx.strategy.PartXAcquisitionStrategy
+  mode: partx
+  d2_ratio: 0.5
+  beta: 1.96
+  allocation: per_region_volume
+  n_candidates: 50000
+  tree:
+    branching_factor: 2
+    delta: 0.05
+    alpha: 0.05
+    m_class: 64
+  bounds:
+    R: 200
+    M: 64

@@ -1,0 +1,3 @@
+# @package _global_
+probability:
+  _target_: adaptive_roa.partx.backend.GPProbabilityBackend

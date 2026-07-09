@@ -75,30 +75,28 @@ def test_partx_gp_forces_one_sided_over_two_sided_system():
     assert cfg.calibration.decision_rule == "one_sided"
 
 
-def test_partx_pendulum_experiment_matches_fm_system_schedule():
-    # partX must use the SAME training/validation amounts as the FM (generative)
-    # adaptive experiments, i.e. the pendulum system-config defaults (the single
-    # source of truth the FM systems use): init=100, incr=100, n_epochs=19.
-    # Fully adaptive (d2_ratio=1.0); conformal coverage comes only from the
-    # held-out cal_set at eval time (calibrate_eval/q_hat_eval), never on D1.
+def test_partx_pendulum_experiment_schedule():
+    # Total training-pool size grows 50 -> 500 in +50 steps over 10 epochs
+    # (init=50, incr=50, n_epochs=10). Fully adaptive (d2_ratio=1.0); conformal
+    # coverage comes only from the held-out cal_set at eval time, never on D1.
     with initialize(version_base=None, config_path="../../configs/adaptive_v2"):
         cfg = compose(config_name="default", overrides=["+experiment=partx_pendulum"])
-    assert cfg.initial_train_size == 100
-    assert cfg.samples_per_epoch == 100
-    assert cfg.n_epochs == 19
+    assert cfg.initial_train_size == 50
+    assert cfg.samples_per_epoch == 50
+    assert cfg.n_epochs == 10
     assert cfg.acquisition.mode == "partx"
     assert cfg.acquisition.d2_ratio == 1.0
     assert cfg.predictor.trainer_target.endswith("GPPredictorTrainer")
     assert cfg.threshold.decision_rule == "one_sided"
 
 
-def test_partx_cartpole_experiment_matches_fm_system_schedule():
-    # cartpole_pybullet system-config defaults (FM systems' schedule):
-    # init=300, incr=100 (from system/_base.yaml), n_epochs=15. Fully adaptive.
+def test_partx_cartpole_experiment_schedule():
+    # Total grows 300 -> 1000 in +50 steps over 15 epochs
+    # (init=300, incr=50, n_epochs=15). Fully adaptive.
     with initialize(version_base=None, config_path="../../configs/adaptive_v2"):
         cfg = compose(config_name="default", overrides=["+experiment=partx_cartpole"])
     assert cfg.initial_train_size == 300
-    assert cfg.samples_per_epoch == 100
+    assert cfg.samples_per_epoch == 50
     assert cfg.n_epochs == 15
     assert cfg.acquisition.mode == "partx"
     assert cfg.acquisition.d2_ratio == 1.0

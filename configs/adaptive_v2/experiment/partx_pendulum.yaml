@@ -1,8 +1,7 @@
 # @package _global_
-# partX on pendulum, matching the FM (generative) adaptive experiments.
-# Training/validation amounts are inherited from the system config
-# (configs/adaptive_v2/system/pendulum.yaml) — the single source of truth the
-# FM systems use: initial_train_size=100, samples_per_epoch=100, n_epochs=19.
+# partX on pendulum. Total training-pool size grows 50 -> 500 in steps of 50
+# over 10 adaptive epochs (init=50, +50/epoch): totals 50,100,...,500.
+# Fully adaptive (d2_ratio=1.0); conformal coverage only at eval time (cal_set).
 #
 # Usage:
 #   python scripts/run_adaptive.py +experiment=partx_pendulum
@@ -12,3 +11,7 @@ defaults:
   - override /predictor: gp
   - override /acquisition: partx
   - override /eval: partx
+
+initial_train_size: 50
+samples_per_epoch: 50
+n_epochs: 10

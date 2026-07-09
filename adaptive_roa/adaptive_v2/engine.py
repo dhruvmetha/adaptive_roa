@@ -318,7 +318,7 @@ class AdaptiveEngine:
                 acquisition=acquisition,
                 endpoint_error=endpoint_error,
                 eval_metrics=full_roa_metrics,
-                d1_eval_metrics=test_metrics if acquisition_mode == "conformal" else None,
+                d1_eval_metrics=test_metrics if acquisition_mode in ("conformal", "partx") else None,
                 conformal_state=conformal_state,
                 extra={
                     "n_cal_eval": n_cal_eval,

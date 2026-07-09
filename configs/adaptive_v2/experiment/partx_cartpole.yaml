@@ -1,0 +1,17 @@
+# @package _global_
+# partX on cartpole_pybullet, using the same training/validation schedule as the
+# real adaptive classification experiments (scripts/overnight_classifier_4systems.sh):
+# initial_train_size=300, samples_per_epoch=100, n_epochs=8 (grows 300 -> 1000).
+#
+# Usage:
+#   python scripts/run_adaptive.py +experiment=partx_cartpole
+
+defaults:
+  - override /system: cartpole_pybullet
+  - override /predictor: gp
+  - override /acquisition: partx
+  - override /eval: partx
+
+initial_train_size: 300
+samples_per_epoch: 100
+n_epochs: 8

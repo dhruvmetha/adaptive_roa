@@ -2,7 +2,7 @@
 acquisition:
   _target_: adaptive_roa.partx.strategy.PartXAcquisitionStrategy
   mode: partx
-  d2_ratio: 0.5
+  d2_ratio: 1.0
   beta: 1.96
   allocation: per_region_volume
   n_candidates: 50000

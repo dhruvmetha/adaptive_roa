@@ -62,6 +62,12 @@ class PartXAcquisitionStrategy:
             "roa_volume": bounds["volume"],
             "roa_volume_ci": [bounds["ci_low"], bounds["ci_high"]],
         }
+        # expose diagnostics to the evaluator without changing the engine signature
+        try:
+            probability_backend.model_handle.partx_diag = diagnostics
+        except Exception:
+            pass
+
         return AcquisitionResult(
             d2_indices=list(selected),
             n_candidates_evaluated=len(cand_indices),

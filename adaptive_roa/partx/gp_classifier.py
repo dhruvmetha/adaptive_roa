@@ -96,8 +96,19 @@ class GPClassifier:
         return self
 
     def state_dict(self):
-        return {"model": self.model.state_dict(), "likelihood": self.likelihood.state_dict()}
+        inducing = self.model.variational_strategy.inducing_points
+        return {
+            "model": self.model.state_dict(),
+            "likelihood": self.likelihood.state_dict(),
+            "inducing_shape": tuple(inducing.shape),
+            "kernel": self.kernel,
+        }
 
     def load_state_dict(self, sd):
+        if self.model is None or self.likelihood is None:
+            inducing = torch.zeros(sd["inducing_shape"])
+            self.model = _VarGP(inducing, sd["kernel"]).to(self.device)
+            self.likelihood = gpytorch.likelihoods.BernoulliLikelihood().to(self.device)
         self.model.load_state_dict(sd["model"])
         self.likelihood.load_state_dict(sd["likelihood"])
+        self.eval()

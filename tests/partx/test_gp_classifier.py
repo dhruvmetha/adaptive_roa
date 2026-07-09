@@ -26,3 +26,20 @@ def test_gp_recovers_disk_boundary():
     # Latent variance is finite and larger far from data density at the edges.
     m, s2 = gp.latent_posterior(np.array([[1.5, 0.0]]))  # near boundary
     assert np.isfinite(m).all() and (s2 > 0).all()
+
+
+def test_gp_state_dict_round_trip():
+    system = PendulumSystem()
+    X, y = _disk_data()
+    gp = GPClassifier(system, n_inducing=64, n_iters=250).fit(X, y)
+
+    probe = np.array([[0.0, 0.0], [2.8, 7.0], [1.5, 0.0]])
+    original_p = gp.p_success(probe)
+
+    sd = gp.state_dict()
+
+    fresh = GPClassifier(system, n_inducing=64)
+    fresh.load_state_dict(sd)
+    restored_p = fresh.p_success(probe)
+
+    np.testing.assert_allclose(restored_p, original_p, atol=1e-4)

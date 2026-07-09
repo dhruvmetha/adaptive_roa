@@ -5,5 +5,6 @@ setup(
     packages=find_packages(),
     install_requires=[
         "gpytorch>=1.11",  # partx: variational GP classifier surrogate
+        "scipy",  # partx: probit predictive probability (scipy.stats.norm)
     ],
 )

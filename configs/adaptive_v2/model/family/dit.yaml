@@ -3,7 +3,7 @@
 _target_: adaptive_roa.model.dit_flow.DiTFlowModel
 
 embedded_dim: ${model_dims.embedded_dim}
-latent_dim: ${latent_dim}
+latent_dim: ${flow_matching.latent_dim}
 condition_dim: ${model_dims.condition_dim}
 time_emb_dim: ${model_dims.time_emb_dim}
 output_dim: ${model_dims.output_dim}

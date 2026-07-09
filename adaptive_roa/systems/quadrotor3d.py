@@ -195,7 +195,7 @@ class Quadrotor3DSystem(DynamicalSystem):
 
         return torch.cat([pos, euler, vel], dim=1)
 
-    def is_in_attractor(self, state, radius: float = 0.15):
+    def is_in_attractor(self, state, radius: float = 0.3):
         """
         Check if states are within attractor basin (hovering at goal)
 
@@ -226,7 +226,7 @@ class Quadrotor3DSystem(DynamicalSystem):
 
         return result
 
-    def classify_attractor(self, state: torch.Tensor, radius: float = 0.15) -> torch.Tensor:
+    def classify_attractor(self, state: torch.Tensor, radius: float = 0.3) -> torch.Tensor:
         """
         Classify Quadrotor 3D states into three categories based on termination conditions
 
@@ -242,7 +242,7 @@ class Quadrotor3DSystem(DynamicalSystem):
 
         Args:
             state: States [B, 13] as (x, y, z, qw, qx, qy, qz, ẋ, ẏ, ż, p, q, r)
-            radius: Attractor radius (default 0.15, Euclidean in 13-D state space)
+            radius: Attractor radius (default 0.3, Euclidean in 13-D state space)
 
         Returns:
             Integer tensor [B] with:

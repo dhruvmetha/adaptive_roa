@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from adaptive_roa.partx.region import Region
 
 
@@ -22,3 +23,26 @@ def test_longest_dim_and_subdivide():
     assert np.isclose(sum(c.volume() for c in children), r.volume())
     # split is along longest normalized dim at the midpoint by default
     assert np.isclose(children[0].high[0], 0.0) and np.isclose(children[1].low[0], 0.0)
+
+
+def test_subdivide_split_value_requires_branching_factor_two():
+    r = Region(low=np.array([0.0, 0.0]), high=np.array([10.0, 1.0]),
+                norm_scale=np.array([10.0, 1.0]))
+    with pytest.raises(ValueError):
+        r.subdivide(branching_factor=3, split_value=2.0)
+
+
+def test_subdivide_split_value_out_of_bounds_raises():
+    r = Region(low=np.array([0.0, 0.0]), high=np.array([10.0, 1.0]),
+                norm_scale=np.array([10.0, 1.0]))
+    with pytest.raises(ValueError):
+        r.subdivide(branching_factor=2, split_value=15.0)
+
+
+def test_subdivide_split_value_in_bounds_still_works():
+    r = Region(low=np.array([0.0, 0.0]), high=np.array([10.0, 1.0]),
+                norm_scale=np.array([10.0, 1.0]))
+    children = r.subdivide(branching_factor=2, split_value=3.0)
+    assert len(children) == 2
+    assert np.isclose(sum(c.volume() for c in children), r.volume())
+    assert np.isclose(children[0].high[0], 3.0) and np.isclose(children[1].low[0], 3.0)

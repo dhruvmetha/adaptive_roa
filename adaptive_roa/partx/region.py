@@ -30,7 +30,17 @@ class Region:
     def subdivide(self, branching_factor=2, split_value=None):
         d = self.longest_dim()
         edges = np.linspace(self.low[d], self.high[d], branching_factor + 1)
-        if split_value is not None and branching_factor == 2:
+        if split_value is not None:
+            if branching_factor != 2:
+                raise ValueError(
+                    "split_value is only supported with branching_factor=2, "
+                    f"got branching_factor={branching_factor}"
+                )
+            if not (self.low[d] < split_value < self.high[d]):
+                raise ValueError(
+                    f"split_value={split_value} must lie strictly inside "
+                    f"({self.low[d]}, {self.high[d]}) along the split dimension"
+                )
             edges = np.array([self.low[d], split_value, self.high[d]])
         children = []
         for i in range(branching_factor):

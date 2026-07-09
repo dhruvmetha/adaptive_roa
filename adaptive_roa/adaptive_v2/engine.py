@@ -179,7 +179,7 @@ class AdaptiveEngine:
 
             q_hat = None
             test_metrics = {"coverage": None, "f1": None, "unknown_rate": None}
-            if acquisition_mode in ("conformal", "partx") and need_d2_acquisition:
+            if acquisition_mode == "conformal" and need_d2_acquisition:
                 d1_labels = self.pool.get_labels(d1_indices)
                 q_hat = self.calibration_backend.calibrate(d1_states, d1_labels, threshold_state)
                 threshold_state.q_hat = q_hat
@@ -193,7 +193,7 @@ class AdaptiveEngine:
                 # doesn't raise. lambda_star/delta_star are already set by optimize().
                 predictor.q_hat = q_hat
                 test_metrics = predictor.evaluate(X_test, y_test, verbose=self.calibration_backend.verbose)
-            elif acquisition_mode in ("conformal", "partx"):
+            elif acquisition_mode == "conformal":
                 print("Skipping q_hat calibration because d2_target=0")
 
             if need_d2_acquisition:
@@ -323,7 +323,7 @@ class AdaptiveEngine:
                 acquisition=acquisition,
                 endpoint_error=endpoint_error,
                 eval_metrics=full_roa_metrics,
-                d1_eval_metrics=test_metrics if acquisition_mode in ("conformal", "partx") else None,
+                d1_eval_metrics=test_metrics if acquisition_mode == "conformal" else None,
                 conformal_state=conformal_state,
                 extra={
                     "n_cal_eval": n_cal_eval,

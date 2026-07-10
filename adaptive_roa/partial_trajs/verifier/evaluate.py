@@ -39,9 +39,8 @@ from adaptive_roa.partial_trajs.systems import make_verifier_system
 from adaptive_roa.partial_trajs.train import build_model
 from adaptive_roa.partial_trajs.verifier.evaluate_roa import load_eval_states
 from adaptive_roa.partial_trajs.verifier.rollout import (
+    _rollout,
     resolve_probabilistic,
-    resolve_outcome,
-    rollout_final_state,
 )
 
 
@@ -51,6 +50,7 @@ def _classify(system, state: torch.Tensor, radius: Optional[float]) -> torch.Ten
     return system.classify_attractor(state, radius=radius)
 
 
+@torch.no_grad()
 def run_verifier_eval(
     model,
     system,
@@ -62,25 +62,51 @@ def run_verifier_eval(
     radius: Optional[float] = None,
     circular_indices: Sequence[int] = (),
     num_samples: Optional[int] = None,
+    device: Optional[str] = None,
+    chunk_size: Optional[int] = None,
 ) -> Tuple[Dict[str, object], Dict[str, torch.Tensor]]:
     """Roll out the verifier over eval rows -> (metrics, per-query arrays).
 
     Deterministic (``num_samples=None``): one rollout per query. Probabilistic
     (``num_samples`` set): N rollouts; a query is predicted success if
     ``p_success >= 0.5``.
-    """
-    if num_samples is None:
-        pred_labels = resolve_outcome(model, system, init, K, radius)
-        probs = None
-    else:
-        probs = resolve_probabilistic(model, system, init, K, num_samples, radius)
-        pred_labels = torch.where(
-            probs["p_success"] >= 0.5,
-            torch.ones_like(label),
-            torch.zeros_like(label),
-        )
 
-    final = rollout_final_state(model, system, init, K, radius)
+    The rollout (the expensive part: K autoregressive steps, each an ODE
+    integration for the generative backend) runs on ``device`` (e.g. ``"cuda"``)
+    in row-chunks of ``chunk_size`` to bound VRAM. Per-query outputs are gathered
+    back on CPU, where the cheap O(N) metrics are then computed. ``device=None``
+    keeps everything on CPU (default).
+    """
+    if device is not None:
+        model = model.to(device)
+
+    n = int(init.shape[0])
+    cs = int(chunk_size) if chunk_size else n
+    pred_parts, final_parts = [], []
+    prob_parts = {"p_success": [], "p_failure": [], "p_unresolved": []} if num_samples else None
+
+    for s in range(0, n, cs):
+        xi = init[s : s + cs]
+        if device is not None:
+            xi = xi.to(device)
+        # One rollout yields both the absorbing labels and the terminal state.
+        pl, fin = _rollout(model.predict, system, xi, K, radius)
+        if num_samples:
+            probs = resolve_probabilistic(model, system, xi, K, int(num_samples), radius)
+            pl = torch.where(
+                probs["p_success"] >= 0.5,
+                torch.ones_like(probs["p_success"], dtype=torch.long),
+                torch.zeros_like(probs["p_success"], dtype=torch.long),
+            )
+            for key in prob_parts:
+                prob_parts[key].append(probs[key].cpu())
+        pred_parts.append(pl.cpu())
+        final_parts.append(fin.cpu())
+
+    pred_labels = torch.cat(pred_parts)
+    final = torch.cat(final_parts)
+
+    # Metrics on CPU (init/terminal/label are CPU eval tensors).
     err = manifold_state_distance(final, terminal, circular_indices)
     terminal_class = _classify(system, terminal, radius)
     motion = manifold_state_distance(terminal, init, circular_indices)
@@ -98,11 +124,12 @@ def run_verifier_eval(
         "final_state": final,
         "terminal_class": terminal_class,
     }
-    if probs is not None:
-        metrics["p_success_mean"] = float(probs["p_success"].mean())
-        per_query["p_success"] = probs["p_success"]
-        per_query["p_failure"] = probs["p_failure"]
-        per_query["p_unresolved"] = probs["p_unresolved"]
+    if prob_parts is not None:
+        probs_cat = {key: torch.cat(vals) for key, vals in prob_parts.items()}
+        metrics["p_success_mean"] = float(probs_cat["p_success"].mean())
+        per_query["p_success"] = probs_cat["p_success"]
+        per_query["p_failure"] = probs_cat["p_failure"]
+        per_query["p_unresolved"] = probs_cat["p_unresolved"]
 
     return metrics, per_query
 
@@ -190,11 +217,18 @@ def main(cfg: DictConfig) -> None:
 
     radius = cfg.get("radius")
     num_samples = cfg.get("num_samples")
+    # GPU by default (falls back to CPU if unavailable); rollout runs in row-chunks.
+    device = str(cfg.get("device", "cuda"))
+    if device.startswith("cuda") and not torch.cuda.is_available():
+        device = "cpu"
+    chunk_size = cfg.get("eval_chunk_size")
     metrics, per_query = run_verifier_eval(
         model, system, init, terminal, label, desc.autoregressive_K,
         radius=None if radius is None else float(radius),
         circular_indices=system.get_circular_indices(),
         num_samples=None if num_samples is None else int(num_samples),
+        device=device,
+        chunk_size=None if chunk_size is None else int(chunk_size),
     )
 
     metadata = {
@@ -211,6 +245,7 @@ def main(cfg: DictConfig) -> None:
         "n_eval_rows": int(label.numel()),
         "in_sample": desc.in_sample,
         "seed": int(cfg.get("seed", 0)),
+        "device": device,
     }
 
     out_dir = cfg.get("output_dir") or (Path(cfg.run_dir) / "eval" / split)

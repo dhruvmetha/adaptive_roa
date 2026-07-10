@@ -23,6 +23,8 @@ eval_split: test        # test | cal | eval  (humanoid resolves to the _fps vari
 num_samples: null       # null -> single deterministic rollout; >1 -> probabilistic
 radius: ${attractor_radius}   # adaptive per-system success/failure radius
 max_eval_rows: null     # cap eval rows (null = all)
+device: cuda            # rollout device (falls back to cpu if unavailable)
+eval_chunk_size: 200000 # rows per rollout chunk (bounds VRAM); null = all at once
 export_predictions: true
 output_dir: null        # null -> <run_dir>/eval/<eval_split>
 seed: 0

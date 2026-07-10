@@ -7,4 +7,6 @@ latent_dim: 0
 num_integration_steps: 100
 batch_size: 1024
 max_epochs: 1000
-lr: 1.0e-3  # per-system override (quad3d/humanoid -> 5e-4) wins via defaults order
+# Per-system generative lr (matches the adaptive flow-matching optimizer.lr:
+# 1e-3, except quad3d/humanoid -> 5e-4). Each system config defines lr_generative.
+lr: ${lr_generative}

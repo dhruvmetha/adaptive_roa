@@ -20,6 +20,8 @@ class HorizonDataModule(pl.LightningDataModule):
         # Data is preloaded into in-memory tensors; worker processes add no value
         # and break on NFS (rmtree of `.nfs*` temp dirs). Mirrors the classifier DM.
         num_workers: int = 0,
+        # Cap the trajectory pool to the first N (gold order); None -> full pool.
+        max_trajectories: Optional[int] = None,
     ):
         super().__init__()
         self.dataset_dir = dataset_dir
@@ -27,15 +29,18 @@ class HorizonDataModule(pl.LightningDataModule):
         self.val_fraction = val_fraction
         self.seed = seed
         self.num_workers = num_workers
+        self.max_trajectories = max_trajectories
         self.train_ds: Optional[HorizonDataset] = None
         self.val_ds: Optional[HorizonDataset] = None
 
     def setup(self, stage: Optional[str] = None) -> None:
         self.train_ds = HorizonDataset(
-            self.dataset_dir, split="train", val_fraction=self.val_fraction, seed=self.seed
+            self.dataset_dir, split="train", val_fraction=self.val_fraction,
+            seed=self.seed, max_trajectories=self.max_trajectories,
         )
         self.val_ds = HorizonDataset(
-            self.dataset_dir, split="val", val_fraction=self.val_fraction, seed=self.seed
+            self.dataset_dir, split="val", val_fraction=self.val_fraction,
+            seed=self.seed, max_trajectories=self.max_trajectories,
         )
 
     def train_dataloader(self) -> DataLoader:

@@ -65,6 +65,23 @@ def test_pendulum_generative_lr_is_1e3():
     assert _compose([]).lr == 1e-3
 
 
+def test_deterministic_lr_in_between_for_quad3d_humanoid():
+    # deterministic q3d/humanoid uses a value between generative (5e-4) and the
+    # classifier default (1e-3); NOT the generative 5e-4 leaking through.
+    assert _compose(["backend=deterministic", "system=quadrotor3d"]).lr == 7.5e-4
+    assert _compose(["backend=deterministic", "system=humanoid_standup_reach"]).lr == 7.5e-4
+
+
+@pytest.mark.parametrize("system", ["pendulum", "cartpole", "quadrotor2d"])
+def test_deterministic_lr_is_1e3_for_small_systems(system):
+    assert _compose(["backend=deterministic", f"system={system}"]).lr == 1e-3
+
+
+@pytest.mark.parametrize("system", ["pendulum", "cartpole", "quadrotor2d"])
+def test_generative_lr_is_1e3_for_small_systems(system):
+    assert _compose([f"system={system}"]).lr == 1e-3
+
+
 def test_horizon_T_override_changes_dataset_dir():
     cfg = _compose(["system=cartpole", "horizon_T=50"])
     assert str(cfg.dataset_dir).endswith("cartpole_pybullet_T50")
@@ -74,3 +91,17 @@ def test_deterministic_backend_epochs():
     cfg = _compose(["backend=deterministic"])
     assert cfg.backend == "deterministic"
     assert cfg.max_epochs == 200
+
+
+@pytest.mark.parametrize(
+    "system,n",
+    [
+        ("pendulum", 500),
+        ("cartpole", 1000),
+        ("quadrotor2d", 12000),
+        ("quadrotor3d", 25000),
+        ("humanoid_standup_reach", 30000),
+    ],
+)
+def test_max_trajectories_default_per_system(system, n):
+    assert _compose([f"system={system}"]).max_trajectories == n

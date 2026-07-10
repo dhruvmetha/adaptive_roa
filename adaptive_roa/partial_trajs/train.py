@@ -18,7 +18,7 @@ from typing import Dict, Optional
 import hydra
 import lightning.pytorch as pl
 import torch
-from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
+from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import CSVLogger
 from omegaconf import DictConfig, OmegaConf
 
@@ -79,6 +79,20 @@ def horizon_error_over_loader(model, system, loader, max_batches: Optional[int] 
     )
 
 
+def build_callbacks(cfg: DictConfig, ckpt_dir):
+    """Checkpoint-only callbacks for the non-adaptive partial-trajectory runs.
+
+    Keeps the best-val checkpoint (+ ``last.ckpt``) but deliberately omits
+    ``EarlyStopping``: these runs are not adaptive and train the full ``max_epochs``.
+    """
+    return [
+        ModelCheckpoint(
+            dirpath=str(ckpt_dir), monitor="val_loss", mode="min",
+            save_top_k=1, save_last=True, filename="best-{epoch:02d}-{val_loss:.4f}",
+        ),
+    ]
+
+
 def _resolve_output_dir(cfg: DictConfig) -> str:
     """The training run directory: Hydra's output dir if running under @hydra.main,
     else ``cfg.output_dir`` (used by tests that call ``run`` without Hydra)."""
@@ -93,19 +107,22 @@ def _resolve_output_dir(cfg: DictConfig) -> str:
 def run(cfg: DictConfig):
     """Build system/data/model, fit, and return ``(model, metric#1 report)``.
 
-    When ``enable_checkpointing`` is set (real runs) the trainer mirrors the adaptive
-    ``ClassifierTrainer``: a best-val ``ModelCheckpoint`` (+ ``last.ckpt``),
-    ``EarlyStopping`` on ``val_loss``, a ``CSVLogger``, and gradient clipping; the
-    best-val weights are reloaded into the returned model after ``fit``.
+    When ``enable_checkpointing`` is set (real runs) the trainer keeps a best-val
+    ``ModelCheckpoint`` (+ ``last.ckpt``), a ``CSVLogger``, and gradient clipping,
+    and reloads the best-val weights into the returned model after ``fit``. Unlike
+    the adaptive ``ClassifierTrainer`` there is NO ``EarlyStopping`` — these
+    non-adaptive runs train the full ``max_epochs``.
     """
     pl.seed_everything(int(cfg.get("seed", 0)), workers=True)
 
     system = make_verifier_system(str(cfg.system), cfg.get("system_dataset_dir"))
+    max_traj = cfg.get("max_trajectories")
     dm = HorizonDataModule(
         cfg.dataset_dir,
         batch_size=int(cfg.batch_size),
         val_fraction=float(cfg.val_fraction),
         seed=int(cfg.get("seed", 0)),
+        max_trajectories=None if max_traj is None else int(max_traj),
     )
     model = build_model(cfg, system)
 
@@ -116,13 +133,7 @@ def run(cfg: DictConfig):
     if checkpointing:
         ckpt_dir = Path(_resolve_output_dir(cfg)) / "checkpoints"
         ckpt_dir.mkdir(parents=True, exist_ok=True)
-        callbacks = [
-            ModelCheckpoint(
-                dirpath=str(ckpt_dir), monitor="val_loss", mode="min",
-                save_top_k=1, save_last=True, filename="best-{epoch:02d}-{val_loss:.4f}",
-            ),
-            EarlyStopping(monitor="val_loss", mode="min", patience=int(cfg.get("patience", 20))),
-        ]
+        callbacks = build_callbacks(cfg, ckpt_dir)
         logger = CSVLogger(save_dir=_resolve_output_dir(cfg), name="partial_trajs_logs")
 
     trainer = pl.Trainer(

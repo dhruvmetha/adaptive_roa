@@ -5,5 +5,8 @@
 backend: deterministic
 batch_size: 1024
 max_epochs: 200
-lr: 1.0e-3
+# Per-system deterministic lr (1e-3 like the adaptive classifier, except
+# quad3d/humanoid -> 7.5e-4, between generative 5e-4 and classifier 1e-3). Each
+# system config defines lr_deterministic.
+lr: ${lr_deterministic}
 dropout: 0.0

@@ -60,3 +60,36 @@ def test_split_is_deterministic_for_same_seed(splits):
     train, _ = splits
     again = HorizonDataset(PENDULUM_T25, split="train", val_fraction=0.2, seed=0)
     assert set(train.traj_ids.tolist()) == set(again.traj_ids.tolist())
+
+
+def _gold_order_ids(n):
+    """First ``n`` trajectory ids in gold/pool order (== ``train_pool.txt`` order),
+    recovered as the first-occurrence order of ``traj_id`` blocks in horizons.npy."""
+    hz = np.load(PENDULUM_T25 / "train_splits" / "horizons.npy", mmap_mode="r")
+    tid = np.asarray(hz["traj_id"])
+    _, first_idx = np.unique(tid, return_index=True)
+    gold = tid[np.sort(first_idx)]
+    return gold[:n]
+
+
+def test_max_trajectories_caps_pool_to_first_n_gold_order():
+    n = 50
+    train = HorizonDataset(PENDULUM_T25, split="train", val_fraction=0.2, seed=0, max_trajectories=n)
+    val = HorizonDataset(PENDULUM_T25, split="val", val_fraction=0.2, seed=0, max_trajectories=n)
+    ids = set(train.traj_ids.tolist()) | set(val.traj_ids.tolist())
+    assert len(ids) == n
+    assert ids == set(_gold_order_ids(n).tolist())
+    # train/val still trajectory-disjoint within the capped pool
+    assert set(train.traj_ids.tolist()).isdisjoint(val.traj_ids.tolist())
+
+
+def test_max_trajectories_none_uses_full_pool():
+    train = HorizonDataset(PENDULUM_T25, split="train", val_fraction=0.2, seed=0, max_trajectories=None)
+    val = HorizonDataset(PENDULUM_T25, split="val", val_fraction=0.2, seed=0, max_trajectories=None)
+    ids = set(train.traj_ids.tolist()) | set(val.traj_ids.tolist())
+    assert len(ids) == 5000
+
+
+def test_max_trajectories_horizons_are_subset_of_full():
+    capped = HorizonDataset(PENDULUM_T25, split="train", val_fraction=0.2, seed=0, max_trajectories=50)
+    assert set(capped.traj_ids.tolist()).issubset(set(_gold_order_ids(50).tolist()))

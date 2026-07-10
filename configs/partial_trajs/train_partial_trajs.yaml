@@ -27,13 +27,16 @@ limit_train_batches: 1.0
 limit_val_batches: 1.0
 eval_max_batches: null  # cap batches for the metric-#1 val report (null = all)
 
-# Checkpointing / logging (mirrors the adaptive ClassifierTrainer)
-patience: 20
+# Checkpointing / logging. No EarlyStopping: these non-adaptive runs train the
+# full max_epochs (best-val + last checkpoints are still kept).
 gradient_clip_val: 1.0
 log_every_n_steps: 10
 
 hydra:
   run:
-    dir: outputs/partial_trajs/${system}/${now:%Y-%m-%d_%H-%M-%S}
+    # Include ${backend} and T${horizon_T} so a system's generative/deterministic
+    # runs and its different-T runs never share a run dir (they can launch in the
+    # same wall-clock second and would otherwise collide on checkpoints/).
+    dir: outputs/partial_trajs/${system}/${backend}/T${horizon_T}/${now:%Y-%m-%d_%H-%M-%S}
   job:
     chdir: false

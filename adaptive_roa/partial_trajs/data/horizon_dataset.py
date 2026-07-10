@@ -11,7 +11,7 @@ sampling is a documented future option (spec §4) not built here.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Union
+from typing import Dict, Optional, Union
 
 import numpy as np
 import torch
@@ -25,6 +25,7 @@ class HorizonDataset(Dataset):
         split: str = "train",
         val_fraction: float = 0.2,
         seed: int = 0,
+        max_trajectories: Optional[int] = None,
     ):
         if split not in ("train", "val"):
             raise ValueError(f"split must be 'train' or 'val', got {split!r}")
@@ -32,17 +33,29 @@ class HorizonDataset(Dataset):
         train_splits = Path(dataset_dir) / "train_splits"
 
         horizons = np.load(train_splits / "horizons.npy", mmap_mode="r")
+        traj_id = horizons["traj_id"]
+
+        if max_trajectories is not None:
+            # Cap to the first N trajectories in gold/pool order (the order in which
+            # the pool was built, == train_pool.txt / train_val_trajectories.txt).
+            # horizons.npy is block-ordered by trajectory in that order, so gold
+            # order is the first-occurrence order of traj_id blocks.
+            _, first_idx = np.unique(traj_id, return_index=True)
+            gold_ids = traj_id[np.sort(first_idx)]
+            pool_ids = gold_ids[: int(max_trajectories)]
+            horizons = np.array(horizons[np.isin(traj_id, pool_ids)])  # materialize pool
+            traj_id = horizons["traj_id"]
 
         # Trajectory-level split: partition unique traj_ids, then keep this
         # split's horizons. Deterministic given seed.
-        unique_ids = np.unique(horizons["traj_id"])
+        unique_ids = np.unique(traj_id)
         perm = np.random.default_rng(seed).permutation(unique_ids)
         n_val = int(round(len(perm) * val_fraction))
         val_ids = perm[:n_val]
         keep_ids = val_ids if split == "val" else perm[n_val:]
         self.traj_ids = np.sort(keep_ids)
 
-        mask = np.isin(horizons["traj_id"], self.traj_ids)
+        mask = np.isin(traj_id, self.traj_ids)
         self.horizons = np.array(horizons[mask])  # materialize this split
 
         # Load only this split's trajectories into memory.

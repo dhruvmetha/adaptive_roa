@@ -6,6 +6,9 @@ dataset_dir: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_traj
 hidden_dims: [512, 1024, 1024, 512]
 attractor_radius: 0.3
 eval_split_file: test_set.txt
-# Generative FM analog used lr 5e-4 for quad3d/humanoid; the deterministic
-# classifier analog used 1e-3 -> pass lr=1e-3 on the CLI for deterministic runs.
-lr: 5.0e-4
+# Generative FM analog used lr 5e-4 for quad3d/humanoid; deterministic uses 7.5e-4
+# (between the generative 5e-4 and the classifier analog's 1e-3).
+lr_generative: 5.0e-4
+lr_deterministic: 7.5e-4
+# Trajectory-pool cap (first N in gold/pool order); horizon count follows per T.
+max_trajectories: 25000

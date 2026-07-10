@@ -6,3 +6,7 @@ dataset_dir: ${shared_data_base:/common/users/shared/pracsys/genMoPlan/data_traj
 hidden_dims: [256, 512, 1024, 512, 256]
 attractor_radius: 0.2
 eval_split_file: test_set.txt
+lr_generative: 1.0e-3
+lr_deterministic: 1.0e-3
+# Trajectory-pool cap (first N in gold/pool order); horizon count follows per T.
+max_trajectories: 1000

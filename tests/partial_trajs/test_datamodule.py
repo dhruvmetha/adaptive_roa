@@ -38,3 +38,10 @@ def test_batch_has_expected_keys_and_shapes(dm):
 
 def test_train_and_val_trajectories_are_disjoint(dm):
     assert set(dm.train_ds.traj_ids.tolist()).isdisjoint(dm.val_ds.traj_ids.tolist())
+
+
+def test_max_trajectories_is_plumbed_to_datasets():
+    dm = HorizonDataModule(PENDULUM_T25, batch_size=64, val_fraction=0.2, seed=0, max_trajectories=40)
+    dm.setup()
+    ids = set(dm.train_ds.traj_ids.tolist()) | set(dm.val_ds.traj_ids.tolist())
+    assert len(ids) == 40

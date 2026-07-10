@@ -11,6 +11,10 @@ acquisition:
     delta: 0.05
     alpha: 0.05
     m_class: 64
+    # Cap on leaf count. null = unbounded (low-dim default). In high dimensions
+    # region classification rarely resolves, so leaves grow ~2^epochs -> OOM;
+    # set e.g. 4000 for >=6D / long schedules to bound memory & runtime.
+    max_leaves: null
   bounds:
     R: 200
     M: 64

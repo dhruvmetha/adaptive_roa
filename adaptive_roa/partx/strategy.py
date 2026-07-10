@@ -35,6 +35,7 @@ class PartXAcquisitionStrategy:
                 delta=float(self._tree_cfg.get("delta", 0.05)),
                 alpha=float(self._tree_cfg.get("alpha", 0.05)),
                 m_class=int(self._tree_cfg.get("m_class", 64)),
+                max_leaves=self._tree_cfg.get("max_leaves", None),
             )
         # 1) refine tree against the current GP posterior
         self.tree.refine(latent_fn)

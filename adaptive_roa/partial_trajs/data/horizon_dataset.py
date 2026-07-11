@@ -26,6 +26,7 @@ class HorizonDataset(Dataset):
         val_fraction: float = 0.2,
         seed: int = 0,
         max_trajectories: Optional[int] = None,
+        iid_horizons: bool = False,
     ):
         if split not in ("train", "val"):
             raise ValueError(f"split must be 'train' or 'val', got {split!r}")
@@ -35,28 +36,45 @@ class HorizonDataset(Dataset):
         horizons = np.load(train_splits / "horizons.npy", mmap_mode="r")
         traj_id = horizons["traj_id"]
 
+        n_horizons = None
         if max_trajectories is not None:
-            # Cap to the first N trajectories in gold/pool order (the order in which
-            # the pool was built, == train_pool.txt / train_val_trajectories.txt).
-            # horizons.npy is block-ordered by trajectory in that order, so gold
-            # order is the first-occurrence order of traj_id blocks.
+            # First N trajectories in gold/pool order (horizons.npy is block-ordered
+            # by trajectory in build order == train_pool.txt).
             _, first_idx = np.unique(traj_id, return_index=True)
             gold_ids = traj_id[np.sort(first_idx)]
             pool_ids = gold_ids[: int(max_trajectories)]
-            horizons = np.array(horizons[np.isin(traj_id, pool_ids)])  # materialize pool
-            traj_id = horizons["traj_id"]
+            pool_mask = np.isin(traj_id, pool_ids)
+            if iid_horizons:
+                # ``max_trajectories`` only sets the *budget*: use the horizon count
+                # those N trajectories would give, but draw that many horizons IID
+                # (uniform, no replacement) from the FULL pool so they span the whole
+                # trajectory diversity instead of clustering in N trajectories.
+                n_horizons = int(pool_mask.sum())
+            else:
+                horizons = np.array(horizons[pool_mask])  # materialize the N-traj pool
+                traj_id = horizons["traj_id"]
 
-        # Trajectory-level split: partition unique traj_ids, then keep this
-        # split's horizons. Deterministic given seed.
-        unique_ids = np.unique(traj_id)
-        perm = np.random.default_rng(seed).permutation(unique_ids)
-        n_val = int(round(len(perm) * val_fraction))
-        val_ids = perm[:n_val]
-        keep_ids = val_ids if split == "val" else perm[n_val:]
-        self.traj_ids = np.sort(keep_ids)
-
-        mask = np.isin(traj_id, self.traj_ids)
-        self.horizons = np.array(horizons[mask])  # materialize this split
+        if iid_horizons:
+            if n_horizons is None:  # no budget -> use all horizons
+                n_horizons = len(traj_id)
+            # Sample K horizons IID from the full pool, then split BY HORIZON
+            # (trajectory-disjoint splitting is meaningless once the sample spans
+            # ~all trajectories). Deterministic given seed.
+            sample = np.random.default_rng(seed).permutation(len(traj_id))[:n_horizons]
+            n_val = int(round(n_horizons * val_fraction))
+            keep_idx = sample[:n_val] if split == "val" else sample[n_val:]
+            self.horizons = np.array(horizons[np.sort(keep_idx)])
+            self.traj_ids = np.unique(self.horizons["traj_id"])
+        else:
+            # Trajectory-level split: partition unique traj_ids, keep this split's
+            # horizons (no trajectory's horizons leak across train/val).
+            unique_ids = np.unique(traj_id)
+            perm = np.random.default_rng(seed).permutation(unique_ids)
+            n_val = int(round(len(perm) * val_fraction))
+            val_ids = perm[:n_val]
+            keep_ids = val_ids if split == "val" else perm[n_val:]
+            self.traj_ids = np.sort(keep_ids)
+            self.horizons = np.array(horizons[np.isin(traj_id, self.traj_ids)])
 
         # Load only this split's trajectories into memory.
         cache = np.load(train_splits / "states_cache.npz")

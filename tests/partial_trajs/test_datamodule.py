@@ -45,3 +45,15 @@ def test_max_trajectories_is_plumbed_to_datasets():
     dm.setup()
     ids = set(dm.train_ds.traj_ids.tolist()) | set(dm.val_ds.traj_ids.tolist())
     assert len(ids) == 40
+
+
+def test_iid_horizons_is_plumbed_to_datasets():
+    clustered = HorizonDataModule(PENDULUM_T25, batch_size=64, val_fraction=0.2, seed=0, max_trajectories=40)
+    clustered.setup()
+    k = len(clustered.train_ds) + len(clustered.val_ds)
+    iid = HorizonDataModule(PENDULUM_T25, batch_size=64, val_fraction=0.2, seed=0, max_trajectories=40, iid_horizons=True)
+    iid.setup()
+    # same horizon budget, but spread over many more trajectories
+    assert len(iid.train_ds) + len(iid.val_ds) == k
+    ids = set(iid.train_ds.traj_ids.tolist()) | set(iid.val_ds.traj_ids.tolist())
+    assert len(ids) > 40

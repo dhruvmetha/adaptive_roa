@@ -19,6 +19,11 @@ system_dataset_dir: null
 # Runtime / trainer
 seed: 0
 val_fraction: 0.2
+# Draw the per-system horizon budget (from max_trajectories) as an IID uniform
+# sample over the full pool, split by horizon -- a faithful iid training set
+# rather than all windows of a few clustered trajectories. false = legacy
+# trajectory-cap (all horizons of the first N trajectories, split by trajectory).
+iid_horizons: true
 accelerator: gpu
 devices: 1
 enable_checkpointing: true

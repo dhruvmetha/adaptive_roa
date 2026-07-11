@@ -93,3 +93,30 @@ def test_max_trajectories_none_uses_full_pool():
 def test_max_trajectories_horizons_are_subset_of_full():
     capped = HorizonDataset(PENDULUM_T25, split="train", val_fraction=0.2, seed=0, max_trajectories=50)
     assert set(capped.traj_ids.tolist()).issubset(set(_gold_order_ids(50).tolist()))
+
+
+def test_iid_horizons_matches_count_but_spreads_across_pool():
+    N = 50
+    # clustered cap count K (all horizons of the first N gold-order trajectories)
+    c_tr = HorizonDataset(PENDULUM_T25, split="train", val_fraction=0.2, seed=0, max_trajectories=N)
+    c_va = HorizonDataset(PENDULUM_T25, split="val", val_fraction=0.2, seed=0, max_trajectories=N)
+    K = len(c_tr) + len(c_va)
+
+    # IID mode: same K, but sampled uniformly from the FULL pool, split by horizon
+    i_tr = HorizonDataset(PENDULUM_T25, split="train", val_fraction=0.2, seed=0, max_trajectories=N, iid_horizons=True)
+    i_va = HorizonDataset(PENDULUM_T25, split="val", val_fraction=0.2, seed=0, max_trajectories=N, iid_horizons=True)
+
+    # (a) same total horizon count as the trajectory cap
+    assert len(i_tr) + len(i_va) == K
+    # (b) ~80/20 horizon-level split
+    assert abs(len(i_va) / K - 0.2) < 0.02
+    # (c) spans FAR more than N trajectories (IID over the whole ~5000-traj pool)
+    n_traj = len(set(i_tr.horizons["traj_id"].tolist()) | set(i_va.horizons["traj_id"].tolist()))
+    assert n_traj > 10 * N
+
+
+def test_iid_horizons_deterministic_for_seed():
+    a = HorizonDataset(PENDULUM_T25, split="train", val_fraction=0.2, seed=0, max_trajectories=50, iid_horizons=True)
+    b = HorizonDataset(PENDULUM_T25, split="train", val_fraction=0.2, seed=0, max_trajectories=50, iid_horizons=True)
+    assert len(a) == len(b)
+    assert np.array_equal(a.horizons["start"], b.horizons["start"])

@@ -22,6 +22,9 @@ class HorizonDataModule(pl.LightningDataModule):
         num_workers: int = 0,
         # Cap the trajectory pool to the first N (gold order); None -> full pool.
         max_trajectories: Optional[int] = None,
+        # If True, use max_trajectories only as a horizon *budget*: sample that many
+        # horizons IID from the full pool and split by horizon (see HorizonDataset).
+        iid_horizons: bool = False,
     ):
         super().__init__()
         self.dataset_dir = dataset_dir
@@ -30,6 +33,7 @@ class HorizonDataModule(pl.LightningDataModule):
         self.seed = seed
         self.num_workers = num_workers
         self.max_trajectories = max_trajectories
+        self.iid_horizons = iid_horizons
         self.train_ds: Optional[HorizonDataset] = None
         self.val_ds: Optional[HorizonDataset] = None
 
@@ -37,10 +41,12 @@ class HorizonDataModule(pl.LightningDataModule):
         self.train_ds = HorizonDataset(
             self.dataset_dir, split="train", val_fraction=self.val_fraction,
             seed=self.seed, max_trajectories=self.max_trajectories,
+            iid_horizons=self.iid_horizons,
         )
         self.val_ds = HorizonDataset(
             self.dataset_dir, split="val", val_fraction=self.val_fraction,
             seed=self.seed, max_trajectories=self.max_trajectories,
+            iid_horizons=self.iid_horizons,
         )
 
     def train_dataloader(self) -> DataLoader:

@@ -123,6 +123,7 @@ def run(cfg: DictConfig):
         val_fraction=float(cfg.val_fraction),
         seed=int(cfg.get("seed", 0)),
         max_trajectories=None if max_traj is None else int(max_traj),
+        iid_horizons=bool(cfg.get("iid_horizons", False)),
     )
     model = build_model(cfg, system)
 

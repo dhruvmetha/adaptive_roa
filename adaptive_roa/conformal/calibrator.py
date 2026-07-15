@@ -68,21 +68,39 @@ def nonconformity_score_two_sided(
     
     Decision regions (with u = λ+δ, v = 1-λ+δ):
     - SUCCESS: p_s >= u and p_f <= v
-    - FAILURE: p_f >= v and p_s <= u  
+    - FAILURE: p_f >= v and p_s <= u
     - INVALID: neither confident (p_s < u and p_f < v)
-    
+
     Score = max of constraint violations (L_inf distance to region).
+
+    NOTE -- the y=±1 branches intentionally evaluate only ONE of their two
+    constraints. This is a proven reduction, not a missing term:
+
+        u + v = (λ+δ) + (1-λ+δ) = 1 + 2δ
+
+    For y=+1, the second term would dominate only if  p_f - v > u - p_s,
+    i.e. only if  p_s + p_f > u + v = 1 + 2δ.  But (p_s, p_f, p_invalid) is a
+    probability triple, so p_s + p_f <= 1, and δ >= 0 -- hence p_s + p_f > 1 + 2δ
+    is impossible and (p_f - v) can NEVER bind. Mirrored argument for y=-1.
+    The y=0 branch keeps BOTH terms because there neither one dominates.
+
+    Verified numerically: 0 disagreements vs the full L_inf form over 2e6 random
+    valid triples. Do NOT "restore" the omitted terms -- they are dead weight.
+    The reduction relies on δ >= 0, which ConformalConfig enforces
+    (delta_min > 0; see configs/adaptive_v2/threshold/conformal_threshold.yaml).
     """
     u = lambda_star + delta       # success threshold on p_s
     v = 1 - lambda_star + delta   # failure threshold on p_f
 
     if y_candidate == 1:  # SUCCESS
         # Require: p_s >= u and p_f <= v
-        # Score = max(0, u - p_s, p_f - v)
+        # Full L_inf form is max(0, u - p_s, p_f - v); (p_f - v) is provably
+        # dominated by (u - p_s) -- see NOTE above -- so it is omitted.
         return max(0.0, u - p_success)
     elif y_candidate == -1:  # FAILURE
         # Require: p_f >= v and p_s <= u
-        # Score = max(0, v - p_f, p_s - u)
+        # Full L_inf form is max(0, v - p_f, p_s - u); (p_s - u) is provably
+        # dominated by (v - p_f) -- see NOTE above -- so it is omitted.
         return max(0.0, v - p_failure)
     else:  # INVALID (y_candidate == 0)
         # Require: p_s < u and p_f < v (separatrix region)
@@ -129,13 +147,18 @@ def nonconformity_scores_batch_two_sided(
     lambda_star: float,
     delta: float
 ) -> np.ndarray:
-    """Batch two-sided nonconformity scores using p_s and p_f."""
+    """Batch two-sided nonconformity scores using p_s and p_f.
+
+    Mirrors nonconformity_score_two_sided exactly, including the proven one-term
+    reduction for y=±1 -- see the NOTE in that function before changing anything here.
+    """
     u = lambda_star + delta       # success threshold on p_s
     v = 1 - lambda_star + delta   # failure threshold on p_f
 
     scores = np.zeros(len(p_success))
 
     # SUCCESS candidates: require p_s >= u and p_f <= v
+    # (p_f - v) omitted: provably dominated by (u - p_s). See NOTE above.
     success_mask = y_groundtruth == 1
     scores[success_mask] = np.maximum(
         0,

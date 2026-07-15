@@ -149,9 +149,22 @@ class PendulumSystem(DynamicalSystem):
 
         Returns:
             Integer tensor [B] with:
-                1: State in stable bottom attractor [0.0, 0.0] (SUCCESS)
-               -1: State in unstable top attractors [±2.1, 0.0] (FAILURE)
+                1: State in the goal attractor [0.0, 0.0] (SUCCESS)
+               -1: State in a saturation attractor [±2.1, 0.0] (FAILURE)
                 0: State in none of the attractors (SEPARATRIX)
+
+        Attractor geometry (verified 2026-07-15 against dataset_description.json; an earlier
+        version of this docstring had it backwards):
+          * theta = 0 is the *upright / inverted* equilibrium and is UNSTABLE -- it is what the
+            LQR stabilises. The documented EOM is
+                theta_ddot = (g/l) sin(theta) + u/I - (b/I) theta_dot
+            and d(theta_ddot)/d(theta) at 0 = +(g/l) > 0, hence unstable. It is NOT a stable
+            "bottom" equilibrium; reaching and holding it is the task.
+          * +/-2.1 are NOT the "top". They are the *torque-saturation* equilibria: with the
+            controller pinned at u = -u_sat, gravity balances control where
+                sin(theta*) = (u_sat/I)/(g/l) = 0.866025  ->  theta* = 2.0944 rad = 120 deg
+            (u_sat appears chosen to place this exactly at 120 deg). The pendulum sticks there
+            because saturated torque cannot lift it further -- that is the failure mode.
         """
         attractors = torch.tensor(self.attractors(), device=state.device, dtype=state.dtype)
 

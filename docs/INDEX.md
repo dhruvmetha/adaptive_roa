@@ -23,11 +23,12 @@ code wins and the page gets fixed or archived.
 
 | I need to… | Read | Status |
 |---|---|---|
-| the method end-to-end, faithful to the implementation | **`ADAPTIVE_METHOD_THRESHOLD_SAMPLING_REEVALUATION.md`** | current — *best method reference; the filename undersells it* |
+| **the method end-to-end** — threshold optimisation, D1/D2 adaptive sampling, reevaluation | **`METHODS.md`** | current |
 | optimize λ*/δ*, calibrate q̂, understand the decision band | **`THRESHOLD_OPTIMIZATION.md`** | current — *strongest doc in the repo* |
-| trace the q̂ calibration chain | `QHAT_CALIBRATION_PIPELINE.md` | current, narrow |
-| the RoA method's math (system-agnostic) | `ADAPTIVE_ROA_METHOD.md` | ⚠ math durable, prose partly stale |
-| the adaptive epoch loop, step by step | `ADAPTIVE_CARTPOLE_PIPELINE.md` | ⚠ loop map unique & useful; **every CLI example misfires** |
+| trace the q̂ calibration chain specifically | `QHAT_CALIBRATION_PIPELINE.md` | current; overlaps THRESHOLD_OPTIMIZATION |
+
+> The epoch loop itself: read `adaptive_roa/adaptive_v2/engine.py`. The prose walkthrough that used
+> to live here was retired — its CLI examples had all rotted, and the code is shorter than the doc.
 
 ## Evidence — frozen, never edit
 

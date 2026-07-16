@@ -21,6 +21,8 @@ returns **zero** — the rot was docs-only.
 | `ADAPTIVE_V2_ARCHITECTURE.md` | A 41-line table of contents, not an architecture. Predates the `predictor=generative\|classifier\|gp` abstraction entirely and never mentions it; says "4 systems" when there are more; asserts `artifacts_v2.json` contains `legacy_epoch_metrics`, a string that appears only in docs and never in code |
 | `ADAPTIVE_V2_MIGRATION.md` | Correct, but a one-time v1→v2 cutover changelog — a historical record misfiled as a living doc. Belongs beside `LEGACY_ADAPTIVE_V1.md` |
 | `LEGACY_ADAPTIVE_V1.md` | Pre-existing archive entry: where the v1 configs/scripts went |
+| `ADAPTIVE_CARTPOLE_PIPELINE.md` | 513 lines stepping through the adaptive epoch loop for cartpole. Every CLI example misfires (`conformal.*` knobs and `sampling_mode=` no longer exist). Its one unique asset was the loop map — but `adaptive_v2/engine.py` is ~300 lines and is true. Retired rather than left flagged: a doc with a warning label is still a doc people read |
+| `ADAPTIVE_ROA_METHOD.md` | 296 lines of system-agnostic method math. The math is durable but the prose is partly stale, and `METHODS.md` (the Feb-27 deep dive) covers the same ground and is current. Retired as redundant, not as wrong |
 
 ## A warning that outlived its doc
 

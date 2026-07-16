@@ -369,7 +369,7 @@ Each prediction variant produces:
 
 ## Configuration Reference
 
-All threshold-related parameters are in `ConformalConfig` (`adaptive_roa/conformal/config.py`), loaded from `configs/conformal/default.yaml`:
+All threshold-related parameters are in `ConformalConfig` (`adaptive_roa/conformal/config.py`), populated via the Hydra groups `configs/adaptive_v2/threshold/conformal_threshold.yaml` and `configs/adaptive_v2/calibration/conformal_calibration.yaml` (there is no `configs/conformal/`):
 
 ```yaml
 # Decision boundary parameters

@@ -271,7 +271,9 @@ N_{D2}=N-N_{D1}.
 D1 serves both:
 
 - exploration (non-adaptive baseline component),
-- conformal calibration data for D2 in `sampling_mode=conformal`.
+- conformal calibration data for D2 in conformal acquisition mode (CLI: `acquisition=conformal`;
+  the old top-level `sampling_mode=` override was removed 2026-06-29, though the artifact JSON
+  still records the mode under a `sampling_mode` key).
 
 ### 8.3 D2 strategy A: `conformal`
 
@@ -426,7 +428,8 @@ Report at minimum:
 - threshold mode (`dynamic` or `fixed`),
 - optimization objective (`loss` or `f1`) and optimize mode (`lambda`/`delta`/`joint`),
 - \(w\), lambda/delta grid ranges and grid sizes,
-- D1/D2 settings (`samples_per_epoch`, `d2_ratio`, `sampling_mode`),
+- D1/D2 settings (`samples_per_epoch`, and the acquisition group's `d2_ratio` / mode — CLI
+  `acquisition=direct|ranked|conformal acquisition.d2_ratio=...`),
 - whether confidence filtering is enabled,
 - MC sample counts for thresholding and evaluation,
 - attractor radius,

@@ -2,7 +2,10 @@
 Configuration dataclass for Conformal Prediction.
 
 This class holds all hyperparameters for conformal prediction and can be
-instantiated via Hydra from configs/conformal/default.yaml.
+populated via Hydra from the adaptive_v2 threshold/calibration groups
+(configs/adaptive_v2/threshold/conformal_threshold.yaml and
+configs/adaptive_v2/calibration/conformal_calibration.yaml); there is no
+configs/conformal/ directory.
 """
 from dataclasses import dataclass, field
 

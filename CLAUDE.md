@@ -30,14 +30,14 @@ Wrong answers, no error. Nothing here fails loudly enough to teach you.
 
 - **`DATA_DIR` = `/common/users/shared/pracsys/genMoPlan/data_trajectories` is shared, READ-ONLY**
   (owned by `st1122`). Never write or delete under it. Exactly **one** code path guards this
-  (`adaptive/data_source.py` raises `ValueError`); every other write path is unguarded and will
+  (`adaptive_roa/adaptive/data_source.py` raises `ValueError`); every other write path is unguarded and will
   succeed quietly.
 - **Labels flip meaning between layers.** On disk `{0,1}`; internally `{-1, 0, +1}` where **`0` is
   separatrix**; but in `evaluate_roa` predictions **`0` is failure** and `-1` is *uncertain*, and
   `-1`/`-2` are silently dropped from metrics — so F1 is computed on a retained subset and is not
   comparable across methods with different abstention rates.
 - **NFS breaks DataLoader workers** (`OSError: Errno 16` cleaning `.nfs*`). The classifier trainer
-  pins `num_workers=0`; the FM trainer and `data/trajectory_data.py` still default to **4**.
+  pins `num_workers=0`; the FM trainer and `adaptive_roa/data/trajectory_data.py` still default to **4**.
 - **`noise_regime=noisy` does not work.** Nothing reads the per-cell `.npz` format — it only builds
   path strings.
 

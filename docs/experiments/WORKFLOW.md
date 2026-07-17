@@ -16,13 +16,19 @@ it does not replace one. Finished experiment *lines* are frozen into `docs/resea
 5. Flip status to `done`; `git mv` the card `log/ → archive/`; lift a curated finding into
    `RESULTS.md`; freeze a finished line into `docs/research_journal/`.
 
-## Enforced rules (checked by `scripts/docs_lint.py`)
+## Machine-enforced (checked by `scripts/docs_lint.py`)
 
 - Status is one of `idea → live → done`.
-- `commit:` is stamped **before** status becomes `live`.
+- `commit:` is stamped **before** status becomes `live` (required once `live`/`done`).
 - `metric:` is set once status is `live`/`done`.
-- `splits:` is non-empty for a `done` card, and the **Result** is split by every axis it names —
-  never aggregate-only.
+- `splits:` is non-empty for a `done` card.
+- Frontmatter `type: experiment`, and all six sections (**Hypothesis**, **Plan**, **Run**,
+  **Result + Verdict**, **Next**, **Discussion**) are present and in order.
+- `docs/INDEX.md` routes to `experiments/WORKFLOW.md`.
+
+## Convention — enforced in review, not by the linter
+
+- The **Result** is split by every axis named in `splits:` — never aggregate-only.
 - Cross-predictor verdicts **state abstention/coverage** (the F1-not-comparable trap; see
   `docs/TARGET.md`).
 - The registry (`docs/research_journal/job_registry.tsv`) is the source of truth for run paths —

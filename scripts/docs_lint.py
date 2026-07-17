@@ -103,7 +103,7 @@ def _iter_card_paths(experiments_dir):
 def collect_cards(experiments_dir):
     cards = []
     for path in _iter_card_paths(experiments_dir):
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             fm, _ = split_frontmatter(f.read())
         rel = os.path.relpath(path, experiments_dir)
         cards.append((rel, fm or {}))
@@ -113,10 +113,10 @@ def collect_cards(experiments_dir):
 def check_tree(experiments_dir, index_path):
     problems = []
     for path in _iter_card_paths(experiments_dir):
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             problems.extend(card_violations(path, f.read()))
     if os.path.exists(index_path):
-        with open(index_path) as f:
+        with open(index_path, encoding="utf-8") as f:
             problems.extend(index_violations(f.read()))
     else:
         problems.append(f"{index_path}: file not found")
@@ -152,7 +152,7 @@ def main(argv=None):
 
     if args.dashboard:
         cards = collect_cards(args.experiments)
-        with open(os.path.join(args.experiments, "DASHBOARD.md"), "w") as f:
+        with open(os.path.join(args.experiments, "DASHBOARD.md"), "w", encoding="utf-8") as f:
             f.write(render_dashboard(cards))
 
     problems = check_tree(args.experiments, args.index)

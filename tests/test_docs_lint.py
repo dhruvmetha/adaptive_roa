@@ -70,7 +70,10 @@ def test_index_route_present_and_absent():
     assert len(problems) == 1
 
 
-import textwrap
+def test_missing_section_reported():
+    bad = VALID_CARD.replace("## Next\n", "")
+    problems = docs_lint.card_violations("log/x.md", bad)
+    assert any("missing section '## Next'" in p for p in problems)
 
 
 def _write(path, text):

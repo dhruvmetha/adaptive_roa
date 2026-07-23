@@ -1,0 +1,64 @@
+# @package _global_
+
+# Stochastic pendulum (LQR + control-proportional dynamics noise).
+# Datasets: ${data_dir}/noisy/pendulum/lqr/{low,med,high,xhigh} — npz-backed
+# training pool (train.npz) + probabilistic 3-col eval/cal/test files
+# (θ_s, θ̇_s, p_success). See scripts/prepare_stochastic_pendulum.py.
+#
+# Usage: system=pendulum_stoch noise_level=med acquisition.d2_ratio=0
+
+defaults:
+  - _base
+  - /model/system_dims: pendulum
+  - /prediction_mode: global
+  - _self_
+
+name: adaptive_pendulum_stoch_${noise_level}
+output_dir: ${exp_dir}/${name}_dhruv/outputs/training_index_${training_index}_d2_ratio_${acquisition.d2_ratio}_warm_start_${warm_start}_adapt_iter_${n_epochs}/${now:%Y-%m-%d_%H-%M-%S}
+
+shuffle_variant: 0
+
+noise_regime: noisy
+# Noise level: low | med | high | xhigh
+noise_level: med
+dataset_name: pendulum/lqr/${noise_level}
+dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
+
+decision_rule: one_sided
+attractor_radius: 0.1
+
+threshold:
+  optimize_mode: joint
+
+data_source:
+  pool_format: npz
+  trajectories_dir: ${dataset_root}/train.npz
+  shuffled_indices_file: ${dataset_root}/train_test_splits/shuffled_indices_${shuffle_variant}.txt
+  shuffled_labels_file: ${dataset_root}/train_test_splits/shuffled_labels_${shuffle_variant}.txt
+  eval_states_file: ${dataset_root}/eval_states.txt
+  cal_set_file: ${dataset_root}/cal_set.txt
+  test_set_file: ${dataset_root}/test_set.txt
+
+# Start-level acquisition: shuffled_indices holds contiguous blocks of 10
+# rollouts per start state, so pool sizes are counted in rollouts and must be
+# multiples of 10 (×10 vs the deterministic pendulum config).
+initial_train_size: 1000
+n_epochs: 19
+samples_per_epoch: 1000
+
+flow_matching:
+  clamp_noise: true
+  use_log_loss_weights: false
+
+system:
+  _target_: adaptive_roa.systems.pendulum.PendulumSystem
+  dataset_dir: ${dataset_root}
+
+flow_matcher:
+  _target_: adaptive_roa.flow_matching.pendulum.latent_conditional.flow_matcher.PendulumLatentConditionalFlowMatcher
+
+flow_matcher_local:
+  _target_: adaptive_roa.flow_matching.pendulum.trajectory.flow_matcher.PendulumTrajectoryFlowMatcher
+
+adaptive_v2:
+  system_name: pendulum

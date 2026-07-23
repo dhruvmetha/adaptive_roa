@@ -561,18 +561,25 @@ def evaluate_full_roa_fast(
         mc_labels = mc_cache.mc_labels
         # Derive pred_sum and mc_errors from cached endpoints
         pred_sum = mc_cache.mc_endpoints.sum(axis=1).astype(np.float64)  # [N, state_dim]
-        mc_errors = np.linalg.norm(
-            mc_cache.mc_endpoints - end_states_all[:, np.newaxis, :],
-            axis=2,
-        ).astype(np.float32)  # [N, K]
+        if end_states_all is None:
+            # probabilistic eval files carry no ground-truth endpoints
+            mc_errors = np.full((n_total, num_mc_samples), np.nan, dtype=np.float32)
+        else:
+            mc_errors = np.linalg.norm(
+                mc_cache.mc_endpoints - end_states_all[:, np.newaxis, :],
+                axis=2,
+            ).astype(np.float32)  # [N, K]
     else:
         # ── GPU MC sampling loop (original path) ─────────────────────────
         X_tensor = torch.from_numpy(X_all).float().to(device)
-        end_tensor = torch.from_numpy(end_states_all).float().to(device)
+        end_tensor = (
+            torch.from_numpy(end_states_all).float().to(device)
+            if end_states_all is not None else None
+        )
 
         mc_labels = np.zeros((n_total, num_mc_samples), dtype=np.int8)
-        pred_sum = np.zeros((n_total, end_states_all.shape[1]), dtype=np.float64)
-        mc_errors = np.zeros((n_total, num_mc_samples), dtype=np.float32)
+        pred_sum = np.zeros((n_total, X_all.shape[1]), dtype=np.float64)
+        mc_errors = np.full((n_total, num_mc_samples), np.nan, dtype=np.float32)
 
         cumulative_rstats = RefinementStats(
             per_attempt_resolved=[0] * refine_max_attempts
@@ -587,7 +594,7 @@ def evaluate_full_roa_fast(
             for batch_start in range(0, n_total, batch_size):
                 batch_end = min(batch_start + batch_size, n_total)
                 batch_inputs = X_tensor[batch_start:batch_end]
-                batch_actual = end_tensor[batch_start:batch_end]
+                batch_actual = end_tensor[batch_start:batch_end] if end_tensor is not None else None
 
                 for sample_idx in range(num_mc_samples):
                     pred = flow_matcher.predict_endpoint(batch_inputs)
@@ -609,11 +616,12 @@ def evaluate_full_roa_fast(
                     pred_np = pred.cpu().numpy()
                     pred_sum[batch_start:batch_end] += pred_np
 
-                    if hasattr(flow_matcher, "distance_manifold"):
-                        geodesic = flow_matcher.distance_manifold.dist(pred, batch_actual).cpu().numpy()
-                    else:
-                        geodesic = pred_np - batch_actual.cpu().numpy()
-                    mc_errors[batch_start:batch_end, sample_idx] = np.linalg.norm(geodesic, axis=1)
+                    if batch_actual is not None:
+                        if hasattr(flow_matcher, "distance_manifold"):
+                            geodesic = flow_matcher.distance_manifold.dist(pred, batch_actual).cpu().numpy()
+                        else:
+                            geodesic = pred_np - batch_actual.cpu().numpy()
+                        mc_errors[batch_start:batch_end, sample_idx] = np.linalg.norm(geodesic, axis=1)
 
                     pbar.update(1)
 
@@ -629,7 +637,13 @@ def evaluate_full_roa_fast(
 
     pred_mean = pred_sum / float(num_mc_samples)
 
-    if flow_matcher is not None and hasattr(flow_matcher, "distance_manifold"):
+    if end_states_all is None:
+        geodesic_errors = np.full_like(pred_mean, np.nan, dtype=np.float32)
+        if flow_matcher is not None and hasattr(flow_matcher, "distance_manifold"):
+            component_names = list(flow_matcher.get_manifold_component_names())
+        else:
+            component_names = [f"dim_{i}" for i in range(geodesic_errors.shape[1])]
+    elif flow_matcher is not None and hasattr(flow_matcher, "distance_manifold"):
         pred_tensor = torch.from_numpy(pred_mean).float().to(device)
         end_tensor_local = torch.from_numpy(end_states_all).float().to(device) if mc_cache is not None else end_tensor
         geodesic_errors = flow_matcher.distance_manifold.dist(pred_tensor, end_tensor_local).cpu().numpy()

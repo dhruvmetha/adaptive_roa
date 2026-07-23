@@ -167,8 +167,12 @@ def prepare_level(level: str, train_ids: np.ndarray, eval_ids: np.ndarray) -> No
 def verify_level(level: str, train_ids: np.ndarray, eval_ids: np.ndarray) -> None:
     dst = DST_ROOT / level
     zsrc = np.load(src_dir(level) / "trajectories.npz")
-    tr = np.load(dst / "train.npz")
-    ev = np.load(dst / "eval.npz")
+    # Materialize member arrays once: NpzFile re-reads the full member from
+    # disk on EVERY access, which is catastrophic inside the loops below.
+    with np.load(dst / "train.npz") as z:
+        tr = {k: z[k] for k in z.files}
+    with np.load(dst / "eval.npz") as z:
+        ev = {k: z[k] for k in z.files}
 
     assert len(tr["labels"]) == N_TRAIN_STARTS * ROLLOUTS_PER_START
     assert len(ev["labels"]) == (N_STARTS - N_TRAIN_STARTS) * ROLLOUTS_PER_START

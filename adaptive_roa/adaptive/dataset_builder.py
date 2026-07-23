@@ -481,12 +481,9 @@ class AdaptiveDatasetBuilder:
             Path to written file
         """
         output_path = self.output_dir / filename
-        traj_dir = self.data_source.trajectories_dir
         with open(output_path, 'w') as f:
             for idx in indices:
-                # Write path relative to trajectories_dir (handles subdirectories)
-                rel_path = self.data_source.trajectory_files[idx].relative_to(traj_dir)
-                f.write(f"{rel_path}\n")
+                f.write(f"{self.data_source.trajectory_name(idx)}\n")
         return str(output_path)
 
     def _build_empty_val_dataset(self, filename: str) -> str:

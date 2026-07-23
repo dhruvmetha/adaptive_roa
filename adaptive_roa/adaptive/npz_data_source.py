@@ -89,3 +89,7 @@ class NpzTrajectoryDataSource(TrajectoryDataSource):
 
     def get_end_state(self, idx: int) -> np.ndarray:
         return self.load_trajectory(idx)[-1]
+
+    def trajectory_name(self, idx: int) -> str:
+        """No files on disk — the name is the rollout row id into train.npz."""
+        return str(int(self.rollout_ids[idx]))

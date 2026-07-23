@@ -267,6 +267,14 @@ class TrajectoryDataSource:
         """Return the state vector at a specific row in trajectory idx."""
         return self.load_trajectory(idx)[row]
 
+    def trajectory_name(self, idx: int) -> str:
+        """Stable name for trajectory idx (path relative to trajectories_dir).
+
+        Written to the train/val trajectory index files consumed by local
+        (trajectory) prediction mode.
+        """
+        return str(self.trajectory_files[idx].relative_to(self.trajectories_dir))
+
     def load_trajectories(self, indices: List[int]) -> List[np.ndarray]:
         """
         Load multiple trajectories by indices.

@@ -1,6 +1,7 @@
 """
 Base class for dynamical systems with Lie group structure
 """
+import math
 import torch
 from abc import ABC, abstractmethod
 from typing import List, Tuple, Dict, Any, Optional
@@ -133,6 +134,41 @@ class DynamicalSystem(ABC):
                 weights.extend([limit] * comp.dim)
 
         return torch.tensor(weights, dtype=torch.float32)
+
+    def get_normalization_scales(self) -> torch.Tensor:
+        """
+        Get per-dimension distance scales for range-normalized state metrics.
+
+        Dividing a state difference by these scales puts every dimension on
+        equal footing, so a full-width spread costs the same in each one.
+        Without it, the widest-range dimension dominates any distance computed
+        over the full state vector.
+
+        This is NOT get_loss_weights(): those weights are proportional to each
+        dimension's range (amplifying wide dimensions), which is the wrong sign
+        for a distance metric.
+
+        Circular (SO2) dimensions use π, since angle differences wrap into
+        [-π, π]. SO3/Sphere components use 1.0 (their coordinates live in
+        [-1, 1]). Real components use half their declared range, falling back
+        to 1.0 when bounds are missing or zero-width.
+
+        Returns:
+            torch.Tensor: Per-dimension scales [state_dim], all finite and > 0
+        """
+        scales = []
+
+        for comp in self._manifold_components:
+            if comp.manifold_type == "SO2":
+                scales.extend([math.pi] * comp.dim)
+            elif comp.manifold_type in ("SO3", "Sphere"):
+                scales.extend([1.0] * comp.dim)
+            else:
+                lo, hi = self._state_bounds.get(comp.name, (-1.0, 1.0))
+                half_range = (hi - lo) / 2.0
+                scales.extend([half_range if half_range > 0 else 1.0] * comp.dim)
+
+        return torch.tensor(scales, dtype=torch.float32)
 
     def embed_state(self, state: torch.Tensor) -> torch.Tensor:
         """

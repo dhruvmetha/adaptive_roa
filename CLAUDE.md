@@ -406,6 +406,22 @@ iLab path rather than erroring (`adaptive_roa/utils/env_config.py:169`).
 - `gpu-redhat` — main pool: volta (sm_70), ampere (sm_80/86), adalovelace (sm_89)
 - `cgpu-redhat` — **Camden nodes, do not submit**
 - Torch 2.5.1/cu118 covers every arch present; there are no Blackwell cards on Amarel.
+- There is no `legacy-gpu` partition (it no longer exists), so `gpu-redhat` is the only
+  usable GPU pool and it does queue — check `sbatch --test-only` before assuming a fast start.
+
+**glibc split — the env does NOT run on the Amarel login node.** The login node is CentOS 7
+(glibc 2.17); the `*-redhat` compute partitions are RHEL 9.6 (glibc 2.34). The conda env is
+built against the latter, so importing torch on the login node fails with
+`GLIBC_2.27 not found ... libcurand.so.10`. This is expected, not a broken env. Build and test
+the env through SLURM, e.g.
+
+```bash
+srun --account=general --partition=main-redhat --time=00:10:00 --mem=8G --cpus-per-task=2 \
+     ./env/bin/python -c "import torch; print(torch.__version__)"
+```
+
+Note `torch.cuda.get_arch_list()` returns `[]` on a CPU node (no CUDA driver) — that is not
+evidence of a CPU-only build; check `torch.version.cuda` instead.
 
 **Datasets are staged per-run**, not bulk-mirrored. `${DATA_DIR}` holds only the regime roots
 (`deterministic/`, `noisy/`, `partial_deterministic/`); a run copies in the subtree it needs.

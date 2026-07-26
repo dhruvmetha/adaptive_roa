@@ -275,3 +275,72 @@ class PendulumSystem(DynamicalSystem):
 
     def __repr__(self) -> str:
         return f"PendulumSystem(S¹ × ℝ, limits=[π, {self.angular_velocity_limit}])"
+
+
+class PendulumG1System(PendulumSystem):
+    """Pendulum where SUCCESS means reaching the RL->LQR handoff region G1.
+
+    For RL-swing-up-only datasets (trajectories truncated at first G1 entry),
+    the success criterion is membership in G1 -- the union of two rotated
+    ellipses on the LQR ROA arms -- rather than proximity to the upright
+    attractor. The G1 geometry is read from the ``G1_handoff_region`` block
+    of the dataset's ``dataset_description.json``.
+
+    classify_attractor() returns 1 (success) for states inside G1 and
+    -1 (failure) otherwise; there is no separatrix/invalid class (0).
+    """
+
+    def __init__(self, dataset_dir: str = None):
+        super().__init__(dataset_dir=dataset_dir)
+
+        spec = (self.dataset_info or {}).get("G1_handoff_region")
+        if spec is None:
+            raise ValueError(
+                f"G1_handoff_region not found in dataset_description.json under "
+                f"{self.dataset_dir}. PendulumG1System requires the G1 geometry."
+            )
+
+        angle = float(spec["orientation"]["angle_rad"])
+        # Rotation by -angle maps (dtheta, dtheta_dot) into (u, v) ellipse axes
+        self._g1_cos = math.cos(-angle)
+        self._g1_sin = math.sin(-angle)
+        self._g1_centers = torch.tensor(
+            [spec["arm_centers"]["left"], spec["arm_centers"]["right"]],
+            dtype=torch.float32,
+        )  # [2, 2]
+        self._g1_r_major = float(spec["radii"]["major_along_band"])
+        self._g1_r_minor = float(spec["radii"]["minor_perpendicular"])
+
+    def in_g1(self, state: torch.Tensor) -> torch.Tensor:
+        """Boolean [B] mask: state inside the G1 handoff region."""
+        centers = self._g1_centers.to(device=state.device, dtype=state.dtype)
+        theta = torch.atan2(torch.sin(state[:, 0]), torch.cos(state[:, 0]))
+
+        dtheta = theta.unsqueeze(1) - centers[:, 0].unsqueeze(0)  # [B, 2]
+        dtheta = torch.atan2(torch.sin(dtheta), torch.cos(dtheta))
+        dvel = state[:, 1].unsqueeze(1) - centers[:, 1].unsqueeze(0)  # [B, 2]
+
+        u = self._g1_cos * dtheta - self._g1_sin * dvel
+        v = self._g1_sin * dtheta + self._g1_cos * dvel
+        score = (u / self._g1_r_major) ** 2 + (v / self._g1_r_minor) ** 2  # [B, 2]
+        # 2e-4 tolerance absorbs rounding of the published G1 parameters vs the
+        # generator's exact values (observed dataset boundary states score <= 1.0001)
+        return (score < 1.0 + 2e-4).any(dim=1)
+
+    def classify_attractor(self, state: torch.Tensor, radius: float = 0.1) -> torch.Tensor:
+        """G1 membership: 1 = success (inside G1), -1 = failure (outside).
+
+        ``radius`` is accepted for interface compatibility but unused --
+        G1 membership is a fixed geometric test.
+        """
+        labels = torch.full(
+            (state.shape[0],), -1, dtype=torch.long, device=state.device
+        )
+        labels[self.in_g1(state)] = 1
+        return labels
+
+    def __repr__(self) -> str:
+        return (
+            f"PendulumG1System(S¹ × ℝ, success=G1 membership, "
+            f"centers={self._g1_centers.tolist()})"
+        )

@@ -1,4 +1,5 @@
 # @package _global_
+sampling_mode: partx
 acquisition:
   _target_: adaptive_roa.partx.strategy.PartXAcquisitionStrategy
   mode: partx

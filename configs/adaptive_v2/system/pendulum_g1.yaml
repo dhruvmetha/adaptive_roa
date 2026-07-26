@@ -1,0 +1,15 @@
+# @package _global_
+
+# Pendulum with SUCCESS = reaching the RL->LQR handoff region G1 (not upright).
+# For RL-swing-up-only datasets whose trajectories are truncated at first G1
+# entry. Train-side labels are rl_success; evaluation typically targets the
+# composition dataset:
+#   python scripts/run_adaptive.py system=pendulum_g1 controller=rl eval_variant=rl_to_lqr
+
+defaults:
+  - pendulum
+  - _self_
+
+system:
+  _target_: adaptive_roa.systems.pendulum.PendulumG1System
+  dataset_dir: ${dataset_root}

@@ -379,3 +379,35 @@ Generated analysis includes:
 - conda_base: /common/home/st1122/miniforge3
 - default_mem: 40G
 - default_cpus: 16
+
+## Compute Defaults (Amarel)
+
+Amarel is a **separate filesystem** from iLab: code arrives via GitHub, results come back via
+`rsync`. Nothing under `/common/` is mounted there.
+
+- amarel_clone_path: /home/st1122/Projects/adaptive_roa
+- amarel_conda_env: /home/st1122/Projects/adaptive_roa/env
+- amarel_conda_base: /home/st1122/miniforge3
+- amarel_log_dir: /home/st1122/Projects/adaptive_roa/slurm_logs
+- amarel_data_dir: /scratch/st1122/genMoPlan-exp/data_trajectories
+- amarel_exp_dir: /scratch/st1122/adaptive_roa/experiments
+- amarel_account: general
+- sbatch_template: scripts/sbatch_amarel.sh
+
+**Sibling dependency:** `flow_matching` (github.com/Ewerton-Vieira/flow_matching) is an editable
+install and must be cloned separately at `/home/st1122/Projects/flow_matching`.
+
+**`.env` is gitignored**, so it does NOT travel with the clone. The Amarel copy must set
+`DATA_DIR`, `SHARED_DATA_BASE`, `EXP_DIR`, `USER_BASE`, `NET_ID`. `SHARED_DATA_BASE` is easy to
+miss — quadrotor3d and humanoid read it instead of `DATA_DIR`, and it falls back to a hardcoded
+iLab path rather than erroring (`adaptive_roa/utils/env_config.py:169`).
+
+**GPU partitions** (all `3-00:00:00` limit, untyped `--gres=gpu:N`):
+- `gpu-redhat` — main pool: volta (sm_70), ampere (sm_80/86), adalovelace (sm_89)
+- `cgpu-redhat` — **Camden nodes, do not submit**
+- Torch 2.5.1/cu118 covers every arch present; there are no Blackwell cards on Amarel.
+
+**Datasets are staged per-run**, not bulk-mirrored. `${DATA_DIR}` holds only the regime roots
+(`deterministic/`, `noisy/`, `partial_deterministic/`); a run copies in the subtree it needs.
+Reference sizes on iLab: `deterministic/pendulum` 1.9G, `noisy/pendulum` 12G,
+`deterministic/humanoid_get_up_medium` 88G (the tree totals ~119G).

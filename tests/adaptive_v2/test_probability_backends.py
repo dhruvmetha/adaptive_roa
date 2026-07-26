@@ -118,3 +118,14 @@ def test_mc_backend_sample_endpoints_requires_bind_model():
     backend = EndpointMCProbabilityBackend(_mc_cfg(), system=None, device="cpu")
     with pytest.raises(RuntimeError, match="before bind_model"):
         backend.sample_endpoints(np.zeros((2, 2), dtype=np.float32), 2, verbose=False)
+
+
+def test_sample_endpoints_handles_empty_input():
+    fm = _CountingFlowMatcher()
+    cfg = ConformalConfig(attractor_radius=0.2)
+    estimator = ProbabilityEstimator(fm, system=None, config=cfg, device="cpu")
+
+    out = estimator.sample_endpoints(np.zeros((0, 2), dtype=np.float32), 3, verbose=False)
+
+    assert out.shape[0] == 0
+    assert fm.calls == 0

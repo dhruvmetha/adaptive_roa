@@ -212,6 +212,10 @@ class ProbabilityEstimator:
         K = int(num_samples)
         if K < 1:
             raise ValueError(f"num_samples must be >= 1, got {num_samples}")
+
+        if N == 0:
+            return np.empty((0, K, 0), dtype=np.float32)
+
         batch_size = self.config.mc_batch_size
 
         if verbose:

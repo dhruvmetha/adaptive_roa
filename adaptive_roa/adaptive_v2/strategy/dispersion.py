@@ -10,6 +10,8 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
+import torch
+from scipy.stats import spearmanr
 
 from adaptive_roa.adaptive_v2.strategy.dispersion_score import (
     mean_pairwise_dispersion,
@@ -111,6 +113,14 @@ class DispersionAcquisitionStrategy:
         selected_indices = [indices[int(p)] for p in positions]
 
         diagnostics = self._build_diagnostics(scores, positions, n_actual)
+        # Computed after selection is decided: diagnostic only, never an input.
+        diagnostics["dispersion_label_uncertainty_spearman"] = (
+            self._label_uncertainty_correlation(
+                endpoints, scores, system, probability_backend
+            )
+            if self.log_score_correlation
+            else None
+        )
 
         if self.verbose:
             print(
@@ -151,6 +161,57 @@ class DispersionAcquisitionStrategy:
         return select_proportional(
             scores, target_count, temperature=self.temperature, seed=self.seed
         )
+
+    def _label_uncertainty_correlation(
+        self,
+        endpoints: np.ndarray,
+        scores: np.ndarray,
+        system: Any,
+        probability_backend: Any,
+    ) -> float | None:
+        """Spearman correlation between dispersion and label-based uncertainty.
+
+        Costs no extra forward passes: the endpoint cloud is already in hand, so
+        p_success comes from classifying those same endpoints. Label-based
+        uncertainty is u = -|p_success - 0.5|, which peaks at p_success = 0.5.
+        Both quantities rise with uncertainty, so +1.0 means the dispersion score
+        and the label counts are redundant.
+
+        This is diagnostic only. It runs after selection is decided and never
+        influences which candidates are chosen.
+
+        Returns:
+            float | None: Spearman rho, or None when it is undefined (fewer than
+                two finite candidates, or either series is constant)
+        """
+        radius = getattr(probability_backend, "attractor_radius", None)
+        if radius is None:
+            return None
+
+        M, K, D = endpoints.shape
+        success_counts = np.zeros(M, dtype=np.float64)
+
+        for start in range(0, M, self.chunk_size):
+            stop = min(start + self.chunk_size, M)
+            flat = torch.as_tensor(
+                endpoints[start:stop].reshape(-1, D), dtype=torch.float32
+            )
+            labels = system.classify_attractor(flat, radius=radius)
+            labels = labels.reshape(stop - start, K)
+            success_counts[start:stop] = (labels == 1).sum(dim=1).cpu().numpy()
+
+        p_success = success_counts / K
+        u = -np.abs(p_success - 0.5)
+
+        finite = np.isfinite(scores)
+        if finite.sum() < 2:
+            return None
+        s, u = scores[finite], u[finite]
+        if np.ptp(s) == 0 or np.ptp(u) == 0:
+            return None
+
+        rho = spearmanr(s, u).statistic
+        return None if not np.isfinite(rho) else float(rho)
 
     def _build_diagnostics(
         self,

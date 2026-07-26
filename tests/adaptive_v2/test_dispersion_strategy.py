@@ -296,3 +296,82 @@ def test_shipped_config_instantiates():
     assert strategy.selection_rule == "greedy"
     assert strategy.log_score_correlation is True
     assert strategy.seed is None
+
+
+def test_correlation_diagnostic_absent_when_disabled():
+    system = _FakeSystem()
+    pool = _FakePool(np.array([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]]))
+    backend = _FakeBackend(_clouds_with_spreads([1.0, 8.0, 4.0]), system)
+
+    result = DispersionAcquisitionStrategy(_cfg(log_score_correlation=False)).select(
+        pool=pool, probability_backend=backend, threshold_backend=None,
+        threshold_state=_threshold_state(), target_count=2,
+    )
+
+    assert result.diagnostics["dispersion_label_uncertainty_spearman"] is None
+
+
+def test_correlation_diagnostic_computed_when_enabled():
+    system = _FakeSystem()
+    rng = np.random.default_rng(4)
+    n = 25
+    pool = _FakePool(rng.normal(size=(n, 2)))
+    # Clouds whose theta values straddle the success/failure boundary by varying
+    # amounts, so both dispersion and p_success vary across candidates.
+    clouds = np.stack(
+        [
+            np.stack(
+                [
+                    np.array([0.0, 0.0]),
+                    np.array([float(i) / n * 2.0, 0.0]),
+                ]
+            )
+            for i in range(n)
+        ]
+    ).astype(np.float32)
+    backend = _FakeBackend(clouds, system)
+
+    result = DispersionAcquisitionStrategy(_cfg(log_score_correlation=True)).select(
+        pool=pool, probability_backend=backend, threshold_backend=None,
+        threshold_state=_threshold_state(), target_count=5,
+    )
+
+    rho = result.diagnostics["dispersion_label_uncertainty_spearman"]
+    assert rho is not None
+    assert -1.0 <= rho <= 1.0
+
+
+def test_correlation_does_not_change_selection():
+    system = _FakeSystem()
+    states = np.array([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [3.0, 0.0]])
+    clouds = _clouds_with_spreads([0.1, 8.0, 0.2, 4.0])
+
+    off = DispersionAcquisitionStrategy(_cfg(log_score_correlation=False)).select(
+        pool=_FakePool(states), probability_backend=_FakeBackend(clouds, system),
+        threshold_backend=None, threshold_state=_threshold_state(), target_count=2,
+    )
+    on = DispersionAcquisitionStrategy(_cfg(log_score_correlation=True)).select(
+        pool=_FakePool(states), probability_backend=_FakeBackend(clouds, system),
+        threshold_backend=None, threshold_state=_threshold_state(), target_count=2,
+    )
+
+    assert off.d2_indices == on.d2_indices
+
+
+def test_correlation_is_none_when_p_success_is_constant():
+    system = _FakeSystem()
+    n = 10
+    pool = _FakePool(np.zeros((n, 2)))
+    # Every endpoint has theta = 5.0 -> all classified failure -> p_success
+    # constant -> Spearman undefined.
+    clouds = np.stack(
+        [np.array([[5.0, 0.0], [5.0, float(i)]]) for i in range(n)]
+    ).astype(np.float32)
+    backend = _FakeBackend(clouds, system)
+
+    result = DispersionAcquisitionStrategy(_cfg(log_score_correlation=True)).select(
+        pool=pool, probability_backend=backend, threshold_backend=None,
+        threshold_state=_threshold_state(), target_count=3,
+    )
+
+    assert result.diagnostics["dispersion_label_uncertainty_spearman"] is None

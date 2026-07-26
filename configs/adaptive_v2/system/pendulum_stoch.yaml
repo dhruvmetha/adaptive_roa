@@ -14,7 +14,7 @@ defaults:
   - _self_
 
 name: adaptive_pendulum_stoch_${noise_level}
-output_dir: ${exp_dir}/${name}_dhruv/outputs/training_index_${training_index}_d2_ratio_${acquisition.d2_ratio}_warm_start_${warm_start}_adapt_iter_${n_epochs}/${now:%Y-%m-%d_%H-%M-%S}
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${acquisition.d2_ratio}_warm_start_${warm_start}_adapt_iter_${n_epochs}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
 
 shuffle_variant: 0
 
@@ -39,9 +39,9 @@ data_source:
   cal_set_file: ${dataset_root}/cal_set.txt
   test_set_file: ${dataset_root}/test_set.txt
 
-# Start-level acquisition: shuffled_indices holds contiguous blocks of 10
-# rollouts per start state, so pool sizes are counted in rollouts and must be
-# multiples of 10 (×10 vs the deterministic pendulum config).
+# v2 datasets (2026-07-25): 300k train rollouts from uniform-random unique
+# starts — plain rollout-level shuffle, no block structure. Eval/cal/test are
+# 3-col (theta, theta_dot, p_success) grid files with ~90 rollouts per cell.
 initial_train_size: 1000
 n_epochs: 19
 samples_per_epoch: 1000

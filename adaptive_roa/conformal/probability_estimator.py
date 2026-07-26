@@ -180,6 +180,63 @@ class ProbabilityEstimator:
         return p_success, p_failure, p_invalid
 
     @torch.no_grad()
+    def sample_endpoints(
+        self,
+        states: Union[torch.Tensor, np.ndarray],
+        num_samples: int,
+        verbose: bool = True,
+    ) -> np.ndarray:
+        """
+        Sample raw endpoint clouds without classifying them.
+
+        For each state, runs num_samples forward passes (each with a fresh
+        z ~ N(0,I)) and returns the predicted endpoints as-is. Unlike
+        estimate(), this performs no attractor classification and no
+        refinement of invalid endpoints, so it never consults the success
+        criteria. It is the input to distribution-based uncertainty scoring.
+
+        Args:
+            states: Initial states [N, state_dim] as torch tensor or numpy array
+            num_samples: Number of endpoint samples K per state; overrides
+                config.num_mc_samples
+            verbose: Show a progress bar
+
+        Returns:
+            np.ndarray: Endpoint clouds [N, K, endpoint_dim] as float32
+        """
+        if isinstance(states, np.ndarray):
+            states = torch.from_numpy(states).float()
+
+        states = states.to(self.device)
+        N = states.shape[0]
+        K = int(num_samples)
+        if K < 1:
+            raise ValueError(f"num_samples must be >= 1, got {num_samples}")
+        batch_size = self.config.mc_batch_size
+
+        if verbose:
+            print(f"      [Cloud] N={N} states, K={K} samples, batch_size={batch_size}")
+
+        n_batches = (N + batch_size - 1) // batch_size
+        out: torch.Tensor | None = None
+
+        with tqdm(total=n_batches * K, desc="Endpoint sampling", disable=not verbose) as pbar:
+            for batch_start in range(0, N, batch_size):
+                batch_end = min(batch_start + batch_size, N)
+                batch_states = states[batch_start:batch_end]
+
+                for k in range(K):
+                    endpoints = self.flow_matcher.predict_endpoint(batch_states)
+                    if out is None:
+                        out = torch.empty(
+                            (N, K, endpoints.shape[1]), dtype=torch.float32
+                        )
+                    out[batch_start:batch_end, k, :] = endpoints.detach().float().cpu()
+                    pbar.update(1)
+
+        return out.numpy()
+
+    @torch.no_grad()
     def estimate_single(self, state: Union[torch.Tensor, np.ndarray]) -> Tuple[float, float, float]:
         """
         Estimate probabilities for a single state.

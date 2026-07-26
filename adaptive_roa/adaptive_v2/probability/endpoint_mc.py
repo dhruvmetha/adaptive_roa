@@ -55,3 +55,16 @@ class EndpointMCProbabilityBackend:
             p_failure=np.asarray(p_failure),
             p_invalid=np.asarray(p_invalid),
         )
+
+    def sample_endpoints(
+        self,
+        start_states: np.ndarray,
+        num_samples: int,
+        verbose: bool = True,
+    ) -> np.ndarray:
+        """Return raw endpoint clouds [N, K, D] with no classification."""
+        if self.estimator is None:
+            raise RuntimeError("Probability backend used before bind_model")
+        return self.estimator.sample_endpoints(
+            start_states, num_samples=num_samples, verbose=verbose
+        )

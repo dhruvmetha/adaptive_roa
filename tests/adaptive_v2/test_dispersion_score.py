@@ -6,6 +6,9 @@ import pytest
 from adaptive_roa.adaptive_v2.strategy.dispersion_score import (
     mean_pairwise_dispersion,
     normalized_distances,
+    select_greedy,
+    select_greedy_diverse,
+    select_proportional,
 )
 
 # A pendulum-like 2-D space: theta circular, theta_dot bounded to [-8, 8].
@@ -92,3 +95,103 @@ def test_normalized_distances_wraps_and_scales():
     # second: theta differs by pi - 0.01 (normalized ~0.997), vel by 8/8 = 1.0
     expected = math.hypot((math.pi - 0.01) / math.pi, 1.0)
     assert d[1] == pytest.approx(expected, rel=1e-5)
+
+
+def test_greedy_takes_highest_scores():
+    scores = np.array([0.1, 0.9, 0.5, 0.7])
+    assert select_greedy(scores, 2).tolist() == [1, 3]
+
+
+def test_greedy_skips_nan_scores():
+    scores = np.array([0.1, np.nan, 0.5, np.nan, 0.7])
+    picked = select_greedy(scores, 3).tolist()
+    assert picked == [4, 2, 0]
+
+
+def test_greedy_returns_all_when_fewer_than_requested():
+    scores = np.array([0.1, np.nan, 0.5])
+    assert sorted(select_greedy(scores, 10).tolist()) == [0, 2]
+
+
+def test_greedy_diverse_spreads_further_than_greedy():
+    # Four high-scoring states clustered together, plus three lower-scoring
+    # states that are far away. Greedy takes only the cluster; diverse spreads.
+    states = np.array(
+        [
+            [0.00, 0.0], [0.01, 0.0], [0.02, 0.0], [0.03, 0.0],
+            [2.00, 0.0], [-2.00, 0.0], [0.00, 6.0],
+        ]
+    )
+    scores = np.array([0.99, 0.98, 0.97, 0.96, 0.90, 0.89, 0.88])
+
+    greedy = select_greedy(scores, 3)
+    diverse = select_greedy_diverse(scores, states, SCALES, CIRCULAR, 3, pool_multiplier=3)
+
+    def min_separation(idx):
+        pts = states[idx]
+        return min(
+            normalized_distances(pts, pts[i], SCALES, CIRCULAR)[j]
+            for i in range(len(pts))
+            for j in range(len(pts))
+            if i != j
+        )
+
+    assert min_separation(diverse) > min_separation(greedy)
+
+
+def test_greedy_diverse_seeds_at_highest_score():
+    states = np.array([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [3.0, 0.0]])
+    scores = np.array([0.1, 0.9, 0.5, 0.4])
+    picked = select_greedy_diverse(scores, states, SCALES, CIRCULAR, 2, pool_multiplier=4)
+    assert picked[0] == 1
+
+
+def test_greedy_diverse_returns_unique_indices():
+    rng = np.random.default_rng(3)
+    states = rng.normal(size=(40, 2))
+    scores = rng.random(40)
+    picked = select_greedy_diverse(scores, states, SCALES, CIRCULAR, 10)
+    assert len(set(picked.tolist())) == 10
+
+
+def test_greedy_diverse_skips_nan_scores():
+    states = np.array([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [3.0, 0.0]])
+    scores = np.array([0.9, np.nan, 0.5, 0.4])
+    picked = select_greedy_diverse(scores, states, SCALES, CIRCULAR, 3, pool_multiplier=5)
+    assert 1 not in picked.tolist()
+
+
+def test_proportional_is_reproducible_under_seed():
+    rng = np.random.default_rng(1)
+    scores = rng.random(50)
+    a = select_proportional(scores, 10, temperature=0.1, seed=7)
+    b = select_proportional(scores, 10, temperature=0.1, seed=7)
+    np.testing.assert_array_equal(a, b)
+
+
+def test_proportional_differs_across_seeds():
+    rng = np.random.default_rng(1)
+    scores = rng.random(200)
+    a = select_proportional(scores, 20, temperature=0.5, seed=1)
+    b = select_proportional(scores, 20, temperature=0.5, seed=2)
+    assert set(a.tolist()) != set(b.tolist())
+
+
+def test_proportional_favours_high_scores_at_low_temperature():
+    scores = np.concatenate([np.full(10, 1.0), np.full(90, 0.0)])
+    picked = select_proportional(scores, 10, temperature=0.01, seed=5)
+    assert set(picked.tolist()) == set(range(10))
+
+
+def test_proportional_selects_unique_and_skips_nan():
+    scores = np.array([0.9, np.nan, 0.5, 0.4, 0.8, np.nan, 0.2])
+    picked = select_proportional(scores, 3, temperature=0.2, seed=0)
+    assert len(set(picked.tolist())) == 3
+    assert 1 not in picked.tolist()
+    assert 5 not in picked.tolist()
+
+
+def test_proportional_handles_all_equal_scores():
+    scores = np.full(20, 0.42)
+    picked = select_proportional(scores, 5, temperature=0.1, seed=0)
+    assert len(set(picked.tolist())) == 5

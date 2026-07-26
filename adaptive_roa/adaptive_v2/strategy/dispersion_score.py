@@ -108,3 +108,105 @@ def normalized_distances(
         circ = diff[:, circular_mask]
         diff[:, circular_mask] = np.arctan2(np.sin(circ), np.cos(circ))
     return np.linalg.norm(diff / np.asarray(scales, dtype=np.float64), axis=1)
+
+
+def _finite_order(scores: np.ndarray) -> np.ndarray:
+    """Positions of finite scores, ordered by score descending (stable)."""
+    valid = np.flatnonzero(np.isfinite(scores))
+    return valid[np.argsort(-scores[valid], kind="stable")]
+
+
+def select_greedy(scores: np.ndarray, n_select: int) -> np.ndarray:
+    """Take the n_select highest-scoring candidates.
+
+    Args:
+        scores: Dispersion scores [M]; NaN entries are skipped
+        n_select: Number of candidates to select
+
+    Returns:
+        np.ndarray: Positions into `scores`, highest score first
+    """
+    return _finite_order(scores)[:n_select]
+
+
+def select_greedy_diverse(
+    scores: np.ndarray,
+    states: np.ndarray,
+    scales: np.ndarray,
+    circular_mask: np.ndarray,
+    n_select: int,
+    pool_multiplier: int = 5,
+) -> np.ndarray:
+    """Farthest-point-sample n_select from the top-scoring shortlist.
+
+    Takes the top `pool_multiplier * n_select` candidates by score, then
+    greedily picks points that are far apart in *initial-state* space, seeded
+    at the highest-scoring candidate. This stops the batch collapsing onto a
+    single high-uncertainty pocket.
+
+    Args:
+        scores: Dispersion scores [M]; NaN entries are skipped
+        states: Candidate initial states [M, D]
+        scales: Per-dimension distance scales [D]
+        circular_mask: Boolean [D], True where the dimension wraps
+        n_select: Number of candidates to select
+        pool_multiplier: Shortlist size as a multiple of n_select
+
+    Returns:
+        np.ndarray: Positions into `scores`, seed candidate first
+    """
+    order = _finite_order(scores)
+    shortlist = order[: max(n_select * pool_multiplier, n_select)]
+    if len(shortlist) <= n_select:
+        return shortlist
+
+    X = np.asarray(states)[shortlist]
+    selected = [0]  # shortlist is score-sorted, so 0 is the highest scorer
+    dist = normalized_distances(X, X[0], scales, circular_mask)
+    dist[0] = -np.inf
+
+    while len(selected) < n_select:
+        nxt = int(np.argmax(dist))
+        selected.append(nxt)
+        dist = np.minimum(dist, normalized_distances(X, X[nxt], scales, circular_mask))
+        dist[selected] = -np.inf
+
+    return shortlist[np.asarray(selected, dtype=int)]
+
+
+def select_proportional(
+    scores: np.ndarray,
+    n_select: int,
+    temperature: float = 0.1,
+    seed: int | None = None,
+) -> np.ndarray:
+    """Sample n_select candidates with probability rising in the score.
+
+    Scores are min-max normalized within the batch before the softmax, so
+    `temperature` carries the same meaning across systems and epochs. Sampling
+    without replacement uses the Gumbel-top-k trick, which is exact and needs
+    no renormalization loop.
+
+    Args:
+        scores: Dispersion scores [M]; NaN entries are skipped
+        n_select: Number of candidates to select
+        temperature: Softmax temperature; lower concentrates on top scores
+        seed: Seed for reproducibility; None draws fresh entropy
+
+    Returns:
+        np.ndarray: Positions into `scores`, unordered
+    """
+    valid = np.flatnonzero(np.isfinite(scores))
+    if len(valid) <= n_select:
+        return valid
+
+    s = np.asarray(scores, dtype=np.float64)[valid]
+    lo, hi = s.min(), s.max()
+    s_norm = np.zeros_like(s) if hi <= lo else (s - lo) / (hi - lo)
+
+    logits = s_norm / max(float(temperature), 1e-12)
+    rng = np.random.default_rng(seed)
+    keys = logits + rng.gumbel(size=len(s))
+
+    top = np.argpartition(-keys, n_select - 1)[:n_select]
+    return valid[top]

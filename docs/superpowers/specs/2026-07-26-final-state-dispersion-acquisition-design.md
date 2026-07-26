@@ -66,7 +66,7 @@ wide unimodal spread and well-separated multimodality.
 
 | Component | Location | Responsibility |
 |---|---|---|
-| `get_normalization_scales()` | `adaptive_roa/systems/base.py` (new method) | Flat `[state_dim]` scale vector: circular dims → π, real dims → `(hi−lo)/2`. Uses the same manifold-component loop as `get_loss_weights()`, so all systems inherit it from the base class. |
+| `get_normalization_scales()` | `adaptive_roa/systems/base.py` (new method) | Flat `[state_dim]` scale vector: circular dims → π, real dims → `hi−lo` (the full range, so a maximal disagreement normalizes to 1.0 in both dimension types). Uses the same manifold-component loop as `get_loss_weights()`, so all systems inherit it from the base class. |
 | `sample_endpoints()` | `adaptive_roa/conformal/probability_estimator.py` (new method) | K-inner-loop over `predict_endpoint`, returns the raw cloud `[N, K, D]`. No classification, no refinement, no `attractor_radius`. |
 | `sample_endpoints()` | `adaptive_roa/adaptive_v2/probability/endpoint_mc.py` (new method) | Thin delegate so the strategy talks only to the backend. |
 | `dispersion_score.py` | `adaptive_roa/adaptive_v2/strategy/` (new) | Pure functions: the metric and the three selection rules. No pipeline or model dependencies. |
@@ -112,8 +112,8 @@ evaluation does. `d2_ratio` therefore behaves exactly as under `ranked`, default
 ```
 Δ_ijd = e_id − e_jd                                    real dimensions
       = atan2(sin(e_id − e_jd), cos(e_id − e_jd))      circular dimensions
-s_d   = π                    if dimension d is circular
-      = (hi_d − lo_d) / 2    otherwise
+s_d   = π                  if dimension d is circular
+      = hi_d − lo_d        otherwise (the full range, not half of it)
 d_ij  = ‖ Δ_ij / s ‖₂
 score(x) = 2 / (K(K−1)) · Σ_{i<j} d_ij
 ```
@@ -121,10 +121,17 @@ score(x) = 2 / (K(K−1)) · Σ_{i<j} d_ij
 Circular wrapping via `atan2(sin, cos)` matches the convention already used by
 `is_in_attractor()` and `classify_attractor()` (`adaptive_roa/systems/pendulum.py:130`).
 
+Both dimension types are scaled so that the maximum possible difference normalizes to 1.0:
+circular differences wrap to at most π (hence `s_d = π`, not 2π), and real differences reach at
+most the full declared range `hi_d − lo_d` (hence dividing by the full range, not half of it).
 Range normalization puts every dimension on equal footing, so a full-width spread costs the same
 in θ as in θ̇. Without it, the widest-range dimension dominates the score — which would be
-severe for quadrotor3d and humanoid. It also bounds the score in a roughly `[0, ~1.4]` band,
-making the `proportional` rule's temperature meaningful across systems and epochs.
+severe for quadrotor3d and humanoid. What makes the `proportional` rule's `temperature`
+meaningful across systems and epochs is not a fixed bound on the raw score (per-candidate scores
+can reach up to `√D` in the worst case, and there is no tighter closed-form bound in general) —
+it's that `select_proportional` min-max normalizes the score to `[0, 1]` within each batch before
+applying `temperature`, so the same `temperature` value has the same effect regardless of the
+raw score's scale.
 
 ### Computation
 
@@ -262,9 +269,9 @@ circular entries equal π, all entries finite and positive.
 
 Pendulum first: 2D, cheapest, and `ranked` / `direct` baselines already exist. Run
 `acquisition=dispersion` against `acquisition=ranked` with the same pool, seed, and epoch count,
-and compare full-ROA evaluation metrics. Read `dispersion_pfail_spearman` early — it indicates
-whether the two scores are selecting meaningfully different points before the full comparison
-finishes.
+and compare full-ROA evaluation metrics. Read `dispersion_label_uncertainty_spearman` early — it
+indicates whether the two scores are selecting meaningfully different points before the full
+comparison finishes.
 
 ## Out of scope
 

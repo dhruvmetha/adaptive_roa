@@ -1,4 +1,5 @@
 import math
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -7,6 +8,10 @@ from omegaconf import OmegaConf
 from adaptive_roa.adaptive_v2.strategy.dispersion import DispersionAcquisitionStrategy
 from adaptive_roa.adaptive_v2.types import ThresholdState
 from adaptive_roa.systems.base import DynamicalSystem, ManifoldComponent
+
+DISPERSION_CONFIG_PATH = (
+    Path(__file__).resolve().parents[2] / "configs/adaptive_v2/acquisition/dispersion.yaml"
+)
 
 
 class _FakeSystem(DynamicalSystem):
@@ -163,12 +168,18 @@ def test_diagnostics_populated():
         "n_dispersion_candidates_evaluated",
         "n_nonfinite_excluded",
         "selection_rule",
+        "dispersion_selection_seed",
     ):
         assert key in d, f"missing diagnostic: {key}"
     assert d["selection_rule"] == "greedy"
     assert d["n_nonfinite_excluded"] == 0
-    # threshold is the lowest score among the two selected
-    assert d["dispersion_score_threshold"] == pytest.approx(4.0 / 8.0, abs=1e-6)
+    # threshold is the lowest score among the two selected. _FakeSystem's
+    # angular_velocity bounds are (-8.0, 8.0), so under the full-range
+    # normalization convention (Fix 1) the scale is 16.0, not 8.0.
+    assert d["dispersion_score_threshold"] == pytest.approx(4.0 / 16.0, abs=1e-6)
+    # greedy is deterministic and doesn't consume a seed, but the key must
+    # still be present with an honest value.
+    assert d["dispersion_selection_seed"] is None
 
 
 def test_target_count_zero_skips():
@@ -264,6 +275,45 @@ def test_proportional_rule_runs_and_is_seeded():
     )
     assert a.d2_indices == b.d2_indices
     assert len(set(a.d2_indices)) == 5
+    # An explicit seed passes through to diagnostics unchanged.
+    assert a.diagnostics["dispersion_selection_seed"] == 11
+
+
+def test_proportional_null_seed_is_reproducible_under_global_numpy_seed():
+    """With seed: null, select() must draw the effective seed from the
+    already-seeded global numpy RNG rather than OS entropy, so that two runs
+    seeded identically at the process level (as engine.py's pl.seed_everything
+    does for the whole run) reproduce both the selection and the seed that
+    produced it."""
+    system = _FakeSystem()
+    states = np.random.default_rng(0).normal(size=(20, 2))
+    spreads = np.linspace(0.1, 8.0, 20)
+    cfg = _cfg(selection_rule="proportional", seed=None)
+
+    np.random.seed(123)
+    a = DispersionAcquisitionStrategy(cfg).select(
+        pool=_FakePool(states),
+        probability_backend=_FakeBackend(_clouds_with_spreads(spreads), system),
+        threshold_backend=None,
+        threshold_state=_threshold_state(),
+        target_count=5,
+    )
+
+    np.random.seed(123)
+    b = DispersionAcquisitionStrategy(cfg).select(
+        pool=_FakePool(states),
+        probability_backend=_FakeBackend(_clouds_with_spreads(spreads), system),
+        threshold_backend=None,
+        threshold_state=_threshold_state(),
+        target_count=5,
+    )
+
+    assert a.d2_indices == b.d2_indices
+    assert a.diagnostics["dispersion_selection_seed"] is not None
+    assert (
+        a.diagnostics["dispersion_selection_seed"]
+        == b.diagnostics["dispersion_selection_seed"]
+    )
 
 
 def test_greedy_diverse_rule_runs():
@@ -285,7 +335,7 @@ def test_greedy_diverse_rule_runs():
 def test_shipped_config_instantiates():
     from hydra.utils import get_class
 
-    cfg = OmegaConf.load("configs/adaptive_v2/acquisition/dispersion.yaml")
+    cfg = OmegaConf.load(DISPERSION_CONFIG_PATH)
     assert cfg.sampling_mode == "dispersion"
 
     node = cfg.acquisition

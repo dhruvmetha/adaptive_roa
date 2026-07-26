@@ -44,7 +44,10 @@ def mean_pairwise_dispersion(
         endpoints: Predicted endpoint clouds [M, K, D]
         scales: Per-dimension distance scales [D], all > 0
         circular_mask: Boolean [D], True where the dimension wraps
-        chunk_size: Candidates processed per block (bounds the [m,K,K,D] temp)
+        chunk_size: Candidates processed per block (bounds the [m,K,K,D] temp).
+            The default of 2048 was sized for D=12 (~39 MB per chunk); the
+            temporary scales linearly in D, so wider state spaces should use a
+            smaller chunk_size to hold the same memory budget.
         device: Torch device for the computation
 
     Returns:
@@ -62,6 +65,8 @@ def mean_pairwise_dispersion(
         raise ValueError(f"scales must be [{D}], got {scales.shape}")
     if circular_mask.shape != (D,):
         raise ValueError(f"circular_mask must be [{D}], got {circular_mask.shape}")
+    if chunk_size <= 0:
+        raise ValueError(f"chunk_size must be > 0, got {chunk_size}")
 
     scales_t = torch.as_tensor(np.asarray(scales), dtype=torch.float32, device=device)
     circ_t = torch.as_tensor(np.asarray(circular_mask), dtype=torch.bool, device=device)
@@ -76,7 +81,11 @@ def mean_pairwise_dispersion(
         finite = torch.isfinite(chunk).all(dim=2).all(dim=1)          # [m]
         diff = chunk.unsqueeze(2) - chunk.unsqueeze(1)                # [m, K, K, D]
         diff = _wrap_circular_(diff, circ_t)
-        dists = torch.linalg.vector_norm(diff / scales_t, dim=-1)     # [m, K, K]
+        # diff is a fresh, unaliased temporary (the broadcasted subtraction
+        # above always allocates), so dividing in place is safe and avoids a
+        # second full-size [m,K,K,D] allocation on top of it.
+        diff.div_(scales_t)
+        dists = torch.linalg.vector_norm(diff, dim=-1)                # [m, K, K]
         scores = dists.sum(dim=(1, 2)) / (K * (K - 1))                # [m]
 
         scores = torch.where(finite, scores, torch.full_like(scores, float("nan")))

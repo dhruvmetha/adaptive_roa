@@ -107,12 +107,27 @@ class DispersionAcquisitionStrategy:
             device=getattr(probability_backend, "device", "cpu"),
         )
 
+        # Resolve the effective seed before selection so a `proportional` run
+        # is replayable: with seed=None we would otherwise draw OS entropy
+        # inside select_proportional and never record what was drawn. Drawing
+        # from the already-seeded global numpy RNG (engine.py calls
+        # pl.seed_everything before any acquisition runs) means this value
+        # inherits the run's determinism instead of being independent entropy.
+        resolved_seed = None
+        if self.selection_rule == "proportional":
+            resolved_seed = (
+                int(np.random.randint(0, 2**31 - 1))
+                if self.seed is None
+                else self.seed
+            )
+
         positions = self._apply_selection_rule(
-            scores, np.asarray(states), scales, circular_mask, target_count
+            scores, np.asarray(states), scales, circular_mask, target_count, resolved_seed
         )
         selected_indices = [indices[int(p)] for p in positions]
 
         diagnostics = self._build_diagnostics(scores, positions, n_actual)
+        diagnostics["dispersion_selection_seed"] = resolved_seed
         # Computed after selection is decided: diagnostic only, never an input.
         diagnostics["dispersion_label_uncertainty_spearman"] = (
             self._label_uncertainty_correlation(
@@ -146,6 +161,7 @@ class DispersionAcquisitionStrategy:
         scales: np.ndarray,
         circular_mask: np.ndarray,
         target_count: int,
+        resolved_seed: int | None,
     ) -> np.ndarray:
         if self.selection_rule == "greedy":
             return select_greedy(scores, target_count)
@@ -159,7 +175,7 @@ class DispersionAcquisitionStrategy:
                 pool_multiplier=self.diversity_pool_multiplier,
             )
         return select_proportional(
-            scores, target_count, temperature=self.temperature, seed=self.seed
+            scores, target_count, temperature=self.temperature, seed=resolved_seed
         )
 
     def _label_uncertainty_correlation(

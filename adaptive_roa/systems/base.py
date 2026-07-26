@@ -140,18 +140,24 @@ class DynamicalSystem(ABC):
         Get per-dimension distance scales for range-normalized state metrics.
 
         Dividing a state difference by these scales puts every dimension on
-        equal footing, so a full-width spread costs the same in each one.
-        Without it, the widest-range dimension dominates any distance computed
-        over the full state vector.
+        equal footing: the MAXIMUM POSSIBLE difference in each dimension
+        normalizes to 1.0, regardless of dimension type. Without it, the
+        widest-range dimension dominates any distance computed over the full
+        state vector.
 
         This is NOT get_loss_weights(): those weights are proportional to each
         dimension's range (amplifying wide dimensions), which is the wrong sign
         for a distance metric.
 
-        Circular (SO2) dimensions use π, since angle differences wrap into
-        [-π, π]. SO3/Sphere components use 1.0 (their coordinates live in
-        [-1, 1]). Real components use half their declared range, falling back
-        to 1.0 when bounds are missing or zero-width.
+        Circular (SO2) dimensions use π rather than the full 2π range: angle
+        differences are wrapped via atan2(sin, cos) into [-π, π], so the
+        largest possible circular disagreement is π, not 2π. SO3/Sphere
+        components use 1.0 (their coordinates live in [-1, 1]). Real
+        components have no such wrapping, so their largest possible
+        disagreement is the FULL declared range (hi - lo), not half of it;
+        using the full range is what makes a maximal real disagreement
+        normalize to 1.0 to match the circular case. Falls back to 1.0 when
+        bounds are missing or the computed range is not positive.
 
         Returns:
             torch.Tensor: Per-dimension scales [state_dim], all finite and > 0
@@ -165,8 +171,8 @@ class DynamicalSystem(ABC):
                 scales.extend([1.0] * comp.dim)
             else:
                 lo, hi = self._state_bounds.get(comp.name, (-1.0, 1.0))
-                half_range = (hi - lo) / 2.0
-                scales.extend([half_range if half_range > 0 else 1.0] * comp.dim)
+                full_range = hi - lo
+                scales.extend([full_range if full_range > 0 else 1.0] * comp.dim)
 
         return torch.tensor(scales, dtype=torch.float32)
 

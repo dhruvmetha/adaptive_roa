@@ -11,7 +11,13 @@ from adaptive_roa.adaptive_v2.strategy.dispersion_score import (
     select_proportional,
 )
 
-# A pendulum-like 2-D space: theta circular, theta_dot bounded to [-8, 8].
+# An arbitrary but self-consistent 2-D scale vector (theta circular, theta_dot
+# real) used to exercise mean_pairwise_dispersion's arithmetic in isolation.
+# NOTE: this is not what DynamicalSystem.get_normalization_scales() would
+# return for a pendulum under the full-range convention (it would give 16.0
+# for theta_dot bounded to [-8, 8], not 8.0) -- see test_normalization_scales.py
+# for tests against the real convention. The tests below are still valid
+# because they only rely on internal self-consistency of this vector.
 SCALES = np.array([math.pi, 8.0], dtype=np.float64)
 CIRCULAR = np.array([True, False])
 
@@ -31,10 +37,14 @@ def test_circular_dimension_wraps_across_pi():
     assert scores[0] == pytest.approx(2 * eps / math.pi, abs=1e-5)
 
 
-def test_range_normalization_equalizes_dimensions():
-    # Full-width spread in theta (2*pi wide, but wraps -> pi apart max)
+def test_separation_equal_to_scale_costs_the_same_in_every_dimension():
+    # This checks the metric's arithmetic in isolation (see the SCALES
+    # comment above): a pairwise separation equal to a dimension's own scale
+    # value normalizes to 1.0 in that dimension, so it costs the same
+    # regardless of which dimension it's in.
+    # theta separation of pi (wraps exactly to pi, the max) == SCALES[0].
     theta_spread = np.array([[[math.pi / 2, 0.0], [-math.pi / 2, 0.0]]])
-    # Full-width spread in theta_dot (16 wide -> 8.0 apart after halving)
+    # theta_dot separation of 8.0 == SCALES[1].
     vel_spread = np.array([[[0.0, 4.0], [0.0, -4.0]]])
     s_theta = mean_pairwise_dispersion(theta_spread, SCALES, CIRCULAR)
     s_vel = mean_pairwise_dispersion(vel_spread, SCALES, CIRCULAR)
@@ -85,6 +95,14 @@ def test_non_finite_candidate_scores_nan_without_poisoning_neighbours():
 def test_requires_at_least_two_samples():
     with pytest.raises(ValueError, match="at least 2"):
         mean_pairwise_dispersion(np.zeros((3, 1, 2)), SCALES, CIRCULAR)
+
+
+def test_rejects_non_positive_chunk_size():
+    endpoints = np.zeros((3, 2, 2))
+    with pytest.raises(ValueError, match="chunk_size"):
+        mean_pairwise_dispersion(endpoints, SCALES, CIRCULAR, chunk_size=0)
+    with pytest.raises(ValueError, match="chunk_size"):
+        mean_pairwise_dispersion(endpoints, SCALES, CIRCULAR, chunk_size=-5)
 
 
 def test_normalized_distances_wraps_and_scales():

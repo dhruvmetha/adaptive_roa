@@ -52,16 +52,16 @@ def test_circular_dim_scale_is_pi():
     assert scales[0].item() == pytest.approx(math.pi)
 
 
-def test_real_dim_scale_is_half_range():
+def test_real_dim_scale_is_full_range():
     scales = _FakeSystem().get_normalization_scales()
-    assert scales[1].item() == pytest.approx(8.0)
+    assert scales[1].item() == pytest.approx(16.0)
 
 
 def test_multi_dim_component_expands_and_missing_bounds_still_scale():
     scales = _MultiDimFakeSystem().get_normalization_scales()
     assert scales.shape == (4,)
-    # position half-range = (6.0 - (-2.0)) / 2 = 4.0, repeated across all 3 dims
-    assert scales[:3].tolist() == pytest.approx([4.0, 4.0, 4.0])
+    # position full range = 6.0 - (-2.0) = 8.0, repeated across all 3 dims
+    assert scales[:3].tolist() == pytest.approx([8.0, 8.0, 8.0])
     # circular dims use pi regardless of any bounds entry
     assert scales[3].item() == pytest.approx(math.pi)
 

@@ -27,6 +27,24 @@ class ProbabilityBackend(Protocol):
     def estimate(self, start_states: np.ndarray) -> OutcomeProbabilities:
         ...
 
+    def sample_endpoints(
+        self,
+        start_states: np.ndarray,
+        num_samples: int,
+        verbose: bool = True,
+    ) -> np.ndarray:
+        """Return a raw endpoint cloud [N, K, D] with no classification.
+
+        Optional capability: only endpoint-sampling backends (e.g.
+        EndpointMCProbabilityBackend) implement this. The classifier backend
+        deliberately does not, since it has no notion of a predicted final
+        state to sample. DispersionAcquisitionStrategy checks for this method
+        with a runtime hasattr() guard rather than relying on Protocol
+        conformance, so declaring it here documents the capability without
+        changing that runtime behavior.
+        """
+        ...
+
 
 class ThresholdBackend(Protocol):
     def optimize(self, X_train: np.ndarray, y_train: np.ndarray) -> ThresholdState:

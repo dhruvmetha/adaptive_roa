@@ -310,95 +310,96 @@ def load_arm(sys, arm):
         return load_fm_inline(sys, arm)    # quad2d/quad3d/humanoid FM: newcrit inline
     return load_fm(sys, arm)               # pendulum/cartpole FM: unchanged old paths
 
-ALL = {}
-for s in SYSTEMS:
-    for a in ARMS:
-        ALL[(s,a)] = load_arm(s, a)
-
-CAP = {}
-for s in SYSTEMS:
-    # exclude part-X from the common-budget cap: it self-limits to a much smaller
-    # trajectory budget, and letting it drag the cap would clip the CLF/FM curves.
-    # part-X still plots to its own (shorter) extent; the _full version is uncapped.
-    maxes = [max(r["traj"] for r in ALL[(s,a)]) for a in ARMS if ALL[(s,a)] and a != "partx"]
-    CAP[s] = min(maxes) if maxes else None
-print("FM eval dirs:", FM_EVAL); print("caps:", CAP)
-for s in SYSTEMS:
-    present = [a for a in ARMS if ALL[(s,a)]]
-    print(f"  {s}: {len(present)} arms -> {present}")
-
-# newcrit FM arm status: epochs loaded vs empty (in-progress) vs missing (not started)
-print("\nnewcrit FM arm status (system, arm -> #epochs loaded | dir):")
-for (s, a) in FM_NEWCRIT:
-    d = resolve_fm_newcrit(s, a)
-    n = len(ALL[(s, a)])
-    if d is None:
-        print(f"  {s:9}|{a:16}: MISSING (no run dir)")
-    elif n == 0:
-        print(f"  {s:9}|{a:16}: EMPTY / in-progress (0 usable epochs)  [{d}]")
-    else:
-        print(f"  {s:9}|{a:16}: {n} epochs loaded")
-
-# CSV
-csv_path = f"{OUT}/clf_vs_fm_metrics.csv"
-with open(csv_path, "w", newline="") as f:
-    w = csv.writer(f); w.writerow(["system","arm","train_traj","F1","FPR","FNR","abstain_pct"])
+if __name__ == "__main__":
+    ALL = {}
     for s in SYSTEMS:
         for a in ARMS:
-            for r in ALL[(s,a)]:
-                w.writerow([s,a,r["traj"],f"{r['F1']:.4f}",f"{r['FPR']:.4f}",f"{r['FNR']:.4f}",f"{r['Abstain']:.3f}"])
-print("wrote", csv_path)
+            ALL[(s,a)] = load_arm(s, a)
 
-METRICS = [("F1","F1 (band / committed points)"),("Abstain","Abstain%  (uncertain + invalid)"),
-           ("FPR","FPR = FP/(FP+TN)"),("FNR","FNR = FN/(FN+TP)")]
-
-def panel(ax, s, key, cap):
-    for a in ARMS:
-        rows = [r for r in ALL[(s,a)] if cap is None or r["traj"] <= cap]
-        if not rows: continue
-        st = STYLE[a]
-        ax.plot([r["traj"] for r in rows], [r[key] for r in rows],
-                color=st["color"], marker=st["marker"], ls=st["ls"], ms=4, lw=1.6, label=st["label"])
-
-# Two renderings: capped (common budget, existing filenames) and full (uncapped x-axis, `_full`).
-MODES = [("",      {s: CAP[s] for s in SYSTEMS}, "common-budget capped"),
-         ("_full", {s: None   for s in SYSTEMS}, "full x-axis (uncapped)")]
-
-for suffix, capmap, desc in MODES:
-    # combined grid (per-row legend in the F1 column)
-    fig, axes = plt.subplots(len(SYSTEMS), len(METRICS), figsize=(19, 4.0*len(SYSTEMS)))
-    for i, s in enumerate(SYSTEMS):
-        for j,(key,title) in enumerate(METRICS):
-            ax = axes[i,j]; panel(ax, s, key, capmap[s])
-            if i == 0: ax.set_title(title, fontsize=11)
-            if j == 0:
-                ax.set_ylabel(f"{s}\n", fontsize=12, fontweight="bold")
-                ax.legend(fontsize=6.5, loc="best")
-            ax.set_xlabel("# training trajectories", fontsize=8); ax.grid(True, alpha=0.3)
-            if key == "F1": ax.set_ylim(0,1.02)
-            if key in ("FPR","FNR","Abstain"): ax.set_ylim(bottom=0)
-    fig.suptitle(f"Classification vs Generative FM for ROA — band mode, {desc} "
-                 "(humanoid: d2=0.5 direct/ranked, manifold F/T)", fontsize=13)
-    fig.tight_layout(rect=[0,0,1,0.99])
-    fig.savefig(f"{OUT}/clf_vs_fm_grid{suffix}.png", dpi=130, bbox_inches="tight"); print(f"wrote grid{suffix}")
-    plt.close(fig)
-
+    CAP = {}
     for s in SYSTEMS:
-        fig, axes = plt.subplots(2,2, figsize=(11,8))
-        for ax,(key,title) in zip(axes.ravel(), METRICS):
-            panel(ax, s, key, capmap[s]); ax.set_title(title); ax.set_xlabel("# training trajectories"); ax.grid(True, alpha=0.3)
-            if key == "F1": ax.set_ylim(0,1.02)
-            if key in ("FPR","FNR","Abstain"): ax.set_ylim(bottom=0)
-        axes[0,0].legend(fontsize=8, loc="best")
-        cap_txt = f"capped @ {CAP[s]} traj" if suffix == "" else "full x-axis (uncapped)"
-        fig.suptitle(f"{s}: CLF vs FM ROA, {cap_txt}", fontsize=13)
-        fig.tight_layout(rect=[0,0,1,0.97]); fig.savefig(f"{OUT}/clf_vs_fm_{s}{suffix}.png", dpi=130, bbox_inches="tight"); print(f"wrote {s}{suffix}")
+        # exclude part-X from the common-budget cap: it self-limits to a much smaller
+        # trajectory budget, and letting it drag the cap would clip the CLF/FM curves.
+        # part-X still plots to its own (shorter) extent; the _full version is uncapped.
+        maxes = [max(r["traj"] for r in ALL[(s,a)]) for a in ARMS if ALL[(s,a)] and a != "partx"]
+        CAP[s] = min(maxes) if maxes else None
+    print("FM eval dirs:", FM_EVAL); print("caps:", CAP)
+    for s in SYSTEMS:
+        present = [a for a in ARMS if ALL[(s,a)]]
+        print(f"  {s}: {len(present)} arms -> {present}")
+
+    # newcrit FM arm status: epochs loaded vs empty (in-progress) vs missing (not started)
+    print("\nnewcrit FM arm status (system, arm -> #epochs loaded | dir):")
+    for (s, a) in FM_NEWCRIT:
+        d = resolve_fm_newcrit(s, a)
+        n = len(ALL[(s, a)])
+        if d is None:
+            print(f"  {s:9}|{a:16}: MISSING (no run dir)")
+        elif n == 0:
+            print(f"  {s:9}|{a:16}: EMPTY / in-progress (0 usable epochs)  [{d}]")
+        else:
+            print(f"  {s:9}|{a:16}: {n} epochs loaded")
+
+    # CSV
+    csv_path = f"{OUT}/clf_vs_fm_metrics.csv"
+    with open(csv_path, "w", newline="") as f:
+        w = csv.writer(f); w.writerow(["system","arm","train_traj","F1","FPR","FNR","abstain_pct"])
+        for s in SYSTEMS:
+            for a in ARMS:
+                for r in ALL[(s,a)]:
+                    w.writerow([s,a,r["traj"],f"{r['F1']:.4f}",f"{r['FPR']:.4f}",f"{r['FNR']:.4f}",f"{r['Abstain']:.3f}"])
+    print("wrote", csv_path)
+
+    METRICS = [("F1","F1 (band / committed points)"),("Abstain","Abstain%  (uncertain + invalid)"),
+               ("FPR","FPR = FP/(FP+TN)"),("FNR","FNR = FN/(FN+TP)")]
+
+    def panel(ax, s, key, cap):
+        for a in ARMS:
+            rows = [r for r in ALL[(s,a)] if cap is None or r["traj"] <= cap]
+            if not rows: continue
+            st = STYLE[a]
+            ax.plot([r["traj"] for r in rows], [r[key] for r in rows],
+                    color=st["color"], marker=st["marker"], ls=st["ls"], ms=4, lw=1.6, label=st["label"])
+
+    # Two renderings: capped (common budget, existing filenames) and full (uncapped x-axis, `_full`).
+    MODES = [("",      {s: CAP[s] for s in SYSTEMS}, "common-budget capped"),
+             ("_full", {s: None   for s in SYSTEMS}, "full x-axis (uncapped)")]
+
+    for suffix, capmap, desc in MODES:
+        # combined grid (per-row legend in the F1 column)
+        fig, axes = plt.subplots(len(SYSTEMS), len(METRICS), figsize=(19, 4.0*len(SYSTEMS)))
+        for i, s in enumerate(SYSTEMS):
+            for j,(key,title) in enumerate(METRICS):
+                ax = axes[i,j]; panel(ax, s, key, capmap[s])
+                if i == 0: ax.set_title(title, fontsize=11)
+                if j == 0:
+                    ax.set_ylabel(f"{s}\n", fontsize=12, fontweight="bold")
+                    ax.legend(fontsize=6.5, loc="best")
+                ax.set_xlabel("# training trajectories", fontsize=8); ax.grid(True, alpha=0.3)
+                if key == "F1": ax.set_ylim(0,1.02)
+                if key in ("FPR","FNR","Abstain"): ax.set_ylim(bottom=0)
+        fig.suptitle(f"Classification vs Generative FM for ROA — band mode, {desc} "
+                     "(humanoid: d2=0.5 direct/ranked, manifold F/T)", fontsize=13)
+        fig.tight_layout(rect=[0,0,1,0.99])
+        fig.savefig(f"{OUT}/clf_vs_fm_grid{suffix}.png", dpi=130, bbox_inches="tight"); print(f"wrote grid{suffix}")
         plt.close(fig)
 
-print("\nFinal capped-epoch values:")
-for s in SYSTEMS:
-    for a in ARMS:
-        rows = [r for r in ALL[(s,a)] if r["traj"] <= CAP[s]]
-        if not rows: continue
-        r = rows[-1]
-        print(f"  {s:9}|{a:16}: traj={r['traj']:>6} F1={r['F1']:.3f} abst={r['Abstain']:5.1f}% FPR={r['FPR']:.3f} FNR={r['FNR']:.3f}")
+        for s in SYSTEMS:
+            fig, axes = plt.subplots(2,2, figsize=(11,8))
+            for ax,(key,title) in zip(axes.ravel(), METRICS):
+                panel(ax, s, key, capmap[s]); ax.set_title(title); ax.set_xlabel("# training trajectories"); ax.grid(True, alpha=0.3)
+                if key == "F1": ax.set_ylim(0,1.02)
+                if key in ("FPR","FNR","Abstain"): ax.set_ylim(bottom=0)
+            axes[0,0].legend(fontsize=8, loc="best")
+            cap_txt = f"capped @ {CAP[s]} traj" if suffix == "" else "full x-axis (uncapped)"
+            fig.suptitle(f"{s}: CLF vs FM ROA, {cap_txt}", fontsize=13)
+            fig.tight_layout(rect=[0,0,1,0.97]); fig.savefig(f"{OUT}/clf_vs_fm_{s}{suffix}.png", dpi=130, bbox_inches="tight"); print(f"wrote {s}{suffix}")
+            plt.close(fig)
+
+    print("\nFinal capped-epoch values:")
+    for s in SYSTEMS:
+        for a in ARMS:
+            rows = [r for r in ALL[(s,a)] if r["traj"] <= CAP[s]]
+            if not rows: continue
+            r = rows[-1]
+            print(f"  {s:9}|{a:16}: traj={r['traj']:>6} F1={r['F1']:.3f} abst={r['Abstain']:5.1f}% FPR={r['FPR']:.3f} FNR={r['FNR']:.3f}")

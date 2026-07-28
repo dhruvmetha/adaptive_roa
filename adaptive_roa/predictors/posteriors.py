@@ -147,3 +147,76 @@ class EnsemblePosterior(Posterior):
     def forward_all_members(self, x: torch.Tensor) -> torch.Tensor:
         """Every member, deterministically: [B, in] -> [M, B, out]."""
         return torch.stack([m(x) for m in self.members], dim=0)
+
+
+class LastLayerLaplacePosterior(Posterior):
+    """Post-hoc Gaussian over last-layer weights via the GGN.
+
+    H = sum_n Lambda_n * phi_n phi_n^T + prior_precision * I, with
+    Lambda = p(1-p) for a Bernoulli head and Lambda = 1/sigma^2 for a Gaussian
+    head. The last-layer restriction keeps H small and PSD.
+
+    ``sigma`` is the observation noise and is REQUIRED for regression. Letting
+    it default to 1.0 (the laplace-torch default) silently scales the entire
+    posterior covariance by an arbitrary constant unrelated to the data.
+    """
+
+    def __init__(self, body: nn.Module, head_layer: nn.Linear, prior_precision: float = 1.0):
+        super().__init__()
+        self.body = body
+        self.head_layer = head_layer
+        self.prior_precision = float(prior_precision)
+        self.register_buffer("_cov", torch.empty(0), persistent=False)
+
+    @property
+    def posterior_covariance(self) -> torch.Tensor:
+        if self._cov.numel() == 0:
+            raise RuntimeError("LastLayerLaplacePosterior.fit has not been called")
+        return self._cov
+
+    @property
+    def is_fitted(self) -> bool:
+        return self._cov.numel() > 0
+
+    def fit(self, features: torch.Tensor, targets: torch.Tensor,
+            task: str, sigma: float | None = None) -> "LastLayerLaplacePosterior":
+        """Fit the GGN over last-layer weights. ``features`` are body outputs."""
+        phi = features.detach()
+        phi = torch.cat([phi, torch.ones(phi.shape[0], 1, dtype=phi.dtype, device=phi.device)], dim=1)
+
+        if task == "outcome":
+            with torch.no_grad():
+                p = torch.sigmoid(self.head_layer(features.detach()).view(-1))
+            lam = (p * (1.0 - p)).clamp_min(1e-6)
+        elif task == "final_state":
+            if sigma is None:
+                raise ValueError(
+                    "final_state Laplace requires an explicit observation noise "
+                    "sigma; defaulting it to 1.0 would scale the posterior "
+                    "covariance by an arbitrary constant."
+                )
+            lam = torch.full((phi.shape[0],), 1.0 / float(sigma) ** 2,
+                             dtype=phi.dtype, device=phi.device)
+        else:
+            raise ValueError(f"unknown task {task!r}; expected 'outcome' or 'final_state'")
+
+        H = torch.einsum("n,ni,nj->ij", lam, phi, phi)
+        H = H + self.prior_precision * torch.eye(phi.shape[1], dtype=phi.dtype, device=phi.device)
+        cov = torch.linalg.inv(H)
+        self._cov = 0.5 * (cov + cov.T)  # symmetrize away round-off
+        return self
+
+    def forward_sample(self, x, generator=None):
+        features = self.body(x)
+        if not self.is_fitted:
+            return self.head_layer(features)  # MAP fallback before fit
+        phi = torch.cat(
+            [features, torch.ones(features.shape[0], 1, dtype=features.dtype, device=features.device)],
+            dim=1,
+        )
+        map_w = torch.cat([self.head_layer.weight, self.head_layer.bias.unsqueeze(1)], dim=1)
+        L = torch.linalg.cholesky(self._cov.to(features.dtype))
+        eps = torch.randn(map_w.shape[0], L.shape[0], generator=generator,
+                          device="cpu", dtype=features.dtype).to(features.device)
+        w = map_w + eps @ L.T
+        return phi @ w.T

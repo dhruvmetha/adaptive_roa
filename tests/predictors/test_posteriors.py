@@ -114,3 +114,51 @@ def test_ensemble_forward_samples_has_spread():
     samples = post.forward_samples(torch.zeros(3, 4), S=40)
     assert samples.shape == (40, 3, 2)
     assert samples.std(dim=0).mean().item() > 0.0
+
+
+def test_laplace_covariance_is_psd_and_shrinks_with_data():
+    from adaptive_roa.predictors.posteriors import LastLayerLaplacePosterior
+
+    torch.manual_seed(0)
+    body = torch.nn.Sequential(torch.nn.Linear(4, 8), torch.nn.ReLU())
+    head = torch.nn.Linear(8, 1)
+    post = LastLayerLaplacePosterior(body, head, prior_precision=1.0)
+
+    x_small, x_large = torch.randn(16, 4), torch.randn(512, 4)
+    post.fit(body(x_small), torch.randint(0, 2, (16,)).float(), task="outcome")
+    cov_small = post.posterior_covariance.clone()
+    post.fit(body(x_large), torch.randint(0, 2, (512,)).float(), task="outcome")
+    cov_large = post.posterior_covariance.clone()
+
+    # Symmetric positive definite.
+    assert torch.allclose(cov_small, cov_small.T, atol=1e-6)
+    assert torch.linalg.eigvalsh(cov_small).min().item() > 0.0
+    # More data => tighter posterior.
+    assert cov_large.diagonal().mean().item() < cov_small.diagonal().mean().item()
+
+
+def test_laplace_forward_is_stochastic_only_after_fit():
+    from adaptive_roa.predictors.posteriors import LastLayerLaplacePosterior
+
+    torch.manual_seed(0)
+    body = torch.nn.Sequential(torch.nn.Linear(4, 8), torch.nn.ReLU())
+    head = torch.nn.Linear(8, 1)
+    post = LastLayerLaplacePosterior(body, head, prior_precision=1.0)
+    x = torch.randn(8, 4)
+
+    # Before fit: falls back to the MAP point estimate.
+    assert torch.allclose(post.forward_sample(x), post.forward_sample(x))
+    post.fit(body(x), torch.randint(0, 2, (8,)).float(), task="outcome")
+    assert not torch.allclose(post.forward_sample(x), post.forward_sample(x))
+
+
+def test_laplace_regression_requires_an_explicit_sigma():
+    """sigma is the observation noise; silently defaulting it to 1.0 is the
+    documented laplace-torch trap and would scale the whole covariance."""
+    from adaptive_roa.predictors.posteriors import LastLayerLaplacePosterior
+
+    body = torch.nn.Sequential(torch.nn.Linear(4, 8), torch.nn.ReLU())
+    head = torch.nn.Linear(8, 3)
+    post = LastLayerLaplacePosterior(body, head, prior_precision=1.0)
+    with pytest.raises(ValueError, match="sigma"):
+        post.fit(body(torch.randn(8, 4)), torch.randn(8, 3), task="final_state")

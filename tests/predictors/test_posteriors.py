@@ -1,3 +1,6 @@
+import math
+
+import pytest
 import torch
 
 from adaptive_roa.predictors.posteriors import (
@@ -59,3 +62,23 @@ def test_mfvi_posterior_spreads_and_accumulates_kl():
     samples = post.forward_samples(x, S=5)
     assert samples.shape == (5, 8, 2)
     assert samples.std(dim=0).mean().item() > 0.0
+
+
+def test_vilinear_kl_matches_closed_form_with_nonzero_mean():
+    """Pins the mu**2 term. A KL that drops it still passes the q==prior test,
+    because that test zeroes mu."""
+    layer = VILinear(4, 3, prior_sigma=1.0)
+    with torch.no_grad():
+        layer.weight_mu.fill_(0.5)
+        layer.bias_mu.fill_(0.5)
+        # softplus(rho) == 2.0  =>  rho == log(e**2 - 1)
+        rho = torch.log(torch.expm1(torch.tensor(2.0)))
+        layer.weight_rho.fill_(rho)
+        layer.bias_rho.fill_(rho)
+
+    # per element: log(prior_sigma/sigma) + (sigma**2 + mu**2)/(2*prior_sigma**2) - 0.5
+    per_element = math.log(1.0 / 2.0) + (4.0 + 0.25) / 2.0 - 0.5
+    n_elements = 4 * 3 + 3  # weights + biases
+    expected = per_element * n_elements
+
+    assert layer.kl_divergence().item() == pytest.approx(expected, rel=1e-5)

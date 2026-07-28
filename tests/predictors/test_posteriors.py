@@ -82,3 +82,35 @@ def test_vilinear_kl_matches_closed_form_with_nonzero_mean():
     expected = per_element * n_elements
 
     assert layer.kl_divergence().item() == pytest.approx(expected, rel=1e-5)
+
+
+def test_ensemble_posterior_draws_a_member_per_call():
+    from adaptive_roa.predictors.posteriors import EnsemblePosterior
+
+    torch.manual_seed(0)
+    nets = [torch.nn.Linear(4, 2) for _ in range(5)]
+    # Force members apart so "which member" is observable in the output.
+    with torch.no_grad():
+        for i, net in enumerate(nets):
+            net.bias.fill_(float(i))
+    post = EnsemblePosterior(nets)
+    x = torch.zeros(1, 4)
+
+    assert post.n_members == 5
+    assert post.kl_divergence().item() == 0.0
+    draws = {round(post.forward_sample(x)[0, 0].item()) for _ in range(200)}
+    assert len(draws) == 5, f"expected all 5 members to be drawn, saw {draws}"
+
+
+def test_ensemble_forward_samples_has_spread():
+    from adaptive_roa.predictors.posteriors import EnsemblePosterior
+
+    torch.manual_seed(0)
+    nets = [torch.nn.Linear(4, 2) for _ in range(5)]
+    with torch.no_grad():
+        for i, net in enumerate(nets):
+            net.bias.fill_(float(i))
+    post = EnsemblePosterior(nets)
+    samples = post.forward_samples(torch.zeros(3, 4), S=40)
+    assert samples.shape == (40, 3, 2)
+    assert samples.std(dim=0).mean().item() > 0.0

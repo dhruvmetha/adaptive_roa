@@ -115,3 +115,35 @@ class MFVIPosterior(Posterior):
 
     def kl_divergence(self):
         return sum(m.kl_divergence() for m in self.net.modules() if isinstance(m, VILinear))
+
+
+class EnsemblePosterior(Posterior):
+    """Deep ensemble: M independently trained members, drawn uniformly.
+
+    Formally MAP inference rather than Bayesian inference (D'Angelo & Fortuin,
+    2021), but empirically a closer match to the HMC predictive than mean-field
+    VI (Izmailov et al., 2021), so it is carried as a baseline.
+
+    ``forward_sample`` returns ONE member, giving an M-atom empirical posterior.
+    Callers drawing K samples need K >= 2M to resolve it.
+    """
+
+    def __init__(self, nets):
+        super().__init__()
+        nets = list(nets)
+        if len(nets) < 2:
+            raise ValueError(f"EnsemblePosterior needs >= 2 members, got {len(nets)}")
+        self.members = nn.ModuleList(nets)
+
+    @property
+    def n_members(self) -> int:
+        return len(self.members)
+
+    def forward_sample(self, x, generator=None):
+        idx = int(torch.randint(self.n_members, (1,), generator=generator,
+                                device="cpu").item())
+        return self.members[idx](x)
+
+    def forward_all_members(self, x: torch.Tensor) -> torch.Tensor:
+        """Every member, deterministically: [B, in] -> [M, B, out]."""
+        return torch.stack([m(x) for m in self.members], dim=0)

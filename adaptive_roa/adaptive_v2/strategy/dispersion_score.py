@@ -219,3 +219,153 @@ def select_proportional(
 
     top = np.argpartition(-keys, n_select - 1)[:n_select]
     return valid[top]
+
+
+def _pairwise(chunk: torch.Tensor, scales_t: torch.Tensor, circ_t: torch.Tensor) -> torch.Tensor:
+    """Normalized, circular-aware pairwise distances for a [m,K,D] block -> [m,K,K]."""
+    diff = chunk.unsqueeze(2) - chunk.unsqueeze(1)
+    diff = _wrap_circular_(diff, circ_t)
+    return torch.linalg.vector_norm(diff.div_(scales_t), dim=-1)
+
+
+def mode_separation(
+    endpoints: np.ndarray,
+    scales: np.ndarray,
+    circular_mask: np.ndarray,
+    chunk_size: int = 2048,
+    device: str = "cpu",
+) -> np.ndarray:
+    """Score how strongly a candidate's endpoint cloud splits into two modes.
+
+        s(x) = 4*p*(1-p) * G / (G + W)
+
+    where the cloud is partitioned in two (seeded at the farthest pair, then
+    refined), p is the smaller side's fraction, G the GAP between the sides
+    (smallest distance across the split) and W the mean within-side pairwise
+    distance.
+
+    This is the quantity mean_pairwise_dispersion cannot express. Dispersion is
+    the sum of within-mode spread and between-mode separation, and only the
+    latter carries information about a decision boundary: a basin boundary is a
+    discontinuity of the endpoint map, so a model of that map must place mass on
+    two separated modes there. A cloud that is merely wide -- the model unsure
+    *where* within one basin, or a genuinely diffuse divergence region -- has
+    W ~ B and scores near zero.
+
+    Being a ratio, the score is invariant to the cloud's overall scale, so the
+    fuzz of an undertrained model cancels rather than dominating.
+
+    Args:
+        endpoints: Predicted endpoint clouds [M, K, D]
+        scales: Per-dimension distance scales [D]
+        circular_mask: Boolean [D], True where the dimension wraps
+        chunk_size: Candidates per block
+        device: Torch device
+
+    Returns:
+        np.ndarray: Scores [M] in [0, 1); NaN where a cloud has non-finite points
+    """
+    endpoints = np.asarray(endpoints)
+    if endpoints.ndim != 3:
+        raise ValueError(f"endpoints must be [M, K, D], got shape {endpoints.shape}")
+    if chunk_size <= 0:
+        raise ValueError(f"chunk_size must be positive, got {chunk_size}")
+    M, K, D = endpoints.shape
+    if K < 4:
+        raise ValueError(f"mode separation needs at least 4 endpoint samples, got K={K}")
+
+    scales_t = torch.as_tensor(np.asarray(scales), dtype=torch.float32, device=device)
+    circ_t = torch.as_tensor(np.asarray(circular_mask), dtype=torch.bool, device=device)
+    out = np.empty(M, dtype=np.float64)
+
+    for start in range(0, M, chunk_size):
+        stop = min(start + chunk_size, M)
+        chunk = torch.as_tensor(endpoints[start:stop], dtype=torch.float32, device=device)
+        finite = torch.isfinite(chunk).all(dim=2).all(dim=1)
+        safe = torch.where(finite.view(-1, 1, 1), chunk, torch.zeros_like(chunk))
+
+        d = _pairwise(safe, scales_t, circ_t)                       # [m,K,K]
+        m = d.shape[0]
+        flat = d.view(m, -1).argmax(dim=1)                          # farthest pair seeds
+        i0, i1 = flat // K, flat % K
+        rows = torch.arange(m, device=d.device)
+        for _ in range(2):                                          # Lloyd refinement
+            side = d[rows, i1] < d[rows, i0]                        # True -> side B
+            # recentre each side on its medoid (min summed within-side distance)
+            for sel, idx in ((~side, "a"), (side, "b")):
+                # summed distance from each point to the points on its own side;
+                # only points on that side are eligible to be its medoid
+                w = torch.where(sel.unsqueeze(1), d, torch.zeros_like(d))
+                cost = w.sum(dim=2)
+                cost = torch.where(sel, cost, torch.full_like(cost, float("inf")))
+                med = cost.argmin(dim=1)
+                if idx == "a": i0 = med
+                else: i1 = med
+
+        nb = side.sum(dim=1).float()
+        p = torch.minimum(nb, K - nb) / K
+        balance = 4.0 * p * (1.0 - p)
+
+        # G: the GAP -- smallest distance across the split. Deliberately not the
+        # centroid/medoid separation: splitting any cloud at its farthest pair puts
+        # the medoids far apart relative to within-side spread, so a contiguous blob
+        # would score as high as two genuinely separated modes. Only the nearest
+        # cross-pair distinguishes "there is empty space between two groups" from
+        # "this is one group that happens to be wide".
+        cross = side.unsqueeze(2) != side.unsqueeze(1)
+        G = torch.where(cross, d, torch.full_like(d, float("inf"))).amin(dim=(1, 2))
+        same = side.unsqueeze(2) == side.unsqueeze(1)
+        eye = torch.eye(K, dtype=torch.bool, device=d.device).unsqueeze(0)
+        wmask = same & ~eye
+        wcount = wmask.sum(dim=(1, 2)).clamp(min=1).float()
+        W = (d * wmask).sum(dim=(1, 2)) / wcount
+
+        s = balance * G / (G + W).clamp(min=1e-12)
+        s = torch.where(finite, s, torch.full_like(s, float("nan")))
+        out[start:stop] = s.double().cpu().numpy()
+
+    return out
+
+
+def idempotence_defect(
+    endpoints: np.ndarray,
+    remapped: np.ndarray,
+    scales: np.ndarray,
+    circular_mask: np.ndarray,
+) -> np.ndarray:
+    """Mean distance each predicted endpoint moves when fed back through the model.
+
+    An attractor is a fixed point of the endpoint map, so E(e) == e for a true
+    attractor. A large defect means the cloud sits somewhere the learned map does
+    not consider settled -- off-attractor or divergent. This distinguishes "the
+    cloud is diffuse because the outcome is genuinely unresolved" from "the cloud
+    is diffuse because it straddles two attractors", which raw spread conflates
+    and which is what starved the success class on quadrotor2d.
+
+    It identifies attractors as the fixed-point set of the learned map, without
+    being told what they are.
+
+    Args:
+        endpoints: Predicted endpoint clouds [M, K, D]
+        remapped: The model applied again to each endpoint, same shape
+        scales: Per-dimension distance scales [D]
+        circular_mask: Boolean [D], True where the dimension wraps
+
+    Returns:
+        np.ndarray: Mean normalized displacement [M]; NaN where either input is
+            non-finite for that candidate
+    """
+    endpoints, remapped = np.asarray(endpoints, dtype=np.float64), np.asarray(remapped, dtype=np.float64)
+    if endpoints.shape != remapped.shape:
+        raise ValueError(f"shape mismatch: {endpoints.shape} vs {remapped.shape}")
+
+    diff = remapped - endpoints
+    circular_mask = np.asarray(circular_mask)
+    if circular_mask.any():
+        c = diff[:, :, circular_mask]
+        diff[:, :, circular_mask] = np.arctan2(np.sin(c), np.cos(c))
+    d = np.linalg.norm(diff / np.asarray(scales, dtype=np.float64), axis=2)   # [M,K]
+
+    ok = np.isfinite(endpoints).all(axis=(1, 2)) & np.isfinite(remapped).all(axis=(1, 2))
+    out = d.mean(axis=1)
+    return np.where(ok, out, np.nan)

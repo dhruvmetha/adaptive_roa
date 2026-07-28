@@ -19,6 +19,10 @@ attractor_analysis*
 **/env/
 **/*.egg-info/
 
+# Per-user context: concrete env paths and machine facts. CLAUDE.md is shared and
+# carries rules only; the values that differ per person live here.
+CLAUDE.local.md
+
 # Generated artifacts
 *.pdf
 Untitled

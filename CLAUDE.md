@@ -48,12 +48,12 @@ Wrong answers, no error. Nothing here fails loudly enough to teach you.
   the CLI renames your output directory and changes no behaviour. Select with `acquisition=`.
 
 ## Environment & paths
-- `conda activate /common/users/dm1487/envs/arcmg` · `pip install -e .`
+- Activate the project conda env, then `pip install -e .`. The env path is per-user and is **not**
+  in this file — see `CLAUDE.local.md` (gitignored) for this machine's.
 - Paths resolve through `.env` (`NET_ID`, `DATA_DIR`, `EXP_DIR`, `SHARED_DATA_BASE`, `NOISE_REGIME`)
   and Hydra resolvers `${data_dir:}`, `${exp_dir:}`, `${shared_data_base:...}`. Never hardcode
-  user-specific paths.
-- **Outputs go under `EXP_DIR`** (`/common/users/shared/pracsys/adaptive_roa_experiments/dhruv/`)
-  or `outputs/`. Write only there.
+  user-specific paths. `.env` is gitignored, so it does not travel with a clone.
+- **Outputs go under `EXP_DIR`** (per-user, set in `.env`) or `outputs/`. Write only there.
 - Data layout: `{shared_data_base}/{noise_regime}/{dataset}/`. Each dataset ships
   `dataset_description.json` (state_dim, manifold, goal, criteria) — read it rather than hardcoding
   system facts. It has twice been right where the code's comments were wrong.
@@ -76,7 +76,7 @@ python scripts/run_adaptive.py system=pendulum predictor=gp acquisition=partx ev
 # partial-trajectory T-step verifier
 python adaptive_roa/partial_trajs/train.py system=pendulum
 
-# tests (use the arcmg python)
+# tests (use the project env's python, not a system one)
 pytest
 ```
 - Hydra config groups live in `configs/`; override on the CLI (`system=cartpole device=cuda:0`).

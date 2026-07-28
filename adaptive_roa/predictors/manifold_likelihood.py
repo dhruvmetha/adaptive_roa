@@ -104,3 +104,62 @@ class RealLikelihood(ComponentLikelihood):
         if int(dim) == 1:
             return [base]
         return [f"{base}_{i}" for i in range(int(dim))]
+
+
+def wrap_angle(x: torch.Tensor) -> torch.Tensor:
+    """Wrap to [-pi, pi]. The codebase-wide idiom (systems/pendulum.py:131 etc.)."""
+    return torch.atan2(torch.sin(x), torch.cos(x))
+
+
+class SO2Likelihood(ComponentLikelihood):
+    """Wrapped normal over one angle.
+
+    The head emits an UNNORMALIZED (sin, cos) direction plus log sigma; the mean
+    angle is atan2(sin, cos), which is well-defined regardless of magnitude and
+    has no seam. Sampling adds Gaussian noise in the tangent (angle) space and
+    wraps, so mass near +/-pi correctly appears on both sides -- the property a
+    Euclidean Gaussian on theta lacks, and the reason this class exists:
+    pendulum's FAILURE attractors sit at theta = +/-pi.
+
+    NLL uses the wrapped geodesic residual. This is the wrapped-normal density
+    truncated to its principal term, which is accurate for sigma well under pi
+    and is what makes the loss seam-aware.
+    """
+
+    LOG_SIGMA_MIN = -7.0
+    LOG_SIGMA_MAX = math.log(math.pi)
+
+    def n_params(self, dim: int) -> int:
+        if int(dim) != 1:
+            raise ValueError(f"SO2 component must be 1-dimensional, got {dim}")
+        return 3
+
+    def _sigma(self, params: torch.Tensor) -> torch.Tensor:
+        return params[..., 2:3].clamp(self.LOG_SIGMA_MIN, self.LOG_SIGMA_MAX).exp()
+
+    def mean(self, params):
+        return torch.atan2(params[..., 0:1], params[..., 1:2])
+
+    def nll(self, params, target, beta: float = 0.0):
+        mu = self.mean(params)
+        sigma = self._sigma(params)
+        resid = wrap_angle(target - mu)
+        per_dim = 0.5 * torch.log(2 * math.pi * sigma ** 2) + resid ** 2 / (2 * sigma ** 2)
+        if beta > 0.0:
+            per_dim = per_dim * (sigma.detach() ** (2.0 * beta))
+        return per_dim.sum(dim=-1)
+
+    def sample(self, params, generator=None):
+        mu = self.mean(params)
+        sigma = self._sigma(params)
+        eps = torch.randn(mu.shape, generator=generator, device=mu.device, dtype=mu.dtype)
+        return wrap_angle(mu + sigma * eps)
+
+    def distance(self, a, b):
+        return wrap_angle(a - b).abs()
+
+    def n_dist(self, dim: int) -> int:
+        return 1
+
+    def names(self, dim: int, base: str) -> List[str]:
+        return [f"{base}_geodesic"]

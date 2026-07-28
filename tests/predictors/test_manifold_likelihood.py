@@ -73,3 +73,69 @@ def test_real_distance_is_absolute_difference_per_dim():
 def test_real_names_are_one_per_dim():
     assert RealLikelihood().names(3, "velocity") == ["velocity_0", "velocity_1", "velocity_2"]
     assert RealLikelihood().names(1, "cart_position") == ["cart_position"]
+
+
+def test_so2_params_are_sin_cos_and_log_sigma():
+    from adaptive_roa.predictors.manifold_likelihood import SO2Likelihood
+    assert SO2Likelihood().n_params(1) == 3
+
+
+def test_so2_mean_recovers_the_angle_via_atan2():
+    from adaptive_roa.predictors.manifold_likelihood import SO2Likelihood
+
+    lik = SO2Likelihood()
+    for theta in (0.0, 1.0, -1.0, 3.0, -3.0, math.pi - 1e-3):
+        params = torch.tensor([[math.sin(theta), math.cos(theta), 0.0]])
+        assert lik.mean(params).item() == pytest.approx(theta, abs=1e-5)
+
+
+def test_so2_mean_is_unaffected_by_the_magnitude_of_sin_cos():
+    """Only the direction matters; the head is not required to emit a unit vector."""
+    from adaptive_roa.predictors.manifold_likelihood import SO2Likelihood
+
+    lik = SO2Likelihood()
+    small = torch.tensor([[0.1 * math.sin(2.0), 0.1 * math.cos(2.0), 0.0]])
+    large = torch.tensor([[9.0 * math.sin(2.0), 9.0 * math.cos(2.0), 0.0]])
+    assert lik.mean(small).item() == pytest.approx(2.0, abs=1e-5)
+    assert lik.mean(large).item() == pytest.approx(2.0, abs=1e-5)
+
+
+def test_so2_samples_stay_wrapped_and_straddle_the_seam():
+    """A mean near +pi with real spread must produce samples on BOTH sides of the
+    seam, all within [-pi, pi]. This is the property a Euclidean Gaussian lacks."""
+    from adaptive_roa.predictors.manifold_likelihood import SO2Likelihood
+
+    lik = SO2Likelihood()
+    theta = math.pi - 0.05
+    params = torch.tensor([[math.sin(theta), math.cos(theta), math.log(0.5)]]).expand(4000, -1)
+    draws = lik.sample(params)
+    assert draws.min() >= -math.pi - 1e-5 and draws.max() <= math.pi + 1e-5
+    assert (draws > 0).any() and (draws < 0).any(), "samples never crossed the seam"
+
+
+def test_so2_distance_is_the_short_way_round():
+    from adaptive_roa.predictors.manifold_likelihood import SO2Likelihood
+
+    lik = SO2Likelihood()
+    a = torch.tensor([[math.pi - 0.1]])
+    b = torch.tensor([[-math.pi + 0.1]])
+    assert lik.n_dist(1) == 1
+    assert lik.distance(a, b).item() == pytest.approx(0.2, abs=1e-5)
+
+
+def test_so2_nll_is_lower_for_a_target_at_the_predicted_angle():
+    from adaptive_roa.predictors.manifold_likelihood import SO2Likelihood
+
+    lik = SO2Likelihood()
+    theta = math.pi - 0.05
+    params = torch.tensor([[math.sin(theta), math.cos(theta), math.log(0.3)]])
+    on = lik.nll(params, torch.tensor([[theta]]))
+    # Just across the seam, geodesically 0.1 away.
+    near = lik.nll(params, torch.tensor([[-math.pi + 0.05]]))
+    far = lik.nll(params, torch.tensor([[0.0]]))
+    assert on.item() < near.item() < far.item()
+
+
+def test_so2_names_mark_the_geodesic():
+    from adaptive_roa.predictors.manifold_likelihood import SO2Likelihood
+    assert SO2Likelihood().names(1, "pole_angle") == ["pole_angle_geodesic"]

@@ -14,7 +14,9 @@ import torch
 from scipy.stats import spearmanr
 
 from adaptive_roa.adaptive_v2.strategy.dispersion_score import (
+    idempotence_defect,
     mean_pairwise_dispersion,
+    mode_separation,
     select_greedy,
     select_greedy_diverse,
     select_proportional,
@@ -22,6 +24,14 @@ from adaptive_roa.adaptive_v2.strategy.dispersion_score import (
 from adaptive_roa.adaptive_v2.types import AcquisitionResult, ThresholdState
 
 _SELECTION_RULES = ("greedy", "greedy_diverse", "proportional")
+# All three are criteria-free: they read only the endpoint cloud's geometry.
+#   dispersion -- mean pairwise distance; conflates within-mode spread with
+#                 between-mode separation, which is how it failed on quad2d
+#   mode_sep   -- gap across a 2-way split; between-mode structure only
+#   gated      -- mode_sep * exp(-idempotence defect), suppressing clouds that
+#                 are diffuse because the dynamics diverge rather than because
+#                 two outcomes compete. Costs a second endpoint pass.
+_SCORES = ("dispersion", "mode_sep", "gated")
 
 
 class DispersionAcquisitionStrategy:
@@ -37,7 +47,11 @@ class DispersionAcquisitionStrategy:
         self.seed = None if cfg.seed is None else int(cfg.seed)
         self.chunk_size = int(cfg.chunk_size)
         self.log_score_correlation = bool(cfg.log_score_correlation)
+        self.score = str(cfg.get("score", "dispersion"))
         self.verbose = bool(cfg.verbose)
+
+        if self.score not in _SCORES:
+            raise ValueError(f"score must be one of {_SCORES}, got {self.score!r}")
 
         if self.selection_rule not in _SELECTION_RULES:
             raise ValueError(
@@ -99,12 +113,8 @@ class DispersionAcquisitionStrategy:
             num_samples=self.num_mc_samples_dispersion,
             verbose=self.verbose,
         )
-        scores = mean_pairwise_dispersion(
-            endpoints,
-            scales,
-            circular_mask,
-            chunk_size=self.chunk_size,
-            device=getattr(probability_backend, "device", "cpu"),
+        scores = self._compute_score(
+            endpoints, scales, circular_mask, probability_backend
         )
 
         # Resolve the effective seed before selection so a `proportional` run
@@ -153,6 +163,30 @@ class DispersionAcquisitionStrategy:
             n_invalid_added=0,
             diagnostics=diagnostics,
         )
+
+    def _compute_score(self, endpoints, scales, circular_mask, probability_backend):
+        device = getattr(probability_backend, "device", "cpu")
+        if self.score == "dispersion":
+            return mean_pairwise_dispersion(
+                endpoints, scales, circular_mask, chunk_size=self.chunk_size, device=device
+            )
+
+        sep = mode_separation(
+            endpoints, scales, circular_mask, chunk_size=self.chunk_size, device=device
+        )
+        if self.score == "mode_sep":
+            return sep
+
+        # gated: suppress clouds the learned map does not treat as settled. An
+        # attractor is a fixed point of the endpoint map, so re-running the model
+        # on each predicted endpoint separates "two competing outcomes" from
+        # "trajectory still diverging", which raw gap structure cannot.
+        M, K, D = endpoints.shape
+        remapped = probability_backend.sample_endpoints(
+            endpoints.reshape(-1, D), num_samples=1, verbose=False
+        ).reshape(M, K, D)
+        defect = idempotence_defect(endpoints, remapped, scales, circular_mask)
+        return sep * np.exp(-defect)
 
     def _apply_selection_rule(
         self,
@@ -246,6 +280,7 @@ class DispersionAcquisitionStrategy:
             "n_dispersion_candidates_evaluated": int(n_actual),
             "n_nonfinite_excluded": int((~np.isfinite(scores)).sum()),
             "selection_rule": self.selection_rule,
+            "score": self.score,
             "num_mc_samples_dispersion": self.num_mc_samples_dispersion,
         }
 

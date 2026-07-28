@@ -1,0 +1,17 @@
+# @package _global_
+# Fully criteria-free acquisition: scores only the geometry of the predicted
+# endpoint cloud. No labels, no attractor radius, no fitted threshold.
+sampling_mode: gated
+acquisition:
+  _target_: adaptive_roa.adaptive_v2.strategy.dispersion.DispersionAcquisitionStrategy
+  d2_ratio: 0.5
+  n_dispersion_candidates: 50000
+  num_mc_samples_dispersion: 20
+  score: gated
+  selection_rule: greedy_diverse
+  diversity_pool_multiplier: 5
+  temperature: 0.1
+  seed: null
+  chunk_size: 2048
+  log_score_correlation: true
+  verbose: true

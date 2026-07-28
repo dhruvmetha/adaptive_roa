@@ -425,3 +425,68 @@ def test_correlation_is_none_when_p_success_is_constant():
     )
 
     assert result.diagnostics["dispersion_label_uncertainty_spearman"] is None
+
+
+# --- selectable score -------------------------------------------------------
+# `score` lets the same strategy run purely geometric (criteria-free) acquisition:
+# gap structure alone, or gap gated by the idempotence defect.
+
+def test_rejects_unknown_score():
+    with pytest.raises(ValueError, match="score"):
+        DispersionAcquisitionStrategy(_cfg(score="bogus"))
+
+
+def test_default_score_is_dispersion_and_unchanged():
+    s = DispersionAcquisitionStrategy(_cfg())
+    assert s.score == "dispersion"
+
+
+def test_mode_sep_score_prefers_bimodal_over_merely_wide():
+    """The whole point: a wide unimodal cloud must lose to a gapped one."""
+    system = _FakeSystem()
+    wide = np.array([[0.0, -4.0], [0.0, -1.3], [0.0, 1.3], [0.0, 4.0]], dtype=np.float32)
+    gapped = np.array([[0.0, -0.1], [0.0, 0.0], [0.0, 3.0], [0.0, 3.1]], dtype=np.float32)
+    clouds = np.stack([wide, gapped])
+    pool = _FakePool(np.array([[0.0, 0.0], [1.0, 0.0]]))
+    backend = _FakeBackend(clouds, system)
+
+    disp = DispersionAcquisitionStrategy(_cfg(selection_rule="greedy")).select(
+        pool=pool, probability_backend=backend, threshold_backend=None,
+        threshold_state=_threshold_state(), target_count=1)
+    modes = DispersionAcquisitionStrategy(
+        _cfg(selection_rule="greedy", score="mode_sep")).select(
+        pool=_FakePool(np.array([[0.0, 0.0], [1.0, 0.0]])),
+        probability_backend=_FakeBackend(clouds, system), threshold_backend=None,
+        threshold_state=_threshold_state(), target_count=1)
+
+    assert disp.d2_indices == [100]      # dispersion picks the wider cloud
+    assert modes.d2_indices == [101]     # mode separation picks the gapped one
+    assert modes.diagnostics["score"] == "mode_sep"
+
+
+def test_gated_score_requests_a_second_endpoint_pass():
+    """gated needs E(e) for each endpoint, so the backend is called twice."""
+    system = _FakeSystem()
+    # K=4: mode_separation requires at least 4 endpoint samples
+    clouds = np.array([[[0.0, 0.0], [0.0, 0.1], [0.0, s], [0.0, s + 0.1]]
+                       for s in (1.0, 4.0, 2.0)], dtype=np.float32)
+
+    class _CountingBackend(_FakeBackend):
+        def __init__(self, *a):
+            super().__init__(*a)
+            self.calls = 0
+
+        def sample_endpoints(self, start_states, num_samples, verbose=True):
+            self.calls += 1
+            return self.clouds[: len(start_states)] if self.calls == 1 else \
+                np.zeros((len(start_states), num_samples, 2), dtype=np.float32)
+
+    backend = _CountingBackend(clouds, system)
+    r = DispersionAcquisitionStrategy(_cfg(selection_rule="greedy", score="gated")).select(
+        pool=_FakePool(np.array([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]])),
+        probability_backend=backend, threshold_backend=None,
+        threshold_state=_threshold_state(), target_count=1)
+
+    assert backend.calls == 2
+    assert r.diagnostics["score"] == "gated"
+    assert len(r.d2_indices) == 1

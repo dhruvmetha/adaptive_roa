@@ -1,9 +1,12 @@
+import math
+
 import numpy as np
 import pytest
 import torch
 
 from adaptive_roa.predictors.bayesian_mlp import build_bayesian_mlp
 from adaptive_roa.predictors.handles import OutcomeModelHandle
+from adaptive_roa.predictors.posteriors import EnsemblePosterior, Posterior
 from adaptive_roa.systems.cartpole import CartPoleSystem
 
 _ALL_KINDS = ["deterministic", "mfvi", "ensemble", "laplace"]
@@ -95,6 +98,70 @@ def test_handle_is_deterministic_for_every_posterior_kind(kind):
     _fit_if_laplace(handle, system, kind, x)
     assert torch.allclose(handle(x), handle(x))
     assert torch.allclose(handle(x), handle(x))
+
+
+class _ConstantPosterior(Posterior):
+    """Posterior whose every draw is a fixed logit. Lets a test pin exact numbers."""
+
+    def __init__(self, value):
+        super().__init__()
+        self._unused = torch.nn.Linear(1, 1)  # gives .parameters() a device
+        self.value = float(value)
+
+    def forward_sample(self, x, generator=None):
+        return torch.full((x.shape[0], 1), self.value, device=x.device, dtype=x.dtype)
+
+
+class _IdentitySystem:
+    state_dim = 1
+
+    def normalize_state(self, x):
+        return x
+
+    def embed_state_for_model(self, x):
+        return x
+
+
+@pytest.mark.parametrize("logit", [25.0, -25.0, 100.0, -100.0])
+def test_handle_logits_stay_finite_when_the_posterior_saturates(logit):
+    """sigmoid saturates to exactly 1.0 in float32 for logits above ~17.
+
+    Averaging probabilities and inverting with log(p/(1-p)) then returns +inf,
+    and the obvious guard -- p.clamp(1e-12, 1 - 1e-12) -- does NOT help, because
+    float32(1 - 1e-12) rounds to exactly 1.0, making the upper clamp a no-op
+    while the lower one works. The handle must marginalize in log space instead.
+    A +inf logit propagates silently into thresholds and calibration.
+    """
+    handle = OutcomeModelHandle(_ConstantPosterior(logit), _IdentitySystem(),
+                                n_marginal_samples=8)
+    out = handle(torch.zeros(4, 1))
+    assert torch.isfinite(out).all()
+    # All draws share one logit, so the marginal must be exactly that logit.
+    torch.testing.assert_close(out, torch.full((4,), logit), rtol=0, atol=1e-3)
+
+
+def test_ensemble_marginal_is_exact_enumeration_not_sampling():
+    """The ensemble's M atoms carry weight 1/M each; that is computable exactly.
+
+    Drawing atoms with replacement instead gives a multinomial weight vector,
+    and because the handle seeds its generator that vector is FIXED for the whole
+    run -- a systematic bias, not noise that averages out. With the members below
+    the seeded-MC estimate was 0.5125 against an exact 0.5800, which flips a
+    decision at lambda* = 0.5.
+    """
+    probs = [0.9, 0.9, 0.9, 0.1, 0.1]
+    logits = [math.log(p / (1.0 - p)) for p in probs]
+    posterior = EnsemblePosterior([_ConstantPosterior(v) for v in logits])
+
+    handle = OutcomeModelHandle(posterior, _IdentitySystem(), n_marginal_samples=64)
+    p_bar = torch.sigmoid(handle(torch.zeros(3, 1)))
+
+    expected = sum(probs) / len(probs)
+    torch.testing.assert_close(p_bar, torch.full((3,), expected), rtol=0, atol=1e-6)
+
+    # And S must not matter: enumeration ignores it.
+    coarse = OutcomeModelHandle(posterior, _IdentitySystem(), n_marginal_samples=2)
+    torch.testing.assert_close(torch.sigmoid(coarse(torch.zeros(3, 1))), p_bar)
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")

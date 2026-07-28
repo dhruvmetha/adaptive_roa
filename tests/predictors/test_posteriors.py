@@ -137,6 +137,48 @@ def test_laplace_covariance_is_psd_and_shrinks_with_data():
     assert cov_large.diagonal().mean().item() < cov_small.diagonal().mean().item()
 
 
+def test_laplace_covariance_matches_the_closed_form_ggn():
+    """Sigma must equal (sum_n lam_n phi_n phi_n^T + prior_precision I)^-1 exactly.
+
+    Every other Laplace test is a property check (PSD, shrinks with data,
+    stochastic after fit) that a mis-contracted-but-data-dependent H would still
+    satisfy. This pins the actual numbers on a hand-computable case: 1-D
+    features, three points, a head with known weights. The expected value is
+    rebuilt here from outer products and an explicit sigmoid -- it never calls
+    the implementation -- so the two agreeing means the implementation is right,
+    not merely self-consistent.
+    """
+    from adaptive_roa.predictors.posteriors import LastLayerLaplacePosterior
+
+    w, b, prior_precision = 0.75, -0.25, 0.5
+    head = torch.nn.Linear(1, 1).double()
+    with torch.no_grad():
+        head.weight.fill_(w)
+        head.bias.fill_(b)
+    post = LastLayerLaplacePosterior(
+        body=torch.nn.Identity(), head_layer=head, prior_precision=prior_precision
+    )
+
+    features = torch.tensor([[2.0], [-1.0], [0.5]], dtype=torch.float64)
+    # Targets do not enter the GGN for a Bernoulli head (lam depends on p only);
+    # they are supplied because fit() takes them.
+    targets = torch.tensor([1.0, 0.0, 1.0], dtype=torch.float64)
+
+    post.fit(features, targets, task="outcome")
+
+    # phi = [feature, 1] (the appended column is the bias input), so H is 2x2.
+    H = torch.zeros(2, 2, dtype=torch.float64)
+    for f in (2.0, -1.0, 0.5):
+        p = 1.0 / (1.0 + math.exp(-(w * f + b)))
+        lam = p * (1.0 - p)
+        phi = torch.tensor([f, 1.0], dtype=torch.float64)
+        H += lam * torch.outer(phi, phi)
+    H += prior_precision * torch.eye(2, dtype=torch.float64)
+    expected = torch.linalg.inv(H)
+
+    torch.testing.assert_close(post.posterior_covariance, expected, rtol=1e-10, atol=1e-12)
+
+
 def test_laplace_forward_is_stochastic_only_after_fit():
     from adaptive_roa.predictors.posteriors import LastLayerLaplacePosterior
 

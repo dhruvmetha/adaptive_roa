@@ -62,6 +62,57 @@ def test_laplace_arm_fits_its_ggn_during_training(tmp_path):
     assert handle.posterior.is_fitted, "Laplace posterior left at the MAP point estimate"
 
 
+def _write_separable(path, n, seed):
+    """A cleanly separable task: label = (cart position > 0), with a margin.
+
+    The margin band is dropped so the Bayes error is exactly zero -- any
+    accuracy below ~0.95 means the arm failed to fit, not that the task is hard.
+    The range is +-4 because CartPoleSystem normalizes x by a cart limit of
+    ~6.05, so a +-1 box would compress the only informative coordinate into
+    +-0.17 and make the test needlessly marginal.
+    """
+    rng = np.random.default_rng(seed)
+    X = rng.uniform(-4.0, 4.0, size=(int(n * 1.4), 4))
+    X = X[np.abs(X[:, 0]) > 0.4][:n]
+    y = (X[:, 0] > 0).astype(int)
+    np.savetxt(path, np.column_stack([X, y]))
+    return str(path), X, y
+
+
+@pytest.mark.parametrize("posterior", ["mfvi", "ensemble", "laplace"])
+def test_trained_arm_actually_learns_the_task(posterior, tmp_path):
+    """Every other trainer test would pass on a network that never learned.
+
+    Shapes, determinism and file existence are all satisfied by random weights,
+    so nothing pinned the one property the arms exist for. Two defects hid in
+    that gap: the trainer returned last-epoch weights while the export loaded
+    the best checkpoint, and MFVI's checkpoint/early-stopping monitored the
+    ELBO -- whose KL term is data-independent and monotone -- rather than the
+    fit. Held-out accuracy is the assertion that notices.
+
+    The bar is 0.8 on a task where the plain-MLP baseline reaches ~1.0: loose
+    enough not to be flaky across arms and seeds, far enough above the 0.5
+    chance level that an untrained or mis-loaded network cannot clear it.
+    """
+    train_file, _, _ = _write_separable(tmp_path / "train.txt", 2000, 0)
+    val_file, _, _ = _write_separable(tmp_path / "val.txt", 600, 1)
+    _, X_test, y_test = _write_separable(tmp_path / "test.txt", 600, 2)
+
+    cfg = _cfg(posterior, hidden_dims=[32, 32], lr=1e-2, max_epochs=40,
+               patience=40, n_members=2, n_marginal_samples=16)
+    cfg.predictor.batch_size = 256
+
+    torch.manual_seed(0)
+    handle = BayesianMLPTrainer(cfg, CartPoleSystem(), "cartpole").fit(
+        {"train": train_file, "val": val_file}, str(tmp_path / "out")
+    )
+
+    logits = handle(torch.as_tensor(X_test, dtype=torch.float32)).view(-1)
+    assert torch.isfinite(logits).all()
+    accuracy = ((logits > 0).long().numpy() == y_test).mean()
+    assert accuracy >= 0.8, f"{posterior} arm did not learn: held-out accuracy {accuracy:.3f}"
+
+
 def test_mfvi_reports_its_kl_weight(tmp_path):
     """beta is a reported protocol parameter, not a silent default."""
     files = {"train": _write_dataset(tmp_path / "train.txt"),

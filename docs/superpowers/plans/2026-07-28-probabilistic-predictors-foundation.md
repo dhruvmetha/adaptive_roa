@@ -569,15 +569,14 @@ class VILinear(nn.Module):
 
     def kl_divergence(self) -> torch.Tensor:
         """Closed-form KL(N(mu, sigma^2) || N(0, prior_sigma^2)), summed."""
-        total = x = None
+        total = torch.zeros((), device=self.weight_mu.device, dtype=self.weight_mu.dtype)
         for mu, rho in ((self.weight_mu, self.weight_rho), (self.bias_mu, self.bias_rho)):
             sigma = F.softplus(rho)
-            x = (
+            total = total + (
                 math.log(self.prior_sigma) - torch.log(sigma)
                 + (sigma.pow(2) + mu.pow(2)) / (2.0 * self.prior_sigma ** 2)
                 - 0.5
             ).sum()
-            total = x if total is None else total + x
         return total
 
 
@@ -588,6 +587,16 @@ class Posterior(nn.Module, ABC):
     def forward_sample(self, x: torch.Tensor,
                        generator: torch.Generator | None = None) -> torch.Tensor:
         """One draw from q(w): [B, in] -> [B, out]."""
+
+    def forward(self, x: torch.Tensor,
+                generator: torch.Generator | None = None) -> torch.Tensor:
+        """Delegate ``__call__`` to ``forward_sample``.
+
+        Required so a Posterior can be nested inside another Posterior --
+        EnsemblePosterior's members are DeterministicPosterior instances and are
+        invoked as ``member(x)``.
+        """
+        return self.forward_sample(x, generator=generator)
 
     def forward_samples(self, x: torch.Tensor, S: int,
                         generator: torch.Generator | None = None) -> torch.Tensor:
@@ -729,8 +738,8 @@ class EnsemblePosterior(Posterior):
                                 device="cpu").item())
         return self.members[idx](x)
 
-    def forward_mean(self, x: torch.Tensor) -> torch.Tensor:
-        """Deterministic average over all members: [B, in] -> [M, B, out]."""
+    def forward_all_members(self, x: torch.Tensor) -> torch.Tensor:
+        """Every member, deterministically: [B, in] -> [M, B, out]."""
         return torch.stack([m(x) for m in self.members], dim=0)
 ```
 
@@ -1168,14 +1177,20 @@ def test_handle_returns_logits_the_classifier_estimator_can_consume():
 
 
 def test_handle_marginalizes_rather_than_taking_one_draw():
-    """More marginal samples => a tighter estimate of the same quantity."""
+    """More marginal samples => a tighter estimate of the same quantity.
+
+    The seed must be set BEFORE _handle() builds the network, so all eight
+    handles share identical weights and the only thing varying is the
+    marginalization draw. Seeding afterwards would leave the weights different
+    and the measured spread would be weight noise, not MC error.
+    """
     x = torch.randn(32, 4)
     spreads = []
     for n in (2, 128):
         outs = []
         for seed in range(8):
+            torch.manual_seed(0)
             handle, _ = _handle(n_marginal_samples=n, seed=seed)
-            torch.manual_seed(0)  # same weights across seeds
             outs.append(handle(x))
         spreads.append(torch.stack(outs).std(dim=0).mean().item())
     assert spreads[1] < spreads[0]

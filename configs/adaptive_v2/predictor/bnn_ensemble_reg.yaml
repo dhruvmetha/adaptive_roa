@@ -1,0 +1,22 @@
+# @package _global_
+defaults:
+  - /probability: endpoint_mc
+predictor:
+  type: generative          # family tag: endpoint data, endpoint-MC backend, fast eval branch
+  name: bnn_ensemble_reg    # arm name: keys the export registry
+  trainer_target: adaptive_roa.adaptive_v2.trainers.final_state_trainer.FinalStateTrainer
+  batch_size: 1024
+  val_batch_size: 2048
+  final_state:
+    posterior: ensemble
+    hidden_dims: [256, 512, 256]
+    lr: 1.0e-3
+    weight_decay: 1.0e-5
+    max_epochs: 200
+    patience: 20
+    prior_sigma: 1.0        # isotropic Gaussian prior, identical across arms
+    n_members: 5
+    beta_nll: 0.5           # Seitzer et al. 2022; 0.0 is plain Gaussian NLL
+  lightning_trainer:
+    gradient_clip_val: 1.0
+    log_every_n_steps: 10

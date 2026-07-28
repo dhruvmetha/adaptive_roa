@@ -20,30 +20,36 @@ from . import flow_matching as _fm  # noqa: F401
 _DATASET_KIND = {"classifier": "classification", "generative": "endpoint"}
 
 
-def resolve_predictor_family(cfg) -> str:
-    """Family tag: drives which dataset files a run wrote."""
+def resolve_predictor_family(cfg, run_dir=None) -> str:
+    """Family tag: drives which dataset files a run wrote.
+
+    ``run_dir``, when given, is folded into the error messages so a failure
+    identifies which run's config was unreadable.
+    """
+    loc = f" at {run_dir}" if run_dir is not None else ""
     predictor = cfg.get("predictor", None)
     if predictor is None:
         raise ValueError(
-            "run config has no 'predictor' entry; refusing to guess "
-            "the export type (classifier vs generative)."
+            f"run config{loc} has no 'predictor' entry; refusing to guess "
+            f"the export type (classifier vs generative)."
         )
     if isinstance(predictor, str):
         return predictor
     family = predictor.get("type", None)
     if family is None:
         raise ValueError(
-            "run config predictor block has no 'type'; cannot determine export type."
+            f"run config predictor block{loc} has no 'type'; "
+            f"cannot determine the export type."
         )
     return str(family)
 
 
-def resolve_predictor_name(cfg) -> str:
+def resolve_predictor_name(cfg, run_dir=None) -> str:
     """Arm name, falling back to the family tag for pre-``name`` runs."""
     predictor = cfg.get("predictor", None)
     if predictor is None or isinstance(predictor, str):
-        return resolve_predictor_family(cfg)
-    return str(predictor.get("name", None) or resolve_predictor_family(cfg))
+        return resolve_predictor_family(cfg, run_dir)
+    return str(predictor.get("name", None) or resolve_predictor_family(cfg, run_dir))
 
 
 def _read_ws(path):
@@ -134,8 +140,8 @@ def write_split(out_dir, split, query_state, gt_label, probs, native_probs):
 def export_run(run_dir, out_dir, device="cuda", epochs=None):
     device = device if (device == "cpu" or torch.cuda.is_available()) else "cpu"
     cfg = load_cfg(run_dir)
-    predictor_family = resolve_predictor_family(cfg)
-    predictor_name = resolve_predictor_name(cfg)
+    predictor_family = resolve_predictor_family(cfg, run_dir)
+    predictor_name = resolve_predictor_name(cfg, run_dir)
     system = resolve_system(cfg)
     pc_class = get_probabilistic_classifier_class(predictor_name)
     native = pc_class.native_probs

@@ -16,6 +16,7 @@ code wins and the page gets fixed or archived.
 | know **what object** we estimate (set / field / volume / reachability), or **what a label value means** | **`TARGET.md`** | current |
 | **run or track an experiment** — the pre-registered loop, verdict rules | **`experiments/WORKFLOW.md`** | current |
 | run this repo on **Amarel** instead of iLab — separate filesystem, glibc split, staging | `COMPUTE.md` | current |
+| the general Amarel how-to underneath it — login, `salloc`, batch scripts, `squeue` | `AMAREL_GUIDE.md` | current — generic; concrete values live in `COMPUTE.md` |
 
 > If you are about to touch labels: `0` means **separatrix** to `system.classify_attractor` but
 > **failure** to `evaluate_roa`'s predictions, and `-1` flips too. `TARGET.md` has the table.

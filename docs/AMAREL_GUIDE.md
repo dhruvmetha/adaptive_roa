@@ -2,6 +2,15 @@
 
 This guide shows you how to run experiments on the Amarel HPC cluster at Rutgers.
 
+> **Generic walkthrough — placeholders throughout** (`NETID`, `PROJECT_DIR`, `ENV_NAME`). For this
+> repo's *concrete* Amarel setup — clone/env/data paths, the `sbatch_amarel.sh` template, dataset
+> staging, and the login-node glibc split that stops the env importing torch — see
+> **`COMPUTE.md`**. Read that one first; this is the general how-to underneath it.
+>
+> Corrected 2026-07-28 against `COMPUTE.md`: `TMPDIR` used `/common/home/...`, which does not exist
+> on Amarel (nothing under `/common/` is mounted there — that's an iLab path), and the SLURM
+> examples named a `gpu` partition and omitted `--account=general`.
+
 ## Prerequisites
 
 - Your Rutgers NetID (e.g., `abc123`)
@@ -46,14 +55,14 @@ Replace:
 Amarel's `/tmp` directory is shared and can cause permission errors. Use your home directory instead:
 
 ```bash
-mkdir -p /common/home/NETID/tmp
-export TMPDIR=/common/home/NETID/tmp
+mkdir -p /home/NETID/tmp
+export TMPDIR=/home/NETID/tmp
 ```
 
 To make this permanent, add the `export` line to your `~/.bashrc`:
 
 ```bash
-echo 'export TMPDIR=/common/home/NETID/tmp' >> ~/.bashrc
+echo 'export TMPDIR=/home/NETID/tmp' >> ~/.bashrc
 ```
 
 ---
@@ -65,7 +74,7 @@ On the login node, you can only run very short tests. For example:
 ```bash
 cd /home/NETID/PROJECT_DIR
 conda activate ENV_NAME
-export TMPDIR=/common/home/NETID/tmp
+export TMPDIR=/home/NETID/tmp
 
 # Test that your environment works
 python your_script.py --help
@@ -80,7 +89,7 @@ python your_script.py --help
 For debugging or testing, you can request an interactive GPU session:
 
 ```bash
-salloc --partition=gpu --gres=gpu:1 --time=02:00:00 --mem=32G --constraint=ampere
+salloc --account=general --partition=gpu-redhat --gres=gpu:1 --time=02:00:00 --mem=32G --constraint=ampere
 ```
 
 Once you get a compute node, run your code:
@@ -88,7 +97,7 @@ Once you get a compute node, run your code:
 ```bash
 cd /home/NETID/PROJECT_DIR
 conda activate ENV_NAME
-export TMPDIR=/common/home/NETID/tmp
+export TMPDIR=/home/NETID/tmp
 
 # Example: run a short test
 python your_script.py \
@@ -107,7 +116,8 @@ Create a Slurm batch script. Example: `run_job.sbatch`
 ```bash
 #!/bin/bash
 #SBATCH --job-name=your_job_name
-#SBATCH --partition=gpu
+#SBATCH --account=general
+#SBATCH --partition=gpu-redhat
 #SBATCH --gres=gpu:1
 #SBATCH --time=24:00:00
 #SBATCH --mem=64G
@@ -118,7 +128,7 @@ Create a Slurm batch script. Example: `run_job.sbatch`
 source ~/miniconda3/etc/profile.d/conda.sh
 conda activate ENV_NAME
 
-export TMPDIR=/common/home/NETID/tmp
+export TMPDIR=/home/NETID/tmp
 
 cd /home/NETID/PROJECT_DIR
 
@@ -172,8 +182,10 @@ ls
 
 Here are useful options for your batch scripts:
 
-- `--partition=gpu`: Use GPU partition
-- `--gres=gpu:1`: Request 1 GPU
+- `--account=general`: Required; jobs are rejected without it
+- `--partition=gpu-redhat`: The GPU partition. Do **not** submit to `cgpu-redhat` (Camden nodes),
+  and there is no `legacy-gpu` — it no longer exists
+- `--gres=gpu:1`: Request 1 GPU (untyped)
 - `--constraint=ampere`: Request A100 GPUs (best performance)
 - `--time=24:00:00`: Maximum runtime (24 hours)
 - `--mem=64G`: Request 64GB RAM
@@ -201,7 +213,7 @@ scancel -u NETID
 ## Troubleshooting
 
 **Permission denied errors with `/tmp`:**
-- Make sure you set `export TMPDIR=/common/home/NETID/tmp` before running your code
+- Make sure you set `export TMPDIR=/home/NETID/tmp` before running your code
 
 **Job gets killed:**
 - Check if you exceeded time limit (`--time` in your script)
@@ -223,7 +235,7 @@ Replace placeholders in all commands above:
 
 Common paths (customize as needed):
 - Project directory: `/home/NETID/PROJECT_DIR`
-- Temporary files: `/common/home/NETID/tmp`
+- Temporary files: `/home/NETID/tmp`
 - Logs: `/home/NETID/PROJECT_DIR/logs`
 - Outputs: `/home/NETID/PROJECT_DIR/outputs`
 

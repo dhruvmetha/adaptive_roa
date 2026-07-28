@@ -12,9 +12,23 @@ from adaptive_roa.systems.cartpole import CartPoleSystem
 
 
 def _write_endpoints(path, n=256, seed=0):
-    """8-column cartpole endpoint pairs: x th xd thd | x th xd thd."""
+    """8-column cartpole endpoint pairs: x th xd thd | x th xd thd.
+
+    Spans the SYSTEM's own bounds rather than a raw +/-1 box. The head learns in
+    normalized coordinates, and cartpole's bounds are +/-6.05 (x) to +/-8.57
+    (theta_dot), so a raw +/-1 box is a ~0.15-wide sliver of normalized space --
+    an unrepresentative, badly-conditioned corner the deployed arm never sees.
+    Generating in normalized space and denormalizing keeps `end = 0.5 * start`
+    an exact 0.5 contraction in BOTH coordinate systems (every cartpole
+    component is a pure scale, and theta is an identity).
+    """
     rng = np.random.default_rng(seed)
-    start = rng.uniform(-1.0, 1.0, size=(n, 4))
+    system = CartPoleSystem()
+    normalized = rng.uniform(-1.0, 1.0, size=(n, 4))
+    normalized[:, 1] *= np.pi  # theta is carried unnormalized, in radians
+    start = system.denormalize_state(
+        torch.as_tensor(normalized, dtype=torch.float32)
+    ).numpy()
     end = start * 0.5  # a learnable contraction toward the origin
     np.savetxt(path, np.column_stack([start, end]))
     return str(path)
@@ -86,15 +100,56 @@ def test_the_arm_actually_learns_the_contraction(files, tmp_path):
     assert (pred - y).pow(2).mean().item() < 0.5 * (x - y).pow(2).mean().item()
 
 
-def test_ensemble_requires_enough_mc_samples_to_resolve_its_members(files, tmp_path):
+def test_ensemble_guard_reads_the_k_the_mc_loop_actually_uses(files, tmp_path):
     """K >= 2M: an M-atom empirical posterior sampled K times needs K >= 2M, or the
-    reported probability is a sampling artifact of the member draw."""
+    reported probability is a sampling artifact of the member draw.
+
+    The guard must read ``probability.num_mc_samples`` -- the ONLY key that
+    reaches the estimator (EndpointMCProbabilityBackend reads cfg.num_mc_samples
+    off the probability block, endpoint_mc.py:17). It previously consulted
+    ``predictor.num_mc_samples`` first, a key no shipped config sets and the MC
+    loop never reads, so the guard could be satisfied or tripped by a number
+    with no effect on the run.
+    """
     cfg = _cfg("ensemble", n_members=8)
-    cfg.predictor.num_mc_samples = 10
+    cfg.probability = {"num_mc_samples": 10}
     with pytest.raises(ValueError, match="num_mc_samples"):
         FinalStateTrainer(cfg, CartPoleSystem(), "cartpole_pybullet").fit(
             files, str(tmp_path / "out_guard")
         )
+
+
+def test_ensemble_guard_ignores_the_dead_predictor_level_key(files, tmp_path):
+    """A generous ``predictor.num_mc_samples`` must NOT satisfy the guard while
+    the live ``probability.num_mc_samples`` is too small -- that is exactly the
+    resolution-order bug, and it is invisible from the run's own outputs."""
+    cfg = _cfg("ensemble", n_members=8)
+    cfg.predictor.num_mc_samples = 1000   # dead key: never reaches the MC loop
+    cfg.probability = {"num_mc_samples": 10}  # the live K
+    with pytest.raises(ValueError, match="num_mc_samples=10"):
+        FinalStateTrainer(cfg, CartPoleSystem(), "cartpole_pybullet")
+
+
+def test_mlp_det_refuses_to_run_with_adaptive_acquisition(files, tmp_path):
+    """I1. `predictor=mlp_det` alone composes to the default acquisition group's
+    d2_ratio=0.5, so the FIXED-DATASET baseline would quietly acquire adaptively
+    and still be reported as a non-adaptive control. Only
+    `+experiment=mlp_det_baseline` zeroes it, and that was enforced solely by a
+    YAML comment, which no run reads."""
+    cfg = _cfg("deterministic")
+    cfg.predictor.name = "mlp_det"
+    cfg.acquisition = {"d2_ratio": 0.5}
+    with pytest.raises(ValueError, match="mlp_det_baseline"):
+        FinalStateTrainer(cfg, CartPoleSystem(), "cartpole_pybullet")
+
+    # d2_ratio = 0 is the baseline's own composition and must be accepted.
+    cfg.acquisition = {"d2_ratio": 0.0}
+    FinalStateTrainer(cfg, CartPoleSystem(), "cartpole_pybullet")
+
+    # A different arm name is unaffected by the check.
+    cfg.predictor.name = "bnn_mfvi_reg"
+    cfg.acquisition = {"d2_ratio": 0.5}
+    FinalStateTrainer(cfg, CartPoleSystem(), "cartpole_pybullet")
 
 
 def test_mlp_det_baseline_experiment_actually_zeroes_d2_ratio():
@@ -236,9 +291,15 @@ def test_laplace_covariance_is_the_ggn_at_the_exported_weights(tmp_path):
         # from (forward_sample only falls back to the MAP head_layer output
         # before the first fit -- see LastLayerLaplacePosterior.forward_sample).
         params = posterior.head_layer(features)
-        resid = head.distance_per_component(head.mean(params), ends)
+        # Normalized coordinates: that is the space the last layer's outputs
+        # live in, so lam = 1/sigma^2 must be measured there too (see the
+        # trainer's Laplace branch and FinalStateHead's coordinate contract).
+        ends_normalized = system.normalize_state(ends)
+        resid = head.distance_per_component(
+            system.normalize_state(head.mean(params)), ends_normalized
+        )
         sigma = float(resid.pow(2).mean().sqrt().clamp_min(1e-3))
-        posterior.fit(features, ends, task="final_state", sigma=sigma)
+        posterior.fit(features, ends_normalized, task="final_state", sigma=sigma)
 
     torch.testing.assert_close(shipped, posterior.posterior_covariance,
                                rtol=1e-6, atol=1e-8)

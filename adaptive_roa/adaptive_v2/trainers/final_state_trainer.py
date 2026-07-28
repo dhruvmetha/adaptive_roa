@@ -100,11 +100,15 @@ class FinalStateTrainer:
         self.system_name = system_name
         fs = self._predictor_cfg.get("final_state", {})
         self.posterior_kind = str(fs.get("posterior", "mfvi"))
-        # beta: 1.0 is untempered. Any other value makes the run a TEMPERED
-        # result and must be labelled as such in the writeup.
+        # KL tempering weight. 1.0 is untempered; any other value makes the run a
+        # TEMPERED result and must be labelled as such in the writeup. (Unrelated
+        # to `beta_nll` below, which is the beta-NLL likelihood exponent -- two
+        # different quantities that both get called "beta" in the literature.)
         self.kl_weight = float(fs.get("kl_weight", 1.0))
         # beta-NLL exponent (Seitzer et al. 2022); 0.5 is the head's default.
         self.beta_nll = float(fs.get("beta_nll", 0.5))
+
+        self._check_fixed_dataset_baseline()
 
         if self.posterior_kind == "ensemble":
             n_members = int(fs.get("n_members", 5))
@@ -116,6 +120,47 @@ class FinalStateTrainer:
                     f"posterior needs num_mc_samples >= 2*M = {2 * n_members}. Raise "
                     f"num_mc_samples or lower n_members."
                 )
+            # The 2*M floor only rules out the structurally broken regime where
+            # members can go undrawn entirely. It is NOT accuracy: the member
+            # weights are multinomial with per-member SD sqrt(p(1-p)/K) at
+            # p = 1/M, which at the shipped K=10, M=5 is 0.126 against an exact
+            # 0.2 -- ~63% relative. Warn rather than raise, because at K=10 that
+            # error is the same order as the irreducible MC error of p_success
+            # itself (SD ~ 0.16), so raising the floor here alone would not buy
+            # a correct number while it WOULD make the shipped config unrunnable.
+            if k < 20 * n_members:
+                weight_sd = (1.0 / n_members * (1.0 - 1.0 / n_members) / k) ** 0.5
+                print(
+                    f"WARNING: ensemble arm with num_mc_samples={k}, n_members={n_members}. "
+                    f"The K-draws-with-replacement member marginal has weight SD "
+                    f"{weight_sd:.3f} against an exact {1.0 / n_members:.3f} "
+                    f"({weight_sd * n_members * 100:.0f}% relative). Unlike the outcome "
+                    f"family, this arm cannot enumerate members exactly (see "
+                    f"FinalStateModelHandle). For publication-grade numbers use "
+                    f"num_mc_samples >= {20 * n_members}."
+                )
+
+    def _check_fixed_dataset_baseline(self) -> None:
+        """``mlp_det`` is a FIXED-DATASET baseline; refuse to run it adaptively.
+
+        ``predictor=mlp_det`` alone composes to the default acquisition group's
+        d2_ratio (0.5), so the arm would quietly acquire new data every epoch and
+        be reported as a non-adaptive control. Only ``+experiment=mlp_det_baseline``
+        zeroes it. Until now that was enforced by a YAML comment, which no run
+        reads.
+        """
+        if str(self._predictor_cfg.get("name", "")) != "mlp_det":
+            return
+        acq = self.cfg.get("acquisition", None)
+        d2_ratio = float(acq.get("d2_ratio", 0.0) or 0.0) if acq is not None else 0.0
+        if d2_ratio != 0.0:
+            raise ValueError(
+                f"predictor 'mlp_det' is the FIXED-DATASET baseline arm but composed to "
+                f"acquisition.d2_ratio={d2_ratio}, so it would acquire adaptively and be "
+                f"reported as a non-adaptive control. Run it as "
+                f"`+experiment=mlp_det_baseline` (the experiment group composes last and "
+                f"sets d2_ratio=0), or set acquisition.d2_ratio=0 explicitly."
+            )
 
     @property
     def _predictor_cfg(self):
@@ -123,12 +168,20 @@ class FinalStateTrainer:
         return pred if pred is not None else self.cfg
 
     def _resolve_num_mc_samples(self) -> int:
-        """``predictor.num_mc_samples``, else ``probability.num_mc_samples``,
-        else the ``endpoint_mc.yaml`` default of 10."""
-        val = self._predictor_cfg.get("num_mc_samples", None)
+        """The K the MC loop actually uses.
+
+        ``probability.num_mc_samples`` is authoritative: it is the only key that
+        reaches the estimator (``EndpointMCProbabilityBackend.__init__`` reads
+        ``cfg.num_mc_samples`` off the ``probability`` block, endpoint_mc.py:17).
+        This used to consult ``predictor.num_mc_samples`` FIRST -- a key no
+        shipped config sets and the MC loop never reads -- so the ensemble guard
+        below could be satisfied by a number that had no effect on the run.
+        ``predictor.num_mc_samples`` is kept only as a legacy fallback.
+        """
+        prob = self.cfg.get("probability", None)
+        val = prob.get("num_mc_samples", None) if prob is not None else None
         if val is None:
-            prob = self.cfg.get("probability", None)
-            val = prob.get("num_mc_samples", None) if prob is not None else None
+            val = self._predictor_cfg.get("num_mc_samples", None)
         return int(val) if val is not None else 10
 
     def _build(self, fs, posterior_kind, output_dim):
@@ -271,9 +324,28 @@ class FinalStateTrainer:
                     # Observation noise = RMS geodesic residual of the fitted mean.
                     # task="final_state" REQUIRES this explicitly: a default of
                     # 1.0 would silently rescale the whole posterior covariance.
-                    resid = head.distance_per_component(head.mean(params), ends)
+                    # Measured in NORMALIZED coordinates, because that is the
+                    # space the last layer's outputs (and hence the GGN's
+                    # Gaussian likelihood, lam = 1/sigma^2) live in -- see
+                    # FinalStateHead's coordinate contract. A raw-coordinate
+                    # residual would scale the whole posterior covariance by an
+                    # arbitrary units factor.
+                    ends_normalized = self.system.normalize_state(ends)
+                    resid = head.distance_per_component(
+                        self.system.normalize_state(head.mean(params)), ends_normalized
+                    )
                     sigma = float(resid.pow(2).mean().sqrt().clamp_min(1e-3))
-                    posterior.fit(posterior.body(embedded), ends, task="final_state", sigma=sigma)
+                    if sigma <= 1e-3:
+                        print(
+                            "WARNING: derived Laplace observation noise hit the 1e-3 floor. "
+                            "lam = 1/sigma^2 is then a fixed constant unrelated to the fit, "
+                            "the GGN is dominated by it, and the posterior collapses -- the "
+                            "arm is effectively a MAP estimate being reported as Bayesian."
+                        )
+                    else:
+                        print(f"Laplace observation noise (normalized RMS residual): sigma={sigma:.6g}")
+                    posterior.fit(posterior.body(embedded), ends_normalized,
+                                  task="final_state", sigma=sigma)
                 # `_cov` is a non-persistent buffer (its shape is unknown until
                 # fit), so it will NOT round-trip through the Lightning
                 # checkpoint. Save it explicitly or the exported arm silently
@@ -344,13 +416,22 @@ def _load_warm_start(module, state, source: str) -> None:
 def _full_training_tensors(data_module):
     """Stack the whole endpoint training set as ``(starts, ends)`` raw tensors.
 
-    The endpoint datamodules differ from the classification one in two ways that
-    matter here. The dataset lives on the PUBLIC ``train_dataset`` attribute (the
-    classification module uses a private ``_train``), and it stores
-    ``self.data`` as a list of ``(start, end)`` numpy tuples rather than stacked
-    tensors -- angle wrapping is applied in ``__getitem__``, not at load time
-    (``data/cartpole_endpoint_data.py:91-103``). Collating through ``__getitem__``
-    is therefore the only way to get correctly wrapped angles.
+    Two things make collating through ``__getitem__`` the right way to do this
+    rather than reading an array attribute directly.
+
+    The dataset lives on the PUBLIC ``train_dataset`` attribute (the
+    classification module uses a private ``_train``), and the four endpoint
+    datamodules do not agree on how they hold the pairs: cartpole and pendulum
+    keep ``self.data`` as a list of ``(start, end)`` numpy tuples
+    (``data/cartpole_endpoint_data.py:48,91``), while quadrotor2d and
+    quadrotor3d keep stacked ``self.start_states`` / ``self.end_states`` arrays
+    (``data/quadrotor2d_endpoint_data.py:79-84,139-141``).
+
+    More importantly, each one applies its own per-sample manifold fix-up inside
+    ``__getitem__`` and nowhere else -- angle wrapping for the systems with an
+    SO2 component, quaternion canonicalization for quadrotor3d. Reading the
+    underlying storage would skip that fix-up and hand the GGN unwrapped angles
+    or double-cover quaternions.
     """
     from torch.utils.data import default_collate
 

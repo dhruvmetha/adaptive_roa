@@ -776,13 +776,17 @@ def test_head_beta_is_threaded_into_the_component_likelihoods():
 
 
 def test_unknown_component_type_is_rejected():
-    class FakeSystem(CartPoleSystem):
-        def define_manifold_structure(self):
-            from adaptive_roa.systems.base import ManifoldComponent
-            return [ManifoldComponent("Hyperbolic", 2, "weird")]
+    """Use a stub rather than subclassing a real system: overriding
+    define_manifold_structure on a concrete system can fail inside that system's
+    own __init__ for unrelated reasons, which would make this pass for the wrong
+    reason. FinalStateHead only reads `.manifold_components`."""
+    from adaptive_roa.systems.base import ManifoldComponent
+
+    class StubSystem:
+        manifold_components = [ManifoldComponent("Hyperbolic", 2, "weird")]
 
     with pytest.raises(ValueError, match="Hyperbolic"):
-        FinalStateHead(FakeSystem())
+        FinalStateHead(StubSystem())
 ```
 
 - [ ] **Step 2: Run test to verify it fails**

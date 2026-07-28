@@ -5,6 +5,10 @@ from typing import Any
 import numpy as np
 
 from adaptive_roa.adaptive_v2.types import OutcomeProbabilities
+from adaptive_roa.conformal import ConformalConfig
+from adaptive_roa.conformal.classifier_probability_estimator import (
+    ClassifierProbabilityEstimator,
+)
 
 
 class GPProbabilityBackend:
@@ -15,9 +19,22 @@ class GPProbabilityBackend:
         self.system = system
         self.device = device
         self.model_handle = None
+        self.estimator = None
 
     def bind_model(self, model_handle: Any) -> None:
         self.model_handle = model_handle
+        # ranked/conformal/direct acquisition read `.estimator` directly
+        # (adaptive_v2/strategy/ranked.py:44). GPModelHandle already satisfies
+        # the classifier contract (model(raw_states) -> logits), so the shared
+        # classifier estimator works unchanged and keeps GP usable outside partx.
+        attractor_radius = getattr(self.cfg, "attractor_radius", 0.2)
+        conf = ConformalConfig(
+            attractor_radius=float(attractor_radius),
+            delta=0.05, w=0.9, alpha=0.1,
+        )
+        self.estimator = ClassifierProbabilityEstimator(
+            model_handle, self.system, conf, self.device
+        )
 
     @property
     def gp(self):

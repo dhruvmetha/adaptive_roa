@@ -23,3 +23,30 @@ def test_backend_estimate_and_latent():
 
     m, s2 = backend.latent_posterior(X[:10])
     assert m.shape == (10,) and np.all(s2 > 0)
+
+
+def test_backend_exposes_estimator_for_standard_strategies(tmp_path):
+    """ranked/conformal/direct read probability_backend.estimator; GP must have it."""
+    import numpy as np
+    from adaptive_roa.partx.backend import GPProbabilityBackend
+    from adaptive_roa.partx.gp_classifier import GPClassifier
+    from adaptive_roa.partx.model_handle import GPModelHandle
+    from adaptive_roa.systems.pendulum import PendulumSystem
+    from omegaconf import OmegaConf
+
+    system = PendulumSystem()
+    rng = np.random.default_rng(0)
+    X = rng.uniform(-3.0, 3.0, size=(64, 2)).astype(np.float32)
+    y = (np.abs(X[:, 0]) < 1.0).astype(np.float32)
+
+    gp = GPClassifier(system, n_inducing=16, n_iters=5, device="cpu").fit(X, y)
+    backend = GPProbabilityBackend(
+        OmegaConf.create({"attractor_radius": 0.2}), system, "cpu"
+    )
+    backend.bind_model(GPModelHandle(gp, system))
+
+    assert backend.estimator is not None
+    p_success, p_failure, p_invalid = backend.estimator.estimate(X)
+    assert p_success.shape == (64,)
+    # Must agree with the backend's own estimate() path.
+    np.testing.assert_allclose(p_success, backend.estimate(X).p_success, atol=1e-5)

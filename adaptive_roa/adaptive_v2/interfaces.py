@@ -10,10 +10,16 @@ from adaptive_roa.adaptive_v2.types import AcquisitionResult, OutcomeProbabiliti
 
 
 class PredictorTrainer(Protocol):
+    """Trains one epoch's predictor and returns a ready-to-use model handle.
+
+    ``dataset_files`` keys depend on the predictor family and prediction mode:
+    ``{"train", "val"}`` for classification and global endpoint data,
+    ``{"train_trajectories", "val_trajectories"}`` for ``prediction_mode: local``.
+    """
+
     def fit(
         self,
-        train_file: str,
-        val_file: str,
+        dataset_files: dict,
         output_dir: str,
         resume_checkpoint: str | None = None,
     ) -> Any:
@@ -98,4 +104,46 @@ class DatasetPool(Protocol):
         ...
 
     def build_all_datasets(self) -> dict[str, str]:
+        ...
+
+
+class OutcomeModelHandle(Protocol):
+    """Predictor that emits p(success | x) directly.
+
+    Bound to ``ClassifierProbabilityBackend``, which calls the handle ONCE per
+    query. Threshold optimization, calibration, and evaluation each call it
+    separately and must agree, so a Bayesian handle marginalizes its weight
+    posterior INTERNALLY and returns identical logits for repeated calls on the
+    same states (use a ``torch.Generator`` seeded at construction).
+    """
+
+    def eval(self) -> Any: ...
+
+    def to(self, device: Any) -> Any: ...
+
+    def __call__(self, raw_states: Any) -> Any:
+        """Raw (un-normalized) states [B, state_dim] -> logits [B] or [B, 1]."""
+        ...
+
+
+class FinalStateModelHandle(Protocol):
+    """Predictor that emits a distribution over the final state.
+
+    Bound to ``EndpointMCProbabilityBackend``, which calls ``predict_endpoint``
+    K times on the SAME batch and counts ``system.classify_attractor`` labels.
+    The spread across those calls IS the outcome probability, so each call must
+    draw a fresh posterior sample. Seeding this handle collapses every arm to
+    p in {0, 1}.
+    """
+
+    def eval(self) -> Any: ...
+
+    def to(self, device: Any) -> Any: ...
+
+    def predict_endpoint(self, states: Any) -> Any:
+        """One posterior draw: [B, state_dim] -> [B, state_dim], raw space."""
+        ...
+
+    def get_manifold_component_names(self) -> list:
+        """Called UNGUARDED by adaptive/endpoint_evaluation.py:100."""
         ...

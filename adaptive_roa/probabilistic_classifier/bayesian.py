@@ -13,10 +13,14 @@ import numpy as np
 import torch
 
 from adaptive_roa.adaptive_v2.types import OutcomeProbabilities
-from adaptive_roa.predictors.bayesian_mlp import build_bayesian_mlp
-from adaptive_roa.predictors.handles import OutcomeModelHandle
+from adaptive_roa.predictors.bayesian_mlp import build_from_cfg, outcome_handle_from_cfg
 from .base import ProbabilisticClassifier
 from .registry import register_probabilistic_classifier
+
+# Checkpoint entries that legitimately have no counterpart in the posterior's
+# own state dict: `pos_weight` is the Lightning module's class-imbalance buffer,
+# and the Laplace `_cov` is non-persistent (it round-trips via laplace_cov.pt).
+_NON_PARAMETER_KEYS = {"pos_weight"}
 
 
 class BNNProbabilisticClassifier(ProbabilisticClassifier):
@@ -47,18 +51,9 @@ class BNNProbabilisticClassifier(ProbabilisticClassifier):
     @classmethod
     def load_from_run(cls, run_dir, epoch, cfg, system, device="cuda"):
         bnn = cfg.get("predictor", {}).get("bnn", {})
-        dummy = torch.zeros(1, int(system.state_dim))
-        input_dim = int(system.embed_state_for_model(system.normalize_state(dummy)).shape[-1])
-        posterior = build_bayesian_mlp(
-            input_dim=input_dim,
-            hidden_dims=list(bnn.get("hidden_dims", [256, 512, 256])),
-            output_dim=1,
-            posterior=cls.posterior_kind,
-            prior_sigma=float(bnn.get("prior_sigma", 1.0)),
-            n_members=int(bnn.get("n_members", 5)),
-            dropout=float(bnn.get("dropout", 0.0)),
-            activation=str(bnn.get("activation", "relu")),
-        )
+        # Same builder the trainer uses, so the skeleton cannot drift from the
+        # architecture the checkpoint was written with.
+        posterior = build_from_cfg(bnn, system, cls.posterior_kind)
         ckpt_dir = Path(run_dir) / f"epoch_{epoch:03d}" / "checkpoints"
         best = sorted(glob.glob(str(ckpt_dir / "best*.ckpt")))
         if not best:
@@ -68,7 +63,22 @@ class BNNProbabilisticClassifier(ProbabilisticClassifier):
         # Lightning prefixes module attrs; strip "posterior." when present.
         state = {k[len("posterior."):] if k.startswith("posterior.") else k: v
                  for k, v in state.items()}
-        posterior.load_state_dict(state, strict=False)
+        # strict=False is needed to tolerate `pos_weight` and the non-persistent
+        # `_cov`, but on its own it also tolerates a WRONG skeleton: a changed
+        # n_members or a laplace checkpoint loaded into an mfvi net leaves whole
+        # sub-networks at random init and returns silently. Check the keys
+        # ourselves so the failure is loud, as classifier.py:44-46 does.
+        missing, unexpected = posterior.load_state_dict(state, strict=False)
+        unexpected = [k for k in unexpected
+                      if k not in _NON_PARAMETER_KEYS and not k.endswith("_cov")]
+        if missing or unexpected:
+            raise RuntimeError(
+                f"checkpoint {best[0]} does not match the '{cls.posterior_kind}' "
+                f"architecture built from cfg.predictor.bnn: "
+                f"{len(missing)} missing key(s) {list(missing)[:5]}, "
+                f"{len(unexpected)} unexpected key(s) {unexpected[:5]}. "
+                f"Loading it would export a partly untrained network."
+            )
 
         # The Laplace GGN covariance is a non-persistent buffer, so the trainer
         # writes it alongside the checkpoint. Without it the arm would load as a
@@ -82,11 +92,7 @@ class BNNProbabilisticClassifier(ProbabilisticClassifier):
                 )
             posterior._cov = torch.load(cov_path, map_location="cpu", weights_only=True)
 
-        handle = OutcomeModelHandle(
-            posterior, system,
-            n_marginal_samples=int(bnn.get("n_marginal_samples", 64)),
-            seed=int(bnn.get("seed", 0)),
-        ).eval().to(device)
+        handle = outcome_handle_from_cfg(posterior, system, bnn).eval().to(device)
         return cls(handle, system, device)
 
 

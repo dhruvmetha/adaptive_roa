@@ -101,3 +101,51 @@ def build_bayesian_mlp(
         f"unknown posterior {posterior!r}; expected one of "
         "'deterministic', 'mfvi', 'ensemble', 'laplace'"
     )
+
+
+def embedded_dim(system) -> int:
+    """Width the system's embedding presents to the network."""
+    dummy = torch.zeros(1, int(system.state_dim))
+    return int(system.embed_state_for_model(system.normalize_state(dummy)).shape[-1])
+
+
+def build_from_cfg(bnn_cfg, system, posterior_kind: str, output_dim: int = 1) -> Posterior:
+    """Build the arm's network straight from a ``predictor.bnn`` config block.
+
+    SINGLE source of the architecture defaults. The trainer and the export
+    wrapper (``probabilistic_classifier/bayesian.py``) must agree exactly: they
+    build the same net from the same config at different times, and a
+    disagreement in even one default yields a checkpoint/skeleton mismatch --
+    which, before the strict key check in the export loader, was silent. Keeping
+    both callers on this one function makes drift impossible rather than merely
+    unlikely.
+    """
+    cfg = bnn_cfg if bnn_cfg is not None else {}
+    return build_bayesian_mlp(
+        input_dim=embedded_dim(system),
+        hidden_dims=list(cfg.get("hidden_dims", [256, 512, 256])),
+        output_dim=int(output_dim),
+        posterior=str(posterior_kind),
+        prior_sigma=float(cfg.get("prior_sigma", 1.0)),
+        n_members=int(cfg.get("n_members", 5)),
+        dropout=float(cfg.get("dropout", 0.0)),
+        activation=str(cfg.get("activation", "relu")),
+    )
+
+
+def outcome_handle_from_cfg(posterior: Posterior, system, bnn_cfg):
+    """Wrap a posterior in an ``OutcomeModelHandle`` using the config's settings.
+
+    Same rationale as ``build_from_cfg``: ``n_marginal_samples`` and ``seed``
+    define the marginalization, so a default that drifts between the trainer and
+    the export wrapper would make the exported probabilities differ from the
+    ones the run itself recorded.
+    """
+    from adaptive_roa.predictors.handles import OutcomeModelHandle
+
+    cfg = bnn_cfg if bnn_cfg is not None else {}
+    return OutcomeModelHandle(
+        posterior, system,
+        n_marginal_samples=int(cfg.get("n_marginal_samples", 64)),
+        seed=int(cfg.get("seed", 0)),
+    )

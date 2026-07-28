@@ -14,7 +14,12 @@ predictor:
     weight_decay: 1.0e-5
     max_epochs: 200
     patience: 20
-    prior_sigma: 1.0        # isotropic Gaussian prior, identical across arms
+    # Isotropic N(0, 1) prior over the LAST LAYER only, as the GGN's
+    # prior_precision = 1/prior_sigma^2 (bayesian_mlp.py:90-98); the body is
+    # trained as a plain MAP fit under weight_decay. NOT identical to the other
+    # arms: mfvi applies the same prior to every layer, and mlp_det /
+    # bnn_ensemble_reg do not consume prior_sigma at all. See mlp_det.yaml.
+    prior_sigma: 1.0
     beta_nll: 0.5           # Seitzer et al. 2022; 0.0 is plain Gaussian NLL
   lightning_trainer:
     gradient_clip_val: 1.0

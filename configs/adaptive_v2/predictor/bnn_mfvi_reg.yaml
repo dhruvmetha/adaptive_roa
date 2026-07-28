@@ -14,7 +14,11 @@ predictor:
     weight_decay: 1.0e-5
     max_epochs: 200
     patience: 20
-    prior_sigma: 1.0        # isotropic Gaussian prior, identical across arms
+    # Isotropic N(0, 1) prior over EVERY layer's weights, via the VILinear KL
+    # term (bayesian_mlp.py:66-71). NOT identical to the other arms: laplace
+    # applies the same prior to the last layer only, and mlp_det /
+    # bnn_ensemble_reg do not consume prior_sigma at all. See mlp_det.yaml.
+    prior_sigma: 1.0
     kl_weight: 1.0          # beta = 1: untempered. Any other value is a TEMPERED result.
     beta_nll: 0.5           # Seitzer et al. 2022; 0.0 is plain Gaussian NLL
   lightning_trainer:

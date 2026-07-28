@@ -14,7 +14,19 @@ predictor:
     weight_decay: 1.0e-5
     max_epochs: 200
     patience: 20
-    prior_sigma: 1.0        # isotropic Gaussian prior, identical across arms
+    # NOT CONSUMED by this arm. The ensemble branch builds `deterministic`
+    # members and does not forward prior_sigma (bayesian_mlp.py:80-88), so each
+    # member's only regularization is the weight_decay above. See mlp_det.yaml
+    # for why the four arms' priors are not, and cannot cheaply be made,
+    # identical.
+    prior_sigma: 1.0
+    # M members. The marginal over members is SAMPLED WITH REPLACEMENT here,
+    # unlike the outcome-family ensemble which enumerates all M exactly
+    # (posteriors.py:166-179); the final-state handle's one-fresh-draw-per-call
+    # contract leaves no point at which enumeration is possible. At this M and
+    # the endpoint_mc default K=10 the member weights carry SD 0.126 against an
+    # exact 0.200. The trainer warns below 20*M. Treat this arm's marginal as
+    # noisier than its outcome-family counterpart at equal M.
     n_members: 5
     beta_nll: 0.5           # Seitzer et al. 2022; 0.0 is plain Gaussian NLL
   lightning_trainer:

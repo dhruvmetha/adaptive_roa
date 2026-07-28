@@ -14,7 +14,19 @@ predictor:
     weight_decay: 1.0e-5
     max_epochs: 200
     patience: 20
-    prior_sigma: 1.0        # isotropic Gaussian prior, identical across arms
+    # NOT CONSUMED by this arm. build_bayesian_mlp only threads prior_sigma into
+    # the mfvi and laplace branches (bayesian_mlp.py:66-98); the deterministic
+    # branch builds plain nn.Linear layers. This arm's only regularization is
+    # the weight_decay above, so it is a near-unregularized MAP fit, NOT a MAP
+    # estimate under the N(0, prior_sigma^2) prior the Bayesian arms use. Kept
+    # for config symmetry across the four arms and read by nothing.
+    #
+    # The priors are deliberately NOT claimed to be identical across arms: mfvi
+    # applies N(0,1) to every layer, laplace applies it to the last layer only,
+    # and the two MAP arms apply none. Making them identical would need the
+    # decay to be 1/(prior_sigma^2 * N) -- dataset-size dependent, and N changes
+    # every adaptive epoch, so no static value here can express it.
+    prior_sigma: 1.0
     beta_nll: 0.5           # Seitzer et al. 2022; 0.0 is plain Gaussian NLL
   lightning_trainer:
     gradient_clip_val: 1.0

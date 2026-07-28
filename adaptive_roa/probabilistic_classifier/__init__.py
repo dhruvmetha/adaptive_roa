@@ -9,6 +9,7 @@ from .registry import (
 # consumer without having to import the submodules manually first.
 from . import classifier as _classifier  # noqa: F401,E402
 from . import flow_matching as _flow_matching  # noqa: F401,E402
+from . import bayesian as _bayesian  # noqa: F401,E402
 
 __all__ = [
     "ProbabilisticClassifier",

@@ -25,6 +25,10 @@ CLAUDE.local.md
 
 # Generated artifacts
 *.pdf
+# ...but archived PDFs are content, not artifacts. The repo archives rather than
+# deletes; without this, `git mv` into docs/archive/ reads as a plain deletion and
+# the file stops travelling with the clone.
+!docs/archive/*.pdf
 Untitled
 telemetry-id
 slurm_logs/

@@ -95,3 +95,100 @@ def test_unknown_component_type_is_rejected():
 
     with pytest.raises(ValueError, match="Hyperbolic"):
         FinalStateHead(StubSystem())
+
+
+@pytest.mark.parametrize("cls,state_dim,n_names,expected_names", SYSTEMS)
+def test_parameter_slices_map_to_correct_state_positions(cls, state_dim, n_names, expected_names):
+    """Parameter slices must map to the correct state positions. A transposition
+    of same-width components (both Real) would pass shape tests but fail this."""
+    system = cls()
+    head = FinalStateHead(system)
+
+    # Build a params tensor with distinct known values per component
+    params = torch.zeros(1, head.n_params)
+    expected_state = {}  # component_idx -> expected state value
+
+    # Fill in each component's parameters with distinct recognizable values
+    param_offset = 0
+    component_idx = 0
+
+    for comp in system.manifold_components:
+        lik, _, n_p, _, _ = head._parts[component_idx]
+
+        if comp.manifold_type == "Real":
+            # Real(dim): mu and log_sigma structure, n_params = 2*dim
+            val = float(10.0 + component_idx)  # 10.0, 11.0, 12.0, etc.
+            params[0, param_offset:param_offset + comp.dim] = val
+            params[0, param_offset + comp.dim:param_offset + 2 * comp.dim] = 0.0  # log_sigma
+            expected_state[component_idx] = torch.full((comp.dim,), val)
+        elif comp.manifold_type == "SO2":
+            # SO2(1): (sin, cos, log_sigma), n_params = 3
+            # Set to a known angle: (component_idx + 1) * pi/4
+            angle = (component_idx + 1) * math.pi / 4
+            params[0, param_offset] = math.sin(angle)
+            params[0, param_offset + 1] = math.cos(angle)
+            params[0, param_offset + 2] = 0.0  # log_sigma
+            expected_state[component_idx] = torch.tensor([angle])
+        elif comp.manifold_type == "SO3":
+            # SO3(1): (qw, qx, qy, qz, log_sig_x, log_sig_y, log_sig_z), n_params = 7
+            # Use identity quaternion (1, 0, 0, 0)
+            q = torch.tensor([1.0, 0.0, 0.0, 0.0])
+            params[0, param_offset:param_offset + 4] = q
+            params[0, param_offset + 4:param_offset + 7] = 0.0  # log_sigmas
+            expected_state[component_idx] = q
+
+        param_offset += n_p
+        component_idx += 1
+
+    mean_output = head.mean(params)
+
+    # Verify that each component's mean appears at the correct state position
+    state_offset = 0
+    component_idx = 0
+    for comp in system.manifold_components:
+        expected = expected_state[component_idx]
+        actual = mean_output[0, state_offset:state_offset + comp.dim]
+
+        # For Real and SO3, check exact match; for SO2 check angle wrapping
+        if comp.manifold_type in ("Real", "SO3"):
+            assert torch.allclose(actual, expected, atol=1e-5), \
+                f"Component {component_idx} ({comp.manifold_type}) mismatch at state[{state_offset}:{state_offset + comp.dim}]"
+        elif comp.manifold_type == "SO2":
+            # SO2 angle may be wrapped; check it's close to expected angle
+            assert torch.allclose(actual, expected, atol=1e-5) or \
+                   torch.allclose(actual + 2*math.pi, expected, atol=1e-5) or \
+                   torch.allclose(actual - 2*math.pi, expected, atol=1e-5), \
+                f"Component {component_idx} (SO2) angle mismatch"
+
+        state_offset += comp.dim
+        component_idx += 1
+
+
+def test_generator_threads_through_all_component_types():
+    """Generator reproducibility must work across Real, SO2, and SO3 simultaneously.
+    No real system has all three; use a stub."""
+    from adaptive_roa.systems.base import ManifoldComponent
+
+    class AllComponentsStub:
+        manifold_components = [
+            ManifoldComponent("Real", 2, "position"),
+            ManifoldComponent("SO2", 1, "angle"),
+            ManifoldComponent("SO3", 4, "rotation"),
+            ManifoldComponent("Real", 1, "velocity"),
+        ]
+
+    head = FinalStateHead(AllComponentsStub())
+    params = torch.randn(8, head.n_params)
+
+    # Two identically-seeded generators should produce identical samples
+    g1 = torch.Generator().manual_seed(42)
+    g2 = torch.Generator().manual_seed(42)
+
+    s1 = head.sample(params, generator=g1)
+    s2 = head.sample(params, generator=g2)
+    assert torch.allclose(s1, s2), "Generator seeding failed for mixed manifolds"
+
+    # A differently-seeded generator should produce different samples
+    g3 = torch.Generator().manual_seed(99)
+    s3 = head.sample(params, generator=g3)
+    assert not torch.allclose(s1, s3), "Different seeds should produce different samples"

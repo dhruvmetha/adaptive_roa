@@ -6,13 +6,22 @@ defaults:
   - /prediction_mode: global
   - _self_
 
-name: adaptive_pendulum
-output_dir: ${exp_dir}/${name}_dhruv/outputs/training_index_${training_index}_warm_start_${warm_start}_adapt_iter_${n_epochs}/${now:%Y-%m-%d_%H-%M-%S}
+name: adaptive_pendulum_${controller}
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${acquisition.d2_ratio}_warm_start_${warm_start}_adapt_iter_${n_epochs}_sampling_mode_${sampling_mode}_selection_${oc.select:acquisition.selection_rule,none}_exp_${exp_id}/${now:%Y-%m-%d_%H-%M-%S}
 
 shuffle_variant: 0
 
-dataset_name: pendulum_lqr_50k
+# Pendulum controller variant: lqr | rl | rl-weak. Training data (trajectories
+# + train_test_splits) always comes from the controller's own dir. eval_variant
+# names the dataset whose cal_set/test_set are used for calibration+evaluation;
+# it defaults to the controller dir itself (correct for lqr). To train on the
+# RL swing-up task and evaluate on the composition, pass e.g.:
+#   system=pendulum_g1 controller=rl eval_variant=rl_to_lqr
+controller: lqr
+eval_variant: ${controller}
+dataset_name: pendulum/${controller}
 dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
+eval_root: ${data_dir}/${noise_regime}/pendulum/${eval_variant}
 
 decision_rule: one_sided
 attractor_radius: 0.1
@@ -25,8 +34,8 @@ data_source:
   shuffled_indices_file: ${dataset_root}/train_test_splits/shuffled_indices_${shuffle_variant}.txt
   shuffled_labels_file: ${dataset_root}/train_test_splits/shuffled_labels_${shuffle_variant}.txt
   eval_states_file: ${dataset_root}/eval_states.txt
-  cal_set_file: ${dataset_root}/cal_set.txt
-  test_set_file: ${dataset_root}/test_set.txt
+  cal_set_file: ${eval_root}/cal_set.txt
+  test_set_file: ${eval_root}/test_set.txt
 
 initial_train_size: 100
 n_epochs: 19

@@ -290,7 +290,8 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
     # ===================================================================
 
     @classmethod
-    def load_from_checkpoint(cls, checkpoint_path: str, device: Optional[str] = None):
+    def load_from_checkpoint(cls, checkpoint_path: str, device: Optional[str] = None,
+                             dataset_dir: Optional[str] = None):
         """
         Load a trained Pendulum LCFM model from checkpoint for inference.
 
@@ -299,6 +300,9 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
                            - If .ckpt file: loads that checkpoint directly
                            - If folder: searches for best checkpoint in folder/version_0/checkpoints/
             device: Device to load model on ("cuda", "cpu", or None for auto)
+            dataset_dir: Optional override for the system's dataset directory. Use when
+                         the checkpoint's stored 'system_dataset_dir' points at a path
+                         that has since moved (e.g. pre-restructure pendulum_lqr_50k).
 
         Returns:
             Loaded model ready for inference
@@ -428,9 +432,12 @@ class PendulumLatentConditionalFlowMatcher(BaseFlowMatcher):
 
         # Initialize system and model
         system = hparams.get("system")
-        if system is None:
-            print("Creating new Pendulum system (not found in hparams)")
-            dataset_dir = hparams.get("system_dataset_dir")
+        if system is None or dataset_dir is not None:
+            print("Creating new Pendulum system" + (
+                " (dataset_dir override)" if dataset_dir is not None else " (not found in hparams)"
+            ))
+            if dataset_dir is None:
+                dataset_dir = hparams.get("system_dataset_dir")
             if not dataset_dir:
                 raise KeyError(
                     "Checkpoint is missing 'system_dataset_dir' hyper_parameter required for "

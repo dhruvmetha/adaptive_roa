@@ -1,0 +1,16 @@
+# @package _global_
+# As entropy.yaml, but breaks exact entropy ties by endpoint-cloud mode
+# separation. With K samples p(success) has only K+1 levels, so many candidates
+# tie at maximum entropy; mode separation is continuous and never ties.
+# Ordering is lexicographic, so this cannot override entropy and adds no weight.
+sampling_mode: entropy_tiebreak
+acquisition:
+  _target_: adaptive_roa.adaptive_v2.strategy.entropy.EntropyAcquisitionStrategy
+  d2_ratio: 0.5
+  n_candidates: 50000
+  num_mc_samples: 20
+  tie_breaker: mode_sep
+  selection_rule: greedy_diverse
+  diversity_pool_multiplier: 5
+  chunk_size: 2048
+  verbose: true

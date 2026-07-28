@@ -10,6 +10,12 @@ noise_regime: deterministic
 training_index: 0
 device: cuda:0
 
+# Experiment identifier embedded in output_dir so a run's directory names itself.
+# Defaults to the scheduler job id, which ties the output dir to its slurm log
+# (slurm_logs/%x_%j.out); falls back to "local" for unscheduled runs. Override on
+# the CLI to tag a campaign, e.g. exp_id=dispersion_sweep.
+exp_id: ${oc.env:SLURM_JOB_ID,local}
+
 use_manifold: false
 use_loss_weights: false
 use_log_loss_weights: false

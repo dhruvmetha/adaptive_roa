@@ -3,6 +3,7 @@ defaults:
   - /probability: endpoint_mc
 predictor:
   type: generative
+  name: fm
   trainer_target: adaptive_roa.adaptive_v2.trainers.flow_matching_trainer.FlowMatchingTrainer
   batch_size: 1024
   val_batch_size: 2048

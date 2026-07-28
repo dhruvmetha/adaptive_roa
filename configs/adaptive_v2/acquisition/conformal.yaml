@@ -1,4 +1,5 @@
 # @package _global_
+sampling_mode: conformal
 acquisition:
   _target_: adaptive_roa.adaptive_v2.strategy.conformal.ConformalAcquisitionStrategy
   d2_ratio: 0.5

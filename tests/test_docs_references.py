@@ -60,13 +60,24 @@ def test_living_set_is_current():
 
 
 def test_no_dead_cli_keys_in_living_docs():
-    """`sampling_mode=` was removed from the CLI on 2026-06-29 and its ghost keeps
-    reappearing in prose. Mentions are fine only when marked as removed."""
+    """`sampling_mode=` selected the acquisition strategy until 2026-06-29, and its ghost
+    keeps reappearing in prose as if it still did.
+
+    It came back on 2026-07-26 (275bb30) as a `@package _global_` label set by each
+    `configs/adaptive_v2/acquisition/*.yaml`, but it is interpolated into `output_dir` and
+    nothing else -- the loop branches on `self.acquisition.mode`. So the key exists and
+    overriding it is *silently* inert, which is worse than a hard error.
+
+    Mentions are therefore fine only when the line says the key is removed or cosmetic.
+    Selection is `acquisition=...`, then and now.
+    """
     pat = re.compile(r"sampling_mode=")
+    allowed = ("removed", "cosmetic")
     for doc in LIVING:
         for i, line in enumerate(doc.read_text().splitlines(), 1):
-            if pat.search(line) and "removed" not in line.lower():
+            if pat.search(line) and not any(w in line.lower() for w in allowed):
                 pytest.fail(
-                    f"{doc.relative_to(REPO)}:{i} uses removed CLI key `sampling_mode=` "
-                    "without marking it as removed. Live form: `acquisition=...`."
+                    f"{doc.relative_to(REPO)}:{i} presents `sampling_mode=` as a live CLI "
+                    "selector. It only renames output_dir. Mark it removed or cosmetic; "
+                    "the selector is `acquisition=...`."
                 )

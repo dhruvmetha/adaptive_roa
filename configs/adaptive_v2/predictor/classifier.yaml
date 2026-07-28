@@ -7,6 +7,7 @@ calibration:
   decision_rule: one_sided
 predictor:
   type: classifier
+  name: mlp
   trainer_target: adaptive_roa.adaptive_v2.trainers.classifier_trainer.ClassifierTrainer
   batch_size: 1024
   val_batch_size: 2048

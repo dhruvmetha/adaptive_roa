@@ -51,6 +51,7 @@ def load_clf_module(epoch_dir, system, cfg, device):
 @register_probabilistic_classifier
 class ClassifierProbabilisticClassifier(ProbabilisticClassifier):
     predictor_type = "classifier"
+    predictor_name = "mlp"
     native_probs = ("p_success",)
 
     def __init__(self, module, system, device):

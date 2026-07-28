@@ -27,7 +27,11 @@ class TrajectoryPool:
             shuffled_labels_file=data_source_cfg.get("shuffled_labels_file", None),
             eval_states_file=data_source_cfg.get("eval_states_file", None),
         )
-        data_source = TrajectoryDataSource(cfg)
+        if str(data_source_cfg.get("pool_format", "text")) == "npz":
+            from adaptive_roa.adaptive.npz_data_source import NpzTrajectoryDataSource
+            data_source = NpzTrajectoryDataSource(cfg)
+        else:
+            data_source = TrajectoryDataSource(cfg)
         self.dataset_builder = AdaptiveDatasetBuilder(
             data_source=data_source,
             output_dir=output_dir,

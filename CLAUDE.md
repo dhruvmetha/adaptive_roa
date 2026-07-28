@@ -38,8 +38,14 @@ Wrong answers, no error. Nothing here fails loudly enough to teach you.
   comparable across methods with different abstention rates.
 - **NFS breaks DataLoader workers** (`OSError: Errno 16` cleaning `.nfs*`). The classifier trainer
   pins `num_workers=0`; the FM trainer and `adaptive_roa/data/trajectory_data.py` still default to **4**.
-- **`noise_regime=noisy` does not work.** Nothing reads the per-cell `.npz` format — it only builds
-  path strings.
+- **`noise_regime=noisy` still does not work — but `system=pendulum_stoch` does.** The regime flag
+  only builds path strings. The stochastic path is a *separate* opt-in: `pool_format: npz` selects
+  `NpzTrajectoryDataSource` in `adaptive_roa/adaptive_v2/pool/trajectory_pool.py`, reading a single
+  flat `train.npz` — not the per-cell format the old note described.
+- **`sampling_mode=` is cosmetic, not a selector.** Each `configs/adaptive_v2/acquisition/*.yaml`
+  sets it `@package _global_`, and it is interpolated into `output_dir` and nothing else. The loop
+  branches on `self.acquisition.mode` (`adaptive_roa/adaptive_v2/engine.py`), so overriding it on
+  the CLI renames your output directory and changes no behaviour. Select with `acquisition=`.
 
 ## Environment & paths
 - `conda activate /common/users/dm1487/envs/arcmg` · `pip install -e .`
@@ -62,7 +68,7 @@ python adaptive_roa/flow_matching/pendulum/latent_conditional/train.py
 python adaptive_roa/flow_matching/evaluate_roa.py --config-name=evaluate_cartpole_roa
 
 # adaptive_v2 loop (predictor = generative | classifier | gp), config_name="default"
-# NOTE: `sampling_mode=` / top-level `d2_ratio=` were REMOVED 2026-06-29. Use the acquisition group:
+# NOTE: top-level `d2_ratio=` was REMOVED 2026-06-29. Select via the acquisition group:
 python scripts/run_adaptive.py system=quadrotor2d predictor=classifier acquisition=direct acquisition.d2_ratio=1.0 device=cuda:0
 # Part-X GP + level-set BO variant:
 python scripts/run_adaptive.py system=pendulum predictor=gp acquisition=partx eval=partx device=cuda:0

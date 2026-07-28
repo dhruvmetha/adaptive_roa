@@ -7,7 +7,7 @@ defaults:
   - _self_
 
 name: adaptive_quadrotor2d
-output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_warm_start_${warm_start}_manifold_${use_manifold}_adapt_iter_${n_epochs}/${now:%Y-%m-%d_%H-%M-%S}
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${acquisition.d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_adapt_iter_${n_epochs}_sampling_mode_${sampling_mode}_selection_${oc.select:acquisition.selection_rule,none}_exp_${exp_id}/${now:%Y-%m-%d_%H-%M-%S}
 
 decision_rule: two_sided
 attractor_radius: 0.3
@@ -27,7 +27,10 @@ data_source:
 
 initial_train_size: 2000
 samples_per_epoch: 500
-n_epochs: 201
+# Stop once the training set reaches 12k trajectories: 2000 + 500*20 = 12,000.
+# (Was 201, which requested 102,500 — far beyond the ~16k available after the
+# 0.2 val split, so every epoch past ~28 retrained on an exhausted pool.)
+n_epochs: 20
 
 flow_matching:
   clamp_noise: false

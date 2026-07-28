@@ -59,6 +59,16 @@ def load_eval_states(
 
     n_cols = data.shape[1]
 
+    # Probabilistic format (stochastic pendulum): θ_s, θ̇_s, p_success — no end
+    # states (each start has many stochastic rollouts). Labels are binarized at
+    # p >= 0.5; end_states is returned as None and callers must guard on it.
+    if n_cols == 3:
+        start_states = data[:, :2].astype(np.float32)
+        p_success = data[:, 2]
+        raw_labels = (p_success >= 0.5).astype(int)
+        labels = np.array([label_mapping.get(l, 0) for l in raw_labels], dtype=np.int64)
+        return start_states, None, labels
+
     # Infer state dimension from number of columns
     # Format: [start_state..., end_state..., label]
     # So: n_cols = 2 * state_dim + 1
@@ -256,6 +266,14 @@ class TrajectoryDataSource:
     def get_state_at(self, idx: int, row: int) -> np.ndarray:
         """Return the state vector at a specific row in trajectory idx."""
         return self.load_trajectory(idx)[row]
+
+    def trajectory_name(self, idx: int) -> str:
+        """Stable name for trajectory idx (path relative to trajectories_dir).
+
+        Written to the train/val trajectory index files consumed by local
+        (trajectory) prediction mode.
+        """
+        return str(self.trajectory_files[idx].relative_to(self.trajectories_dir))
 
     def load_trajectories(self, indices: List[int]) -> List[np.ndarray]:
         """

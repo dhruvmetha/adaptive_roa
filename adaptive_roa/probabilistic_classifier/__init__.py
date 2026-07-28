@@ -10,6 +10,7 @@ from .registry import (
 from . import classifier as _classifier  # noqa: F401,E402
 from . import flow_matching as _flow_matching  # noqa: F401,E402
 from . import bayesian as _bayesian  # noqa: F401,E402
+from . import bayesian_final_state as _bayesian_final_state  # noqa: F401,E402
 
 __all__ = [
     "ProbabilisticClassifier",

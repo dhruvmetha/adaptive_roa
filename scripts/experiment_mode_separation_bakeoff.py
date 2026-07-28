@@ -69,6 +69,28 @@ def to_ilab(path: str) -> str:
     return path.replace(AMAREL_DATA, ILAB_DATA) if path else path
 
 
+def patch_system_paths(SystemClass):
+    """Translate Amarel data paths to iLab at System construction.
+
+    Only the pendulum flow matcher's load_from_checkpoint accepts a dataset_dir
+    override; the others rebuild their system from the checkpoint's
+    `system_dataset_dir` hparam, which points at Amarel. /scratch cannot be
+    symlinked on iLab, so intercept the path at the constructor instead. Confined
+    to this script -- no production behaviour changes.
+    """
+    orig = SystemClass.__init__
+    if getattr(orig, "_ilab_patched", False):
+        return
+
+    def init(self, *a, **kw):
+        a = tuple(to_ilab(x) if isinstance(x, str) else x for x in a)
+        kw = {k: (to_ilab(v) if isinstance(v, str) else v) for k, v in kw.items()}
+        return orig(self, *a, **kw)
+
+    init._ilab_patched = True
+    SystemClass.__init__ = init
+
+
 def dataset_dir_of(epoch_dir: Path) -> str:
     """Resolved dataset dir from the checkpoint hparams, remapped to iLab.
 
@@ -150,6 +172,7 @@ def run_system(key, n_cand, K, top_n, device, seed=0):
     epochs = pick_epochs(run_dir)
     if not epochs:
         print(f"  [{key}] no epoch has both a checkpoint and per-point eval, skipping"); return []
+    patch_system_paths(System)
     ds_dir = dataset_dir_of(epochs[0])
     system = System(dataset_dir=ds_dir)
     scales = system.get_normalization_scales().cpu().numpy().astype(np.float64)
@@ -166,7 +189,7 @@ def run_system(key, n_cand, K, top_n, device, seed=0):
         X, y_true, p_succ = states_all[sel].astype(np.float32), true_all[sel], ps_all[sel]
 
         ckpt = glob.glob(str(epoch_dir / "checkpoints" / "best*.ckpt"))[0]
-        fm = FM.load_from_checkpoint(ckpt, device=device, dataset_dir=ds_dir)
+        fm = FM.load_from_checkpoint(ckpt, device=device)
         est = ProbabilityEstimator(fm, system, ConformalConfig(num_mc_samples=K), device)
 
         cloud = est.sample_endpoints(X, num_samples=K, verbose=False)          # [M,K,D]

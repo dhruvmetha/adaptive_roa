@@ -13,8 +13,7 @@ from typing import Any
 
 import numpy as np
 import torch
-
-_EPS = 1e-12
+import torch.nn.functional as F
 
 
 class OutcomeModelHandle:
@@ -62,13 +61,33 @@ class OutcomeModelHandle:
         param_device = next(self.posterior.parameters()).device
         generator = torch.Generator(device=param_device).manual_seed(self.seed)
         with torch.no_grad():
-            samples = self.posterior.forward_samples(
+            # Ensembles override this to enumerate all M members exactly;
+            # everything else draws S samples. See Posterior.predictive_logit_samples.
+            samples = self.posterior.predictive_logit_samples(
                 embedded, S=self.n_marginal_samples, generator=generator
             )  # [S, B, 1]
+            s = samples.view(samples.shape[0], samples.shape[1])
+
             # Marginalize in PROBABILITY space, not logit space: the Bayesian
             # model average is E_q[p(y|x,w)], and averaging logits instead would
             # be a different (and systematically overconfident) estimator.
-            p = torch.sigmoid(samples.view(samples.shape[0], samples.shape[1])).mean(dim=0)
+            #
+            # But compute that average in LOG space. The naive form --
+            # p = sigmoid(s).mean(0); log(p / (1 - p)) -- breaks in float32:
+            # sigmoid saturates to exactly 1.0 for s >~ 17, and the obvious
+            # guard `p.clamp(eps, 1 - eps)` is a NO-OP on the upper side because
+            # float32(1 - 1e-12) rounds to exactly 1.0. A posterior whose draws
+            # all saturate then returns +inf logits, which propagate silently
+            # into thresholds and calibration. (The same idiom is safe in
+            # partx/model_handle.py only because that code runs in float64.)
+            #
+            # Identity used, for p_bar = (1/S) sum_i sigmoid(s_i):
+            #   logit(p_bar) = log p_bar - log(1 - p_bar)
+            #                = logsumexp_i logsigmoid(s_i)
+            #                  - logsumexp_i logsigmoid(-s_i)
+            # since 1 - sigmoid(s) = sigmoid(-s) and the two -log(S) terms
+            # cancel. Exact, and finite for every finite input.
+            logit_p = (torch.logsumexp(F.logsigmoid(s), dim=0)
+                       - torch.logsumexp(F.logsigmoid(-s), dim=0))
 
-        p = p.clamp(_EPS, 1.0 - _EPS)
-        return torch.log(p / (1.0 - p)).to(out_device)
+        return logit_p.to(out_device)

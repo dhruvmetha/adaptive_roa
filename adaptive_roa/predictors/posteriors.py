@@ -82,6 +82,18 @@ class Posterior(nn.Module, ABC):
         """S independent draws: [B, in] -> [S, B, out]."""
         return torch.stack([self.forward_sample(x, generator=generator) for _ in range(int(S))], dim=0)
 
+    def predictive_logit_samples(self, x: torch.Tensor, S: int,
+                                 generator: torch.Generator | None = None) -> torch.Tensor:
+        """Atoms to average over when marginalizing: [B, in] -> [K, B, out].
+
+        The default is Monte Carlo -- ``K = S`` independent draws from q(w) --
+        because for a continuous posterior no finite exact enumeration exists.
+        Posteriors with a FINITE support override this to enumerate it exactly
+        (see ``EnsemblePosterior``), in which case ``S`` is ignored and ``K`` is
+        the support size. Callers must therefore not assume ``K == S``.
+        """
+        return self.forward_samples(x, S, generator=generator)
+
     def kl_divergence(self) -> torch.Tensor:
         """KL(q||p); zero for non-variational posteriors."""
         return torch.zeros((), device=next(self.parameters()).device)
@@ -125,7 +137,9 @@ class EnsemblePosterior(Posterior):
     VI (Izmailov et al., 2021), so it is carried as a baseline.
 
     ``forward_sample`` returns ONE member, giving an M-atom empirical posterior.
-    Callers drawing K samples need K >= 2M to resolve it.
+    Callers drawing K samples need K >= 2M to resolve it -- which is why the
+    predictive marginal does NOT go through it: see
+    ``predictive_logit_samples`` below, which enumerates all M members exactly.
     """
 
     def __init__(self, nets):
@@ -148,6 +162,21 @@ class EnsemblePosterior(Posterior):
     def forward_all_members(self, x: torch.Tensor) -> torch.Tensor:
         """Every member, deterministically: [B, in] -> [M, B, out]."""
         return torch.stack([m(x) for m in self.members], dim=0)
+
+    def predictive_logit_samples(self, x, S, generator=None):
+        """Exact enumeration of the M-atom posterior; ``S`` is ignored.
+
+        The ensemble marginal is NOT sampled. Its support is the M members with
+        weight 1/M each, so averaging over ``forward_all_members`` computes
+        sum_m p_m / M exactly. Sampling M atoms with replacement instead gives a
+        multinomial weight vector -- and because the handle seeds its generator,
+        that vector is FIXED for the whole run, so the error is a systematic
+        bias rather than noise that averages out. At M=5, S=64 the seeded
+        weights were [.125, .281, .109, .234, .250] against an exact .2, which
+        is enough to flip decisions near lambda*. Enumeration is also ~S/M times
+        cheaper.
+        """
+        return self.forward_all_members(x)
 
 
 class LastLayerLaplacePosterior(Posterior):
@@ -216,7 +245,10 @@ class LastLayerLaplacePosterior(Posterior):
             dim=1,
         )
         map_w = torch.cat([self.head_layer.weight, self.head_layer.bias.unsqueeze(1)], dim=1)
-        L = torch.linalg.cholesky(self._cov.to(features.dtype))
+        # Key off the FEATURE device/dtype like every other posterior does; a
+        # dtype-only `.to` leaves the covariance on whichever device it was
+        # loaded on (torch.load defaults to CPU) after a `.to("cuda")`.
+        L = torch.linalg.cholesky(self._cov.to(device=features.device, dtype=features.dtype))
         eps = torch.randn(map_w.shape[0], L.shape[0], generator=generator,
                           device=features.device, dtype=features.dtype)
         w = map_w + eps @ L.T

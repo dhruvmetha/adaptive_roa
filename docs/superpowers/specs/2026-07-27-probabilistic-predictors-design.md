@@ -97,6 +97,16 @@ easiest thing to get wrong, and both failure modes are silent.
   back to logits, as `GPModelHandle` does at `partx/model_handle.py:38-41`) using a
   `torch.Generator` seeded at construction. Repeated calls on the same states
   return identical logits.
+  Do **not** copy `GPModelHandle`'s `p.clip(eps, 1 - eps)` guard: that code runs
+  in float64, where `1 - 1e-12` is representable. In float32 it rounds to exactly
+  `1.0`, the guard becomes a no-op, and a saturated posterior yields `+inf`
+  logits. Compute the average in log space instead —
+  `logit(p_bar) = logsumexp_i logsigmoid(s_i) - logsumexp_i logsigmoid(-s_i)` —
+  which is exact and needs no clamp.
+  Posteriors with **finite** support (the deep ensemble: M members, weight 1/M)
+  must **enumerate** that support rather than sample it. Sampling M atoms with
+  replacement under the handle's fixed seed produces a fixed, biased mixture
+  weight vector reused for every prediction in the run.
 - `FinalStateModelHandle.predict_endpoint` is invoked **K times on the same
   batch**, and the spread across calls is the probability. It must draw a
   **fresh** posterior sample every call.

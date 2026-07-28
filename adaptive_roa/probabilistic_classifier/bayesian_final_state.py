@@ -55,9 +55,21 @@ def _resolve_probability_cfg(cfg) -> tuple[float, int]:
     (pre-adaptive_v2) FM pipeline, not this one.
     """
     prob = cfg.get("probability", {}) or {}
-    radius = float(prob.get("attractor_radius", cfg.get("attractor_radius", 0.2)))
+    radius = prob.get("attractor_radius", cfg.get("attractor_radius", None))
+    if radius is None:
+        # No silent default: the radius decides EVERY endpoint's label, so a
+        # wrong one moves p_success without any downstream signal. The old
+        # fallback of 0.2 is wrong for pendulum and both quadrotors.
+        raise ValueError(
+            "no attractor_radius in the run config (looked at probability."
+            "attractor_radius and the top-level attractor_radius). Guessing it "
+            "would silently relabel every MC endpoint and change p_success."
+        )
+    # 10 matches configs/adaptive_v2/probability/endpoint_mc.yaml's own default,
+    # which every final-state predictor config pulls in, so this fallback can
+    # only fire for a run whose probability block was written by hand.
     num_mc_samples = int(prob.get("num_mc_samples", 10))
-    return radius, num_mc_samples
+    return float(radius), num_mc_samples
 
 
 class FinalStateProbabilisticClassifier(ProbabilisticClassifier):

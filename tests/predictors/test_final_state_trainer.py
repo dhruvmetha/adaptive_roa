@@ -91,3 +91,19 @@ def test_ensemble_requires_enough_mc_samples_to_resolve_its_members(files, tmp_p
         FinalStateTrainer(cfg, CartPoleSystem(), "cartpole_pybullet").fit(
             files, str(tmp_path / "out_guard")
         )
+
+
+def test_mlp_det_baseline_experiment_actually_zeroes_d2_ratio():
+    """The baseline arm must not acquire adaptively. Setting acquisition.d2_ratio
+    from the predictor group is silently discarded (default.yaml lists predictor
+    before acquisition and a later group wins), so it lives in the experiment
+    group, which composes last."""
+    import os
+    from hydra import compose, initialize_config_dir
+
+    d = os.path.abspath("configs/adaptive_v2")
+    with initialize_config_dir(config_dir=d, version_base=None):
+        cfg = compose(config_name="default", overrides=["+experiment=mlp_det_baseline"])
+    assert cfg.predictor.name == "mlp_det"
+    assert cfg.predictor.type == "generative"
+    assert float(cfg.acquisition.d2_ratio) == 0.0

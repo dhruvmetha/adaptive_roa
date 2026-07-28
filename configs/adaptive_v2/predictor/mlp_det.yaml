@@ -19,5 +19,8 @@ predictor:
   lightning_trainer:
     gradient_clip_val: 1.0
     log_every_n_steps: 10
-acquisition:
-  d2_ratio: 0.0             # deterministic arm is a baseline; no conformal acquisition
+# This arm is a fixed-dataset baseline: it must run with d2_ratio=0 (no conformal
+# acquisition). That CANNOT be set from this group -- default.yaml lists `predictor`
+# before `acquisition`, and a later group wins, so an `acquisition:` override written
+# here would be silently discarded. Run it via `+experiment=mlp_det_baseline` instead,
+# which sets acquisition.d2_ratio=0 from the experiment group (composed last).

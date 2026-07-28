@@ -10,6 +10,7 @@ calibration:
   decision_rule: one_sided
 predictor:
   type: classifier                      # reuse classification data path + skips
+  name: gp
   trainer_target: adaptive_roa.partx.trainer.GPPredictorTrainer
   gp:
     n_inducing: 128

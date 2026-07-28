@@ -17,6 +17,7 @@ class ProbabilisticClassifier(ABC):
     """
 
     predictor_type: str = ""
+    predictor_name: str = ""
     native_probs: tuple[str, ...] = ()
 
     @abstractmethod

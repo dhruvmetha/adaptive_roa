@@ -55,7 +55,12 @@ class OutcomeModelHandle:
 
         embedded = self.system.embed_state_for_model(self.system.normalize_state(x))
 
-        generator = torch.Generator().manual_seed(self.seed)
+        # The generator must live on the same device the posteriors draw on:
+        # VILinear draws on the parameter device, and Ensemble/Laplace now do
+        # too (see posteriors.py). A CPU generator paired with CUDA parameters
+        # (or vice versa) raises a device-mismatch RuntimeError.
+        param_device = next(self.posterior.parameters()).device
+        generator = torch.Generator(device=param_device).manual_seed(self.seed)
         with torch.no_grad():
             samples = self.posterior.forward_samples(
                 embedded, S=self.n_marginal_samples, generator=generator

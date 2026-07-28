@@ -140,8 +140,9 @@ class EnsemblePosterior(Posterior):
         return len(self.members)
 
     def forward_sample(self, x, generator=None):
+        device = next(self.parameters()).device
         idx = int(torch.randint(self.n_members, (1,), generator=generator,
-                                device="cpu").item())
+                                device=device).item())
         return self.members[idx](x)
 
     def forward_all_members(self, x: torch.Tensor) -> torch.Tensor:
@@ -217,6 +218,6 @@ class LastLayerLaplacePosterior(Posterior):
         map_w = torch.cat([self.head_layer.weight, self.head_layer.bias.unsqueeze(1)], dim=1)
         L = torch.linalg.cholesky(self._cov.to(features.dtype))
         eps = torch.randn(map_w.shape[0], L.shape[0], generator=generator,
-                          device="cpu", dtype=features.dtype).to(features.device)
+                          device=features.device, dtype=features.dtype)
         w = map_w + eps @ L.T
         return phi @ w.T

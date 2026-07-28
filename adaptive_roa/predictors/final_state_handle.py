@@ -25,6 +25,21 @@ class _ManifoldDistanceShim:
         self._head = head
 
     def dist(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        """RAW-in, RAW-out -- deliberately NOT normalized.
+
+        Its only caller is full_roa.py:621,649, which passes raw predicted and
+        raw actual endpoints and writes the result to
+        ``full_roa["endpoint_errors"]``. That call site hands the FM family's
+        ``distance_manifold.dist`` raw states too, so keeping this raw is what
+        makes ``endpoint_errors`` comparable across the two families.
+        Normalizing here would fix nothing and would instead reintroduce the
+        same cross-family unit mismatch in a different JSON field.
+
+        Note this is NOT the same convention as
+        ``FinalStateModelHandle.compute_manifold_distance_per_component``, which
+        normalizes because its FM counterpart does. The two conventions are a
+        property of the two CALL SITES, not an inconsistency here.
+        """
         return self._head.distance_per_component(x, y)
 
 
@@ -36,6 +51,27 @@ class FinalStateModelHandle:
     those calls IS the outcome probability. Every call therefore draws a fresh
     weight sample AND a fresh head sample. Seeding this handle collapses every
     arm to p in {0, 1}.
+
+    KNOWN ESTIMATOR ASYMMETRY (ensemble arm)
+    ----------------------------------------
+    ``_params`` calls ``posterior.forward_sample``, which for an ensemble draws
+    ONE member uniformly at random per call. Over K calls the marginal is
+    therefore a K-draws-WITH-REPLACEMENT mixture, whose member weights are a
+    multinomial rather than the exact 1/M.
+
+    The outcome family does NOT do this: ``EnsemblePosterior`` overrides
+    ``predictive_logit_samples`` to ENUMERATE all M members exactly
+    (``posteriors.py:166-179``), precisely because sampling the atoms is a
+    systematic bias rather than noise that averages out. That override is
+    unavailable here: this handle's contract is one fresh draw per call, so
+    there is no point at which K draws are visible together to be replaced by an
+    enumeration.
+
+    Consequence, stated so it is not invisible in results: ``bnn_ensemble_reg``
+    and its outcome-family sibling are NOT the same estimator quality even at
+    equal M. At the shipped K=10, M=5 the member-weight standard deviation is
+    sqrt(p(1-p)/K) = 0.126 against an exact p = 0.2, i.e. ~63% relative. See
+    ``FinalStateTrainer._resolve_num_mc_samples`` for the guard and its warning.
     """
 
     def __init__(self, posterior, head, system: Any, device: str = "cpu"):
@@ -82,4 +118,22 @@ class FinalStateModelHandle:
         return list(self.head.component_names)
 
     def compute_manifold_distance_per_component(self, predicted, true) -> torch.Tensor:
-        return self.head.distance_per_component(predicted, true)
+        """Per-component geodesic error in NORMALIZED coordinates: [B, n_comp].
+
+        MUST agree with the flow-matching family's identically-named method,
+        ``flow_matching/base/flow_matcher.py:1156-1161``, which normalizes both
+        arguments before taking the distance. Both families are called from the
+        same unguarded site (``adaptive/endpoint_evaluation.py:116``) and the
+        result is written to the SHARED ``artifacts_v2.json`` key
+        ``endpoint_error``, which ``scripts/compile_adaptive_metrics.py:82-92``
+        reads POSITIONALLY into one cross-run dataframe. The two families also
+        return byte-identical ``component_names``, so a name-based join succeeds
+        silently and nothing downstream can detect a unit mismatch.
+
+        Computing this on raw coordinates instead inflated pendulum's
+        ``angular_velocity`` component by exactly the velocity bound, 6.28x,
+        against the FM arms it is tabulated beside.
+        """
+        return self.head.distance_per_component(
+            self.system.normalize_state(predicted), self.system.normalize_state(true)
+        )

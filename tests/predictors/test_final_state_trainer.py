@@ -1,3 +1,7 @@
+import glob
+import re
+from pathlib import Path
+
 import numpy as np
 import pytest
 import torch
@@ -107,3 +111,134 @@ def test_mlp_det_baseline_experiment_actually_zeroes_d2_ratio():
     assert cfg.predictor.name == "mlp_det"
     assert cfg.predictor.type == "generative"
     assert float(cfg.acquisition.d2_ratio) == 0.0
+
+
+# --- best-vs-last-epoch weights -------------------------------------------
+#
+# Both tests below need a run whose kept checkpoint is NOT the last epoch,
+# otherwise "best weights" and "last weights" are the same tensors and the
+# assertions are vacuous. Fitting the GGN before the best-checkpoint reload
+# (or skipping the reload) changes no shape, no value range, and no other
+# test's status -- the symptom is a Gaussian centred at one parameter point
+# with curvature computed at a different one -- so this has to compare
+# tensors directly against the actual kept checkpoint file.
+
+_MAX_EPOCHS = 40
+_EPOCH_IN_FILENAME = re.compile(r"epoch=(\d+)")
+
+
+def _write_noisy(path, n, seed):
+    """end = 0.5*start plus noise big enough that the net overfits it, so
+    val_nll turns up early instead of monotonically improving to the last
+    epoch."""
+    rng = np.random.default_rng(seed)
+    start = rng.uniform(-1.0, 1.0, size=(n, 4))
+    end = 0.5 * start + 0.8 * rng.normal(size=(n, 4))
+    np.savetxt(path, np.column_stack([start, end]))
+    return str(path)
+
+
+def _fit_noisy(posterior, tmp_path):
+    cfg = _cfg(posterior, hidden_dims=[64, 64], lr=1e-2, max_epochs=_MAX_EPOCHS,
+               # No early stopping: it would end the run AT the best epoch and
+               # make "kept < last" true for the wrong reason.
+               patience=_MAX_EPOCHS + 1, n_members=2)
+    cfg.predictor.batch_size = 128
+    files = {"train": _write_noisy(tmp_path / "train.txt", 400, 0),
+             "val": _write_noisy(tmp_path / "val.txt", 300, 1)}
+    torch.manual_seed(0)
+    out = tmp_path / "out"
+    handle = FinalStateTrainer(cfg, CartPoleSystem(), "cartpole_pybullet").fit(files, str(out))
+    return handle, out / "checkpoints"
+
+
+def _assert_best_is_not_last(ckpt_path):
+    """Guard: the run must have kept an epoch other than its last one."""
+    match = _EPOCH_IN_FILENAME.search(Path(ckpt_path).name)
+    assert match, f"cannot read the kept epoch out of {ckpt_path}"
+    kept = int(match.group(1))
+    assert kept < _MAX_EPOCHS - 1, (
+        f"degenerate fixture: kept epoch {kept} of max_epochs={_MAX_EPOCHS}, so the "
+        f"best and last weights coincide and this test cannot tell them apart. "
+        f"Make the targets noisier or train longer."
+    )
+
+
+def _posterior_state(ckpt_path):
+    sd = torch.load(ckpt_path, map_location="cpu", weights_only=False)["state_dict"]
+    return {k[len("posterior."):]: v for k, v in sd.items() if k.startswith("posterior.")}
+
+
+@pytest.mark.parametrize("posterior", ["deterministic", "mfvi", "ensemble", "laplace"])
+def test_fit_returns_the_best_checkpoint_weights_not_the_last_epochs(posterior, tmp_path):
+    """The returned handle must carry the weights the export will reload.
+
+    If ``fit`` handed back last-epoch weights instead of the best-``val_nll``
+    checkpoint's, the pipeline's own numbers and the exported ones would come
+    from different networks. Nothing about shapes, determinism, or file
+    existence notices that -- this compares the tensors directly.
+    """
+    handle, ckpt_dir = _fit_noisy(posterior, tmp_path)
+
+    if posterior == "ensemble":
+        # Each member has its own checkpoint; the top-level best-ensemble.ckpt
+        # is written FROM the assembled posterior, so comparing against it
+        # would be vacuous. Compare member-wise instead.
+        pairs = []
+        for m, member in enumerate(handle.posterior.members):
+            found = sorted(glob.glob(str(ckpt_dir / f"member_{m}" / "best_member*.ckpt")))
+            assert len(found) == 1, found
+            _assert_best_is_not_last(found[0])
+            pairs.append((member.state_dict(), _posterior_state(found[0])))
+    else:
+        found = sorted(glob.glob(str(ckpt_dir / "best*.ckpt")))
+        assert len(found) == 1, found
+        _assert_best_is_not_last(found[0])
+        pairs = [(handle.posterior.state_dict(), _posterior_state(found[0]))]
+
+    for live, saved in pairs:
+        assert set(live) == set(saved), (set(live) ^ set(saved))
+        for key in live:
+            torch.testing.assert_close(live[key], saved[key], rtol=0, atol=0,
+                                       msg=f"{key} differs from the kept checkpoint")
+
+
+def test_laplace_covariance_is_the_ggn_at_the_exported_weights(tmp_path):
+    """H^-1 must be evaluated at the parameters that ship, not some other ones.
+
+    The covariance is curvature AT a point. Fitting the GGN before the best
+    checkpoint is reloaded centres the Gaussian at the best-epoch weights
+    while taking its curvature from the last epoch -- a silent math error
+    that changes no shape, no value range, and no other test's status.
+    Recompute the GGN here at the RETURNED handle's weights (same features,
+    same derived sigma) and require the shipped laplace_cov.pt to match it.
+    """
+    handle, ckpt_dir = _fit_noisy("laplace", tmp_path)
+    _assert_best_is_not_last(sorted(glob.glob(str(ckpt_dir / "best*.ckpt")))[0])
+
+    shipped = torch.load(ckpt_dir / "laplace_cov.pt", map_location="cpu", weights_only=True)
+
+    system = CartPoleSystem()
+    posterior = handle.posterior
+    head = handle.head
+    raw = np.loadtxt(tmp_path / "train.txt")
+    starts = torch.as_tensor(raw[:, :4], dtype=torch.float32)
+    ends = torch.as_tensor(raw[:, 4:], dtype=torch.float32)
+
+    posterior.eval()
+    with torch.no_grad():
+        embedded = system.embed_state_for_model(system.normalize_state(starts))
+        features = posterior.body(embedded)
+        # The MAP prediction, NOT posterior.forward_sample: the posterior is
+        # already fitted at this point (from the trainer's own run), so
+        # forward_sample would draw a random posterior sample instead of
+        # reproducing the deterministic prediction the trainer derived sigma
+        # from (forward_sample only falls back to the MAP head_layer output
+        # before the first fit -- see LastLayerLaplacePosterior.forward_sample).
+        params = posterior.head_layer(features)
+        resid = head.distance_per_component(head.mean(params), ends)
+        sigma = float(resid.pow(2).mean().sqrt().clamp_min(1e-3))
+        posterior.fit(features, ends, task="final_state", sigma=sigma)
+
+    torch.testing.assert_close(shipped, posterior.posterior_covariance,
+                               rtol=1e-6, atol=1e-8)

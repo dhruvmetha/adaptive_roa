@@ -30,6 +30,27 @@ class FinalStateHead:
 
     ``beta`` is the beta-NLL exponent (Seitzer et al., ICLR 2022); 0.5 is the
     recommended default and 0.0 recovers plain Gaussian NLL.
+
+    Coordinate contract
+    -------------------
+    The distribution's PARAMETERS live in NORMALIZED state coordinates; every
+    public method speaks RAW ones. ``nll`` normalizes its target, ``sample`` and
+    ``mean`` denormalize their output, and ``distance_per_component`` is a pure
+    raw-in/raw-out geometric helper. Callers therefore never handle normalized
+    states, which is what keeps this head's contract identical to the flow
+    matcher's ``predict_endpoint``.
+
+    Learning in normalized coordinates is not cosmetic. The loss sums a Gaussian
+    NLL across dims, and beta-NLL then multiplies each dim by ``sigma^(2*beta)``,
+    so in RAW coordinates a wide-range dim dominates the total. Measured on
+    quadrotor3d (position +/-1.8 m against angular velocity +/-39 rad/s) at an
+    untrained initialization, the three angular-velocity dims carried 97.9% of
+    the loss and the per-dim spread was 287x; in normalized coordinates the
+    spread is 1.2x. Because ``gradient_clip_val`` is a GLOBAL-norm clip, the
+    dominant dims also dominated the clipped update direction, and at the
+    ``LOG_SIGMA_MIN`` floor a collapsed dim's sigma gradient is exactly zero and
+    can never recover. This also puts the arm on the same footing as every other
+    predictor in the codebase, all of which learn normalized.
     """
 
     def __init__(self, system, beta: float = 0.5):
@@ -65,6 +86,12 @@ class FinalStateHead:
             yield lik, p, t, dim
 
     def nll(self, params: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        """NLL of a RAW target under the predictive distribution: [B]."""
+        # Normalized before scoring so no dim's loss contribution is set by its
+        # physical units -- see the class docstring for the measured effect.
+        # normalize_state leaves SO2 angles and SO3 quaternions untouched on all
+        # four systems, so the circular components' semantics are unaffected.
+        target = self.system.normalize_state(target)
         total = None
         for lik, p, t, _dim in self._iter(params, target):
             term = lik.nll(p, t, beta=self.beta)
@@ -72,12 +99,28 @@ class FinalStateHead:
         return total
 
     def sample(self, params: torch.Tensor, generator: torch.Generator | None = None) -> torch.Tensor:
-        return torch.cat(
+        """One draw in RAW coordinates: [B, n_params] -> [B, state_dim]."""
+        normalized = torch.cat(
             [lik.sample(p, generator=generator) for lik, p, _t, _d in self._iter(params)], dim=-1
         )
+        return self._to_raw(normalized)
 
     def mean(self, params: torch.Tensor) -> torch.Tensor:
-        return torch.cat([lik.mean(p) for lik, p, _t, _d in self._iter(params)], dim=-1)
+        """Distribution mean in RAW coordinates: [B, n_params] -> [B, state_dim]."""
+        normalized = torch.cat(
+            [lik.mean(p) for lik, p, _t, _d in self._iter(params)], dim=-1
+        )
+        return self._to_raw(normalized)
+
+    def _to_raw(self, normalized: torch.Tensor) -> torch.Tensor:
+        """Normalized -> raw, preserving each component's manifold invariants.
+
+        denormalize_state is an identity on SO2 angles (so samples stay wrapped)
+        and unit-normalizes the quadrotor3d quaternion (idempotent, since
+        SO3Likelihood.sample already canonicalized it), so the raw-output
+        contract predict_endpoint advertises still holds after the round trip.
+        """
+        return self.system.denormalize_state(normalized)
 
     def distance_per_component(self, a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
         out = [

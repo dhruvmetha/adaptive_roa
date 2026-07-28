@@ -142,11 +142,25 @@ def test_parameter_slices_map_to_correct_state_positions(cls, state_dim, n_names
 
     mean_output = head.mean(params)
 
+    # `head.mean` speaks RAW coordinates while the parameters it reads are
+    # NORMALIZED (see FinalStateHead's coordinate contract), so push the
+    # expected normalized-space values through the same denormalization before
+    # comparing. This is a per-position affine map, so it cannot mask a
+    # transposition of two same-width components -- the property under test --
+    # as long as the injected values stay distinct, which they do (10.0, 11.0,
+    # 12.0, ...). Verified by mutation: swapping the last two _parts entries'
+    # param_offset still fails this test on all three parametrized systems.
+    expected_normalized = torch.cat(
+        [expected_state[i].reshape(1, -1) for i in range(len(system.manifold_components))],
+        dim=-1,
+    )
+    expected_raw = system.denormalize_state(expected_normalized)
+
     # Verify that each component's mean appears at the correct state position
     state_offset = 0
     component_idx = 0
     for comp in system.manifold_components:
-        expected = expected_state[component_idx]
+        expected = expected_raw[0, state_offset:state_offset + comp.dim]
         actual = mean_output[0, state_offset:state_offset + comp.dim]
 
         # For Real and SO3, check exact match; for SO2 check angle wrapping
@@ -176,6 +190,15 @@ def test_generator_threads_through_all_component_types():
             ManifoldComponent("SO3", 4, "rotation"),
             ManifoldComponent("Real", 1, "velocity"),
         ]
+
+        # FinalStateHead's parameters live in normalized coordinates and its
+        # public methods speak raw ones, so a system must supply both maps.
+        # Identity here keeps this test about generator threading only.
+        def normalize_state(self, x):
+            return x
+
+        def denormalize_state(self, x):
+            return x
 
     head = FinalStateHead(AllComponentsStub())
     params = torch.randn(8, head.n_params)

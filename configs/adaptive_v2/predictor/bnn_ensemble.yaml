@@ -17,7 +17,9 @@ predictor:
     lr: 1.0e-3
     weight_decay: 1.0e-5
     max_epochs: 200
-    patience: 20
+    patience: 20            # on val_nll, NOT the ELBO: the KL term is data-independent
+                            # and shrinks monotonically, so ELBO-monitored early stopping
+                            # never fires and the "best" checkpoint is always the last epoch.
     prior_sigma: 1.0        # isotropic Gaussian prior, identical across arms
     n_members: 5
     n_marginal_samples: 64

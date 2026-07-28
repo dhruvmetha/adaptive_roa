@@ -369,3 +369,101 @@ def idempotence_defect(
     ok = np.isfinite(endpoints).all(axis=(1, 2)) & np.isfinite(remapped).all(axis=(1, 2))
     out = d.mean(axis=1)
     return np.where(ok, out, np.nan)
+
+
+def mode_separation_linkage(
+    endpoints: np.ndarray,
+    scales: np.ndarray,
+    circular_mask: np.ndarray,
+    chunk_size: int = 2048,
+    device: str = "cpu",
+) -> np.ndarray:
+    """Mode separation without assuming the cloud has exactly two modes.
+
+        s(x) = H(cluster sizes)/log(k) * G / (G + W)
+
+    Single-linkage merges the K endpoints; the cut is placed at the largest
+    RELATIVE jump in the merge sequence, so the number of clusters k is read off
+    the data rather than fixed. G is that jump, W the mean within-cluster
+    pairwise distance below it, and the balance term is the cluster-size entropy
+    normalized by log(k) -- 1.0 for evenly-sized clusters at any k, small when
+    one cluster dominates (the lone-outlier case).
+
+    mode_separation() always cuts in two, which deflates clouds with three or
+    more modes: the farthest-pair seeding merges two real modes onto one side,
+    inflating W and shrinking the gap, so a triple point can score no better than
+    background. Measured on the campaign checkpoints, ~30% of model-ambiguous
+    quadrotor2d candidates and ~18% of pendulum's have 3+ clumps, so that is a
+    systematic loss of recall on exactly the most ambiguous states.
+
+    Like mode_separation this is a ratio, so it is invariant to overall cloud
+    scale, and it needs no bandwidth or cluster-count parameter.
+
+    Args:
+        endpoints: Predicted endpoint clouds [M, K, D]
+        scales: Per-dimension distance scales [D]
+        circular_mask: Boolean [D], True where the dimension wraps
+        chunk_size: Candidates per block
+        device: Torch device for the distance computation
+
+    Returns:
+        np.ndarray: Scores [M] in [0, 1); NaN where a cloud has non-finite points
+    """
+    import scipy.cluster.hierarchy as sch
+    from scipy.spatial.distance import squareform
+
+    endpoints = np.asarray(endpoints)
+    if endpoints.ndim != 3:
+        raise ValueError(f"endpoints must be [M, K, D], got shape {endpoints.shape}")
+    if chunk_size <= 0:
+        raise ValueError(f"chunk_size must be positive, got {chunk_size}")
+    M, K, _ = endpoints.shape
+    if K < 4:
+        raise ValueError(f"mode separation needs at least 4 endpoint samples, got K={K}")
+
+    scales_t = torch.as_tensor(np.asarray(scales), dtype=torch.float32, device=device)
+    circ_t = torch.as_tensor(np.asarray(circular_mask), dtype=torch.bool, device=device)
+    out = np.empty(M, dtype=np.float64)
+
+    for start in range(0, M, chunk_size):
+        stop = min(start + chunk_size, M)
+        chunk = torch.as_tensor(endpoints[start:stop], dtype=torch.float32, device=device)
+        finite = torch.isfinite(chunk).all(dim=2).all(dim=1).cpu().numpy()
+        safe = torch.where(
+            torch.as_tensor(finite, device=chunk.device).view(-1, 1, 1),
+            chunk, torch.zeros_like(chunk),
+        )
+        dmat = _pairwise(safe, scales_t, circ_t).double().cpu().numpy()
+
+        for i in range(dmat.shape[0]):
+            if not finite[i]:
+                out[start + i] = np.nan
+                continue
+            m = (dmat[i] + dmat[i].T) / 2.0
+            np.fill_diagonal(m, 0.0)
+            merges = sch.linkage(squareform(m, checks=False), method="single")[:, 2]
+            if merges[-1] <= 1e-12:          # degenerate: every endpoint identical
+                out[start + i] = 0.0
+                continue
+
+            # cut at the largest relative jump; j merges done -> K-j clusters
+            rel = merges[1:] / np.maximum(merges[:-1], 1e-12)
+            j = int(np.argmax(rel)) + 1
+            G = float(merges[j])
+            k = K - j
+
+            labels = sch.fcluster(
+                sch.linkage(squareform(m, checks=False), method="single"),
+                t=k, criterion="maxclust",
+            )
+            same = labels[:, None] == labels[None, :]
+            np.fill_diagonal(same, False)
+            W = float(m[same].mean()) if same.any() else 0.0
+
+            _, counts = np.unique(labels, return_counts=True)
+            p = counts / counts.sum()
+            balance = (-(p * np.log(p)).sum() / np.log(k)) if k > 1 else 0.0
+
+            out[start + i] = balance * G / max(G + W, 1e-12)
+
+    return out

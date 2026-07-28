@@ -8,6 +8,8 @@ cloud, then grades them against ground truth the scorer never saw.
 
   dispersion  -- mean pairwise distance (the incumbent that lost)
   mode_sep    -- 4p(1-p)*G/(G+W), gap across a 2-way split of the cloud
+  mode_link   -- same idea but k is read from the data (single-linkage largest
+                 relative jump), so 3+ mode clouds are not deflated
   idem        -- mean displacement when endpoints are fed back through the model
   gated       -- mode_sep * exp(-idem), the F3 combination
 
@@ -53,7 +55,8 @@ from scipy.stats import spearmanr
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from adaptive_roa.adaptive_v2.strategy.dispersion_score import (
-    mean_pairwise_dispersion, mode_separation, idempotence_defect,
+    mean_pairwise_dispersion, mode_separation, mode_separation_linkage,
+    idempotence_defect,
 )
 from adaptive_roa.conformal.config import ConformalConfig
 from adaptive_roa.conformal.probability_estimator import ProbabilityEstimator
@@ -200,9 +203,11 @@ def run_system(key, n_cand, K, top_n, device, seed=0):
         scores = {
             "dispersion": mean_pairwise_dispersion(cloud, scales, circ, device=device),
             "mode_sep":   mode_separation(cloud, scales, circ, device=device),
+            "mode_link":  mode_separation_linkage(cloud, scales, circ, device=device),
             "idem":       idempotence_defect(cloud, remapped, scales, circ),
         }
         scores["gated"] = scores["mode_sep"] * np.exp(-scores["idem"])
+        scores["gated_link"] = scores["mode_link"] * np.exp(-scores["idem"])
 
         u = -np.abs(p_succ - 0.5)
         bdry = boundary_mask(X, y_true, scales, circ, device=device)

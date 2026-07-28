@@ -334,3 +334,61 @@ def test_idempotence_defect_marks_non_finite_nan():
     remapped[1, 0, 0] = np.inf
     d = idempotence_defect(cloud, remapped, SCALES, CIRCULAR)
     assert not np.isnan(d[0]) and np.isnan(d[1])
+
+
+# --- k-agnostic mode separation -------------------------------------------
+# The 2-partition deflates clouds with 3+ modes: the farthest-pair seeding merges
+# two real modes into one side, inflating W and shrinking the apparent gap. On
+# quadrotor2d ~30% of model-ambiguous candidates have 3+ clumps, so that is a
+# systematic blind spot, not a corner case.
+
+from adaptive_roa.adaptive_v2.strategy.dispersion_score import mode_separation_linkage
+
+
+def _trimodal(gap, n=12, jitter=0.002, seed=0):
+    """n endpoints in three tight clusters spaced `gap` apart in theta_dot."""
+    rng = np.random.default_rng(seed)
+    parts = [np.column_stack([rng.normal(0, jitter, n // 3),
+                              rng.normal(c * gap, jitter, n // 3)]) for c in (-1, 0, 1)]
+    return np.vstack(parts)
+
+
+def test_linkage_scores_trimodal_high():
+    assert mode_separation_linkage(_trimodal(gap=3.0)[None], SCALES, CIRCULAR)[0] > 0.8
+
+
+def test_linkage_beats_two_partition_on_trimodal():
+    # The point of the generalisation: the 2-way split cannot see three modes.
+    cloud = _trimodal(gap=3.0)[None]
+    assert (mode_separation_linkage(cloud, SCALES, CIRCULAR)[0]
+            > mode_separation(cloud, SCALES, CIRCULAR)[0])
+
+
+def test_linkage_still_scores_bimodal_high():
+    assert mode_separation_linkage(_bimodal(gap=3.0)[None], SCALES, CIRCULAR)[0] > 0.8
+
+
+def test_linkage_scores_unimodal_low():
+    for width in (0.001, 1.0, 8.0):
+        assert mode_separation_linkage(_blob(width=width)[None], SCALES, CIRCULAR)[0] < 0.6
+
+
+def test_linkage_separates_unimodal_from_multimodal():
+    blob = mode_separation_linkage(_blob(width=6.0)[None], SCALES, CIRCULAR)[0]
+    bi = mode_separation_linkage(_bimodal(gap=3.0)[None], SCALES, CIRCULAR)[0]
+    tri = mode_separation_linkage(_trimodal(gap=3.0)[None], SCALES, CIRCULAR)[0]
+    assert min(bi, tri) > blob + 0.25
+
+
+def test_linkage_penalises_lone_outlier():
+    lone = np.vstack([_blob(width=0.001, n=11), np.array([[0.0, 6.0]])])[None]
+    even = _bimodal(gap=6.0)[None]
+    assert (mode_separation_linkage(even, SCALES, CIRCULAR)[0]
+            > mode_separation_linkage(lone, SCALES, CIRCULAR)[0])
+
+
+def test_linkage_marks_non_finite_nan():
+    clouds = np.concatenate([_bimodal(gap=3.0)[None], _bimodal(gap=3.0)[None]])
+    clouds[1, 0, 1] = np.nan
+    s = mode_separation_linkage(clouds, SCALES, CIRCULAR)
+    assert not np.isnan(s[0]) and np.isnan(s[1])

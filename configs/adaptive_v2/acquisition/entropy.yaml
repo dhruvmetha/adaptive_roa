@@ -1,0 +1,16 @@
+# @package _global_
+# Threshold-free acquisition: uses the success criterion to label sampled
+# endpoints, but fits no lambda*/delta*/q_hat. Score is the binary entropy of
+# p(success), whose peak at 0.5 is a universal constant rather than a per-system
+# fitted quantity.
+sampling_mode: entropy
+acquisition:
+  _target_: adaptive_roa.adaptive_v2.strategy.entropy.EntropyAcquisitionStrategy
+  d2_ratio: 0.5
+  n_candidates: 50000
+  num_mc_samples: 20
+  tie_breaker: none              # none | mode_sep
+  selection_rule: greedy_diverse # batch diversity is a correctness requirement
+  diversity_pool_multiplier: 5
+  chunk_size: 2048
+  verbose: true

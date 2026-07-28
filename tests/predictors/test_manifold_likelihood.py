@@ -217,3 +217,98 @@ def test_so3_nll_is_invariant_to_target_sign():
 def test_so3_names_mark_the_geodesic():
     from adaptive_roa.predictors.manifold_likelihood import SO3Likelihood
     assert SO3Likelihood().names(4, "orientation") == ["orientation_geodesic"]
+
+
+def test_quaternion_multiply_matches_vector_rotation_composition():
+    """Every fixture above pins the mean to the identity, which cancels the
+    cross terms in the Hamilton product and hides sign/order bugs. Check the
+    product against vector rotation instead: composing two rotations about
+    different, non-parallel axes and applying the composed quaternion to a
+    generic vector must match applying the two rotations in sequence."""
+    from adaptive_roa.predictors.manifold_likelihood import quaternion_multiply
+
+    def rotate(q, v):
+        qv = torch.cat([torch.zeros_like(v[..., :1]), v], dim=-1)
+        q_conj = q * torch.tensor([1.0, -1.0, -1.0, -1.0])
+        return quaternion_multiply(quaternion_multiply(q, qv), q_conj)[..., 1:4]
+
+    a1, a2 = math.radians(50.0), math.radians(80.0)
+    q1 = torch.tensor([[math.cos(a1 / 2), math.sin(a1 / 2), 0.0, 0.0]])  # 50 deg about x
+    q2 = torch.tensor([[math.cos(a2 / 2), 0.0, math.sin(a2 / 2), 0.0]])  # 80 deg about y
+    v = torch.tensor([[0.3, -0.6, 0.75]])
+
+    lhs = rotate(quaternion_multiply(q1, q2), v)
+    rhs = rotate(q1, rotate(q2, v))
+    assert torch.allclose(lhs, rhs, atol=1e-6)
+
+
+def test_so3_exp_log_are_mutual_inverses():
+    """Round-trip exp/log directly, away from the fixtures' identity mean, at
+    a near-zero angle, a moderate angle, and near the pi cut locus (strictly
+    below it -- theta = pi itself is the genuine SO(3) sign ambiguity)."""
+    from adaptive_roa.predictors.manifold_likelihood import SO3Likelihood
+
+    axis = torch.tensor([0.2, -0.5, 0.8])
+    axis = axis / axis.norm()
+    for theta in (1e-8, 0.7, math.pi - 1e-3):
+        xi = (axis * theta).unsqueeze(0)
+        q = SO3Likelihood._exp_map(xi)
+        xi_recovered = SO3Likelihood._log_map(q)
+        assert torch.allclose(xi_recovered, xi, atol=1e-4)
+
+
+def _axis_angle_to_quaternion(axis, angle: float) -> torch.Tensor:
+    axis_t = torch.as_tensor(axis, dtype=torch.float64)
+    axis_t = axis_t / axis_t.norm()
+    return torch.cat([torch.tensor([math.cos(angle / 2)]), axis_t * math.sin(angle / 2)]).float().unsqueeze(0)
+
+
+def test_so3_nll_and_sample_with_a_non_identity_mean():
+    """The identity-mean fixtures never route through _residual's
+    quaternion_multiply(q_bar_inv, q_t) composition with a real q_bar. Use a
+    70 degree rotation about an oblique axis as the mean instead, and a target
+    about a genuinely different axis (same-axis rotations commute, which would
+    hide a left/right multiplication-order bug in the composition)."""
+    from adaptive_roa.predictors.manifold_likelihood import SO3Likelihood
+
+    lik = SO3Likelihood()
+    mean_q = _axis_angle_to_quaternion([0.2, -0.5, 0.8], math.radians(70.0))
+    tilted = _axis_angle_to_quaternion([0.8, 0.3, -0.1], math.radians(40.0))
+
+    params_tight = torch.cat([mean_q, torch.full((1, 3), math.log(0.3))], dim=-1)
+    assert lik.nll(params_tight, mean_q).item() < lik.nll(params_tight, tilted).item()
+
+    spreads = []
+    for log_sigma in (math.log(0.5), math.log(0.01)):
+        params = torch.cat([mean_q, torch.full((1, 3), log_sigma)], dim=-1).expand(800, -1)
+        draws = lik.sample(params)
+        spreads.append(lik.distance(draws, mean_q.expand(800, -1)).mean().item())
+    assert spreads[1] < spreads[0]
+
+
+def test_so3_residual_matches_an_independent_rotation_library():
+    """The rotation ANGLE of A*B and B*A is always equal (conjugate rotations
+    share a trace), so neither a same-axis target nor an isotropic sigma can
+    ever expose a left/right multiplication-order bug in
+    quaternion_multiply(q_bar_inv, q_t) -- ||xi|| is order-invariant by a
+    group-theory fact, not by correctness. Check the actual tangent-space
+    residual vector (not just its norm) against scipy.spatial.transform.Rotation
+    composing the same two rotations via its own rotation-matrix machinery,
+    entirely independent of this module's quaternion_multiply."""
+    from scipy.spatial.transform import Rotation
+
+    from adaptive_roa.predictors.manifold_likelihood import SO3Likelihood
+
+    lik = SO3Likelihood()
+    mean_q = _axis_angle_to_quaternion([0.2, -0.5, 0.8], math.radians(70.0))
+    target_q = _axis_angle_to_quaternion([0.8, 0.3, -0.1], math.radians(40.0))
+    params = torch.cat([mean_q, torch.zeros(1, 3)], dim=-1)
+
+    xi = lik._residual(params, target_q)[0]
+
+    def _to_scipy_rotation(q: torch.Tensor) -> Rotation:
+        w, x, y, z = q[0].tolist()
+        return Rotation.from_quat([x, y, z, w])  # scipy convention is (x, y, z, w)
+
+    expected = _to_scipy_rotation(mean_q).inv() * _to_scipy_rotation(target_q)
+    assert torch.allclose(xi, torch.tensor(expected.as_rotvec(), dtype=torch.float32), atol=1e-4)

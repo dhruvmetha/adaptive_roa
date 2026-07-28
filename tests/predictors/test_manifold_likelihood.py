@@ -54,6 +54,9 @@ def test_real_sample_is_stochastic_and_reproducible_under_a_generator():
 
 
 def test_real_sample_recovers_the_parameters_in_expectation():
+    # Seeded: the mean check on the sigma=1.5 dim sits at ~3 sigma, giving a
+    # measured 0.26% flake rate (1 in 385) when unseeded.
+    torch.manual_seed(0)
     lik = RealLikelihood()
     mu = torch.tensor([[2.0, -1.0]])
     params = torch.cat([mu, torch.log(torch.tensor([[0.5, 1.5]]))], dim=-1)

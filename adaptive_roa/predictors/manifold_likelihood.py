@@ -22,6 +22,20 @@ def _split_mu_logsigma(params: torch.Tensor, dim: int):
     return params[..., :dim], params[..., dim:2 * dim]
 
 
+def _check_real_width(params: torch.Tensor, dim: int) -> None:
+    """A Euclidean slice must carry exactly ``2 * dim`` params (mu, log_sigma).
+
+    Silent-wrongness guard: a params/target width mismatch would slice log_sigma
+    out of the wrong offset and produce a plausible-looking but wrong loss.
+    """
+    if params.shape[-1] != 2 * int(dim):
+        raise ValueError(
+            f"RealLikelihood expects 2*dim={2 * int(dim)} params for a dim={int(dim)} "
+            f"slice, got {params.shape[-1]}; the log-sigma slice would be read from "
+            f"the wrong offset."
+        )
+
+
 class ComponentLikelihood(ABC):
     """One manifold component's predictive distribution."""
 
@@ -75,6 +89,12 @@ class RealLikelihood(ComponentLikelihood):
 
     def nll(self, params, target, beta: float = 0.0):
         dim = target.shape[-1]
+        # `nll` derives dim from the TARGET while `sample`/`mean` derive it from
+        # the PARAMS width. If a caller ever pairs a params slice with a
+        # mismatched target slice, the log-sigma read below silently lands on
+        # the wrong half of the vector and the loss is quietly wrong rather than
+        # raising. Cross-check the two derivations instead.
+        _check_real_width(params, dim)
         mu, _ = _split_mu_logsigma(params, dim)
         sigma = self._sigma(params, dim)
         per_dim = 0.5 * torch.log(2 * math.pi * sigma ** 2) + (target - mu) ** 2 / (2 * sigma ** 2)
@@ -85,6 +105,7 @@ class RealLikelihood(ComponentLikelihood):
 
     def sample(self, params, generator=None):
         dim = params.shape[-1] // 2
+        _check_real_width(params, dim)
         mu, _ = _split_mu_logsigma(params, dim)
         sigma = self._sigma(params, dim)
         eps = torch.randn(mu.shape, generator=generator, device=mu.device, dtype=mu.dtype)
@@ -92,6 +113,7 @@ class RealLikelihood(ComponentLikelihood):
 
     def mean(self, params):
         dim = params.shape[-1] // 2
+        _check_real_width(params, dim)
         return _split_mu_logsigma(params, dim)[0]
 
     def distance(self, a, b):
@@ -127,6 +149,9 @@ class SO2Likelihood(ComponentLikelihood):
     """
 
     LOG_SIGMA_MIN = -7.0
+    # sigma is an angular standard deviation in radians; pi is the largest
+    # geodesic distance on the circle, so anything above it is already uniform.
+    # SO3Likelihood uses the same ceiling for the same reason.
     LOG_SIGMA_MAX = math.log(math.pi)
 
     def n_params(self, dim: int) -> int:
@@ -172,8 +197,21 @@ def canonicalize_quaternion(q: torch.Tensor) -> torch.Tensor:
     L2 against an identity-quaternion goal, so -q -- the same rotation -- lands at
     distance 2 and is misclassified.
     """
-    q = q / q.norm(dim=-1, keepdim=True).clamp_min(1e-8)
+    norm = q.norm(dim=-1, keepdim=True)
+    # `q / norm.clamp_min(1e-8)` does NOT give a unit quaternion for a degenerate
+    # input: at ||q|| = 2e-9 the clamp divides by 1e-8 and leaves ||q|| = 0.2, so
+    # a "canonical" quaternion of the wrong magnitude flows on into
+    # classify_attractor's raw L2 comparison. Fall back to the identity rotation
+    # for inputs too small to carry a direction, and renormalize the rest.
+    q = torch.where(norm > 1e-6, q / norm.clamp_min(1e-8), _identity_quaternion(q))
     return torch.where(q[..., 0:1] < 0, -q, q)
+
+
+def _identity_quaternion(like: torch.Tensor) -> torch.Tensor:
+    """(1, 0, 0, 0) broadcast to ``like``'s shape/device/dtype."""
+    out = torch.zeros_like(like)
+    out[..., 0] = 1.0
+    return out
 
 
 def quaternion_multiply(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
@@ -202,7 +240,16 @@ class SO3Likelihood(ComponentLikelihood):
     """
 
     LOG_SIGMA_MIN = -7.0
-    LOG_SIGMA_MAX = 2.0
+    # Matches SO2Likelihood.LOG_SIGMA_MAX, and for the same reason: sigma is an
+    # ANGULAR standard deviation in radians, and pi is the largest geodesic
+    # distance either manifold admits (on SO(3) every rotation is within pi of
+    # every other). A per-axis sigma at that clamp already yields an essentially
+    # uniform orientation, so nothing informative lives above it. The previous
+    # value of 2.0 (sigma = 7.39 rad, over two full turns) was an unexplained
+    # round number that let a diverging fit wander far past uniform while the
+    # NLL kept rewarding it; tightening only bites fits that are already
+    # degenerate.
+    LOG_SIGMA_MAX = math.log(math.pi)
 
     def n_params(self, dim: int) -> int:
         if int(dim) != 4:

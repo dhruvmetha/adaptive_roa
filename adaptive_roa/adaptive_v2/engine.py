@@ -22,7 +22,7 @@ from adaptive_roa.adaptive.endpoint_evaluation import (
 )
 from adaptive_roa.adaptive_v2.pool.trajectory_pool import TrajectoryPool
 from adaptive_roa.adaptive_v2.filters.confidence_filter import ConfidencePairFilter
-from adaptive_roa.adaptive_v2.types import AcquisitionResult, EpochArtifacts
+from adaptive_roa.adaptive_v2.types import AcquisitionResult, EpochArtifacts, ThresholdState
 
 
 def _instantiate(cfg_node, *args, **kwargs):
@@ -152,10 +152,25 @@ class AdaptiveEngine:
             )
             need_d2_acquisition = n_d2_target > 0 and not skip_ranked_for_eval_off
 
-            X_val, y_val = sample_val_data_for_optimization(
-                self.pool.dataset_builder,
-            )
-            threshold_state = self.threshold_backend.optimize(X_val, y_val)
+            # Fit lambda*/delta* only when something actually consumes them: the
+            # evaluator, or an acquisition strategy that scores against a decision
+            # boundary. Threshold-free strategies (entropy, dispersion) ignore
+            # threshold_state, so for them the training loop never fits a
+            # threshold at all -- making that independence structural rather than
+            # a fact about who happens to read the variable.
+            threshold_consumers = {"ranked", "direct", "conformal", "partx"}
+            needs_threshold = run_eval or acquisition_mode in threshold_consumers
+            if needs_threshold:
+                X_val, y_val = sample_val_data_for_optimization(
+                    self.pool.dataset_builder,
+                )
+                threshold_state = self.threshold_backend.optimize(X_val, y_val)
+            else:
+                threshold_state = ThresholdState(
+                    lambda_star=float("nan"), delta_star=float("nan")
+                )
+                print(f"Skipping threshold optimization: {acquisition_mode} is threshold-free "
+                      f"and no evaluation runs this epoch")
 
             if self.smoke_mode or not run_eval or self.predictor_type == "classifier":
                 # classifier has no generated endpoints -> no endpoint-prediction error
@@ -288,8 +303,10 @@ class AdaptiveEngine:
                 "n_discarded_certain": int(acquisition.n_certain_discarded),
                 "n_ranked_candidates_evaluated": acquisition.diagnostics.get("n_ranked_candidates_evaluated"),
                 "ranked_score_threshold": acquisition.diagnostics.get("ranked_score_threshold"),
-                "lambda_star": float(threshold_state.lambda_star),
-                "delta_star": float(threshold_state.delta_star),
+                "lambda_star": (float(threshold_state.lambda_star)
+                                if np.isfinite(threshold_state.lambda_star) else None),
+                "delta_star": (float(threshold_state.delta_star)
+                               if np.isfinite(threshold_state.delta_star) else None),
                 "q_hat": float(q_hat) if q_hat is not None else None,
                 "q_hat_eval": float(q_hat_eval) if q_hat_eval is not None else None,
                 "n_cal_eval": int(n_cal_eval),

@@ -12,7 +12,7 @@ def test_backend_estimate_and_latent():
     X = np.column_stack([rng.uniform(-3, 3, 200), rng.uniform(-8, 8, 200)])
     y = ((X[:, 0] ** 2 + (X[:, 1] / 3) ** 2) < 1.0).astype(int)
     gp = GPClassifier(system, n_inducing=64, n_iters=150).fit(X, y)
-    backend = GPProbabilityBackend(OmegaConf.create({}), system, "cpu")
+    backend = GPProbabilityBackend(OmegaConf.create({"attractor_radius": 0.2}), system, "cpu")
     backend.bind_model(GPModelHandle(gp, system))
 
     probs = backend.estimate(X[:10])
@@ -41,11 +41,12 @@ def test_backend_exposes_estimator_for_standard_strategies(tmp_path):
 
     gp = GPClassifier(system, n_inducing=16, n_iters=5, device="cpu").fit(X, y)
     backend = GPProbabilityBackend(
-        OmegaConf.create({"attractor_radius": 0.2}), system, "cpu"
+        OmegaConf.create({"attractor_radius": 0.37}), system, "cpu"
     )
     backend.bind_model(GPModelHandle(gp, system))
 
     assert backend.estimator is not None
+    assert backend.estimator.config.attractor_radius == 0.37
     p_success, p_failure, p_invalid = backend.estimator.estimate(X)
     assert p_success.shape == (64,)
     # Must agree with the backend's own estimate() path.

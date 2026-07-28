@@ -27,9 +27,8 @@ class GPProbabilityBackend:
         # (adaptive_v2/strategy/ranked.py:44). GPModelHandle already satisfies
         # the classifier contract (model(raw_states) -> logits), so the shared
         # classifier estimator works unchanged and keeps GP usable outside partx.
-        attractor_radius = getattr(self.cfg, "attractor_radius", 0.2)
         conf = ConformalConfig(
-            attractor_radius=float(attractor_radius),
+            attractor_radius=float(self.cfg.attractor_radius),
             delta=0.05, w=0.9, alpha=0.1,
         )
         self.estimator = ClassifierProbabilityEstimator(

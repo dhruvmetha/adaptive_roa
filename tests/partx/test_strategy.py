@@ -22,7 +22,7 @@ def test_strategy_selects_target_count():
     X = np.column_stack([rng.uniform(-3, 3, 400), rng.uniform(-8, 8, 400)])
     y = (X[:, 0] < 0).astype(int)
     gp = GPClassifier(system, n_inducing=64, n_iters=150).fit(X, y)
-    backend = GPProbabilityBackend(OmegaConf.create({}), system, "cpu")
+    backend = GPProbabilityBackend(OmegaConf.create({"attractor_radius": 0.2}), system, "cpu")
     backend.bind_model(GPModelHandle(gp, system))
 
     cfg = OmegaConf.create({

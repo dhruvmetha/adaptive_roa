@@ -163,3 +163,109 @@ class SO2Likelihood(ComponentLikelihood):
 
     def names(self, dim: int, base: str) -> List[str]:
         return [f"{base}_geodesic"]
+
+
+def canonicalize_quaternion(q: torch.Tensor) -> torch.Tensor:
+    """Unit-normalize and force qw >= 0 (mirrors systems/quadrotor3d.py:425-443).
+
+    NOT cosmetic: Quadrotor3DSystem.classify_attractor compares raw 13-vectors by
+    L2 against an identity-quaternion goal, so -q -- the same rotation -- lands at
+    distance 2 and is misclassified.
+    """
+    q = q / q.norm(dim=-1, keepdim=True).clamp_min(1e-8)
+    return torch.where(q[..., 0:1] < 0, -q, q)
+
+
+def quaternion_multiply(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+    """Hamilton product, (w, x, y, z) convention."""
+    aw, ax, ay, az = a.unbind(-1)
+    bw, bx, by, bz = b.unbind(-1)
+    return torch.stack([
+        aw * bw - ax * bx - ay * by - az * bz,
+        aw * bx + ax * bw + ay * bz - az * by,
+        aw * by - ax * bz + ay * bw + az * bx,
+        aw * bz + ax * by - ay * bx + az * bw,
+    ], dim=-1)
+
+
+class SO3Likelihood(ComponentLikelihood):
+    """Concentrated Gaussian in the so(3) tangent space at a mean rotation.
+
+    The head emits an unnormalized 4-vector (canonicalized to a unit quaternion
+    with qw >= 0) plus three log sigmas for the tangent axes. Sampling draws
+    xi ~ N(0, diag(sigma^2)) in so(3) and applies q = q_bar * exp(xi/2), which
+    keeps every sample exactly on the unit sphere -- something a Gaussian in R^4
+    plus renormalization does not do faithfully.
+
+    NLL uses the tangent-space residual of the target relative to the mean, so it
+    is invariant to the target's sign (double cover).
+    """
+
+    LOG_SIGMA_MIN = -7.0
+    LOG_SIGMA_MAX = 2.0
+
+    def n_params(self, dim: int) -> int:
+        if int(dim) != 4:
+            raise ValueError(f"SO3 component must be 4-dimensional, got {dim}")
+        return 7
+
+    def _sigma(self, params: torch.Tensor) -> torch.Tensor:
+        return params[..., 4:7].clamp(self.LOG_SIGMA_MIN, self.LOG_SIGMA_MAX).exp()
+
+    def mean(self, params):
+        return canonicalize_quaternion(params[..., 0:4])
+
+    @staticmethod
+    def _exp_map(xi: torch.Tensor) -> torch.Tensor:
+        """so(3) tangent vector -> unit quaternion. xi is a rotation vector."""
+        theta = xi.norm(dim=-1, keepdim=True)
+        half = 0.5 * theta
+        # sinc-style guard so the theta -> 0 limit is finite and differentiable.
+        scale = torch.where(theta > 1e-6, torch.sin(half) / theta.clamp_min(1e-8),
+                            torch.full_like(theta, 0.5))
+        return torch.cat([torch.cos(half), xi * scale], dim=-1)
+
+    @staticmethod
+    def _log_map(q: torch.Tensor) -> torch.Tensor:
+        """Unit quaternion -> so(3) rotation vector, sign-canonicalized first."""
+        q = canonicalize_quaternion(q)
+        w = q[..., 0:1].clamp(-1.0, 1.0)
+        v = q[..., 1:4]
+        v_norm = v.norm(dim=-1, keepdim=True)
+        angle = 2.0 * torch.atan2(v_norm, w)
+        scale = torch.where(v_norm > 1e-6, angle / v_norm.clamp_min(1e-8),
+                            torch.full_like(v_norm, 2.0))
+        return v * scale
+
+    def _residual(self, params, target):
+        q_bar = self.mean(params)
+        q_t = canonicalize_quaternion(target)
+        q_bar_inv = q_bar * torch.tensor([1.0, -1.0, -1.0, -1.0], device=q_bar.device,
+                                         dtype=q_bar.dtype)
+        return self._log_map(quaternion_multiply(q_bar_inv, q_t))
+
+    def nll(self, params, target, beta: float = 0.0):
+        sigma = self._sigma(params)
+        xi = self._residual(params, target)
+        per_dim = 0.5 * torch.log(2 * math.pi * sigma ** 2) + xi ** 2 / (2 * sigma ** 2)
+        if beta > 0.0:
+            per_dim = per_dim * (sigma.detach() ** (2.0 * beta))
+        return per_dim.sum(dim=-1)
+
+    def sample(self, params, generator=None):
+        q_bar = self.mean(params)
+        sigma = self._sigma(params)
+        eps = torch.randn(sigma.shape, generator=generator, device=sigma.device, dtype=sigma.dtype)
+        return canonicalize_quaternion(quaternion_multiply(q_bar, self._exp_map(sigma * eps)))
+
+    def distance(self, a, b):
+        a = canonicalize_quaternion(a)
+        b = canonicalize_quaternion(b)
+        dot = (a * b).sum(dim=-1, keepdim=True).abs().clamp(max=1.0)
+        return 2.0 * torch.acos(dot)
+
+    def n_dist(self, dim: int) -> int:
+        return 1
+
+    def names(self, dim: int, base: str) -> List[str]:
+        return [f"{base}_geodesic"]

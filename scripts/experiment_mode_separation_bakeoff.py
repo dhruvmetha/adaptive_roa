@@ -206,6 +206,33 @@ def run_system(key, n_cand, K, top_n, device, seed=0):
             "mode_link":  mode_separation_linkage(cloud, scales, circ, device=device),
             "idem":       idempotence_defect(cloud, remapped, scales, circ),
         }
+        # Threshold-free label-based baseline: binary entropy of p_success.
+        # Uses the criterion (labels) but no fitted lambda*/delta*/q_hat -- the
+        # 0.5 peak is a universal constant, not a per-system parameter. Ranks
+        # identically to -|p-0.5|, which is also the grading target `u`, so its
+        # spearman_u is 1.0 by construction and carries no information; read its
+        # boundary lift and success fraction instead.
+        eps = 1e-12
+        pc = np.clip(p_succ, eps, 1 - eps)
+        scores["label_entropy"] = -(pc * np.log(pc) + (1 - pc) * np.log(1 - pc))
+        # Jeffreys-posterior variance over the true p given k of K successes:
+        # continuous at K=10 where raw p_success takes only 11 values.
+        a, b = p_succ * K + 0.5, (1 - p_succ) * K + 0.5
+        scores["beta_var"] = (a * b) / ((a + b) ** 2 * (a + b + 1))
+        # Apples-to-apples: p_success from the SAME K-sample cloud the geometric
+        # scores use. The npz p_success comes from the eval pass at K=100, so
+        # scoring against it gives label entropy 5x the sampling budget and hides
+        # the coarseness (11 distinct values at K=10) that acquisition actually
+        # faces. This arm is what the loop would really see.
+        radius = float(npz["attractor_radius"])
+        lab = system.classify_attractor(
+            torch.as_tensor(cloud.reshape(-1, D), dtype=torch.float32), radius=radius
+        ).reshape(M, K)
+        p_K = (lab == 1).float().mean(dim=1).cpu().numpy().astype(np.float64)
+        pk = np.clip(p_K, eps, 1 - eps)
+        scores["label_entropy_K"] = -(pk * np.log(pk) + (1 - pk) * np.log(1 - pk))
+        aK, bK = p_K * K + 0.5, (1 - p_K) * K + 0.5
+        scores["beta_var_K"] = (aK * bK) / ((aK + bK) ** 2 * (aK + bK + 1))
         scores["gated"] = scores["mode_sep"] * np.exp(-scores["idem"])
         scores["gated_link"] = scores["mode_link"] * np.exp(-scores["idem"])
 

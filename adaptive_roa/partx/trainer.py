@@ -51,8 +51,19 @@ class GPPredictorTrainer:
             lr=float(gp_cfg.get("lr", 0.1)),
             device=device,
         )
+
+        if resume_checkpoint and Path(resume_checkpoint).exists():
+            print(f"Warm start: loading GP classifier state from {resume_checkpoint}")
+            gp.load_state_dict(
+                torch.load(resume_checkpoint, map_location="cpu", weights_only=False)
+            )
+            gp.to(device)
+
         gp.fit(X, y)
         ckpt_dir = Path(output_dir) / "checkpoints"
         ckpt_dir.mkdir(parents=True, exist_ok=True)
-        torch.save(gp.state_dict(), ckpt_dir / "gp.pt")
+        # MUST match the engine's glob, checkpoints/best*.ckpt (engine.py:140).
+        # This previously wrote "gp.pt", which the glob never matched, so the GP
+        # arm silently never warm-started even with warm_start: true.
+        torch.save(gp.state_dict(), ckpt_dir / "best-gp.ckpt")
         return GPModelHandle(gp, self.system).eval().to(device)

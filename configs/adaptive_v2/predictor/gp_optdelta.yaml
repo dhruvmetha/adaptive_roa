@@ -8,11 +8,9 @@ threshold:
 calibration:
   decision_rule: one_sided
 predictor:
-  # No `name:` here on purpose: no ProbabilisticClassifier is registered for
-  # the GP predictor yet, so claiming an arm name (e.g. "gp_optdelta") would
-  # make export_run's registry lookup raise KeyError instead of falling back
-  # to the "classifier" family alias. Add `name: gp_optdelta` once a GP
-  # export wrapper (checkpoint load + predict) is registered under that name.
+  # Export wrapper registered in
+  # adaptive_roa/probabilistic_classifier/gaussian_process.py.
+  name: gp_optdelta
   type: classifier                      # reuse classification data path + skips
   trainer_target: adaptive_roa.partx.trainer.GPPredictorTrainer
   gp:

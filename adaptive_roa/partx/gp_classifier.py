@@ -53,8 +53,13 @@ class GPClassifier:
         # Inducing points: random subset of the training features (deterministic under seed).
         perm = torch.randperm(X.size(0))[:n_ind]
         inducing = X[perm].clone()
-        self.model = _VarGP(inducing, self.kernel).to(self.device)
-        self.likelihood = gpytorch.likelihoods.BernoulliLikelihood().to(self.device)
+        if self.model is None or self.likelihood is None:
+            self.model = _VarGP(inducing, self.kernel).to(self.device)
+            self.likelihood = gpytorch.likelihoods.BernoulliLikelihood().to(self.device)
+        # else: warm start -- keep the loaded variational distribution, kernel
+        # hyperparameters and inducing locations, and continue optimizing them
+        # against the (now larger) training set. num_data below is recomputed
+        # from the current y, so the ELBO scaling stays correct.
         self.model.train(); self.likelihood.train()
         opt = torch.optim.Adam(
             list(self.model.parameters()) + list(self.likelihood.parameters()), lr=self.lr

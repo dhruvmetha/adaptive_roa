@@ -25,6 +25,7 @@ from adaptive_roa.predictors.bayesian_mlp import build_from_cfg
 from adaptive_roa.predictors.final_state_handle import FinalStateModelHandle
 from adaptive_roa.predictors.heads import FinalStateHead
 from .base import ProbabilisticClassifier
+from .endpoint_mc import endpoint_mc_probabilities
 from .registry import register_probabilistic_classifier
 
 # Checkpoint entries that legitimately have no counterpart in the posterior's
@@ -38,10 +39,6 @@ from .registry import register_probabilistic_classifier
 # round-trips via laplace_cov.pt) and is excluded by the `_cov` suffix check
 # below, same as the sibling.
 _NON_PARAMETER_KEYS: set[str] = set()
-
-# MC classification batch size: matches the outcome arms' export batch size
-# (bayesian.py / classifier.py); K forward passes run per batch regardless.
-_BATCH_SIZE = 8192
 
 
 def _resolve_probability_cfg(cfg) -> tuple[float, int]:
@@ -88,35 +85,9 @@ class FinalStateProbabilisticClassifier(ProbabilisticClassifier):
         self.num_mc_samples = num_mc_samples
 
     def predict(self, states: np.ndarray) -> OutcomeProbabilities:
-        n = len(states)
-        if n == 0:
-            z = np.zeros(0)
-            return OutcomeProbabilities(p_success=z, p_failure=z, p_invalid=z)
-
-        k = self.num_mc_samples
-        success = np.zeros(n, dtype=np.int64)
-        failure = np.zeros(n, dtype=np.int64)
-        invalid = np.zeros(n, dtype=np.int64)
-        with torch.no_grad():
-            for i in range(0, n, _BATCH_SIZE):
-                j = min(i + _BATCH_SIZE, n)
-                batch = states[i:j]
-                for _ in range(k):
-                    # Fresh weight sample AND fresh head sample every call --
-                    # the spread across these K draws IS the outcome
-                    # probability (FinalStateModelHandle's contract).
-                    endpoints = self.handle.predict_endpoint(batch)
-                    labels = self.system.classify_attractor(
-                        endpoints, radius=self.attractor_radius
-                    ).cpu().numpy()
-                    success[i:j] += (labels == 1)
-                    failure[i:j] += (labels == -1)
-                    invalid[i:j] += (labels == 0)
-
-        return OutcomeProbabilities(
-            p_success=success.astype(np.float64) / k,
-            p_failure=failure.astype(np.float64) / k,
-            p_invalid=invalid.astype(np.float64) / k,
+        return endpoint_mc_probabilities(
+            self.handle, self.system, states,
+            self.attractor_radius, self.num_mc_samples,
         )
 
     @classmethod

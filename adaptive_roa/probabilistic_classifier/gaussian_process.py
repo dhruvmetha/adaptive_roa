@@ -19,6 +19,7 @@ from adaptive_roa.partx.model_handle import GPModelHandle
 from adaptive_roa.predictors.gp_final_state_handle import GPFinalStateHandle
 from adaptive_roa.predictors.gp_regressor import GPRegressor
 from .base import ProbabilisticClassifier
+from .endpoint_mc import endpoint_mc_probabilities
 from .registry import register_probabilistic_classifier
 
 
@@ -89,18 +90,12 @@ class GPRegProbabilisticClassifier(ProbabilisticClassifier):
         self.num_mc_samples = num_mc_samples
 
     def predict(self, states: np.ndarray) -> OutcomeProbabilities:
-        x = torch.as_tensor(np.asarray(states), dtype=torch.float32)
-        counts = torch.zeros(3, x.shape[0], dtype=torch.long)
-        with torch.no_grad():
-            for _ in range(self.num_mc_samples):
-                labels = self.system.classify_attractor(
-                    self.handle.predict_endpoint(x), radius=self.attractor_radius
-                ).cpu()
-                counts[0] += (labels == 1).long()
-                counts[1] += (labels == -1).long()
-                counts[2] += (labels == 0).long()
-        p = counts.double().numpy() / float(self.num_mc_samples)
-        return OutcomeProbabilities(p_success=p[0], p_failure=p[1], p_invalid=p[2])
+        # Same loop as the BNN final-state arms, batching and empty-input guard
+        # included; see probabilistic_classifier/endpoint_mc.py.
+        return endpoint_mc_probabilities(
+            self.handle, self.system, np.asarray(states),
+            self.attractor_radius, self.num_mc_samples,
+        )
 
     @classmethod
     def load_from_run(cls, run_dir, epoch, cfg, system, device="cuda"):

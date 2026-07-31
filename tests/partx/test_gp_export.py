@@ -129,3 +129,88 @@ def test_missing_gp_checkpoint_raises(tmp_path):
     ckpt_dir.mkdir()
     with pytest.raises(FileNotFoundError):
         _find_gp_checkpoint(ckpt_dir)
+
+
+def _trained_gp_reg_classifier(tmp_path, num_mc_samples=4):
+    from omegaconf import OmegaConf
+    from adaptive_roa.adaptive_v2.trainers.gp_regressor_trainer import GPRegressorTrainer
+    from adaptive_roa.probabilistic_classifier.gaussian_process import (
+        GPRegProbabilisticClassifier,
+    )
+    from adaptive_roa.systems.cartpole import CartPoleSystem
+
+    def endpoints(path, n, seed):
+        rng = np.random.default_rng(seed)
+        s = rng.uniform(-0.5, 0.5, size=(n, 4))
+        np.savetxt(path, np.column_stack([s, s * 0.5]))
+        return str(path)
+
+    files = {"train": endpoints(tmp_path / "train.txt", 200, 0),
+             "val": endpoints(tmp_path / "val.txt", 100, 1)}
+    run_dir = tmp_path / "run"
+    cfg = OmegaConf.create({
+        "device": "cpu",
+        "predictor": {"type": "generative", "name": "gp_reg", "batch_size": 64,
+                      "val_batch_size": 64,
+                      "gp": {"n_inducing": 16, "n_iters": 20, "lr": 0.05, "batch_size": 128}},
+    })
+    GPRegressorTrainer(cfg, CartPoleSystem(), "cartpole_pybullet").fit(
+        files, str(run_dir / "epoch_000")
+    )
+    export_cfg = OmegaConf.create({
+        "predictor": {"type": "generative", "name": "gp_reg"},
+        "probability": {"attractor_radius": 0.4, "num_mc_samples": num_mc_samples},
+    })
+    return GPRegProbabilisticClassifier.load_from_run(
+        str(run_dir), 0, export_cfg, CartPoleSystem(), device="cpu"
+    )
+
+
+def test_gp_reg_export_shares_the_final_state_mc_loop():
+    """I3. The GP wrapper duplicated FinalStateProbabilisticClassifier.predict
+    and dropped its _BATCH_SIZE chunking and its n == 0 guard. The loop now lives
+    in one place so the 1/-1/0 label mapping is written once."""
+    import inspect
+
+    from adaptive_roa.probabilistic_classifier import bayesian_final_state, gaussian_process
+    from adaptive_roa.probabilistic_classifier.endpoint_mc import endpoint_mc_probabilities
+
+    for module in (bayesian_final_state, gaussian_process):
+        assert module.endpoint_mc_probabilities is endpoint_mc_probabilities
+    for cls in (bayesian_final_state.FinalStateProbabilisticClassifier,
+                gaussian_process.GPRegProbabilisticClassifier):
+        src = inspect.getsource(cls.predict)
+        assert "endpoint_mc_probabilities" in src
+        assert "classify_attractor" not in src, "the label mapping is duplicated again"
+
+
+def test_gp_reg_export_handles_an_empty_input(tmp_path):
+    """The n == 0 guard the GP wrapper was missing: an empty split must return
+    empty arrays, not crash inside the MC loop."""
+    clf = _trained_gp_reg_classifier(tmp_path)
+    probs = clf.predict(np.zeros((0, 4), dtype=np.float32))
+    assert probs.p_success.shape == (0,)
+    assert probs.p_failure.shape == (0,)
+    assert probs.p_invalid.shape == (0,)
+
+
+def test_gp_reg_export_probabilities_do_not_depend_on_the_export_batch_size(tmp_path):
+    """C1 on the export path -- the path that produces the per-point
+    probabilities used in analysis. Before the fix p_success was a function of
+    how the caller batched rather than of the query state (the strictly-uncertain
+    fraction swung 0.018 -> 0.20 on identical inputs and model)."""
+    from adaptive_roa.probabilistic_classifier.endpoint_mc import endpoint_mc_probabilities
+
+    clf = _trained_gp_reg_classifier(tmp_path, num_mc_samples=200)
+    states = np.random.default_rng(0).uniform(-0.4, 0.4, size=(1024, 4)).astype(np.float32)
+
+    whole = endpoint_mc_probabilities(clf.handle, clf.system, states,
+                                      clf.attractor_radius, clf.num_mc_samples)
+    chunked = endpoint_mc_probabilities(clf.handle, clf.system, states,
+                                        clf.attractor_radius, clf.num_mc_samples,
+                                        batch_size=64)
+    # MC noise only: with K=200 the per-point SD is at most 0.035, so a mean
+    # absolute gap this small cannot hide a collapsed predictive spread.
+    assert np.abs(whole.p_success - chunked.p_success).mean() < 0.03
+    for p in (whole, chunked):
+        np.testing.assert_allclose(p.p_success + p.p_failure + p.p_invalid, 1.0, atol=1e-9)

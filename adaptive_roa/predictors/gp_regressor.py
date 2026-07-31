@@ -71,10 +71,16 @@ class GPRegressor:
         X = torch.as_tensor(X, dtype=torch.float32).to(self.device)
         Y = torch.as_tensor(Y, dtype=torch.float32).to(self.device)
         n = X.size(0)
-        n_ind = min(self.n_inducing, n)
-        perm = torch.randperm(n)[:n_ind]
-        inducing = X[perm].clone().unsqueeze(0).repeat(self.num_tasks, 1, 1)
-        self._build(inducing)
+
+        if self.model is None or self.likelihood is None:
+            n_ind = min(self.n_inducing, n)
+            perm = torch.randperm(n)[:n_ind]
+            inducing = X[perm].clone().unsqueeze(0).repeat(self.num_tasks, 1, 1)
+            self._build(inducing)
+        # else: warm start -- keep the loaded variational distribution, kernel
+        # hyperparameters and inducing locations, and continue optimizing them
+        # against the (now larger) training set. num_data below is recomputed
+        # from the current n, so the ELBO scaling stays correct.
 
         self.model.train()
         self.likelihood.train()

@@ -54,12 +54,39 @@ def test_warm_start_reloads_a_previous_checkpoint(files, tmp_path):
     first_out = tmp_path / "e0"
     trainer.fit(files, str(first_out))
     ckpt = list((first_out / "checkpoints").glob("best*.ckpt"))[0]
+    saved = torch.load(ckpt, map_location="cpu", weights_only=False)
+    saved_inducing = saved["model"][
+        "variational_strategy.base_variational_strategy.inducing_points"
+    ]
+    saved_lengthscale = saved["model"]["covar_module.base_kernel.raw_lengthscale"]
 
-    resumed = GPRegressorTrainer(_cfg(n_iters=1), CartPoleSystem(), "cartpole_pybullet").fit(
+    # n_iters=0 -- no optimization steps run, so the resumed state must be
+    # EXACTLY the checkpoint's, byte for byte, if the warm start actually
+    # skipped the rebuild rather than silently discarding it.
+    resumed = GPRegressorTrainer(_cfg(n_iters=0), CartPoleSystem(), "cartpole_pybullet").fit(
         files, str(tmp_path / "e1"), resume_checkpoint=str(ckpt)
     )
+    resumed_sd = resumed.gp.state_dict()["model"]
+    assert torch.equal(
+        resumed_sd["variational_strategy.base_variational_strategy.inducing_points"],
+        saved_inducing,
+    )
+    assert torch.equal(resumed_sd["covar_module.base_kernel.raw_lengthscale"], saved_lengthscale)
     x = torch.randn(8, 4) * 0.3
     assert torch.isfinite(resumed.predict_endpoint(x)).all()
+
+    # A cold start (no resume_checkpoint) with the same n_iters=0 rebuilds from
+    # a fresh random inducing-point draw, so it must NOT match the checkpoint --
+    # this is what makes the assertions above capable of catching a no-op warm
+    # start rather than trivially passing regardless of whether state persisted.
+    cold = GPRegressorTrainer(_cfg(n_iters=0), CartPoleSystem(), "cartpole_pybullet").fit(
+        files, str(tmp_path / "e2")
+    )
+    cold_sd = cold.gp.state_dict()["model"]
+    assert not torch.equal(
+        cold_sd["variational_strategy.base_variational_strategy.inducing_points"],
+        saved_inducing,
+    )
 
 
 def test_the_arm_actually_learns_the_contraction(files, tmp_path):

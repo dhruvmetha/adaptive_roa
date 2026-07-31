@@ -3,6 +3,15 @@
 Contract matches every sibling: __init__(cfg, system, system_name) and
 fit(dataset_files, output_dir, resume_checkpoint=None) -> model handle. There is
 no Lightning loop -- GPRegressor.fit owns its own minibatched ELBO optimization.
+
+MODEL SELECTION: like the BNN final-state arms, this arm selects on the held-out
+validation set rather than keeping the terminal state. The BNN arms early-stop
+and checkpoint on ``val_nll`` (final_state_trainer.py's ``_MONITOR``); this one
+evaluates the same quantity -- the mean per-point marginal predictive NLL -- every
+``gp.eval_every`` ELBO iterations and restores the best-scoring state before
+returning, so every final-state arm is selected under one criterion. Running a
+fixed iteration budget and saving the last state, as this trainer previously did,
+would have made ``gp_reg``'s reported numbers incomparable with its siblings'.
 """
 from __future__ import annotations
 
@@ -13,7 +22,7 @@ import torch
 
 from adaptive_roa.adaptive_v2.trainers.final_state_trainer import (
     _DATAMODULES,
-    _full_training_tensors,
+    _full_dataset_tensors,
 )
 from adaptive_roa.predictors.embedding import EmbeddedStateDecoder
 from adaptive_roa.predictors.gp_final_state_handle import GPFinalStateHandle
@@ -49,21 +58,29 @@ class GPRegressorTrainer:
         dm.setup()
         return dm
 
+    def _features_and_targets(self, dataset):
+        """Both features and targets live in EMBEDDED, NORMALIZED space: an angle
+        regressed directly would carry the +/-pi seam, and a quaternion would
+        carry the double cover."""
+        starts, ends = _full_dataset_tensors(dataset)
+        return (
+            self.system.embed_state_for_model(self.system.normalize_state(starts)),
+            self.system.embed_state_for_model(self.system.normalize_state(ends)),
+        )
+
     def fit(self, dataset_files: dict, output_dir: str, resume_checkpoint: str | None = None):
         gp_cfg = self._predictor_cfg.get("gp", {})
+        # Same resolution and default as every other adaptive_v2 trainer
+        # (final_state_trainer.py, bayesian_mlp_trainer.py, classifier_trainer.py,
+        # partx/trainer.py).
         device = str(self._predictor_cfg.get("device", self.cfg.get("device", "cuda:0")))
         if device.startswith("cuda") and not torch.cuda.is_available():
             device = "cpu"
 
         decoder = EmbeddedStateDecoder(self.system)
         data_module = self._create_datamodule(dataset_files)
-        starts, ends = _full_training_tensors(data_module)
-
-        # Both features and targets live in EMBEDDED, NORMALIZED space: an angle
-        # regressed directly would carry the +/-pi seam, and a quaternion would
-        # carry the double cover.
-        feats = self.system.embed_state_for_model(self.system.normalize_state(starts))
-        targets = self.system.embed_state_for_model(self.system.normalize_state(ends))
+        feats, targets = self._features_and_targets(data_module.train_dataset)
+        val_feats, val_targets = self._features_and_targets(data_module.val_dataset)
 
         gp = GPRegressor(
             num_tasks=decoder.embed_dim,
@@ -73,6 +90,7 @@ class GPRegressorTrainer:
             n_iters=int(gp_cfg.get("n_iters", 300)),
             lr=float(gp_cfg.get("lr", 0.01)),
             batch_size=int(gp_cfg.get("batch_size", 1024)),
+            eval_every=int(gp_cfg.get("eval_every", 10)),
             device=device,
         )
 
@@ -82,11 +100,13 @@ class GPRegressorTrainer:
                                           weights_only=False))
             gp.to(device)
 
-        gp.fit(feats, targets)
+        gp.fit(feats, targets, val_feats, val_targets)
 
         ckpt_dir = Path(output_dir) / "checkpoints"
         ckpt_dir.mkdir(parents=True, exist_ok=True)
         # MUST match the engine's glob, checkpoints/best*.ckpt (engine.py:140).
+        # The state written here is the best-val_nll one, not the terminal one,
+        # matching what the sibling arms' best*.ckpt carries.
         torch.save(gp.state_dict(), ckpt_dir / "best-gp.ckpt")
 
         return GPFinalStateHandle(gp, self.system, device=device).eval().to(device)

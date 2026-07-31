@@ -90,7 +90,16 @@ def test_warm_start_reloads_a_previous_checkpoint(files, tmp_path):
 
 
 def test_the_arm_actually_learns_the_contraction(files, tmp_path):
-    """Guards against shipping an untrained GP."""
+    """Guards against shipping an untrained GP.
+
+    The margin used to be 0.5x, which an ARM THAT BARELY TRAINED still clears:
+    at n_iters=30 the ratio is already 0.31, and the review measured an untrained
+    GP at 2.0x -- so 0.5x only rules out "totally broken", not "under-trained".
+    Measured ratios for this fixture at n_iters=300 across five torch seeds:
+    0.0013, 0.0021, 0.0029, 0.0076, 0.0154. The seed is pinned below and the
+    bound set at 0.02, ~7x above the seeded value and 25x tighter than before.
+    """
+    torch.manual_seed(0)
     handle = GPRegressorTrainer(_cfg(n_iters=300), CartPoleSystem(), "cartpole_pybullet").fit(
         files, str(tmp_path / "out")
     )
@@ -99,7 +108,27 @@ def test_the_arm_actually_learns_the_contraction(files, tmp_path):
     y = torch.as_tensor(raw[:, 4:], dtype=torch.float32)
     feats = handle.system.embed_state_for_model(handle.system.normalize_state(x))
     pred = handle.decoder.decode(handle.gp.mean(feats))
-    assert (pred - y).pow(2).mean().item() < 0.5 * (x - y).pow(2).mean().item()
+    ratio = (pred - y).pow(2).mean().item() / (x - y).pow(2).mean().item()
+    assert ratio < 0.02, f"fitted/identity MSE ratio {ratio:.5g} is too loose to be trained"
+
+
+def test_the_trainer_selects_on_the_validation_split(files, tmp_path):
+    """I2 regression: the trainer used to load `validation_file` and then never
+    read it -- a fixed 300-iteration budget whose terminal state was saved. The
+    BNN final-state arms early-stop and checkpoint on val_nll, so gp_reg was the
+    one arm not selected under the shared criterion."""
+    trainer = GPRegressorTrainer(_cfg(n_iters=40, eval_every=5), CartPoleSystem(),
+                                 "cartpole_pybullet")
+    handle = trainer.fit(files, str(tmp_path / "out"))
+    assert handle.gp.best_val_nll is not None, "no validation score was ever computed"
+
+    # The state that was kept (and written to best-gp.ckpt) must be the one that
+    # scored best, not merely the last one the loop produced.
+    dm = trainer._create_datamodule(files)
+    feats, targets = trainer._features_and_targets(dm.val_dataset)
+    assert handle.gp.val_nll(feats, targets) == pytest.approx(
+        handle.gp.best_val_nll, rel=1e-5
+    )
 
 
 def test_config_composes_with_the_endpoint_mc_backend():

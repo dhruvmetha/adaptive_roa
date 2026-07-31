@@ -433,8 +433,17 @@ def _full_training_tensors(data_module):
     underlying storage would skip that fix-up and hand the GGN unwrapped angles
     or double-cover quaternions.
     """
+    return _full_dataset_tensors(data_module.train_dataset)
+
+
+def _full_dataset_tensors(dataset):
+    """Stack one endpoint dataset as ``(starts, ends)`` raw tensors.
+
+    Split out from ``_full_training_tensors`` so the validation split can be
+    materialized the same way (``GPRegressorTrainer`` selects on it). All of the
+    reasoning above about collating through ``__getitem__`` applies here too.
+    """
     from torch.utils.data import default_collate
 
-    ds = data_module.train_dataset
-    batch = default_collate([ds[i] for i in range(len(ds))])
+    batch = default_collate([dataset[i] for i in range(len(dataset))])
     return batch["start_state"].float(), batch["end_state"].float()

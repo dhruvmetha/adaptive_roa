@@ -112,3 +112,34 @@ def test_config_composes_with_the_endpoint_mc_backend():
     assert cfg.predictor.name == "gp_reg"
     assert cfg.predictor.type == "generative"
     assert "EndpointMCProbabilityBackend" in cfg.probability._target_
+
+
+def test_gp_reg_export_round_trips_a_trained_arm(tmp_path):
+    """The export path is what produces the per-point probabilities used in
+    analysis; nothing else exercises it."""
+    from omegaconf import OmegaConf
+    from adaptive_roa.probabilistic_classifier.gaussian_process import (
+        GPRegProbabilisticClassifier,
+    )
+
+    files = {"train": _write_endpoints(tmp_path / "train.txt"),
+             "val": _write_endpoints(tmp_path / "val.txt", n=100, seed=1)}
+    run_dir = tmp_path / "run"
+    GPRegressorTrainer(_cfg(), CartPoleSystem(), "cartpole_pybullet").fit(
+        files, str(run_dir / "epoch_000")
+    )
+
+    cfg = OmegaConf.create({
+        "predictor": {"type": "generative", "name": "gp_reg",
+                      "gp": {"n_inducing": 16, "kernel": "matern52"}},
+        "probability": {"attractor_radius": 0.37, "num_mc_samples": 7},
+    })
+    clf = GPRegProbabilisticClassifier.load_from_run(
+        str(run_dir), 0, cfg, CartPoleSystem(), device="cpu"
+    )
+    assert clf.attractor_radius == 0.37
+    assert clf.num_mc_samples == 7
+
+    probs = clf.predict(np.random.default_rng(0).uniform(-0.3, 0.3, size=(24, 4)).astype("float32"))
+    total = probs.p_success + probs.p_failure + probs.p_invalid
+    np.testing.assert_allclose(total, np.ones(24), atol=1e-6)

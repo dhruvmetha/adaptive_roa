@@ -97,3 +97,19 @@ def test_handle_is_module_shaped_for_the_engine():
     assert handle.eval() is not None
     assert handle.to("cpu") is not None
     assert isinstance(handle.training, bool)
+
+
+def test_the_shim_is_the_shared_one_not_a_local_copy():
+    """I4. gp_final_state_handle.py used to re-declare _ManifoldDistanceShim
+    verbatim, minus the 16-line docstring recording WHY `dist` stays raw while
+    `compute_manifold_distance_per_component` normalizes, and naming the call
+    sites (full_roa.py:621,649) that pin the convention. Two copies means a
+    future fix to one silently misses the other."""
+    import adaptive_roa.predictors.gp_final_state_handle as gp_mod
+    from adaptive_roa.predictors.final_state_handle import _ManifoldDistanceShim
+
+    assert gp_mod._ManifoldDistanceShim is _ManifoldDistanceShim
+    handle, _system = _handle()
+    assert isinstance(handle.distance_manifold, _ManifoldDistanceShim)
+    # The docstring recording the raw-vs-normalized contract must travel with it.
+    assert "RAW-in, RAW-out" in _ManifoldDistanceShim.dist.__doc__

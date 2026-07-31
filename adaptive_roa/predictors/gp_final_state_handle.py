@@ -14,15 +14,11 @@ import numpy as np
 import torch
 
 from adaptive_roa.predictors.embedding import EmbeddedStateDecoder
+# Imported, NOT re-declared: the raw-vs-normalized convention this shim encodes
+# is documented on the original (final_state_handle.py) and pinned to specific
+# call sites. A second copy would let a future fix to one silently miss the other.
+from adaptive_roa.predictors.final_state_handle import _ManifoldDistanceShim
 from adaptive_roa.predictors.heads import FinalStateHead
-
-
-class _ManifoldDistanceShim:
-    def __init__(self, head):
-        self._head = head
-
-    def dist(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        return self._head.distance_per_component(x, y)
 
 
 class GPFinalStateHandle:

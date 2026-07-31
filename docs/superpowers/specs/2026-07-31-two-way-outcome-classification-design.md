@@ -82,7 +82,7 @@ Consequence worth recording: `apply_two_sided_rule` reduces to `apply_one_sided_
 when `p_success + p_failure == 1`, since its failure test `(1 - p_failure) < λ - δ`
 becomes `p_success < λ - δ`. `decision_rule` is therefore left untouched in the configs.
 
-### 2. One shared guard for the invalid gates
+### 2. Explicitly gate the invalid gates on the flag
 
 `p_invalid ≡ 0` does **not** by itself disable the invalid gates. All of them test
 `p_invalid >= threshold`, which fires when the threshold is `<= 0`:
@@ -90,35 +90,58 @@ becomes `p_success < λ - δ`. `decision_rule` is therefore left untouched in th
 - `adaptive_roa/conformal/lambda_optimizer.py:49` and `:84` — `p_invalid >= (λ - δ)`
 - `adaptive_roa/adaptive_v2/eval/full_roa.py:281, 314, 340, 402, 492` — five `_predict_*`
   functions, four defaulting to `λ - δ` and `_predict_fixed_threshold` hardcoding `0.5`
+- `adaptive_roa/adaptive_v2/filters/confidence_filter.py:128, 136` — passes `p_invalid`
+  unconditionally, bypassing `use_p_invalid_veto`
 
 `optimize_lambda_delta` searches `lambda_range=(0.3, 0.7)` × `delta_range=(0.01, 0.3)`,
 so `λ - δ = 0.0` is a reachable grid point (λ=0.3, δ=0.3) at which every point would be
 flagged invalid.
 
-Instead of threading a mode flag through all seven call sites, add one helper and use it
-at each:
+Each gate is disabled by an **explicit flag**, never by inferring the mode from an
+all-zero `p_invalid`. Every default is the current value, so all three-way paths —
+including `predictor: classifier`, which already runs with `p_invalid = zeros`
+(`adaptive_roa/conformal/classifier_probability_estimator.py:75`) — evaluate exactly the
+same expressions they do today and stay bit-identical.
+
+**2a. `lambda_optimizer.py` — no change.** `two_way.yaml` sets
+`use_p_invalid_veto: false`; `adaptive_roa/conformal/predictor.py:204` already turns that
+into `p_invalid_for_opt = None`, and the existing `p_invalid is None` branch
+(`lambda_optimizer.py:50-51`) maps `None` to an all-False mask. The switch that this
+design needs is already wired.
+
+**2b. `full_roa.py` — one helper, gated on the flag.**
 
 ```python
-def _invalid_mask(p_invalid: np.ndarray | None, threshold: float, n: int) -> np.ndarray:
-    """Nothing is invalid when p_invalid is identically zero."""
-    if p_invalid is None or not np.any(p_invalid):
+def _invalid_mask(p_invalid: np.ndarray, threshold: float, n: int,
+                  binary_outcomes: bool = False) -> np.ndarray:
+    """Points whose predicted-endpoint cloud is mostly invalid.
+
+    Two-way runs have no invalid class, so nothing is ever masked.
+    """
+    if binary_outcomes:
         return np.zeros(n, dtype=bool)
     return p_invalid >= threshold
 ```
 
-`n` is passed explicitly because `p_invalid` may be `None` at the `lambda_optimizer`
-call sites, where the length comes from `p_success` instead.
+`evaluate_full_roa_fast(flow_matcher, system, ...)` already receives `system`
+(`full_roa.py:624-626`), so the flag is read once as
+`binary_outcomes = getattr(system, "binary_outcomes", False)` and threaded into the five
+`_predict_*` functions and `optimize_lambda_delta` — no new argument at any external call
+site, which also satisfies the project convention that new `evaluate_full_roa_fast`
+parameters stay backward-compatible.
 
-This is a tautology rather than a heuristic: if no MC sample was classified invalid, no
-point can be invalid, whatever the threshold. Two consequences:
+**2c. `confidence_filter.py` — new constructor argument.**
+`ConfidencePairFilter.__init__` gains `binary_outcomes: bool = False`; when set, it passes
+`p_invalid=None` to `apply_one_sided_rule` / `apply_two_sided_rule` instead of
+`probs.p_invalid`. `engine.py:279` supplies `binary_outcomes=self.system.binary_outcomes`.
+(The filter is already skipped for `predictor_type == "classifier"` at `engine.py:277`, so
+the classifier path never reaches it either way.)
 
-- It removes any need to touch `adaptive_roa/adaptive_v2/filters/confidence_filter.py:128,136`,
-  which passes `p_invalid` unconditionally and bypasses `use_p_invalid_veto`.
-- It also fixes the same latent degeneracy on the existing `predictor: classifier` path,
-  which already runs with `p_invalid = zeros`
-  (`adaptive_roa/conformal/classifier_probability_estimator.py:75`). That is a behaviour
-  change to three-way classifier runs, but only at grid points where `λ - δ <= 0`, which
-  score F1 = 0 and never win the optimization.
+**Known degeneracy, left untouched by design.** In three-way mode a backend that reports
+`p_invalid = zeros` — the classifier predictor — still marks every point invalid at grid
+points where `λ - δ <= 0`. Those candidates score F1 = 0 and never win the optimization,
+so the behaviour is inert. Fixing it would change three-way classifier results, which this
+design explicitly declines to do; it is recorded here as a separate known issue.
 
 Deliberately **not** changed: the conformal candidate label set
 `for label in [-1, 0, 1]` (`adaptive_roa/conformal/calibrator.py:443`) and the
@@ -151,7 +174,9 @@ resolver or recorded path in `docs/plots/EXPERIMENT_DIRS.md` is affected. Two-wa
 land under `adaptive_cartpole_pybullet_2way/`, `adaptive_quadrotor2d_2way/`,
 `adaptive_quadrotor3d_2way/` and cannot collide with any existing glob.
 
-`use_p_invalid_veto` is an existing switch
+`use_p_invalid_veto: false` in `two_way.yaml` is load-bearing, not cosmetic: per §2a it is
+the entire mechanism by which the `lambda_optimizer` gates are disabled, which is why that
+module needs no code change. It is an existing switch
 (`adaptive_roa/conformal/config.py:66`, threaded at `conformal/predictor.py:204`); the
 two-way config only flips it.
 
@@ -186,9 +211,15 @@ Unit tests, no training required:
 2. `binary_outcomes=False` reproduces current behaviour exactly (regression guard).
 3. In binary mode the probability backend yields `p_invalid == 0` and
    `p_success + p_failure == 1`.
-4. `_invalid_mask` returns all-False for an identically-zero `p_invalid` even at
-   `threshold=0.0`, and is unchanged from `p_invalid >= threshold` when any entry is
-   non-zero.
+4. `_invalid_mask` returns all-False when `binary_outcomes=True`, even at
+   `threshold=0.0`; with `binary_outcomes=False` (the default) it returns exactly
+   `p_invalid >= threshold`, including for an identically-zero `p_invalid` at
+   `threshold=0.0`, where it must still return all-True.
+5. Regression guard for the classifier path: with an all-zero `p_invalid` and
+   `binary_outcomes=False`, the five `_predict_*` functions produce byte-identical output
+   to the pre-change implementation.
+6. `ConfidencePairFilter` with `binary_outcomes=True` passes `p_invalid=None` to the
+   decision rule; with the default it passes `probs.p_invalid` unchanged.
 5. Loading an `MCCache` whose metadata `binary_outcomes` disagrees with the system
    triggers reclassification and yields labels with no `0`.
 6. Hydra composition: `outcome=two_way` sets `system.binary_outcomes: true` and resolves

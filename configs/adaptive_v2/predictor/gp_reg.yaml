@@ -1,0 +1,15 @@
+# @package _global_
+defaults:
+  - /probability: endpoint_mc
+predictor:
+  type: generative          # family tag: endpoint data, endpoint-MC backend, fast eval branch
+  name: gp_reg              # arm name: keys the export registry
+  trainer_target: adaptive_roa.adaptive_v2.trainers.gp_regressor_trainer.GPRegressorTrainer
+  batch_size: 1024
+  val_batch_size: 2048
+  gp:
+    n_inducing: 128
+    kernel: matern52
+    n_iters: 300
+    lr: 0.01
+    batch_size: 1024        # minibatch for the ELBO; the pool reaches 12k-17k rows

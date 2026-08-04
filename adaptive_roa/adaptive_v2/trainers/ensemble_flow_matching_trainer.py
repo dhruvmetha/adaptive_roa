@@ -1,9 +1,15 @@
-"""Deep ensemble of flow matchers, trained one member per GPU in parallel.
+"""Deep ensemble of flow matchers, trained one member per process in parallel.
 
 Members are statistically independent, so training them is embarrassingly
-parallel: M processes, member m pinned to device m, no communication. Wall-clock
-equals a SINGLE member. The sequential loop used for the classifier ensemble
-would be ~M x 50h per arm here, which is why this exists.
+parallel: M processes, no communication. Member m is round-robined onto
+device `m % n_visible_gpus` rather than pinned to device m, because M can
+exceed the GPU count available on a single node (e.g. M=5 members on a
+4-GPU node): flow-matching models are small and the cards have plenty of
+headroom, so doubling a member up on an already-used card costs wall-clock
+on that card, not correctness. When exactly one member lands per GPU,
+wall-clock equals a SINGLE member; the sequential loop used for the
+classifier ensemble would be ~M x 50h per arm here, which is why this
+exists.
 """
 from __future__ import annotations
 
@@ -109,9 +115,38 @@ class EnsembleFlowMatcherHandle:
         )
 
 
+_CPU_SENTINEL = ""
+
+
+def _device_for_member(rank: int, n_visible: int) -> str:
+    """Map ensemble member `rank` onto a CUDA_VISIBLE_DEVICES value.
+
+    Members round-robin across whatever GPUs the parent process can see:
+    `rank % n_visible`. With 5 members and 4 visible GPUs, members 0-3 each
+    get their own card and member 4 wraps back onto device 0 -- balanced
+    (no device gets more than ceil(M / n_visible) members) rather than
+    piling every overflow member onto device 0.
+
+    `n_visible` must come from the PARENT process (torch.cuda.device_count()
+    read before CUDA_VISIBLE_DEVICES is narrowed for any child) and be passed
+    in explicitly. Querying it again inside the child, after this function's
+    return value has already been written to CUDA_VISIBLE_DEVICES, would see
+    exactly 1 device and silently pin every subsequent member to device 0.
+
+    n_visible <= 0 (CPU-only machine, or no GPUs visible at all) returns the
+    CPU sentinel "" instead of raising ZeroDivisionError on `rank % 0`;
+    setting CUDA_VISIBLE_DEVICES="" hides all devices from CUDA, and
+    FlowMatchingTrainer already falls back to the "cpu" accelerator when
+    torch.cuda.is_available() is False (flow_matching_trainer.py:191).
+    """
+    if n_visible <= 0:
+        return _CPU_SENTINEL
+    return str(rank % n_visible)
+
+
 def _train_one_member(rank: int, cfg_blob, system_name: str, dataset_files, out_dir,
-                       resume, seed_base):
-    """Child process: train member `rank` on device `rank`.
+                       resume, seed_base, n_visible_gpus: int):
+    """Child process: train member `rank` on its assigned device.
 
     `system_name` is passed explicitly and `system` is rebuilt from `cfg_blob`
     here rather than pickled across the process boundary: FlowMatchingTrainer
@@ -121,13 +156,19 @@ def _train_one_member(rank: int, cfg_blob, system_name: str, dataset_files, out_
     fully determined by `cfg.system`, so reconstructing it with
     `hydra.utils.instantiate` is both correct and mirrors exactly what
     AdaptiveEngine.__init__ does for the parent process (engine.py:68).
+
+    `n_visible_gpus` is captured by the PARENT (EnsembleFlowMatchingTrainer.fit,
+    via torch.cuda.device_count() before any child narrows its own
+    CUDA_VISIBLE_DEVICES) and threaded through the mp.spawn args tuple -- see
+    _device_for_member's docstring for why re-querying it here would be wrong.
     """
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(rank)
+    os.environ["CUDA_VISIBLE_DEVICES"] = _device_for_member(rank, n_visible_gpus)
     torch.manual_seed(seed_base + rank)
     import hydra
     from omegaconf import OmegaConf
     cfg = OmegaConf.create(cfg_blob)
-    # Each child sees exactly one GPU, so it must address it as device 0.
+    # Each child sees at most one GPU (or none, on a CPU-only machine), so it
+    # must address its device as device 0.
     OmegaConf.update(cfg, "predictor.lightning_trainer.devices", 1, force_add=True)
     system = hydra.utils.instantiate(cfg.system)
     trainer = FlowMatchingTrainer(cfg, system, system_name)
@@ -150,10 +191,14 @@ class EnsembleFlowMatchingTrainer:
             resume_checkpoint: str | None = None):
         from omegaconf import OmegaConf
         blob = OmegaConf.to_container(self.cfg, resolve=True)
+        # Read the visible device count HERE, in the parent, before any child
+        # narrows its own CUDA_VISIBLE_DEVICES -- see _device_for_member's
+        # docstring for why the child must not re-query this itself.
+        n_visible_gpus = torch.cuda.device_count()
         mp.spawn(
             _train_one_member,
             args=(blob, self.system_name, dataset_files, output_dir,
-                  resume_checkpoint, self.seed_base),
+                  resume_checkpoint, self.seed_base, n_visible_gpus),
             nprocs=self.n_members, join=True,
         )
         members = [self._load_member(output_dir, m) for m in range(self.n_members)]

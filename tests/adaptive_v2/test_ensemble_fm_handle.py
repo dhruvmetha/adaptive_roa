@@ -1,3 +1,6 @@
+import math
+from collections import Counter
+
 import numpy as np
 import pytest
 import torch
@@ -9,6 +12,7 @@ from adaptive_roa.adaptive_v2.probability.ensemble_prob import (
 from adaptive_roa.adaptive_v2.trainers.ensemble_flow_matching_trainer import (
     EnsembleFlowMatcherHandle,
     EnsembleFlowMatchingTrainer,
+    _device_for_member,
 )
 
 
@@ -239,3 +243,47 @@ def test_ensemble_trainer_reads_n_members_and_seed_from_cfg():
     trainer = EnsembleFlowMatchingTrainer(cfg, system=None, system_name="pendulum")
     assert trainer.n_members == 5
     assert trainer.seed_base == 123
+
+
+# ---------------------------------------------------------------------------
+# _device_for_member: maps ensemble member rank -> CUDA_VISIBLE_DEVICES value,
+# aware of how many GPUs are actually visible. Amarel gpu-redhat nodes top out
+# at 4 GPUs (most have 2) and iLab's 12-GPU/user quota is saturated, so the
+# old "member m pinned to device m" scheme (requiring M=5 GPUs on one node)
+# can never schedule anywhere. Members must round-robin across whatever GPU
+# count is actually visible instead.
+# ---------------------------------------------------------------------------
+def test_device_for_member_one_gpu_per_member_when_gpus_cover_members():
+    assert [_device_for_member(r, 5) for r in range(5)] == ["0", "1", "2", "3", "4"]
+
+
+def test_device_for_member_wraps_when_fewer_gpus_than_members():
+    # 5 members, 4 GPUs: members 0-3 get a card each, member 4 wraps to 0.
+    assert [_device_for_member(r, 4) for r in range(5)] == ["0", "1", "2", "3", "0"]
+
+
+def test_device_for_member_wraps_repeatedly_with_very_few_gpus():
+    # 5 members, 2 GPUs: alternate 0/1, doubling and tripling up.
+    assert [_device_for_member(r, 2) for r in range(5)] == ["0", "1", "0", "1", "0"]
+
+
+def test_device_for_member_cpu_sentinel_when_no_gpus_visible():
+    # 3 members, 0 GPUs (CPU-only machine): no modulo-by-zero, no exception,
+    # every member gets the same CPU sentinel.
+    for r in range(3):
+        assert _device_for_member(r, 0) == ""
+
+
+def test_device_for_member_distribution_is_balanced():
+    cases = [
+        (5, 5), (5, 4), (5, 2), (3, 0), (11, 3), (1, 4), (8, 3),
+    ]
+    for n_members, n_visible in cases:
+        assignments = [_device_for_member(r, n_visible) for r in range(n_members)]
+        counts = Counter(assignments)
+        max_allowed = math.ceil(n_members / n_visible) if n_visible > 0 else n_members
+        assert max(counts.values()) <= max_allowed, (
+            f"n_members={n_members}, n_visible={n_visible}: "
+            f"most-loaded device got {max(counts.values())}, "
+            f"expected <= {max_allowed}"
+        )

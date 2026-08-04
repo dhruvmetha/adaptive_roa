@@ -271,3 +271,26 @@ also "wins" at low/med, that is a red flag for the analysis rather than a bonus,
 diagnostics say the arms are selecting near-identically there.
 
 Still selection behaviour only — no downstream metric claim until the floors finish.
+
+## 2026-08-04 07:20 — epoch-0 identity confirmed empirically (FM)
+
+The design lists "epoch-0 identity: all five arms score identically before the first
+acquisition" as an integration check. It holds, visibly, in the FM arms' checkpoints: at
+adaptive epoch 0 every arm's members converge at the *same* lightning epochs — best checkpoints
+at 95, 111, 125, 130 across `epi_var` and `aleat` alike. All arms start from the same seed-42
+random training set, so they train identical ensembles until the first acquisition differentiates
+them. Any divergence at epoch 0 would have meant an arm was leaking acquisition state into
+training; there is none.
+
+### Correction on how to judge FM liveness
+
+Earlier I recorded "newest .ckpt mtime" as the liveness check. That is too noisy to rely on:
+`last.ckpt` only updates when Lightning actually saves, and as a member converges the saves become
+sparse, so individual members legitimately go 10-35 minutes without writing while still training.
+It briefly looked like the `aleat` arm had stalled; it had not, and `srun --jobid=<id> nvidia-smi`
+confirmed all five member processes alive in every arm.
+
+The reliable signal is the **max best-epoch number parsed from the checkpoint filenames**
+(`best-{epoch}-{val_loss}.ckpt`) advancing over time, cross-checked with the live member-process
+count. Measured pace: max best-epoch 112 -> 134 over 17 minutes, and a member at 191/200 by 07:20
+— roughly 2.5-3 h per adaptive epoch, so ~2 days for 19 epochs.

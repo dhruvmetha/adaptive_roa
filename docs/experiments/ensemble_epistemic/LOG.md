@@ -1468,3 +1468,52 @@ a bad trade.
    come back as PENDING it will restart from epoch 0 and overwrite its own results, since the
    engine has no resume. `check_preempted.sh` section 2 now detects exactly that (PENDING job with
    epochs already on disk).
+
+## 2026-08-04 14:15 — METHODOLOGICAL CORRECTION: single-epoch floors are too noisy; two verdicts change
+
+The deterministic floor now has 13 epochs with three distinct seeds, which exposes a problem with
+how every verdict so far was tested. **The per-epoch floor varies 15.6x**:
+
+| epoch | 1 | 3 | 6 | 7 | 9 | 11 | 13 |
+|---|---|---|---|---|---|---|---|
+| 2*SD | 0.00117 | 0.00205 | 0.00083 | **0.00380** | **0.00024** | 0.00179 | 0.00050 |
+
+With three seeds, each epoch's SD has two degrees of freedom — a very noisy estimate. Testing the
+same det gap (`total`, −0.00264) against different epochs' floors gives:
+
+| floor choice | multiple | verdict |
+|---|---|---|
+| min (ep9) | 10.8x | distinguishable |
+| median | 1.9x | distinguishable |
+| **max (ep7)** | **0.7x** | **within noise** |
+| last available (ep13) | 5.2x | distinguishable |
+
+The conclusion depended on an arbitrary choice. Fixed by **pooling variance across epochs**
+(`2*sqrt(mean(var_e))`), which uses all the data instead of one slice.
+
+### Re-tested against pooled floors
+
+| level | pooled 2*SD (epochs) | result |
+|---|---|---|
+| det | 0.00171 (13) | all arms −1.3 to −1.6x — **DISTINGUISHABLE**, verdict holds |
+| low | 0.00035 (3) | −0.9 to −1.2x — **marginal**, 3 of 4 barely over threshold |
+| med | 0.00126 (2) | −0.8 to −0.9x — **WITHIN NOISE** |
+| high | 0.00055 (2) | +2.3 to +5.9x — **DISTINGUISHABLE**, all arms harmful |
+
+**Two changes to previously reported results:**
+
+1. **`med: adaptive helps` is RETRACTED.** It was reported at −1.5 to −3.1x against a single-epoch
+   floor of 0.00037. The pooled floor is 0.00126 — 3.4x larger — and every arm falls to −0.8 to
+   −0.9x, i.e. inside the noise. med is a null, not a win.
+2. **`low is a null` is WEAKENED.** Three of four arms now sit just over the threshold (−1.1 to
+   −1.2x) rather than just under. Best described as marginal in the helping direction, not a clean
+   null.
+
+**Unchanged:** det (all adaptive arms beat random, score irrelevant) and high (every adaptive arm
+distinguishably worse than random). Both were large enough to survive the floor change.
+
+**Caveat on pooling itself.** It assumes the floor is roughly stationary across epochs, which the
+15.6x det range makes questionable. It is nonetheless strictly better than picking one epoch
+arbitrarily, and the det pooled floor rests on 13 epochs. The low/med/high pooled floors currently
+rest on only 2-3 epochs and will firm up as the replicates deepen — **their verdicts should be
+re-checked then.**

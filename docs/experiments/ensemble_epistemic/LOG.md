@@ -122,3 +122,48 @@ Replicates now running for the run-to-run floor: `clf_high_dir00_s43` (199906),
 `clf_high_dir00_s44` (199914), `clf_xhigh_dir00_s43` (60082690), `clf_xhigh_dir00_s44`
 (60082691). Without these no verdict in this campaign is declarable -- the same rule that
 reversed three conclusions last time.
+
+## 2026-08-04 06:45 — first readout: the deterministic validation case does NOT behave as designed
+
+The deterministic-pendulum CLF arms are nearly complete (`det_epi_bald` at 19/19). The design
+set this up as the validation case: "on the deterministic pendulum aleatoric ~ 0, so `epi_*` and
+`total` should select nearly the same points... Divergence there means the decomposition measures
+something other than what it claims."
+
+Per-epoch acquisition diagnostics, deterministic pendulum, seed 42 (enrich = selected / pool):
+
+| arm | ep | epi_pool | ale_pool | epi_sel | ale_sel | enrich_epi | enrich_ale |
+|---|---|---|---|---|---|---|---|
+| total    | 5  | 0.00419 | 0.00518 | 0.10459 | 0.15958 | 25.0 | 30.8 |
+| total    | 10 | 0.00114 | 0.00247 | 0.03422 | 0.09047 | 30.0 | 36.6 |
+| epi_var  | 5  | 0.00293 | 0.00553 | 0.08175 | 0.16575 | 27.9 | 30.0 |
+| epi_var  | 10 | 0.00139 | 0.00245 | 0.04251 | 0.07409 | 30.7 | 30.3 |
+| epi_bald | 5  | 0.00616 | 0.00664 | 0.16176 | 0.20422 | 26.3 | 30.8 |
+| epi_bald | 10 | 0.00158 | 0.00209 | 0.04448 | 0.05731 | 28.1 | 27.4 |
+| aleat    | 5  | 0.00698 | 0.00916 | 0.12400 | 0.26956 | 17.8 | 29.4 |
+| aleat    | 10 | 0.00107 | 0.00194 | 0.04719 | 0.06220 | 43.9 | 32.1 |
+
+Two things, consistent across all four arms and both epochs:
+
+1. **Aleatoric is not ~0 on a deterministic system — it consistently EXCEEDS epistemic**
+   (e.g. `total` at epoch 10: 0.00247 vs 0.00114, a factor of 2.2). The design's premise for this
+   validation case is false as stated.
+2. **No arm separates the two components in what it actually selects.** Every arm enriches BOTH
+   terms by ~25-35x, including the ones optimising the opposite quantity: `aleat` enriches
+   epistemic 17.8-43.9x, and `epi_var`/`epi_bald` enrich aleatoric 27-32x. The enrichment ratios
+   are near-identical regardless of which term the arm maximises.
+
+The likely mechanism is that for a classifier ensemble, "aleatoric" = mean per-member binary
+entropy, and near a decision boundary a well-trained member outputs p ~ 0.5. That registers as
+aleatoric even when the underlying dynamics are perfectly deterministic. So on a deterministic
+system this term measures **boundary/representational** uncertainty, not irreducible process
+noise — the two are not distinguishable by this decomposition at a separatrix.
+
+This is the same coupling the final review raised independently (finding 7: `epi_var`'s selection
+noise is proportional to p(1-p)^2, i.e. largest exactly where aleatoric is largest).
+
+**Status: strong preliminary signal, not a verdict.** It is one seed, classifier only, and the
+run-to-run floor (`clf_det_dir00_s43/s44`, jobs 60089992/60089993) is still training. The
+direction is consistent across 8 arm-epoch observations, but the campaign rule stands: no verdict
+without the floor and two consecutive epochs. The stochastic arms are where the decomposition is
+actually supposed to earn its keep, and they are still running.

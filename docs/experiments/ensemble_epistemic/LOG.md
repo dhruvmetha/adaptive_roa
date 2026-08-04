@@ -1546,3 +1546,33 @@ magnitude as `aleat`'s.
 ~1x the floor and the floor estimate moved 3.4x. The xhigh verdict is 27-37x, so no plausible
 floor revision touches it. That is the practical distinction to carry into the writeup: effects at
 1-5x the floor are hostage to how the floor is estimated; effects above ~10x are not.
+
+## 2026-08-04 14:35 — floors deepened; `high` needs qualifying, low/med hold
+
+Pooled floors now rest on 3-4 epochs instead of 2. Re-tested at two consecutive epochs:
+
+| level | pooled 2*SD (epochs) | arm | ep A | ep B | stable? |
+|---|---|---|---|---|---|
+| low | 0.00031 (4) | all four | −1.0 to −1.4x | −1.1 to −1.4x | yes, marginal help |
+| med | 0.00102 (4) | all four | −0.4 to −0.8x | −1.0 to −1.1x | borderline null |
+| high | 0.00050 (3) | `epi_bald` | +12.0x | +4.1x | **yes, harmful** |
+| | | `epi_var` | +3.1x | +6.6x | **yes, harmful** |
+| | | `total` | +4.2x | +5.2x | **yes, harmful** |
+| | | `aleat` | **−0.6x** | **+2.6x** | **NO — crosses zero** |
+
+**`high: every adaptive arm is worse than random` is too strong.** Three of four arms
+(`epi_bald`, `epi_var`, `total`) exceed the floor in the harmful direction at both epochs. The
+negative control `aleat` does not: it reads −0.6x (better than random) at epoch 7 and +2.6x
+(worse) at epoch 8. Corrected claim: **three of four adaptive arms are distinguishably worse than
+random at high noise; `aleat` is inconsistent.**
+
+That `aleat` is the least harmful arm at high is the same inversion noted earlier — the negative
+control behaving best at high and worst at xhigh — and it now survives a pooled floor. It remains
+unexplained and is worth stating as an open question rather than smoothing over.
+
+**Magnitudes are unstable even where direction is not.** `epi_bald` swings +12.0x → +4.1x between
+consecutive epochs. So at high, only the *sign* is reportable, not the size, and certainly not the
+ranking among arms (which I already retracted at 13:25).
+
+low and med are unchanged by the deeper floors: low marginally helping (−1.0 to −1.4x,
+consistently just over threshold), med borderline null. The med retraction stands.

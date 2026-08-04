@@ -1,0 +1,28 @@
+# @package _global_
+# Reference tier: every arm at the [50,50] tanh backbone where full-batch HMC is
+# feasible, targeting ONE shared posterior so HMC is a valid reference for the
+# approximations.
+#
+# pos_weight and beta-NLL are pinned OFF here. pos_weight tempers the likelihood
+# per class; beta-NLL multiplies each dimension by a detached sigma^(2*beta) and
+# is not a likelihood at all, so no posterior corresponds to it. With either
+# active, HMC would reference a target no arm is approximating -- and it would
+# look fine.
+#
+# The production tier keeps both as deliberate optimization aids. Its fidelity is
+# therefore NOT measured by this tier; do not transfer these numbers to it.
+#
+# Usage:
+#   python scripts/run_adaptive.py +experiment=reference_tier predictor=<arm>
+
+predictor:
+  classifier:
+    hidden_dims: [50, 50]
+  bnn:
+    hidden_dims: [50, 50]
+    activation: tanh
+    pos_weight: 1.0
+  final_state:
+    hidden_dims: [50, 50]
+    activation: tanh
+    beta_nll: 0.0

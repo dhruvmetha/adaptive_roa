@@ -851,3 +851,54 @@ selectivity without concentrating the acquisition where genuine disagreement act
 Two caveats. Only two epochs, so this is a direction and not a trend. And `epi_pool` is measured
 per-arm against that arm's own model on its own data, so cross-arm comparison of the *level* is
 confounded — only the within-arm change is meaningful.
+
+## 2026-08-04 11:20 — fix validated, real floor measured, and the headline restated correctly
+
+The seed fix works. At epoch 0, all three seeds now produce **distinct** values at every level
+(pre-fix they were bit-identical), and the real floor is far larger than the broken one:
+
+| level | broken 2*SD | real 2*SD (raw Brier) | understated by |
+|---|---|---|---|
+| low | 0.00024 | 0.00113 | 4.8x |
+| med | 0.00000 | 0.00298 | infinite |
+| high | 0.00039 | 0.00483 | 12.4x |
+| xhigh | 0.00164 | 0.00496 | 3.0x |
+
+### Re-tested at epoch 7 against the real floor (x = multiples of 2*SD; * = distinguishable)
+
+**xhigh**
+| arm | raw Brier | post-recal | sAUROC |
+|---|---|---|---|
+| `epi_bald` | +0.0145 (2.9x)* | −0.00048 (0.6x) | +0.00044 (0.6x) |
+| `epi_var` | +0.0480 (9.7x)* | −0.00032 (0.4x) | +0.00045 (0.6x) |
+| `total` | +0.0916 (18.5x)* | +0.0230 (28.0x)* | −0.0289 (37.3x)* |
+| `aleat` | +0.1087 (21.9x)* | +0.0258 (31.5x)* | −0.0340 (43.9x)* |
+
+**high**
+| arm | raw Brier | post-recal | sAUROC |
+|---|---|---|---|
+| `epi_bald` | +0.2179 (45.1x)* | +0.00597 (11.0x)* | −0.00445 (24.6x)* |
+| `epi_var` | +0.1237 (25.6x)* | +0.00155 (2.9x)* | −0.00099 (5.5x)* |
+| `total` | +0.0992 (20.5x)* | +0.00206 (3.8x)* | −0.00112 (6.2x)* |
+| `aleat` | +0.0895 (18.5x)* | −0.00027 (0.5x) | −0.00018 (1.0x)* |
+
+### The corrected headline
+
+**At xhigh the epistemic arms fully repair the damage but do NOT beat random sampling.** On both
+calibration-free metrics they sit at 0.4–0.6x the floor from the non-adaptive control — a null,
+not a win. Meanwhile `total` and `aleat` are 28–44x the floor *worse*. So the honest claim is:
+acquiring on total entropy at xhigh is severely harmful, and the epistemic split removes that harm
+entirely, restoring parity with random sampling. That is a strong result and it does not need the
+overclaim I made earlier.
+
+**At high, `epi_bald` genuinely hurts** — it is distinguishably worse than the control even after
+recalibration (11x floor) and on sAUROC (24.6x). This part of the earlier finding survives the
+correction: it is not purely a calibration artefact at high, only mostly one (the raw 45x gap
+falls to 11x, not to zero). `aleat` is the *closest* arm to the control at high post-recalibration,
+which is the opposite of its behaviour at xhigh and remains unexplained.
+
+Both of my earlier positions were wrong in different directions: the original "beats random by
+14–30x" overclaimed on a broken floor, and the blanket retraction was too pessimistic — the
+large effects (`total`/`aleat` harm at xhigh, 18–44x) were always safe. The floor is measured at
+epoch 0 and will likely grow as arms diverge, so the small multiples (0.4–3x) remain provisional;
+the large ones do not.

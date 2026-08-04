@@ -1065,3 +1065,47 @@ This makes the campaign's conclusion sharper: epistemic acquisition helps **only
 disagreement co-locates with genuine ambiguity**. That held at xhigh and failed at high, and the
 selected-point diagnostic above is the cheap test for whether it holds in any new setting — it
 needs no extra compute, just the `d2_indices` already written every epoch.
+
+## 2026-08-04 11:55 — ROOT CAUSE: BALD is epistemic disagreement divided by p(1-p)
+
+The "ensemble disagrees in a useless place" explanation above described the symptom. The cause is
+in BALD's functional form.
+
+Second-order Taylor: `BALD = H(p̄) − E_m[H(p_m)] ≈ Var_m[p] / (2·p̄(1−p̄))`, because
+`H''(p) = −1/(p(1−p))`. For **identical** member disagreement (Var = 1e-4):
+
+| p̄ | BALD | amplification vs p=0.5 |
+|---|---|---|
+| 0.50 | 0.000200 | 1.0x |
+| 0.10 | 0.000556 | 2.8x |
+| 0.02 | 0.002667 | 13.3x |
+| 0.01 | 0.006982 | **34.9x** |
+
+`epi_var` returns 0.000200 at every one of those — no curvature factor.
+
+So BALD does not rank by "how much do members disagree"; it ranks by "how much do members disagree,
+weighted by 1/(p(1−p))". Where the model's mass sits at extreme p — high noise, for this
+classifier — it selects states where members quibble over whether p is 0.001 or 0.02 and
+multiplies that quibble by ~35x. Those states are worthless to label. That is precisely the
+97.8%-near-certain acquisition measured at high.
+
+**The prediction is confirmed in the data.** If curvature amplification is the mechanism, the
+variance-based score should be less tail-dragged at high, and it is:
+
+| arm @ high | mean_p of picks | frac ambiguous | post-recal harm |
+|---|---|---|---|
+| `epi_bald` | 0.010 | 0.001 | 11.0x floor |
+| `epi_var` | 0.025 | **0.026** (26x more) | 2.9x floor |
+
+This is the first genuine evidence favouring `epi_var` — and notably **not** for the reason the
+design anticipated. The design justified `epi_var` by its freedom from finite-K MC bias; that bias
+turned out not to reorder anything (a near-constant offset). The advantage that actually shows up
+is freedom from the `1/(p(1−p))` curvature weighting, which applies even with exact probabilities
+and no sampling at all. Worth correcting in the writeup: the estimator matters, but for a
+different reason than stated.
+
+**Open, and cheap to test:** miscalibration is plausibly a second-order contributor, since a
+poorly-calibrated model puts more mass at extreme p than it should and feeds the amplification.
+Flow matching is 7.7x better calibrated than the classifier at high (measured at epoch 0), so if
+calibration drives this, BALD should be markedly less tail-biased on the FM arms. The same
+`d2_indices` diagnostic answers it with no extra compute once FM has a few more epochs.

@@ -236,3 +236,38 @@ score modes select what they claim to select, in the right order, with the negat
 inverted. It does NOT show that epistemic acquisition produces a better model — that requires the
 downstream metrics at matched epochs against the run-to-run floor, and those arms and floors are
 still training. Keep the two claims separate in the writeup.
+
+## 2026-08-04 07:00 — the separation is a monotone function of noise
+
+Selectivity ratio (enrich_epi / enrich_ale) at epoch 4, classifier, seed 42, across all five
+noise levels. `ale_pool` is the mean aleatoric score over the candidate pool.
+
+| level | ale_pool | `epi_bald` | `epi_var` | `total` | `aleat` |
+|---|---|---|---|---|---|
+| det   | ~0.005      | ~1.0 | ~1.0 | ~1.0 | ~1.0 |
+| low   | 0.016       | 1.00 | 1.02 | 0.98 | 0.98 |
+| med   | 0.034       | –    | 1.04 | 0.95 | 1.02 |
+| high  | 0.17–0.21   | 3.32 | 2.33 | 0.84 | 0.53 |
+| xhigh | 0.34–0.41   | **3.59** | **2.30** | 0.53 | 0.48 |
+
+**At low, med and deterministic noise no arm separates anything** — every arm sits at ~1.0,
+including the ones explicitly maximising epistemic. The arms only fan out once `ale_pool` exceeds
+roughly 0.1, and the fan widens from high to xhigh.
+
+The mechanism is the same one the deterministic case showed: when the pool carries little
+aleatoric mass, what uncertainty exists is boundary-driven, and the per-member entropy term and
+the between-member disagreement term move together, so there is nothing to pull apart. Genuine
+process noise is what creates separable aleatoric mass.
+
+**This lands exactly on the motivating problem.** The previous campaign measured entropy
+acquisition *harming* the classifier at high (+0.157 debiased Brier) and xhigh (+0.088) while
+leaving low and med alone. The decomposition does something only at high and xhigh — precisely
+the regimes where total-entropy acquisition breaks — and does nothing where nothing was broken.
+That is the correct shape for the fix to have.
+
+It also sharpens the prediction to test once the metrics land: `epi_*` should beat `total` at
+high and xhigh, and should be indistinguishable from it at low, med and deterministic. If `epi_*`
+also "wins" at low/med, that is a red flag for the analysis rather than a bonus, because these
+diagnostics say the arms are selecting near-identically there.
+
+Still selection behaviour only — no downstream metric claim until the floors finish.

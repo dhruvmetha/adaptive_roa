@@ -1378,3 +1378,31 @@ every gap above; the ensemble floor should be tighter but is unmeasured. So the 
 consistent over two epochs, but **none of these gaps is yet established as distinguishable from
 noise.** The `total`-is-worst pattern is the one to watch, because it is the only claim that is
 consistent on both metrics and both epochs.
+
+## 2026-08-04 13:05 — preemption caught before it corrupted an arm in the established verdict
+
+`clf_xhigh_total` (job 60036433) was preempted at epoch 11 and auto-requeued by `--requeue`.
+`scripts/check_preempted.sh` did not flag it — a requeued job is PENDING, not absent from squeue,
+so it looks like a normal queue entry. It was only visible because Amarel's pending count went
+from 0 to 1.
+
+**Why this mattered.** `AdaptiveEngine.run` iterates `for epoch in range(n_epochs)` with no resume
+logic, so a requeued job restarts at epoch 0 and overwrites the existing epoch dirs in place.
+Amarel now carries the member-seed fix (4c7c561) that the original run predates, so the restart
+would have rewritten epochs 0-10 under the new code while epochs 11+ remained pre-fix output — a
+single arm's curve stitched across two codebases, and specifically the `total` arm at xhigh, which
+is one of the two arms in the campaign's first established verdict.
+
+Handled per the standing rule: cancelled, deleted the output dir on **both** Amarel and the local
+mirror, relaunched clean (job 60250190). Costs ~11 epochs of recompute (~5h) and buys an
+internally consistent curve.
+
+**Note for the remaining arms.** Every main arm was launched before the seed fix, so they all run
+with member seeds 0..4 while any relaunched arm gets 42..46. That is an arbitrary difference in
+initialisation, equivalent to a different random init, and it is precisely what the run-to-run
+floor measures — so arm-vs-arm comparisons stay valid. But if more arms get preempted, each one
+must be cleaned and relaunched the same way rather than allowed to requeue in place.
+
+**Monitoring gap to close:** requeued jobs are invisible to `check_preempted.sh`. The reliable
+signal is a PENDING job whose name matches a main arm, or `sacct` showing `Elapsed 00:00:00` on a
+job that was previously running. Both are now in the poll.

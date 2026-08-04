@@ -83,6 +83,14 @@ shared by all five arms.)*
 Each epoch records the pool indices it acquired, so the **true** success probability of every
 purchased point is recoverable.
 
+### Harm tracks how far an arm drags the training marginal — across levels, not within them
+Over 112 arm-epochs spanning all four stochastic levels: corr(fraction of ambiguous points
+acquired, harm) = **−0.429**, corr(marginal skew |mean_p − 0.5|, harm) = **+0.406**. The effect is
+strong at xhigh (r = −0.748) and **absent within high** (r = +0.259, wrong sign), where all arms
+are compressed into mean_p 0.008–0.079 — too narrow a band to discriminate. So this explains the
+dose-response *between* noise levels, and explains nothing about differences *between arms* at
+high.
+
 ### Why total entropy fails at xhigh
 | arm | fraction of acquired points genuinely ambiguous |
 |---|---|

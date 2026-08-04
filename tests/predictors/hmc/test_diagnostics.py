@@ -113,3 +113,38 @@ def test_the_ceiling_min_exposes_one_diverged_chain_that_the_mean_hides():
 def test_ceiling_needs_at_least_two_chains():
     with pytest.raises(ValueError, match="chains"):
         hmc_vs_hmc_ceiling(torch.rand(1, 50, 10))
+
+
+def test_the_ceiling_refuses_a_non_probability_instead_of_returning_nonsense():
+    """`agreement` thresholds at 0.5 and `total_variation` is a distance in
+    [0, 1]. Fed the final-state head's raw location proxy, this function
+    reported `total_variation: 2.595` and `total_variation_max: 3.893` -- values
+    a total-variation distance strictly cannot take -- and an `agreement` of 0.0
+    obtained by thresholding a normalized cart position at 0.5. Both went into
+    the run artifact looking like diagnostics.
+
+    It must raise, not clamp: a clamp turns invalid input into a
+    plausible-looking output, which is exactly how those numbers shipped.
+    """
+    raw_proxy = torch.randn(3, 40, 25) * 2.0 + 3.9   # the observed scale
+    with pytest.raises(ValueError, match="PROBABILITIES"):
+        hmc_vs_hmc_ceiling(raw_proxy)
+
+
+@pytest.mark.parametrize("bad", [-0.01, 1.01])
+def test_the_ceiling_rejects_values_just_outside_the_unit_interval(bad):
+    p = torch.full((2, 10, 5), 0.5)
+    p[0, 0, 0] = bad
+    with pytest.raises(ValueError, match=r"\[0, 1\]"):
+        hmc_vs_hmc_ceiling(p)
+
+
+def test_the_ceiling_accepts_the_closed_unit_interval():
+    """0.0 and 1.0 are valid probabilities -- the final-state head's per-draw
+    success indicator is exactly {0, 1}, so an open-interval check would reject
+    every legitimate input from that head."""
+    p = torch.zeros(2, 10, 5)
+    p[0] = 1.0
+    out = hmc_vs_hmc_ceiling(p)
+    assert out["agreement"] == pytest.approx(0.0)
+    assert out["total_variation"] == pytest.approx(1.0)

@@ -53,6 +53,32 @@ def total_variation(p: torch.Tensor, q: torch.Tensor) -> float:
     return float((p - q).abs().mean().item())
 
 
+def _require_probabilities(predictions: torch.Tensor) -> None:
+    """Reject anything that is not a probability, loudly.
+
+    ``agreement`` thresholds at 0.5 and ``total_variation`` is a distance in
+    [0, 1]; neither means anything for an unbounded scalar. Feeding this the
+    final-state head's raw location proxy produced ``total_variation = 3.89``,
+    which a total-variation distance strictly cannot be, and an ``agreement``
+    that thresholded a normalized cart position at 0.5. Both numbers went into
+    the run artifact looking like diagnostics.
+
+    Deliberately NOT clamped: a clamp turns an invalid input into a
+    plausible-looking output, which is the exact failure mode that let those
+    numbers ship. The caller must supply a probability or fix its summary.
+    """
+    lo = float(predictions.min())
+    hi = float(predictions.max())
+    if not (0.0 <= lo and hi <= 1.0):
+        raise ValueError(
+            f"the HMC-vs-HMC ceiling is defined on PROBABILITIES: agreement "
+            f"thresholds at 0.5 and total_variation is a distance in [0, 1]. "
+            f"Got values in [{lo:.4g}, {hi:.4g}]. Summarize the predictive as a "
+            f"probability (for a final-state head, p(endpoint in attractor)) "
+            f"rather than passing a raw network output."
+        )
+
+
 def hmc_vs_hmc_ceiling(predictions: torch.Tensor) -> dict:
     """How well HMC agrees with ITSELF, leave-one-chain-out.
 
@@ -73,6 +99,7 @@ def hmc_vs_hmc_ceiling(predictions: torch.Tensor) -> dict:
         raise ValueError(
             f"the HMC-vs-HMC ceiling needs at least 2 chains, got {predictions.shape[0]}"
         )
+    _require_probabilities(predictions)
     agreements, tvs = [], []
     for i in range(predictions.shape[0]):
         held = predictions[i].mean(dim=0)

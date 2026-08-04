@@ -147,3 +147,16 @@ test and are at epoch 4 of 19.
   (fixed in 4c7c561).
 - **Requeued preemptions are invisible** to a `PREEMPTED` query and silently overwrite their own
   early epochs, because the engine has no resume logic (fixed in `check_preempted.sh`).
+
+---
+
+## 6. Known coverage limits (not defects)
+
+- **Classifier arms stop at ~epoch 17–18, not 19.** Submitted with a 1-day walltime; 19 epochs
+  needs ~25h at their measured ~1.28h/epoch. SLURM refuses to raise `TimeLimit` on a running job,
+  and relaunching would discard 12h × ~15 arms. Matched-epoch analysis loses one or two epochs of
+  depth and nothing else.
+- **The FM floor will cap around epoch 15.** `fm_high_dir00_s44` runs on Amarel at ~4.5h/epoch
+  (versus ~2.5h on iLab) against a 3-day limit, which is Amarel's maximum — so it cannot reach 19.
+  The FM *arms* themselves are safe (iLab, 7-day limit, ~48h needed). Consequence: FM comparisons
+  are floor-backed up to ~epoch 15 and unbacked beyond it. Any FM claim at epochs 16–19 must say so.

@@ -93,3 +93,32 @@ have killed all four CLF resubmissions. `BayesianMLPTrainer` already hardcodes
   ensemble if naively fixed, since all members would resume from one checkpoint — guarded only
   by `warm_start: false`. `K % M == 0` is load-bearing for threshold/calibration and asserted
   nowhere (currently 10 % 5 and 100 % 5, both fine).
+
+## 2026-08-04 06:00-06:30 — thread-limit fix, FM smoke test, old campaign closed out
+
+**FM smoke test passes for all five arms.** `tests/adaptive_v2/test_fm_decomposition_smoke.py`
+runs two adaptive epochs per arm on a real flow-matching ensemble, so `estimate_members`,
+`_load_member` and the decomposition strategy are now exercised against real models rather
+than fakes. This was the largest remaining unknown: the live arms first reach that code about
+a day into training, on all five arms at once.
+
+**The thread-limit diagnosis was wrong the first time.** Capping OMP/MKL did not fix it; three
+arms died again at 25-35 minutes with "can't start new thread" and
+"BlockingIOError: [Errno 11] Resource temporarily unavailable". The real limit is
+`ulimit -u` = 2000, which on Linux counts THREADS per user per node across all jobs. One arm is
+~570 threads (5 members x train+val DataLoader workers); SLURM packs four 2-GPU arms onto one
+8-GPU node. OMP caps shrink each process's pool, not the process count. `num_workers` 4 -> 1
+cut it to ~316/arm; measured 1278/2000 with four arms co-located. All five arms relaunched
+together (v3) to keep them config-identical.
+
+**Old campaign closed.** Its last three arms were being kept alive for the one unsettled
+question, xhigh-FM. Refreshing the deliverable showed why that was futile: verdicts exist for
+med-FM, med-CLF, high-FM, high-CLF and xhigh-CLF, but **no xhigh seed replicates were ever
+run**, so xhigh-FM has no run-to-run floor and the verdict is uncomputable regardless of how
+long those arms train. Cancelled all three and redirected the capacity to seed replicates for
+*this* campaign, which had exactly one.
+
+Replicates now running for the run-to-run floor: `clf_high_dir00_s43` (199906),
+`clf_high_dir00_s44` (199914), `clf_xhigh_dir00_s43` (60082690), `clf_xhigh_dir00_s44`
+(60082691). Without these no verdict in this campaign is declarable -- the same rule that
+reversed three conclusions last time.

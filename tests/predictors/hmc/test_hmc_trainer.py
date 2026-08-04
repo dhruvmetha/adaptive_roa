@@ -140,6 +140,9 @@ def test_writes_an_auditable_diagnostics_artifact(head, tmp_path, outcome_files,
     assert 0.0 <= ceiling["agreement_min"] <= ceiling["agreement"]
     assert 0.0 <= ceiling["total_variation"] <= 1.0
     assert ceiling["total_variation"] <= ceiling["total_variation_max"] <= 1.0
+    # A ceiling computed where every point shares a label is trivially 1.0 and
+    # says nothing about fidelity; positive_rate is what makes that visible.
+    assert 0.0 <= ceiling["positive_rate"] <= 1.0
 
 
 @pytest.mark.parametrize("key,value", [("pos_weight", 2.0), ("beta_nll", 0.5),

@@ -94,6 +94,13 @@ def hmc_vs_hmc_ceiling(predictions: torch.Tensor) -> dict:
     `agreement` and `agreement_min` means one chain disagrees with the rest;
     `agreement_min` (and `total_variation_max`) is the conservative bound to
     quote when this ceiling is used to judge an approximation's fidelity.
+
+    `positive_rate` is the pooled fraction of predictive mass above the
+    threshold, reported so a DEGENERATE ceiling is identifiable. When every
+    query point falls on one side (positive_rate 0.0 or 1.0), agreement is
+    trivially 1.0 and total_variation trivially 0.0 no matter how badly the
+    chains mix -- that is a property of the evaluation set, not evidence of
+    fidelity, and it must not be quoted as a ceiling.
     """
     if predictions.shape[0] < 2:
         raise ValueError(
@@ -112,5 +119,6 @@ def hmc_vs_hmc_ceiling(predictions: torch.Tensor) -> dict:
         "agreement_min": float(min(agreements)),
         "total_variation": float(sum(tvs) / len(tvs)),
         "total_variation_max": float(max(tvs)),
+        "positive_rate": float((predictions >= 0.5).float().mean().item()),
         "n_chains": int(predictions.shape[0]),
     }

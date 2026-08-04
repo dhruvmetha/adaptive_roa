@@ -148,3 +148,19 @@ def test_the_ceiling_accepts_the_closed_unit_interval():
     out = hmc_vs_hmc_ceiling(p)
     assert out["agreement"] == pytest.approx(0.0)
     assert out["total_variation"] == pytest.approx(1.0)
+
+
+def test_a_degenerate_ceiling_is_identifiable_from_positive_rate():
+    """When every query point falls on one side of the threshold, agreement is
+    trivially 1.0 and total_variation trivially 0.0 no matter how badly the
+    chains mix. That is a property of the evaluation set, not fidelity, and
+    without `positive_rate` a reader cannot tell the two apart.
+    """
+    all_negative = torch.zeros(3, 50, 40)
+    out = hmc_vs_hmc_ceiling(all_negative)
+    assert out["agreement"] == pytest.approx(1.0)
+    assert out["total_variation"] == pytest.approx(0.0)
+    assert out["positive_rate"] == pytest.approx(0.0)   # the tell
+
+    informative = torch.rand(3, 50, 40)
+    assert 0.1 < hmc_vs_hmc_ceiling(informative)["positive_rate"] < 0.9

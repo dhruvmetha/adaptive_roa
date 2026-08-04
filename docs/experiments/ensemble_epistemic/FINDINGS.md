@@ -1,7 +1,7 @@
 # Ensemble Epistemic Acquisition — current findings
 
-**Status: campaign in progress.** Classifier arms at epochs 6–11 of 19 (deterministic complete);
-flow-matching arms at epoch 4 of 19. This file holds only what is *currently defensible*.
+**Status: campaign in progress.** Classifier arms at epochs ~9–13 of 19 and will stop at ~17
+(walltime, see §6); deterministic complete at 19/19; flow-matching arms at epoch 4 of 19. This file holds only what is *currently defensible*.
 `LOG.md` is the chronological record including superseded claims and their corrections.
 
 Standard of evidence used throughout: a gap counts only if it exceeds **2×SD of three
@@ -33,14 +33,15 @@ Arms only diverge once aleatoric mass in the candidate pool exceeds roughly 0.1:
 | xhigh | 0.34–0.41 | yes, most |
 
 ### Deterministic pendulum (complete, 19/19 epochs)
-Every adaptive arm beats random sampling by **1.6–1.9× the floor**, and the spread *between* arms
-(0.3×) is inside the floor. With aleatoric ≈ 0 there is nothing to separate, so the score choice
+Every adaptive arm beats random sampling by **1.3–1.6× the pooled floor** (2×SD = 0.00171 over 13
+epochs), and the spread *between* arms is inside the floor. (An earlier figure of 1.6–1.9× used a
+single-epoch floor, before pooling was adopted.) With aleatoric ≈ 0 there is nothing to separate, so the score choice
 does not matter while adaptive-vs-random does. This is the design's validation case, passed.
 
 ### low noise is marginal; med noise is a null
-Against a **pooled** floor (variance averaged across epochs, not one epoch's slice), low sits at
-−0.9 to −1.2× — three of four arms barely over the threshold, in the helping direction — and med
-sits at −0.8 to −0.9×, inside the noise. Neither level shows a score effect.
+Against **pooled** floors over 4 epochs, low sits at −1.0 to −1.4× (all four arms just over the
+threshold, in the helping direction) and med at −0.4 to −1.1× (straddling it). Neither level shows
+a score effect: the arms are within ~0.4× of each other at both levels.
 
 *Superseded: med was previously reported as "adaptive helps (−1.5 to −3.1×)" against a
 single-epoch floor. The pooled floor is 3.4× larger and the effect does not survive it.*
@@ -67,8 +68,9 @@ at two consecutive epochs:
 | `epi_var` | −0.3× | −0.5× |
 | `total` | +17.4× / +22.5× (ep6/7, single-epoch floor; relaunch re-deriving) | – |
 
-Acquiring on total entropy — or on the aleatoric component — is **17–28× the floor worse than
-random sampling**. Acquiring on either epistemic component is **indistinguishable from random**.
+Acquiring on the aleatoric component is **27–31× the pooled floor worse than random sampling**;
+`total` measured 17–22× against a single-epoch floor before its relaunch and is being re-derived.
+Acquiring on either epistemic component is **indistinguishable from random** (0.3–0.5×).
 Parity is the expected ceiling, not a shortfall: the epistemic split restores a balanced,
 representative sample, which is what random already provides. The value is in avoiding total
 entropy's skew.

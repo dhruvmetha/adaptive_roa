@@ -20,6 +20,7 @@ import torch
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import CSVLogger
 
+from adaptive_roa.adaptive_v2.trainers._seeding import resolve_seed_base
 from adaptive_roa.data.cartpole_endpoint_data import CartPoleEndpointDataModule
 from adaptive_roa.data.pendulum_endpoint_data import PendulumEndpointDataModule
 from adaptive_roa.data.quadrotor2d_endpoint_data import Quadrotor2DEndpointDataModule
@@ -167,6 +168,18 @@ class FinalStateTrainer:
         pred = self.cfg.get("predictor")
         return pred if pred is not None else self.cfg
 
+    def _member_seed_base(self) -> int:
+        """Seed base for the ensemble members, from the RUN seed.
+
+        Same defect, same fix as ``BayesianMLPTrainer._member_seed_base``: this
+        read ``predictor.final_state.seed``, a key no predictor config sets, so
+        it resolved to 0 in every run and ``bnn_ensemble_reg`` trained
+        bit-identical ensembles under seeds 42/43/44. See
+        ``_seeding.resolve_seed_base``. ``predictor.final_state.seed`` still
+        wins if explicitly set.
+        """
+        return resolve_seed_base(self.cfg, self._predictor_cfg.get("final_state", {}))
+
     def _resolve_num_mc_samples(self) -> int:
         """The K the MC loop actually uses.
 
@@ -279,7 +292,7 @@ class FinalStateTrainer:
             # Members must be independent: own seed, own optimizer, own shuffling.
             members, use_gpu, device = [], False, "cpu"
             for m in range(n_members):
-                torch.manual_seed(int(fs.get("seed", 0)) + m)
+                torch.manual_seed(self._member_seed_base() + m)
                 member = self._build(fs, "deterministic", head.n_params)
                 if member_states is not None:
                     _load_warm_start(member, member_states[m],

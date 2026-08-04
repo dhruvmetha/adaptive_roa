@@ -16,6 +16,7 @@ import torch.nn.functional as F
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import CSVLogger
 
+from adaptive_roa.adaptive_v2.trainers._seeding import resolve_seed_base
 from adaptive_roa.data.adaptive_classification_data import AdaptiveClassificationDataModule
 from adaptive_roa.predictors.bayesian_mlp import build_from_cfg, outcome_handle_from_cfg
 from adaptive_roa.predictors.posteriors import EnsemblePosterior
@@ -98,26 +99,11 @@ class BayesianMLPTrainer:
     def _member_seed_base(self) -> int:
         """Seed base for the ensemble members, from the RUN seed.
 
-        This used to read `predictor.bnn.seed`, a key that exists in no predictor
-        config, so it silently resolved to 0 in every run: members were always
-        seeded 0..M-1 and `seed=43` / `seed=44` produced bit-identical models. The
-        engine's `pl.seed_everything(cfg.seed)` does not save it either, because
-        the per-member `torch.manual_seed` below immediately overrides the global
-        RNG for model init and shuffling.
-
-        That made seed replicates useless as a run-to-run floor: their only
-        remaining variation was cross-cluster float nondeterminism. Replicates run
-        on the same cluster came out identical to the last bit, which read as a
-        floor of exactly zero and made every gap look significant.
-
-        `predictor.bnn.seed` still wins if explicitly set, so an existing config
-        can pin member seeds independently of the run seed.
+        See ``_seeding.resolve_seed_base`` for the bug this replaced and why a
+        bit-identical seed replicate is worse than a missing feature.
+        `predictor.bnn.seed` still wins if explicitly set.
         """
-        bnn = self._predictor_cfg.get("bnn", {})
-        explicit = bnn.get("seed")
-        if explicit is not None:
-            return int(explicit)
-        return int(self.cfg.get("seed", 42))
+        return resolve_seed_base(self.cfg, self._predictor_cfg.get("bnn", {}))
 
     def _build(self, bnn, posterior_kind):
         # Shared with the export wrapper so the two can never build different

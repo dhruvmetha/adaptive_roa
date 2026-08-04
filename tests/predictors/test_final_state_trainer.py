@@ -303,3 +303,28 @@ def test_laplace_covariance_is_the_ggn_at_the_exported_weights(tmp_path):
 
     torch.testing.assert_close(shipped, posterior.posterior_covariance,
                                rtol=1e-6, atol=1e-8)
+
+
+def test_ensemble_members_follow_the_run_seed(files, tmp_path):
+    """The call-site half of the seed fix.
+
+    `torch.manual_seed(int(fs.get("seed", 0)) + m)` read a key no predictor
+    config sets, so `bnn_ensemble_reg` seeded members 0..M-1 in every run and
+    seed replicates were bit-identical -- a run-to-run floor of exactly zero,
+    which made every arm gap look significant. The unit test on
+    `_member_seed_base` cannot see a call site that ignores it; this can.
+    """
+    def member_weights(run_seed):
+        cfg = _cfg("ensemble", max_epochs=1)
+        cfg.seed = run_seed
+        out = tmp_path / f"seed{run_seed}"
+        FinalStateTrainer(cfg, CartPoleSystem(), "cartpole_pybullet").fit(files, str(out))
+        state = torch.load(out / "checkpoints" / "best-ensemble.ckpt",
+                           map_location="cpu", weights_only=False)["state_dict"]
+        return {k: v.clone() for k, v in state.items() if v.is_floating_point()}
+
+    a, b = member_weights(43), member_weights(44)
+    assert a.keys() == b.keys()
+    assert any(not torch.allclose(a[k], b[k]) for k in a), (
+        "seed replicates trained bit-identical ensembles"
+    )

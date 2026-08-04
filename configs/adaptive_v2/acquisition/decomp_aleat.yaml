@@ -1,0 +1,12 @@
+# @package _global_
+# NEGATIVE CONTROL: deliberately targets irreducible randomness. Expected to be
+# the worst arm at high noise; if it is not, the decomposition is not working.
+sampling_mode: decomp_aleat
+acquisition:
+  _target_: adaptive_roa.adaptive_v2.strategy.decomposition.DecompositionAcquisitionStrategy
+  score: aleatoric
+  d2_ratio: 1.0
+  n_candidates: 50000
+  selection_rule: greedy_diverse
+  diversity_pool_multiplier: 5
+  verbose: true

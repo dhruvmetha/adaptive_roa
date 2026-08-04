@@ -59,7 +59,8 @@ class EnsembleClassifierProbabilityBackend(_EnsembleBackendBase):
         post = self._posterior()
         x = torch.as_tensor(np.asarray(start_states), dtype=torch.float32,
                             device=self.device)
-        logits = post.forward_all_members(x)           # [M, N, 1]
+        embedded = self.system.embed_state_for_model(self.system.normalize_state(x))
+        logits = post.forward_all_members(embedded)    # [M, N, 1]
         p = torch.sigmoid(logits).squeeze(-1)          # [M, N]
         return p.detach().cpu().numpy().astype(np.float64)
 

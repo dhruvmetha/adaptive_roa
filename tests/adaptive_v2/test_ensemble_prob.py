@@ -26,9 +26,33 @@ class _FakeHandle:
         return self
 
 
+class _RecordingSystem:
+    """Fake system that proves the backend embeds before calling the posterior."""
+    def __init__(self):
+        self.saw_shapes = []
+    def normalize_state(self, x):
+        self.saw_shapes.append(("normalize", tuple(x.shape)))
+        return x
+    def embed_state_for_model(self, x):
+        self.saw_shapes.append(("embed", tuple(x.shape)))
+        # widen 2D -> 3D the way a circular embedding does, so a backend that
+        # skipped this step would hand the posterior the wrong width
+        return torch.cat([x, x[:, :1]], dim=1)
+
+
+def test_estimate_members_embeds_states_before_the_posterior():
+    sys_ = _RecordingSystem()
+    b = EnsembleClassifierProbabilityBackend(
+        OmegaConf.create({"attractor_radius": 0.1}), system=sys_, device="cpu")
+    b.bind_model(_FakeHandle())
+    b.estimate_members(np.zeros((4, 2), dtype=np.float32))
+    assert [s[0] for s in sys_.saw_shapes] == ["normalize", "embed"]
+    assert sys_.saw_shapes[-1][1] == (4, 2)   # embed received the normalized 2D input
+
+
 def test_classifier_backend_members_shape_and_values():
     b = EnsembleClassifierProbabilityBackend(
-        OmegaConf.create({"attractor_radius": 0.1}), system=None, device="cpu")
+        OmegaConf.create({"attractor_radius": 0.1}), system=_RecordingSystem(), device="cpu")
     b.bind_model(_FakeHandle())
     pm = b.estimate_members(np.zeros((4, 2), dtype=np.float32))
     assert pm.shape == (2, 4)
@@ -38,7 +62,7 @@ def test_classifier_backend_members_shape_and_values():
 
 def test_classifier_backend_marginal_is_mean_of_members():
     b = EnsembleClassifierProbabilityBackend(
-        OmegaConf.create({"attractor_radius": 0.1}), system=None, device="cpu")
+        OmegaConf.create({"attractor_radius": 0.1}), system=_RecordingSystem(), device="cpu")
     b.bind_model(_FakeHandle())
     x = np.zeros((4, 2), dtype=np.float32)
     pm = b.estimate_members(x)
@@ -49,7 +73,7 @@ def test_classifier_backend_marginal_is_mean_of_members():
 
 def test_classifier_member_sample_size_is_none_because_no_sampling():
     b = EnsembleClassifierProbabilityBackend(
-        OmegaConf.create({"attractor_radius": 0.1}), system=None, device="cpu")
+        OmegaConf.create({"attractor_radius": 0.1}), system=_RecordingSystem(), device="cpu")
     assert b.member_sample_size is None
 
 
@@ -68,13 +92,13 @@ def test_backend_rejects_a_single_member_ensemble():
         posterior = _One()
         def eval(self): return self
     b = EnsembleClassifierProbabilityBackend(
-        OmegaConf.create({"attractor_radius": 0.1}), system=None, device="cpu")
+        OmegaConf.create({"attractor_radius": 0.1}), system=_RecordingSystem(), device="cpu")
     with pytest.raises(ValueError, match="at least 2 members"):
         b.bind_model(_H())
 
 
 def test_estimate_before_bind_model_raises():
     b = EnsembleClassifierProbabilityBackend(
-        OmegaConf.create({"attractor_radius": 0.1}), system=None, device="cpu")
+        OmegaConf.create({"attractor_radius": 0.1}), system=_RecordingSystem(), device="cpu")
     with pytest.raises(RuntimeError, match="before bind_model"):
         b.estimate_members(np.zeros((2, 2), dtype=np.float32))

@@ -9,7 +9,6 @@ function of the caller's S.
 from __future__ import annotations
 
 import torch
-from torch.nn.utils import vector_to_parameters
 
 from adaptive_roa.predictors.posteriors import Posterior
 
@@ -24,7 +23,6 @@ class HMCPosterior(Posterior):
             )
         self.net = net
         self.register_buffer("samples", samples.detach().clone())
-        self._params = [p for p in net.parameters() if p.requires_grad]
 
     @property
     def n_draws(self) -> int:
@@ -42,8 +40,14 @@ class HMCPosterior(Posterior):
         return torch.func.functional_call(self.net, replacements, (x,))
 
     def forward_sample(self, x, generator=None):
+        # Draw the index on the PARAMETER device, matching EnsemblePosterior
+        # (posteriors.py) and the generator OutcomeModelHandle hands down
+        # (handles.py, torch.Generator(device=param_device)). A CPU-only draw
+        # here would raise a device-mismatch RuntimeError against a CUDA
+        # generator on a CUDA model.
+        device = next(self.parameters()).device
         idx = int(torch.randint(self.n_draws, (1,), generator=generator,
-                                device="cpu").item())
+                                device=device).item())
         with torch.no_grad():
             return self._forward_with(self.samples[idx], x)
 

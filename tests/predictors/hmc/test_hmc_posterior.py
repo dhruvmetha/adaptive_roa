@@ -25,6 +25,22 @@ def test_rejects_an_empty_sample_set():
         HMCPosterior(net, torch.zeros(0, dim))
 
 
+def test_rejects_a_1d_sample_tensor():
+    net = build_bayesian_mlp(input_dim=4, hidden_dims=[8], output_dim=1,
+                             posterior="deterministic", activation="tanh")
+    dim = sum(p.numel() for p in net.parameters())
+    with pytest.raises(ValueError, match="at least"):
+        HMCPosterior(net, torch.zeros(dim))
+
+
+def test_rejects_a_3d_sample_tensor():
+    net = build_bayesian_mlp(input_dim=4, hidden_dims=[8], output_dim=1,
+                             posterior="deterministic", activation="tanh")
+    dim = sum(p.numel() for p in net.parameters())
+    with pytest.raises(ValueError, match="at least"):
+        HMCPosterior(net, torch.zeros(4, 1, dim))
+
+
 def test_forward_sample_draws_one_atom_and_varies():
     post = _posterior()
     x = torch.randn(6, 4)
@@ -38,6 +54,24 @@ def test_forward_sample_is_reproducible_under_a_seeded_generator():
     x = torch.randn(6, 4)
     g1 = torch.Generator().manual_seed(7)
     g2 = torch.Generator().manual_seed(7)
+    torch.testing.assert_close(post.forward_sample(x, generator=g1),
+                               post.forward_sample(x, generator=g2))
+
+
+def test_forward_sample_accepts_a_generator_on_the_parameter_device():
+    """Regression pin: forward_sample must draw its index on the SAME device
+    as the posterior's own parameters (mirroring EnsemblePosterior and the
+    generator OutcomeModelHandle constructs via
+    torch.Generator(device=param_device)), not an unconditional CPU draw --
+    a mismatch raises RuntimeError on a CUDA model paired with the CUDA
+    generator the handle hands down. CUDA is unavailable on this machine, so
+    this only exercises the CPU/CPU pairing; see the report for what that
+    does and does not cover."""
+    post = _posterior()
+    x = torch.randn(6, 4)
+    param_device = next(post.parameters()).device
+    g1 = torch.Generator(device=param_device).manual_seed(11)
+    g2 = torch.Generator(device=param_device).manual_seed(11)
     torch.testing.assert_close(post.forward_sample(x, generator=g1),
                                post.forward_sample(x, generator=g2))
 

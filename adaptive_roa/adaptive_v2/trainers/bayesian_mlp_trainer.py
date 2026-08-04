@@ -95,6 +95,30 @@ class BayesianMLPTrainer:
         pred = self.cfg.get("predictor")
         return pred if pred is not None else self.cfg
 
+    def _member_seed_base(self) -> int:
+        """Seed base for the ensemble members, from the RUN seed.
+
+        This used to read `predictor.bnn.seed`, a key that exists in no predictor
+        config, so it silently resolved to 0 in every run: members were always
+        seeded 0..M-1 and `seed=43` / `seed=44` produced bit-identical models. The
+        engine's `pl.seed_everything(cfg.seed)` does not save it either, because
+        the per-member `torch.manual_seed` below immediately overrides the global
+        RNG for model init and shuffling.
+
+        That made seed replicates useless as a run-to-run floor: their only
+        remaining variation was cross-cluster float nondeterminism. Replicates run
+        on the same cluster came out identical to the last bit, which read as a
+        floor of exactly zero and made every gap look significant.
+
+        `predictor.bnn.seed` still wins if explicitly set, so an existing config
+        can pin member seeds independently of the run seed.
+        """
+        bnn = self._predictor_cfg.get("bnn", {})
+        explicit = bnn.get("seed")
+        if explicit is not None:
+            return int(explicit)
+        return int(self.cfg.get("seed", 42))
+
     def _build(self, bnn, posterior_kind):
         # Shared with the export wrapper so the two can never build different
         # architectures from the same config (see bayesian_mlp.build_from_cfg).
@@ -182,7 +206,7 @@ class BayesianMLPTrainer:
             # Members must be independent: own seed, own optimizer, own shuffling.
             members, use_gpu, device = [], False, "cpu"
             for m in range(n_members):
-                torch.manual_seed(int(bnn.get("seed", 0)) + m)
+                torch.manual_seed(self._member_seed_base() + m)
                 member = self._build(bnn, "deterministic")
                 if member_states is not None:
                     _load_warm_start(member, member_states[m],

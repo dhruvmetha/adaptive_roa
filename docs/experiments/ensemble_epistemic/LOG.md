@@ -1622,3 +1622,27 @@ the epistemic arms recover ambiguity. What does **not** stand is any claim that 
 differences *between* arms at high are explained by tail depth. At high the arms are compressed
 into mean_p 0.008–0.079 — too narrow a band for the mechanism to discriminate, which is likely why
 the correlation is meaningless there.
+
+## 2026-08-04 19:40 — fm_high_total destroyed by a live source edit (my error)
+
+`fm_high_total` FAILED after 13:30:23 at epoch 5 of 19. Cause: my own edit.
+
+I changed `_device_for_member(rank, n_visible: int)` to take a device list, to fix members
+ignoring the parent's `CUDA_VISIBLE_DEVICES` restriction. The FM arms were already running.
+`mp.spawn` children **re-import their module fresh from disk at every spawn**, while the parent
+holds the code it imported at launch — so the parent kept passing an int while the child ran the
+new list-only code, and it died with `object of type 'int' has no len()`.
+
+The other four arms were on the same path and would have crashed identically at their next epoch
+boundary. `_device_for_member` now accepts both shapes; **verified in production**: `epi_var`,
+`epi_bald` and `aleat` have each since started epoch_004, which requires a successful spawn under
+the new code.
+
+**A green test suite proved nothing here.** Tests exercise new code against new code; they cannot
+see a process started an hour ago holding the old shape. Before editing anything under
+`adaptive_roa/` while jobs run, the question is "what re-imports this?" — trainers under
+`adaptive_v2/trainers/` are re-imported every adaptive epoch and are the highest-risk files in the
+repo. `scripts/` and analysis code are safe.
+
+`fm_high_total` has **not** been relaunched: 5 epochs are on disk, and restarting costs ~13h from
+epoch 0 since the engine has no resume.

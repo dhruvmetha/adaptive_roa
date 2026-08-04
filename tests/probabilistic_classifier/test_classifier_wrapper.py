@@ -46,3 +46,34 @@ def test_predict_cached_returns_none():
     system = PendulumSystem()
     pc = ClassifierProbabilisticClassifier(_tiny_module(system).eval(), system, device="cpu")
     assert pc.predict_cached("run", 0, "test", np.zeros((2, 2))) is None
+
+
+def test_the_export_loader_rebuilds_the_trained_activation(tmp_path):
+    """Activations carry no parameters, so a train/export activation mismatch
+    loads the state_dict CLEANLY and then computes different logits -- there is
+    no error, no missing key, nothing to catch it. `load_clf_module` must read
+    the same `classifier.activation` key `ClassifierTrainer` writes with.
+    """
+    from omegaconf import OmegaConf
+
+    from adaptive_roa.probabilistic_classifier.classifier import load_clf_module
+
+    system = PendulumSystem()
+    cfg = OmegaConf.create({"classifier": {"hidden_dims": [8], "activation": "tanh"}})
+
+    dummy = torch.zeros(1, int(system.state_dim))
+    input_dim = int(system.embed_state_for_model(system.normalize_state(dummy)).shape[-1])
+    trained = ClassifierModule(
+        mlp=ClassifierMLP(input_dim=input_dim, hidden_dims=[8], output_dim=1,
+                          activation="tanh"),
+        system=system, pos_weight=torch.tensor(1.0), lr=1e-3, weight_decay=1e-5,
+    ).eval()
+    ckpt_dir = tmp_path / "checkpoints"
+    ckpt_dir.mkdir()
+    torch.save({"state_dict": trained.state_dict()}, ckpt_dir / "best.ckpt")
+
+    loaded = load_clf_module(str(tmp_path), system, cfg, device="cpu")
+    assert [type(m).__name__ for m in loaded.mlp.net] == \
+           [type(m).__name__ for m in trained.mlp.net]
+    states = torch.randn(6, int(system.state_dim))
+    torch.testing.assert_close(loaded(states), trained(states))

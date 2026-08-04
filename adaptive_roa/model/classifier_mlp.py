@@ -20,16 +20,34 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class ClassifierMLP(nn.Module):
-    """MLP mapping an embedded state [B, input_dim] -> logits [B, output_dim]."""
+_ACTIVATIONS = {"relu": nn.ReLU, "tanh": nn.Tanh, "gelu": nn.GELU, "silu": nn.SiLU}
 
-    def __init__(self, input_dim: int, hidden_dims: List[int], output_dim: int = 1, dropout: float = 0.0):
+
+class ClassifierMLP(nn.Module):
+    """MLP mapping an embedded state [B, input_dim] -> logits [B, output_dim].
+
+    ``activation`` defaults to ReLU (every existing run and checkpoint). It is
+    configurable because the HMC reference tier puts every arm on the SAME
+    [50,50] tanh backbone -- ReLU's non-differentiability degrades leapfrog's
+    local error to O(eps) -- and a hardcoded ReLU here silently kept the plain
+    classifier on a different backbone than the tier claimed. Activations carry
+    no parameters, so switching one does not change the state_dict layout and
+    existing checkpoints still load.
+    """
+
+    def __init__(self, input_dim: int, hidden_dims: List[int], output_dim: int = 1,
+                 dropout: float = 0.0, activation: str = "relu"):
         super().__init__()
+        act_cls = _ACTIVATIONS.get(str(activation).lower())
+        if act_cls is None:
+            raise ValueError(
+                f"unknown activation {activation!r}; expected one of {sorted(_ACTIVATIONS)}"
+            )
         dims = [int(input_dim)] + [int(h) for h in hidden_dims]
         layers: List[nn.Module] = []
         for a, b in zip(dims[:-1], dims[1:]):
             layers.append(nn.Linear(a, b))
-            layers.append(nn.ReLU())
+            layers.append(act_cls())
             if dropout > 0:
                 layers.append(nn.Dropout(dropout))
         layers.append(nn.Linear(dims[-1], int(output_dim)))

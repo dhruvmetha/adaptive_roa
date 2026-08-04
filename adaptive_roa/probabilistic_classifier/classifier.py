@@ -32,6 +32,10 @@ def load_clf_module(epoch_dir, system, cfg, device):
         hidden_dims=list(cls.get("hidden_dims", [256, 512, 256])),
         output_dim=1,
         dropout=float(cls.get("dropout", 0.0)),
+        # MUST mirror ClassifierTrainer's default. Activations carry no
+        # parameters, so a mismatch here loads the checkpoint cleanly and then
+        # computes different logits -- there is no error to catch it.
+        activation=str(cls.get("activation", "relu")),
     )
     module = ClassifierModule(
         mlp=mlp, system=system, pos_weight=torch.tensor(1.0), lr=1e-3, weight_decay=1e-5

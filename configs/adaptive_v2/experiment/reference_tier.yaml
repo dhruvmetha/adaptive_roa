@@ -1,7 +1,7 @@
 # @package _global_
-# Reference tier: every arm at the [50,50] tanh backbone where full-batch HMC is
-# feasible, targeting ONE shared posterior so HMC is a valid reference for the
-# approximations.
+# Reference tier: every arm listed below at the [50,50] tanh backbone where
+# full-batch HMC is feasible, targeting ONE shared posterior so HMC is a valid
+# reference for the approximations.
 #
 # pos_weight and beta-NLL are pinned OFF here. pos_weight tempers the likelihood
 # per class; beta-NLL multiplies each dimension by a detached sigma^(2*beta) and
@@ -12,12 +12,27 @@
 # The production tier keeps both as deliberate optimization aids. Its fidelity is
 # therefore NOT measured by this tier; do not transfer these numbers to it.
 #
+# SCOPE. The stanzas below are the tier. Arms with no stanza compose under
+# `+experiment=reference_tier` without error but are NOT in the tier and must not
+# be quoted against the HMC reference:
+#   * gp / gp_reg -- sparse GPs have no [50,50] tanh backbone at all, and no
+#     pos_weight/beta-NLL analogue. They are a different model class; their
+#     agreement with HMC is a cross-class comparison, not a fidelity number.
+#   * hmc / hmc_reg -- the reference itself. It reads NONE of the keys below
+#     (setting predictor.hmc.pos_weight or .beta_nll raises); its backbone is
+#     pinned in its own arm config.
+#
 # Usage:
 #   python scripts/run_adaptive.py +experiment=reference_tier predictor=<arm>
 
 predictor:
   classifier:
     hidden_dims: [50, 50]
+    activation: tanh
+    # ClassifierTrainer defaults to the DATA-DERIVED pos_weight (a tempered
+    # likelihood). It has to be pinned explicitly here -- the key under
+    # `bnn` below is read only by BayesianMLPTrainer.
+    pos_weight: 1.0
   bnn:
     hidden_dims: [50, 50]
     activation: tanh

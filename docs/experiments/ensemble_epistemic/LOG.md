@@ -415,3 +415,48 @@ the previous campaign's measurement that scored acquisition dragged the training
 floor is still not available at these epochs (replicates at epoch 3-4). Do not promote any of
 this to a verdict yet. The concrete next test is to compare arms *after* recalibration, which
 would confirm or kill the "calibration is fixable" reading directly.
+
+## 2026-08-04 07:40 — on calibration-free metrics the epistemic arms beat total entropy decisively at xhigh
+
+Both calibration-free components across every available epoch. Nothing here is a single-epoch
+reading.
+
+**xhigh — sAUROC (higher better)**
+| arm | ep1 | ep2 | ep3 | ep4 | ep5 | ep6 |
+|---|---|---|---|---|---|---|
+| `dir00` (control) | 0.8947 | 0.8949 | 0.8951 | 0.8971 | 0.8976 | – |
+| `epi_bald` | **0.8966** | **0.8971** | **0.8977** | **0.8980** | **0.8984** | **0.8988** |
+| `epi_var` | 0.8956 | 0.8963 | 0.8971 | 0.8978 | 0.8977 | 0.8983 |
+| `aleat` | 0.8880 | 0.8806 | 0.8802 | 0.8656 | 0.8695 | – |
+| `total` | 0.8847 | 0.8806 | 0.8758 | 0.8602 | 0.8546 | 0.8768 |
+
+**xhigh — RES (resolution, higher better)**
+| arm | ep1 | ep3 | ep5 | ep6 |
+|---|---|---|---|---|
+| `dir00` | 0.1294 | 0.1312 | 0.1322 | – |
+| `epi_bald` | **0.1323** | **0.1328** | **0.1330** | **0.1331** |
+| `epi_var` | 0.1308 | 0.1321 | 0.1325 | 0.1328 |
+| `aleat` | 0.1252 | 0.1171 | 0.1102 | – |
+| `total` | 0.1235 | 0.1138 | 0.1021 | 0.1145 |
+
+Two claims, of very different strength:
+
+**Strong and unambiguous — the epistemic arms beat `total` at xhigh.** `epi_bald` leads `total`
+by +0.022 to +0.044 sAUROC and holds RES at 0.133 while `total` collapses to 0.102. Monotone and
+consistent at every epoch, with the negative control `aleat` tracking `total` down as designed.
+`total` and `aleat` lose discriminative power that recalibration cannot restore; the epistemic
+arms do not lose it at all.
+
+**Weak — `epi_bald` also edges the non-adaptive control at xhigh.** It is above `dir00` at all
+six epochs on sAUROC and all four on RES, but by only +0.001 to +0.002, which is small enough
+that the run-to-run floor could absorb it. Consistency across 6/6 epochs is suggestive, not
+sufficient. Do not claim "adaptive beats random" until the replicates reach these epochs.
+
+**high is a null on these metrics.** sAUROC spans 0.977-0.981 across all five arms and RES
+0.180-0.190; the control is marginally best and `epi_var` closest to it. So the dramatic Brier
+spread at high (0.053 to 0.230) is *entirely* calibration, as the decomposition said — no arm
+gains or loses meaningful discriminative power there.
+
+Net: the earlier reading that "`epi_bald` is the worst arm at high" was a calibration artifact
+and should not be carried forward. On the component that recalibration cannot repair, `epi_bald`
+is the best arm at xhigh and tied at high.

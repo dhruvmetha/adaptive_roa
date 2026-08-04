@@ -294,3 +294,67 @@ The reliable signal is the **max best-epoch number parsed from the checkpoint fi
 (`best-{epoch}-{val_loss}.ckpt`) advancing over time, cross-checked with the live member-process
 count. Measured pace: max best-epoch 112 -> 134 over 17 minutes, and a member at 191/200 by 07:20
 — roughly 2.5-3 h per adaptive epoch, so ~2 days for 19 epochs.
+
+## 2026-08-04 07:35 — FIRST DOWNSTREAM READOUT (classifier): epi_bald rescues xhigh, but is worst at high
+
+Analysis pipeline validated end-to-end on the new campaign: `sync_amarel_results.sh` gained a
+no-delete `ensemble_epistemic` entry (the directory has local writers — `fm_high_*` on iLab and
+`clf_high_*` on arrakis — so `--delete` would have erased every locally-run arm), and
+`stoch_prob_metrics.py` scores the merged tree unchanged. 132 rows, 28 stochastic runs.
+
+**The deterministic arms cannot be scored this way.** The metrics need ground-truth `p_success`
+from repeated rollouts (`noisy/pendulum/lqr/<level>/eval_success_prob.npz`); there is no `det`
+entry, and a deterministic system's p_success is degenerate {0,1} rather than a rollout
+frequency. The det arms must be judged on the label metrics already in `artifacts_v2.json`.
+
+Debiased Brier per epoch (lower is better):
+
+**xhigh**
+| arm | ep1 | ep2 | ep3 | ep4 | ep5 | ep6 |
+|---|---|---|---|---|---|---|
+| `dir00` (control) | 0.0839 | 0.0728 | 0.0677 | 0.0684 | 0.0714 | – |
+| `epi_bald` | 0.0932 | 0.0867 | **0.0713** | **0.0757** | **0.0795** | 0.0825 |
+| `epi_var` | 0.1050 | 0.1087 | 0.1087 | 0.1121 | 0.1173 | 0.1259 |
+| `aleat` | 0.1284 | 0.1449 | 0.1597 | 0.1677 | 0.1661 | – |
+| `total` | 0.1361 | 0.1486 | 0.1613 | 0.1722 | 0.1779 | 0.1619 |
+
+**high**
+| arm | ep1 | ep2 | ep3 | ep4 | ep5 |
+|---|---|---|---|---|---|
+| `dir00` (control) | 0.0639 | 0.0594 | 0.0579 | 0.0591 | 0.0532 |
+| `aleat` | 0.0564 | 0.0971 | 0.1029 | 0.1159 | 0.1277 |
+| `total` | 0.0683 | 0.1019 | 0.1092 | 0.1398 | 0.1265 |
+| `epi_var` | 0.0894 | 0.0980 | 0.1184 | 0.1388 | 0.1571 |
+| `epi_bald` | 0.0953 | 0.1365 | 0.1802 | 0.2023 | **0.2297** |
+
+Two findings, both stable over 5-6 consecutive epochs rather than single-epoch flukes:
+
+1. **At xhigh `epi_bald` essentially eliminates the harm.** It tracks the non-adaptive control
+   within ~0.008-0.011 while `total` runs +0.107 worse. That is the designed outcome, and the
+   negative control `aleat` sits with `total` at the bottom as it should.
+2. **At high `epi_bald` is the WORST arm** — worse than `total` and worse than the negative
+   control, and monotonically diverging (0.095 -> 0.230). The ordering is the near-inverse of
+   xhigh. This is not noise; it is monotone across every epoch.
+
+That inversion is the interesting result and it is not yet explained. The selectivity diagnostics
+show `epi_bald` has the highest epistemic enrichment at BOTH levels (3.3 at high, 3.6 at xhigh),
+so identical selection behaviour produces opposite downstream effects. A plausible reading is that
+epistemic-only acquisition concentrates sampling in a narrow, unrepresentative region, which
+degrades *calibration* even when it improves the decision boundary — and at xhigh the cost of
+drowning in aleatoric mass simply outweighs it. `sAUROC` is nearly flat across arms at high
+(0.9755-0.9811) while Brier ranges 0.053-0.230, which is consistent with a calibration effect
+rather than a ranking effect. Worth testing directly.
+
+Also note: **every adaptive arm is worse than the non-adaptive control at both levels.** That
+reproduces the previous campaign's core finding rather than overturning it; the question here is
+only whether the epistemic split reduces the damage, and at xhigh it clearly does.
+
+### This is NOT a verdict yet
+
+- The run-to-run floor is **not** established at these epochs. The `dir00_s43/s44` replicates have
+  only reached epochs 0-1, and a floor at epoch 0 is meaningless because all arms share the same
+  seed-42 data there by construction. Everything above is one seed per arm.
+- Epochs 5-7 of 19. The previous campaign's verdicts landed at epochs 8-18, and several reversed
+  before then.
+- Effect sizes are large (4x at high) relative to the old campaign's ~0.015 CLF floor, so the
+  direction is unlikely to be pure noise — but "unlikely" is not the standard this campaign set.

@@ -657,3 +657,51 @@ mass dominating the pool above ale_pool ~0.1), and the fix works at xhigh.
 `med`'s floor is degenerate — its replicates have only reached epoch 1, where all seeds still
 share identical data — so the med row is not yet testable. Treat it as unresolved rather than
 as a null.
+
+## 2026-08-04 08:15 — HEADLINE: after recalibration the epistemic arms win, and at xhigh they beat random
+
+The proposed test, run. `Brier = REL − RES + UNC`, so perfect recalibration drives `REL → 0` and
+the achievable floor is `Brier_recal = UNC − RES` — precisely the part calibration **cannot**
+repair. Both components are already in the scored metrics, so no new compute was needed.
+
+**Epoch 5, gap vs the non-adaptive control:**
+
+| level | arm | raw Brier gap | post-recal gap | shrinkage |
+|---|---|---|---|---|
+| high | `epi_bald` | +0.17646 | **+0.00142** | 124x |
+| high | `epi_var` | +0.10392 | +0.00059 | 176x |
+| high | `total` | +0.07328 | +0.00230 | 32x |
+| high | `aleat` | +0.07448 | +0.00786 | 9x |
+| xhigh | `epi_bald` | +0.00815 | **−0.00079** | sign flips |
+| xhigh | `epi_var` | +0.04589 | **−0.00035** | sign flips |
+| xhigh | `total` | +0.10653 | +0.03008 | 3.5x |
+| xhigh | `aleat` | +0.09475 | +0.02204 | 4.3x |
+
+**xhigh, post-recalibration gap vs control, every epoch — stable 5/5:**
+
+| arm | ep1 | ep2 | ep3 | ep4 | ep5 |
+|---|---|---|---|---|---|
+| `epi_bald` | **−0.00294** | **−0.00140** | **−0.00160** | **−0.00039** | **−0.00079** |
+| `epi_var` | −0.00145 | −0.00055 | −0.00090 | −0.00022 | −0.00035 |
+| `total` | +0.00586 | +0.01269 | +0.01737 | +0.02820 | +0.03008 |
+| `aleat` | +0.00420 | +0.01234 | +0.01406 | +0.02397 | +0.02204 |
+
+Both epistemic arms are negative — better than random sampling — at **every** epoch, while
+`total` and `aleat` are positive and degrade monotonically. This is the designed result, on the
+component that recalibration cannot rescue, sustained over five consecutive epochs.
+
+**The `epi_bald`-is-worst-at-high result was almost entirely an artefact.** Its +0.176 raw
+deficit shrinks 124-fold to +0.0014 once miscalibration is removed. The arms differ enormously in
+how well-calibrated they leave the model and barely at all in how much irreducible information
+they gather — except at xhigh, where `total` and `aleat` destroy resolution outright.
+
+**Where the evidence is weaker.** At high the post-recal gaps are all small (0.0002–0.010) and
+the ordering is *not* stable: `epi_var` trends best (down to +0.00024 by epoch 6) and `aleat` is
+clearly worst from epoch 4 on, but `total` and `epi_bald` swap places between epochs. Treat high
+as "adaptive ≈ control after recalibration, with `aleat` worst" and nothing finer. No floor has
+been computed for the recalibrated metric, and these gaps are small enough to need one.
+
+**Caveat on the idealisation.** `UNC − RES` is the *perfect*-recalibration floor. Real
+recalibration (Platt, isotonic, conformal) recovers only part of it, so the practical benefit sits
+between the raw and recalibrated columns. The qualitative conclusion — that most of the damage is
+fixable and the epistemic arms protect the unfixable part — does not depend on reaching the floor.

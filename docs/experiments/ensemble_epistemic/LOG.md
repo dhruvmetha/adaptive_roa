@@ -705,3 +705,42 @@ been computed for the recalibrated metric, and these gaps are small enough to ne
 recalibration (Platt, isotonic, conformal) recovers only part of it, so the practical benefit sits
 between the raw and recalibrated columns. The qualitative conclusion — that most of the damage is
 fixable and the epistemic arms protect the unfixable part — does not depend on reaching the floor.
+
+## 2026-08-04 08:25 — FM arms enter the scored pipeline; epoch-0 identity holds there too
+
+All five FM arms are now scored at epoch 0 (K=100 eval samples, 20 per member across M=5, as
+designed). Pre-acquisition they must be identical, and they are:
+
+| arm | brier_deb | sAUROC | RES | REL_deb |
+|---|---|---|---|---|
+| `aleat`/`epi_bald`/`epi_var`/`total` | 0.00693 | 0.97761 | 0.18751 | 0.00265 |
+| `dir00` | 0.00699 | 0.97758 | 0.18747 | 0.00267 |
+
+Spread across arms 5.6e-05 — third independent confirmation of epoch-0 identity (after the
+classifier metrics and the FM checkpoint epochs), and it validates the FM eval path end to end.
+
+### A cross-predictor observation that reframes the campaign's scope
+
+At high noise, epoch 0, on the *same* data:
+
+| predictor | brier_deb | REL_deb | sAUROC |
+|---|---|---|---|
+| flow matching | **0.00693** | 0.00265 | 0.97761 |
+| classifier | 0.05315 | – | 0.97964 |
+
+**The flow matcher is 7.7x better calibrated than the classifier before any acquisition happens**,
+while ranking slightly worse (sAUROC 0.9776 vs 0.9796). The classifier's miscalibration under
+process noise — the thing the epistemic split was shown to repair — is largely absent in FM to
+begin with.
+
+This is consistent with the previous campaign, which found entropy acquisition never harmed flow
+matching and helped it at med/high, and it sets expectations: the FM arms should show a *much
+smaller* spread between score modes than the classifier did, because there is far less
+calibration damage available to prevent. A null result on the FM half would therefore not
+contradict the classifier finding — it would be the predicted consequence of FM starting well
+calibrated. Worth stating now, before the FM numbers land, so the comparison is not read as a
+failed replication.
+
+Floor status: the adaptive-arm replicates (`clf_xhigh_epi_bald_s43/s44`) have created epoch_001
+but not yet written its artifacts, so the adaptive floor is still pending. The headline xhigh
+claim currently rests on the `dir00` floor, which is a lower bound.

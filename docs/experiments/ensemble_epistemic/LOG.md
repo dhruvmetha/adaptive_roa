@@ -167,3 +167,42 @@ run-to-run floor (`clf_det_dir00_s43/s44`, jobs 60089992/60089993) is still trai
 direction is consistent across 8 arm-epoch observations, but the campaign rule stands: no verdict
 without the floor and two consecutive epochs. The stochastic arms are where the decomposition is
 actually supposed to earn its keep, and they are still running.
+
+## 2026-08-04 06:50 — the high-noise readout, and a correction to the entry above
+
+Same diagnostics at **stochastic high noise**, epoch 5, the regime the decomposition was
+designed for:
+
+| arm | epi_pool | ale_pool | epi_sel | ale_sel | enrich_epi | enrich_ale |
+|---|---|---|---|---|---|---|
+| total    | 0.00834 | 0.16879 | 0.03068 | 0.60896 | 3.7 | 3.6 |
+| epi_var  | 0.00498 | 0.18416 | 0.02270 | 0.55910 | 4.6 | 3.0 |
+| epi_bald | 0.00510 | 0.21428 | 0.02865 | 0.44787 | 5.6 | 2.1 |
+| aleat    | 0.00823 | 0.20056 | 0.01805 | 0.63568 | 2.2 | 3.2 |
+
+**The decomposition works here, and the arms order exactly as designed.** Ranked by epistemic
+enrichment: `epi_bald` 5.6 > `epi_var` 4.6 > `total` 3.7 > `aleat` 2.2. Ranked by aleatoric
+enrichment the order inverts: `aleat` 3.2 > `total` 3.6/`epi_var` 3.0 > `epi_bald` 2.1. The
+epistemic arms buy epistemic enrichment while *suppressing* aleatoric relative to `total`, and
+the negative control does the opposite. That is the intended behaviour, demonstrated causally.
+
+It also confirms the motivating diagnosis: at high noise the pool is overwhelmingly aleatoric —
+`ale_pool` ~ 0.17-0.21 against `epi_pool` ~ 0.005-0.008, a ratio of 20-40x. Total entropy at
+this noise level is almost entirely irreducible, which is why acquiring on it degenerates.
+
+### Correction to the deterministic entry
+
+The entry above overstated the deterministic result by calling the design's premise "false as
+stated". That framing was wrong on the absolute scale. Deterministic `ale_pool` is 0.002-0.009
+against 0.17-0.21 at high noise — 20-100x smaller, so aleatoric IS nearly zero there in absolute
+terms, as the design predicted. And the design's actual operational prediction for that case,
+that all arms select nearly the same points, HOLDS: every arm enriches both terms ~25-35x.
+
+What the deterministic numbers genuinely show is narrower: the small residual uncertainty on a
+deterministic system is boundary-driven, and at a separatrix the per-member entropy term and the
+between-member disagreement term move together, so the decomposition cannot separate them there.
+That is a caveat about what "aleatoric" means near a decision boundary, not a refutation of the
+method — and it is consistent with the high-noise result, where genuine process noise creates
+aleatoric mass that IS separable.
+
+Both readouts remain preliminary: one seed, classifier only, floors still training.

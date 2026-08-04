@@ -588,6 +588,20 @@ def evaluate_full_roa_fast(
         n_batches = (n_total + batch_size - 1) // batch_size
         total_steps = n_batches * num_mc_samples
 
+        # Ensembles must split the K eval draws EVENLY across members rather
+        # than sampling one at random each time: EnsemblePosterior.
+        # predictive_logit_samples (adaptive_roa/predictors/posteriors.py)
+        # documents that a seeded generator sampling members produced a fixed
+        # weight vector [.125, .281, .109, .234, .250] against an exact .2 --
+        # enough to flip decisions near lambda*. Pinning the member by
+        # `sample_idx % n_members` enumerates each member floor(K/M) or
+        # ceil(K/M) times, exactly and deterministically. Using the handle's
+        # own round-robin cursor instead (EnsembleFlowMatcherHandle.
+        # predict_endpoint) would make the weighting depend on how many times
+        # anything else happened to call it first, so the member is pinned
+        # explicitly here rather than delegating to that cursor.
+        n_members = getattr(flow_matcher, "n_members", None)
+
         flow_matcher.eval()
         with torch.no_grad():
           with tqdm(total=total_steps, desc="Full ROA eval", disable=not verbose) as pbar:
@@ -597,7 +611,12 @@ def evaluate_full_roa_fast(
                 batch_actual = end_tensor[batch_start:batch_end] if end_tensor is not None else None
 
                 for sample_idx in range(num_mc_samples):
-                    pred = flow_matcher.predict_endpoint(batch_inputs)
+                    if n_members:
+                        pred = flow_matcher.predict_endpoint_member(
+                            sample_idx % n_members, batch_inputs
+                        )
+                    else:
+                        pred = flow_matcher.predict_endpoint(batch_inputs)
                     labels_tensor = system.classify_attractor(pred, attractor_radius)
 
                     if refine_invalids:

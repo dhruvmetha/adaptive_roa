@@ -615,3 +615,45 @@ stochasticity only. Adaptive arms additionally vary in which points they acquire
 variance is not captured here. The previous campaign replicated both `dir00` and the adaptive arm
 for exactly this reason. Replicates of `clf_xhigh_epi_bald` are being launched now; until they
 land, the numbers above are compared against a floor that is a lower bound on the true one.
+
+## 2026-08-04 08:05 — deterministic validation passes, and the full dose-response
+
+### Deterministic pendulum (label metrics, matched epoch 15, all five arms)
+
+| arm | AUC | Brier | log_score | accuracy |
+|---|---|---|---|---|
+| `dir00` (control) | 0.999912 | 0.00349 | 0.01195 | 0.99628 |
+| `total` | 0.999995 | **0.00089** | 0.00318 | 0.99842 |
+| `epi_var` | 0.999988 | 0.00142 | 0.00492 | 0.99828 |
+| `epi_bald` | 0.999990 | 0.00132 | 0.00474 | 0.99866 |
+| `aleat` | 0.999994 | 0.00129 | 0.00435 | 0.99926 |
+
+**The design's validation case passes.** Every adaptive arm beats the non-adaptive control
+(Brier 2.5-4x lower), and the four adaptive arms land within 1.6x of each other — exactly the
+predicted "aleatoric ~ 0, so all arms select nearly the same points and land on nearly the same
+metrics". AUC is saturated (spread 8e-05) and carries no signal here; Brier, log score and
+accuracy still discriminate. Note this needs the label metrics: the probability metrics require
+rollout ground truth that does not exist for a deterministic system.
+
+### Full dose-response — debiased-Brier gap vs the control (negative = adaptive HELPS)
+
+| level | ep | floor 2*SD | `total` | `epi_var` | `epi_bald` | `aleat` |
+|---|---|---|---|---|---|---|
+| det   | 15 | – | −0.0026 | −0.0021 | −0.0022 | −0.0022 |
+| low   | 4  | 0.00024 | −0.00165 | −0.00269 | −0.00292 | −0.00411 |
+| med   | 3  | (degenerate) | −0.00284 | −0.00019 | +0.00162 | −0.00179 |
+| high  | 5  | 0.00087 | +0.07328 | +0.10392 | +0.17646 | +0.07448 |
+| xhigh | 5  | 0.00046 | +0.10653 | +0.04589 | **+0.00815** | +0.09475 |
+
+The sign flips with noise. At det and low, adaptive acquisition **helps** and the choice of score
+barely matters. At high and xhigh it **hurts**, by two orders of magnitude more than it ever
+helped — and only there does the choice of score matter, with `epi_bald` cutting the damage from
++0.107 to +0.008 at xhigh.
+
+This reproduces and extends the previous campaign's finding. It measured entropy acquisition
+harming the classifier at high/xhigh and not at low/med; the mechanism is now visible (aleatoric
+mass dominating the pool above ale_pool ~0.1), and the fix works at xhigh.
+
+`med`'s floor is degenerate — its replicates have only reached epoch 1, where all seeds still
+share identical data — so the med row is not yet testable. Treat it as unresolved rather than
+as a null.

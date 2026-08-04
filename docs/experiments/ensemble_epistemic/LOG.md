@@ -1517,3 +1517,32 @@ distinguishably worse than random). Both were large enough to survive the floor 
 arbitrarily, and the det pooled floor rests on 13 epochs. The low/med/high pooled floors currently
 rest on only 2-3 epochs and will firm up as the replicates deepen — **their verdicts should be
 re-checked then.**
+
+## 2026-08-04 14:25 — the xhigh headline survives the pooled-floor correction
+
+The pooled-floor fix retracted the med verdict, so the xhigh headline had to be re-tested the same
+way. It holds, at two consecutive epochs:
+
+xhigh pooled floor over 4 epochs: **recal 2*SD = 0.00095, sAUROC 2*SD = 0.001142**
+(the single-epoch floor used for the original 12:20 verdict was 0.00102 / 0.001808 — so that
+verdict was, if anything, *conservative*, not a lucky slice).
+
+| arm | ep | post-recal gap | × floor | sAUROC gap | × floor |
+|---|---|---|---|---|---|
+| `epi_bald` | 7 | −0.00048 | 0.5× | +0.00044 | 0.4× |
+| `epi_bald` | 8 | −0.00047 | 0.5× | +0.00056 | 0.5× |
+| `epi_var` | 7 | −0.00032 | 0.3× | +0.00045 | 0.4× |
+| `epi_var` | 8 | −0.00046 | 0.5× | +0.00072 | 0.6× |
+| `aleat` | 7 | +0.02581 | **27.2×** | −0.03401 | **29.8×** |
+| `aleat` | 8 | +0.02932 | **30.9×** | −0.04260 | **37.3×** |
+
+So: the aleatoric arm is 27–37× the pooled floor worse than random sampling on both
+calibration-free metrics, at two consecutive epochs, while both epistemic arms sit at 0.3–0.6×
+— indistinguishable from random. `total` is absent because its relaunch after the preemption has
+not caught up; it will be re-derived, and its earlier numbers (+17 to +22×) were of the same
+magnitude as `aleat`'s.
+
+**Why this matters beyond the result.** The med verdict died under pooling because its effect was
+~1x the floor and the floor estimate moved 3.4x. The xhigh verdict is 27-37x, so no plausible
+floor revision touches it. That is the practical distinction to carry into the writeup: effects at
+1-5x the floor are hostage to how the floor is estimated; effects above ~10x are not.

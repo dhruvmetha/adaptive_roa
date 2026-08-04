@@ -1156,3 +1156,42 @@ empirical question that only the FM downstream metrics can answer — and they a
 **The FM half is therefore the real experiment**, and the classifier half mostly measures how
 badly a miscalibrated model misleads every acquisition rule. That is a useful negative result in
 its own right, but it must not be reported as a verdict on the estimators.
+
+## 2026-08-04 12:05 — first FM downstream numbers: adaptive HELPS on flow matching at high
+
+FM high, epoch 1 (first post-acquisition epoch). Gap is vs the non-adaptive control; negative
+Brier gap = adaptive helps.
+
+| arm | Brier | gap | sAUROC | gap | post-recal | gap |
+|---|---|---|---|---|---|---|
+| `dir00` (control) | 0.00454 | – | 0.97934 | – | 0.00239 | – |
+| `epi_var` | **0.00151** | **−0.00303** | 0.97968 | +0.00034 | 0.00157 | −0.00083 |
+| `aleat` | 0.00168 | −0.00286 | 0.97961 | +0.00027 | 0.00148 | −0.00091 |
+| `epi_bald` | 0.00189 | −0.00265 | 0.97994 | +0.00060 | 0.00198 | −0.00042 |
+| `total` | 0.00288 | −0.00166 | 0.97903 | −0.00031 | 0.00203 | −0.00037 |
+
+**Every adaptive arm beats the non-adaptive control on flow matching**, which is the exact
+opposite of the classifier at the same noise level, where every arm lost. It reproduces the
+previous campaign's finding that entropy acquisition never harmed FM and helped it at med/high,
+and it is consistent with the acquisition-quality diagnostic: on FM all arms buy balanced,
+informative points, while on the classifier they all buy near-certain junk.
+
+Epoch-0 identity holds (arms differ by 5.6e-05 pre-acquisition), so the epoch-1 separation is
+genuinely caused by acquisition.
+
+### Why this is NOT yet a result
+
+- **One epoch.** The campaign rule needs two consecutive, and this is the first post-acquisition
+  epoch in a 19-epoch run.
+- **No FM floor exists yet.** `fm_high_dir00_s43` has been running 47 minutes and has produced
+  nothing scoreable. For scale, the previous campaign's *single-model* FM floor was SD 0.00343 at
+  epoch 0 (2*SD = 0.00686) — larger than every gap in the table. Ensembling should tighten that
+  (this campaign's CLF floors came out ~3x tighter than the previous campaign's), but even a 3x
+  tightening puts 2*SD ~ 0.0023 against gaps of 0.0017–0.0030. **These gaps are marginal at best
+  and may be entirely noise.**
+- The arm ordering (`epi_var` > `aleat` > `epi_bald` > `total`) is therefore not meaningful yet.
+  Worth noting only that the negative control sits second — if that persists once a floor exists,
+  it would argue against the premise that aleatoric-targeted sampling is wasteful on FM.
+
+Treat this as "FM behaves oppositely to CLF at high", which the diagnostic already predicted, and
+nothing more.

@@ -125,6 +125,14 @@ test and are at epoch 4 of 19.
 - **All flow-matching results.** No FM floor exists yet (both seed replicates still early). Two
   consecutive epochs show every adaptive arm beating the control, with `total` the only arm
   costing discriminative power — but no gap is yet distinguishable from noise.
+
+  The FM floor replicates are verified config-identical to the main `dir00` arm apart from the
+  seed (checked against the recorded Hydra overrides, not just the launch command). One asymmetry
+  to carry forward when the floor lands: `dir00` and `s43` run on iLab while `s44` runs on Amarel,
+  so cross-cluster float nondeterminism is folded into that floor. That inflates it, which is
+  **conservative** — it makes significance harder to claim, not easier — but it means the FM floor
+  is not directly comparable in magnitude to the classifier floors, which were measured
+  within-cluster.
 - **Whether the epistemic split helps a well-calibrated predictor at all.** This is the campaign's
   actual question and it is unanswered.
 - **`epi_var` vs `epi_bald`.** On the classifier both are exact (members enumerated, K = None), so

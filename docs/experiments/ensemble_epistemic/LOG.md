@@ -1195,3 +1195,39 @@ genuinely caused by acquisition.
 
 Treat this as "FM behaves oppositely to CLF at high", which the diagnostic already predicted, and
 nothing more.
+
+## 2026-08-04 12:20 — FIRST ESTABLISHED VERDICT (classifier, xhigh)
+
+Floor now measured at **epoch 2** from three genuinely-distinct seeds on the fixed code
+(2*SD: post-recal 0.00102, sAUROC 0.001808 — both larger than the epoch-0 floor, as expected).
+Gaps vs the non-adaptive control at the two deepest epochs:
+
+| arm | ep | post-recal gap | x floor | sAUROC gap | x floor |
+|---|---|---|---|---|---|
+| `epi_bald` | 6 | −0.00081 | 0.8x | +0.00126 | 0.7x |
+| `epi_bald` | 7 | −0.00048 | 0.5x | +0.00044 | 0.2x |
+| `epi_var` | 6 | −0.00057 | 0.6x | +0.00075 | 0.4x |
+| `epi_var` | 7 | −0.00032 | 0.3x | +0.00045 | 0.2x |
+| `total` | 6 | +0.01774 | **17.4x** | −0.02078 | **11.5x** |
+| `total` | 7 | +0.02295 | **22.5x** | −0.02888 | **16.0x** |
+| `aleat` | 6 | +0.02857 | **28.1x** | −0.03954 | **21.9x** |
+| `aleat` | 7 | +0.02581 | **25.3x** | −0.03401 | **18.8x** |
+
+**Verdict, meeting every rule this campaign set** (two consecutive epochs, valid seed floor,
+calibration-free metrics):
+
+> On the ensemble classifier at xhigh noise, acquiring on total label entropy — or on the
+> aleatoric component — is **17–28x the run-to-run floor worse** than random sampling, on the
+> component recalibration cannot repair. Acquiring on either epistemic component is
+> **indistinguishable from random** (0.2–0.8x floor).
+
+The negative control behaving as the worst arm, and the two epistemic estimators agreeing with
+each other, are both as designed.
+
+**Scope, stated precisely.** This is a verdict about *acquisition on this classifier*, whose
+probability estimates are poorly calibrated at high noise (7.7x worse Brier than FM pre-training).
+The mechanism is established: every score is computed on distorted p̄, and total entropy — which
+targets p = 0.5 by construction — is misled hardest, landing on states whose true p is ~0.12.
+The epistemic scores are less misled because they key on member *disagreement* rather than on the
+absolute probability. It is **not** a verdict on these estimators for a well-calibrated model;
+the FM arms test that and are at epoch 3–4 of 19 with no floor yet.

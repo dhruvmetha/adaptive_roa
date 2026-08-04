@@ -93,7 +93,10 @@ Five arms, all sharing one predictor class so no comparison is confounded by ens
 | `aleat` | mean_m H(p̂_m) — **negative control** |
 
 `aleat` should be the *worst* arm at high noise, since it deliberately targets irreducible
-randomness. If `epi_*` beats `total` and `aleat` loses to `total`, that is a causal
+randomness. Its own finite-K bias runs downward (the plug-in entropy estimator underestimates),
+roughly uniformly across the interior, so it shifts the score by a near-constant and does not
+threaten the arm's role as a control — but it means `aleat` values are not directly comparable
+in absolute terms to `total`. If `epi_*` beats `total` and `aleat` loses to `total`, that is a causal
 demonstration the split is real rather than a relabelling.
 
 An ensemble non-adaptive and an ensemble total-entropy arm are both required even though
@@ -103,7 +106,8 @@ acquisition change with the ensembling change. As a bonus, ensemble-`total` vs t
 single-`total` measures the pure ensembling effect.
 
 d2_ratio = 1.0 (fully adaptive), 19 epochs, seed 42 — matching where the previous campaign's
-effects were largest and cleanest.
+effects were largest and cleanest. M = 5. K = 20 at acquisition and K = 100 at eval (the
+existing defaults); the bias figures above are for the acquisition K.
 
 ## Architecture
 
@@ -130,6 +134,11 @@ Zero communication; wall-clock ≈ one member. Follows `bayesian_mlp_trainer` co
 is the whole point for FM at ~50h per member.
 
 **4. Ensemble handle** exposing `n_members` and per-member `predict_endpoint`.
+
+**Configs.** New predictor configs `configs/adaptive_v2/predictor/{fm_ensemble,clf_ensemble}.yaml`
+(the latter can largely reuse `bnn_ensemble.yaml`, which is already `posterior: ensemble`,
+`n_members: 5`), and one acquisition config per score mode under
+`configs/adaptive_v2/acquisition/` selecting `decomposition.py` with the appropriate `score`.
 
 **5. `full_roa.py`** — when the handle reports `n_members`, split the K eval samples **evenly
 across members** instead of sampling members randomly. This follows a precedent already in

@@ -1406,3 +1406,41 @@ must be cleaned and relaunched the same way rather than allowed to requeue in pl
 **Monitoring gap to close:** requeued jobs are invisible to `check_preempted.sh`. The reliable
 signal is a PENDING job whose name matches a main arm, or `sacct` showing `Elapsed 00:00:00` on a
 job that was previously running. Both are now in the poll.
+
+## 2026-08-04 13:25 — two-consecutive-epoch check on every level (and a walk-back on "epi_bald worst at high")
+
+Post-recalibration gap vs control in floor units, at the two deepest shared epochs:
+
+| level | floor 2*SD | arm | ep A | ep B |
+|---|---|---|---|---|
+| low (5,6) | 0.00042 | all four | −0.8 to −1.0x | −0.8 to −1.0x |
+| med (5,6) | 0.00037 | `total` | −2.1x | −3.1x |
+| | | `epi_bald` | −2.0x | −2.9x |
+| | | `aleat` | −1.5x | −2.8x |
+| | | `epi_var` | −1.1x | −3.0x |
+| high (7,8) | 0.00063 | `epi_bald` | +9.5x | +3.2x |
+| | | `epi_var` | +2.5x | +5.2x |
+| | | `total` | +3.3x | +4.1x |
+| | | `aleat` | −0.4x | +2.0x |
+
+**low is a null.** All four arms sit at −0.8 to −1.0x at both epochs — consistently just under the
+threshold. Adaptive acquisition is indistinguishable from random sampling at low noise, and the
+score choice is irrelevant. This is the predicted behaviour below the aleatoric threshold, now
+confirmed at two consecutive epochs rather than inferred.
+
+**med: adaptive helps, and again the score does not matter.** Three of four arms exceed the floor
+at both epochs (−1.5 to −3.1x), all in the same direction, with a spread between arms smaller than
+the gap to the control.
+
+**high: all arms are harmful, but I over-claimed the ordering.** Earlier I reported `epi_bald` as
+"the worst arm at high, +13.0x". Across epochs 7 and 8 it reads +9.5x then +3.2x, while `epi_var`
+goes +2.5x then +5.2x — the arms swap places. **The ordering among arms at high is not stable and
+should not be reported.** What survives the two-epoch rule is only the weaker claim: every
+adaptive arm is distinguishably worse than random at high noise. The mechanism (BALD's
+`1/(p(1−p))` tail bias) is still supported by the acquisition-quality data, which is stable, but
+the downstream *ranking* it predicted is not.
+
+xhigh is temporarily unavailable: `clf_xhigh_total` was deleted and relaunched after the
+preemption, so no epoch is yet shared by all five arms. The earlier xhigh verdict
+(`total`/`aleat` 17-28x worse, epistemic arms tie) stands on the data recorded at 12:20 and will
+be re-derived on the clean run.

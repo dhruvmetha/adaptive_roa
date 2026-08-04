@@ -567,3 +567,51 @@ is that the bias matters *most* late in training, once real disagreement decays 
 0.02 scale. The estimator question is therefore still open — but the mechanism by which `epi_var`
 was expected to win has now failed its first direct test, and the debiased estimator is currently
 the *worse* separator on both predictors.
+
+## 2026-08-04 07:55 — floor established: the epistemic arms genuinely beat random sampling at xhigh
+
+Three seeds of `dir00` (42/43/44) now overlap at epoch 1, giving the first real run-to-run floor.
+Epoch 0 is excluded: all seeds share identical data there by construction, so its spread is
+structurally zero and meaningless as a floor.
+
+| level | metric | seed SD | 2*SD (decision threshold) |
+|---|---|---|---|
+| high  | debiased Brier | 0.00043 | 0.00087 |
+| xhigh | debiased Brier | 0.00023 | 0.00046 |
+| high  | sAUROC | 0.000254 | 0.000508 |
+| xhigh | sAUROC | 0.000033 | 0.000065 |
+
+The floor is far tighter than assumed. **sAUROC gaps vs the non-adaptive control:**
+
+| level | arm | gap @ep1 | gap @ep5 | vs floor |
+|---|---|---|---|---|
+| xhigh | `epi_bald` | **+0.00195** | **+0.00089** | 14-30x floor, POSITIVE |
+| xhigh | `epi_var` | +0.00093 | – | 14x floor, POSITIVE |
+| xhigh | `total` | −0.01004 | – | 154x floor, NEGATIVE |
+| xhigh | `aleat` | −0.00673 | – | 103x floor, NEGATIVE |
+| high | `epi_var` | −0.00129 | – | 2.5x floor, negative |
+| high | `epi_bald` | −0.00205 | −0.00143 | 2.8-4x floor, negative |
+| high | `total` | −0.00380 | – | 7.5x floor, negative |
+
+### Correction to the previous entry
+
+Two entries ago I called "`epi_bald` also edges the non-adaptive control at xhigh" a **weak**
+claim that "the run-to-run floor could absorb". It cannot. The xhigh sAUROC floor is 2*SD =
+0.000065 and the effect is +0.0009 to +0.0020 — 14 to 30 times larger, positive at every epoch
+measured. By this campaign's own stated rule the claim is distinguishable, and my hedge was too
+conservative rather than too aggressive.
+
+So at xhigh the epistemic arms do not merely limit the damage; they **beat random sampling** on
+the metric recalibration cannot repair, while `total` and `aleat` are 100-150x the floor *worse*
+than random.
+
+At high, every adaptive arm is distinguishably worse than the control, but by only 2.5-7.5x the
+floor — an order of magnitude smaller effect than at xhigh, and `epi_var` is the least harmful.
+
+### The floor is still incomplete, and this is the important caveat
+
+It comes from `dir00` replicates, whose data order is fixed, so it measures *training*
+stochasticity only. Adaptive arms additionally vary in which points they acquire, and that
+variance is not captured here. The previous campaign replicated both `dir00` and the adaptive arm
+for exactly this reason. Replicates of `clf_xhigh_epi_bald` are being launched now; until they
+land, the numbers above are compared against a floor that is a lower bound on the true one.

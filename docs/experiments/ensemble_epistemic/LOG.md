@@ -803,3 +803,26 @@ on the fixed code: `clf_{high,xhigh,med,low}_dir00_s{43,44}` and `clf_xhigh_epi_
 **The main arms are unaffected and were not relaunched.** They all ran at `seed=42` with member
 seeds 0..4 — arbitrary but consistent across every arm, so the comparisons between them remain
 valid. Only the floor was broken.
+
+## 2026-08-04 08:50 — the PREVIOUS campaign is NOT affected by the seed bug
+
+Checked, because the retraction above would have propagated to a delivered result if it applied.
+It does not. The previous campaign's per-seed classifier values vary genuinely:
+
+| level / arm | debiased Brier per seed |
+|---|---|
+| med CLF `dir00` | 0.01394, 0.00945, 0.01757 |
+| med CLF `ent10` | 0.01108, 0.01046, 0.01228 |
+| med FM `dir00` | 0.00173, 0.00079, 0.00094 |
+
+Three distinct values per arm, spreads of the order 0.004–0.008 — nothing like the bit-identical
+collapse seen in this campaign's replicates. Whatever seeding path those runs used, it worked.
+
+The bug is specific to `predictor=clf_ensemble`, which routes through
+`BayesianMLPTrainer._run_lightning`'s per-member `torch.manual_seed(bnn.get("seed", 0) + m)`.
+The previous campaign's classifier arms did not use the ensemble predictor, so their global
+`pl.seed_everything(cfg.seed)` was never overridden.
+
+**`docs/stoch_compare/` verdicts stand as delivered** — med-FM, high-FM, med-CLF, high-CLF and
+xhigh-CLF are unaffected. Only this campaign's floor was broken, and only for the ensemble
+classifier.

@@ -189,17 +189,24 @@ def test_final_state_gradients_are_finite_including_a_degenerate_quaternion():
 
 
 def test_prior_sigma_scales_the_prior_term():
+    """Assert the DIFFERENCE against the closed form rather than a direction.
+
+    At small theta the -log(sigma) term dominates the -theta^2/(2 sigma^2) one,
+    so a TIGHTER prior gives a HIGHER log-density -- an inequality here is easy
+    to get backwards. The likelihood term cancels exactly, because log_prob
+    injects the same theta into both nets regardless of their own weights.
+    """
     theta = torch.randn(_outcome().dim) * 0.5
     x = torch.randn(8, 5)
     y = (torch.rand(8) > 0.5).float()
 
-    tight = _outcome(prior_sigma=0.5)
-    loose = _outcome(prior_sigma=5.0)
-    torch.manual_seed(0)
-    # Same weights in both, so only the prior term differs.
-    tight.set_flat(theta)
-    loose.set_flat(theta)
-    assert tight.log_prob(theta, x, y).item() < loose.log_prob(theta, x, y).item()
+    def prior_term(sigma):
+        return (-0.5 * (theta / sigma) ** 2 - math.log(sigma)
+                - 0.5 * math.log(2 * math.pi)).sum().item()
+
+    got = (_outcome(prior_sigma=0.5).log_prob(theta, x, y).item()
+           - _outcome(prior_sigma=5.0).log_prob(theta, x, y).item())
+    assert got == pytest.approx(prior_term(0.5) - prior_term(5.0), rel=1e-5)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**

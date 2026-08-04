@@ -64,18 +64,26 @@ def test_step_size_adapts_toward_the_target_acceptance():
     acceptance and a smaller step size, AND the achieved rate must land near
     the requested target for each of two distinct target_accept values --
     ordering alone would also be satisfied by a mechanism that moves the
-    right way but overshoots or undershoots by a large, uncontrolled amount."""
+    right way but overshoots or undershoots by a large, uncontrolled amount.
+
+    Targets are 0.60/0.85 rather than the ceiling-adjacent 0.95: since
+    accept_rate <= 1.0 always, a band around 0.95 is one-sided in practice
+    (a chain saturating at 1.000 would pass regardless of how well adaptation
+    is actually tracking). n_warmup=1000 (not the sampler's usual few hundred)
+    because jitter adds noise to the dual-averaging signal; even so, the low
+    target carries a measured positive bias -- see the module docstring.
+    """
     lp, glp = _gaussian_target()
-    kw = dict(theta_init=torch.zeros(4), n_samples=400, n_warmup=400,
+    kw = dict(theta_init=torch.zeros(4), n_samples=400, n_warmup=1000,
               n_leapfrog=15, seed=0)
-    low = hmc_chain(lp, glp, target_accept=0.65, **kw)
-    high = hmc_chain(lp, glp, target_accept=0.95, **kw)
+    low = hmc_chain(lp, glp, target_accept=0.60, **kw)
+    high = hmc_chain(lp, glp, target_accept=0.85, **kw)
 
     assert high.accept_rate >= low.accept_rate
     assert high.step_size < low.step_size
     assert low.divergences == 0 and high.divergences == 0
-    assert abs(low.accept_rate - 0.65) < 0.15
-    assert abs(high.accept_rate - 0.95) < 0.15
+    assert abs(low.accept_rate - 0.60) < 0.15
+    assert abs(high.accept_rate - 0.85) < 0.15
 
 
 def test_different_seeds_give_different_chains_and_same_seed_reproduces():

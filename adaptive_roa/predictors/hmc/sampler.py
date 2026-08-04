@@ -17,17 +17,25 @@ digits out of hundreds of draws on an affected seed). Callers sizing
 `n_samples` for a reference chain should budget for this.
 
 Known bias: at low `target_accept` (~0.6), achieved acceptance tends to
-run ~0.10 above the target even after 1000 warmup iterations (measured
-across 50 seeds on a standard Gaussian, mean bias +0.10 at target 0.6 vs.
-+0.02 at target 0.85). Jittering the trajectory length widens the range of
-step sizes that can trigger a hard leapfrog-stability divergence; since a
-divergence only ever pushes the adapted step size down (never up), the
-settled step size skews smaller -- and achieved acceptance correspondingly
-higher -- than the low-target equilibrium alone would imply. The bias
-shrinks at higher targets, where the settled step size sits further from
-the stability boundary. This is a property of jittered dual averaging on
-this class of target, not a tuning defect; it has been measured and
-reported rather than tuned away by widening test tolerances.
+run above the target even after 1000 warmup iterations -- measured mean
+bias +0.10 at target 0.6 vs. +0.026 at target 0.85 (n_samples=200,
+n_warmup=1000, n_leapfrog=15, averaged over seeds 0-19 on a standard
+Gaussian; stable across other 20-seed windows too, +0.10/+0.03 on seeds
+20-39 and 40-59). The mechanism is one-directional by construction:
+jittering the trajectory length widens the range of step sizes that can
+trigger a hard leapfrog-stability divergence, and a divergence only ever
+pushes the adapted step size DOWN -- there is no mechanism that pushes it
+back up in response to a divergence. So the settled step size skews
+smaller, and achieved acceptance correspondingly higher, than the
+low-target equilibrium alone would imply; the effect shrinks at higher
+targets, where the settled step size already sits further from the
+stability boundary from the other direction. This is a property of
+jittered dual averaging on this class of target, not a tuning defect; it
+has been measured and reported (see
+`test_adaptation_calibration_matches_its_documented_bias`) rather than
+tuned away by widening test tolerances. Callers choosing `target_accept`
+for a real run should prefer values well above ~0.6 if calibration
+accuracy (not just direction) matters.
 """
 from __future__ import annotations
 

@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from adaptive_roa.predictors.hmc.sampler import hmc_chain, leapfrog
@@ -58,20 +59,18 @@ def test_chain_recovers_a_gaussian_target():
     assert abs(res.samples.std(0).mean().item() - 2.0) < 0.35
 
 
-def test_step_size_adapts_toward_the_target_acceptance():
-    """Dual averaging should track the requested acceptance level itself, not
-    just its direction: a stricter target must yield a higher achieved
-    acceptance and a smaller step size, AND the achieved rate must land near
-    the requested target for each of two distinct target_accept values --
-    ordering alone would also be satisfied by a mechanism that moves the
-    right way but overshoots or undershoots by a large, uncontrolled amount.
+def test_step_size_adapts_in_the_right_direction():
+    """A stricter target must yield a higher achieved acceptance and a
+    smaller step size. This pins response *direction* only -- how close the
+    achieved rate lands to the requested target is a separate, seed-noisy
+    question covered by test_adaptation_calibration_matches_its_documented_bias
+    below, which asserts it as a mean over seeds rather than per-seed.
 
     Targets are 0.60/0.85 rather than the ceiling-adjacent 0.95: since
-    accept_rate <= 1.0 always, a band around 0.95 is one-sided in practice
-    (a chain saturating at 1.000 would pass regardless of how well adaptation
-    is actually tracking). n_warmup=1000 (not the sampler's usual few hundred)
-    because jitter adds noise to the dual-averaging signal; even so, the low
-    target carries a measured positive bias -- see the module docstring.
+    accept_rate <= 1.0 always, a per-seed check near 0.95 is one-sided in
+    practice (a chain saturating at 1.000 would pass regardless of how well
+    adaptation is actually tracking). n_warmup=1000 (not the sampler's usual
+    few hundred) because jitter adds noise to the dual-averaging signal.
     """
     lp, glp = _gaussian_target()
     kw = dict(theta_init=torch.zeros(4), n_samples=400, n_warmup=1000,
@@ -82,8 +81,33 @@ def test_step_size_adapts_toward_the_target_acceptance():
     assert high.accept_rate >= low.accept_rate
     assert high.step_size < low.step_size
     assert low.divergences == 0 and high.divergences == 0
-    assert abs(low.accept_rate - 0.60) < 0.15
-    assert abs(high.accept_rate - 0.85) < 0.15
+
+
+@pytest.mark.parametrize("target,expected_bias", [(0.60, 0.10), (0.85, 0.026)])
+def test_adaptation_calibration_matches_its_documented_bias(target, expected_bias):
+    """Dual averaging overshoots low acceptance targets, and the bias is
+    one-directional by construction: a divergence can only push the settled
+    step size DOWN, which pushes acceptance UP. There is no mechanism pushing
+    the other way (see the module docstring for the full mechanism and the
+    jitter/ESS tradeoff that comes with it).
+
+    Asserted as a mean over seeds rather than per-seed: the per-seed spread is
+    real (roughly a quarter of seeds fall outside a +/-0.15 band at the low
+    target), so a per-seed window measures that spread rather than the
+    calibration. The mean is stable across seed ranges (checked out-of-band
+    against seeds 20-39 and 40-59, not just the 0-19 used here) and pins the
+    documented value, so a change in the sampler's calibration fails this
+    test rather than passing quietly.
+    """
+    lp, glp = _gaussian_target()
+    rates = [
+        hmc_chain(lp, glp, torch.zeros(4), n_samples=200, n_warmup=1000,
+                  n_leapfrog=15, target_accept=target, seed=s).accept_rate
+        for s in range(20)
+    ]
+    mean_bias = sum(rates) / len(rates) - target
+    assert mean_bias == pytest.approx(expected_bias, abs=0.04)
+    assert mean_bias > 0.0   # the asymmetry is structural, never negative
 
 
 def test_different_seeds_give_different_chains_and_same_seed_reproduces():

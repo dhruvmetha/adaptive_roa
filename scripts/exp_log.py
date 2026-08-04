@@ -69,18 +69,34 @@ def cmd_append(a) -> int:
 
 
 def cmd_update(a) -> int:
+    """Update by job_id when given, else by run_id.
+
+    run_id is NOT unique: a relaunched arm reuses it, so the log holds one record
+    per submission under the same name. Selecting by run_id then rewrites the live
+    record along with the dead ones -- it marked three currently-running arms
+    'superseded'. job_id is the only per-submission identifier, so prefer it
+    whenever a specific attempt is meant.
+    """
     log = Path(a.log)
     recs = _read(log)
-    hit = [r for r in recs if r["run_id"] == a.run_id]
+    if not a.job_id and not a.run_id:
+        print("give --job-id (preferred) or --run-id", file=sys.stderr)
+        return 1
+    if a.job_id:
+        hit = [r for r in recs if str(r.get("job_id")) == str(a.job_id)]
+        label = f"job {a.job_id}"
+    else:
+        hit = [r for r in recs if r["run_id"] == a.run_id]
+        label = a.run_id
     if not hit:
-        print(f"no run with run_id {a.run_id!r} in {log}", file=sys.stderr)
+        print(f"no run matching {label!r} in {log}", file=sys.stderr)
         return 1
     for r in hit:
         r["status"] = a.status
         if a.notes:
             r["notes"] = (r.get("notes", "") + " | " + a.notes).strip(" |")
     _write(log, recs)
-    print(f"{a.run_id} -> {a.status}")
+    print(f"{label} -> {a.status} ({len(hit)} record(s))")
     return 0
 
 
@@ -120,7 +136,9 @@ def main() -> int:
 
     ap_u = sub.add_parser("update-status")
     ap_u.add_argument("--log", required=True)
-    ap_u.add_argument("--run-id", required=True)
+    ap_u.add_argument("--run-id", default="")
+    ap_u.add_argument("--job-id", default="",
+                      help="preferred: run_id repeats across relaunches, job_id does not")
     ap_u.add_argument("--status", required=True)
     ap_u.add_argument("--notes", default="")
     ap_u.set_defaults(func=cmd_update)

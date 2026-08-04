@@ -206,3 +206,33 @@ method — and it is consistent with the high-noise result, where genuine proces
 aleatoric mass that IS separable.
 
 Both readouts remain preliminary: one seed, classifier only, floors still training.
+
+## 2026-08-04 06:55 — selectivity is stable across three consecutive epochs
+
+Selectivity ratio = enrich_epi / enrich_ale, stochastic high noise, classifier, seed 42.
+A ratio > 1 means the arm preferentially acquires epistemic over aleatoric mass.
+
+| arm | ep3 | ep4 | ep5 |
+|---|---|---|---|
+| `epi_bald` | **3.25** | **3.32** | **2.69** |
+| `epi_var`  | 2.08 | 2.33 | 1.50 |
+| `total`    | 1.02 | 0.84 | 1.02 |
+| `aleat`    | 0.57 | 0.53 | 0.69 |
+
+The ordering `epi_bald` > `epi_var` > `total` > `aleat` holds at **every** epoch with no overlap
+between arms. `total` sits at ~1.0 throughout — exactly what acquiring on the sum should do —
+and the negative control is reliably below 1, i.e. it actively anti-selects epistemic mass.
+Three consecutive epochs clears the campaign's two-epoch rule.
+
+**`epi_bald` separates better than `epi_var`, and that is expected here.** For the classifier
+both estimators are exact: `EnsemblePosterior` enumerates members rather than sampling, so K is
+None and there is no finite-K noise for `epi_var`'s correction to remove. The debiasing that
+motivates `epi_var` only buys anything where p_m is MC-estimated — i.e. flow matching at K=20,
+which is still training. So this result does not yet speak to the estimator question the design
+posed; it speaks to the decomposition working at all.
+
+**What this does and does not establish.** It shows the decomposition is mechanically sound: the
+score modes select what they claim to select, in the right order, with the negative control
+inverted. It does NOT show that epistemic acquisition produces a better model — that requires the
+downstream metrics at matched epochs against the run-to-run floor, and those arms and floors are
+still training. Keep the two claims separate in the writeup.

@@ -902,3 +902,48 @@ Both of my earlier positions were wrong in different directions: the original "b
 large effects (`total`/`aleat` harm at xhigh, 18–44x) were always safe. The floor is measured at
 epoch 0 and will likely grow as arms diverge, so the small multiples (0.4–3x) remain provisional;
 the large ones do not.
+
+## 2026-08-04 11:30 — how much does the floor grow with epoch? (measured, not assumed)
+
+My re-tested claims use a floor measured at **epoch 0** against gaps at **epoch 7**, which is the
+weakest link in the analysis. The previous campaign has valid multi-epoch seed replicates, so the
+epoch-dependence can be measured rather than guessed:
+
+| group | SD @ep0 | SD mid | SD @last | trend |
+|---|---|---|---|---|
+| `clf_high_dir00` | 0.00721 | 0.01358 (ep9) | 0.01038 (ep18) | grows ~1.9x |
+| `clf_high_ent10` | 0.00771 | 0.00682 | 0.02074 (ep18) | grows ~2.7x |
+| `clf_med_dir00` | 0.00584 | 0.00053 | 0.00464 | shrinks then recovers |
+| `clf_xhigh_ent10` | 0.00729 (ep8) | 0.00491 | 0.00481 | shrinks |
+| `fm_high_dir00` | 0.00343 | 0.00146 | 0.00049 (ep8) | **shrinks 7x** |
+| `fm_med_ent10` | 0.00318 | 0.00027 | 0.00024 (ep13) | **shrinks 13x** |
+
+Two clean patterns. For **flow matching the floor shrinks sharply** as members converge, so an
+epoch-0 floor is a conservative over-estimate there. For the **classifier it can grow, worst case
+~2.7x** at high noise.
+
+### Which of my claims survive a 3x floor growth
+
+Applying the worst observed CLF growth as a stress test to the epoch-7 results:
+
+| claim | multiple @ep0 floor | @3x floor | survives? |
+|---|---|---|---|
+| xhigh `total` harmful (post-recal) | 28.0x | 9.3x | **yes** |
+| xhigh `aleat` harmful (post-recal) | 31.5x | 10.5x | **yes** |
+| xhigh `total`/`aleat` harmful (sAUROC) | 37-44x | 12-15x | **yes** |
+| xhigh `epi_bald`/`epi_var` ≈ control | 0.4-0.6x | 0.1-0.2x | **yes** (null strengthens) |
+| high `epi_bald` worse post-recal | 11.0x | 3.7x | **yes** |
+| high `epi_var` worse post-recal | 2.9x | 1.0x | **no — becomes marginal** |
+| high `total` worse post-recal | 3.8x | 1.3x | **no — becomes marginal** |
+
+So the headline survives comfortably: at xhigh, `total`/`aleat` do real damage and the epistemic
+arms are indistinguishable from random. The `epi_bald`-hurts-at-high finding also survives. The
+fine-grained ordering *among* arms at high does not, and should not be reported.
+
+### A side observation worth keeping
+
+The previous campaign's CLF floors (SD 0.007-0.02) are ~3x larger than this campaign's
+(SD 0.0024 at high, epoch 0). That is the expected consequence of ensembling: averaging five
+members damps run-to-run variance. It means the ensemble predictor buys tighter reproducibility
+as well as better calibration — and that comparisons in this campaign have more resolving power
+per seed than the previous one did.

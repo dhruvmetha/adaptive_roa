@@ -47,15 +47,48 @@ def test_total_variation_is_zero_for_identical_and_one_for_opposite():
                            torch.tensor([0.0, 1.0])) == pytest.approx(1.0)
 
 
-def test_ceiling_reports_below_one_for_finite_chains():
-    """The ceiling is what an approximation is actually competing against; it is
-    below 1.0 because HMC's own chains differ at finite sample size."""
+def test_ceiling_is_high_for_agreeing_chains_and_low_for_disagreeing_ones():
+    """The ceiling must actually measure inter-chain agreement. Asserting only
+    that it lies in [0, 1] is vacuous -- agreement() is a mean of booleans and
+    cannot leave that range, so a leave-one-out bug comparing a chain against
+    itself would pass unnoticed."""
     torch.manual_seed(0)
-    preds = torch.sigmoid(torch.randn(3, 150, 40))
-    out = hmc_vs_hmc_ceiling(preds)
-    assert set(out) >= {"agreement", "total_variation", "n_chains"}
-    assert 0.0 < out["agreement"] <= 1.0
-    assert out["n_chains"] == 3
+    # Chains sampling the same predictive: agreement should be near 1.
+    tight = torch.sigmoid(torch.randn(1, 200, 60) * 0.3 + 2.0).repeat(3, 1, 1)
+    tight = tight + torch.randn_like(tight) * 0.01
+    out_tight = hmc_vs_hmc_ceiling(tight.clamp(0, 1))
+    assert out_tight["agreement"] > 0.9
+
+    # Chains on opposite sides of the 0.5 decision boundary: agreement must drop.
+    #
+    # Measured (deterministic -- no randomness in this fixture): overall mean
+    # agreement is 2/3, not the <0.6 a naive reading of "1 chain vs. 2" might
+    # suggest. The fold that actually holds out the odd chain (index 0, the
+    # 0.9 chain) reads agreement 0.0 -- complete disagreement, as expected.
+    # But because 0.9 + 0.1 == 1.0 exactly, the other two folds average one
+    # 0.9-chain with one 0.1-chain to exactly 0.5, the decision boundary
+    # itself; floating-point rounding lands that average a hair *below* 0.5
+    # (0.499999...), which happens to fall on the same side as the held-out
+    # 0.1 chain and reads as "agreement" rather than "disagreement". This is
+    # a property of this exact fixture (verified identical in float32 and
+    # float64, so it is a structural artifact of the 0.9/0.1 split summing to
+    # 1.0, not sampling noise) -- not a defect in `agreement`/`hmc_vs_hmc_ceiling`.
+    # It is exactly the case `agreement_min` exists to surface: the mean
+    # (0.667) looks only mildly reduced, but the worst fold (0.0) shows one
+    # chain is in complete disagreement with the rest.
+    split = torch.cat([
+        torch.full((1, 200, 60), 0.9),
+        torch.full((2, 200, 60), 0.1),
+    ], dim=0)
+    out_split = hmc_vs_hmc_ceiling(split)
+    assert set(out_split) >= {
+        "agreement", "agreement_min", "total_variation",
+        "total_variation_max", "n_chains",
+    }
+    assert out_split["agreement"] < 0.7
+    assert out_split["agreement_min"] == pytest.approx(0.0)
+    assert out_split["agreement_min"] < out_split["agreement"]
+    assert out_split["n_chains"] == 3
 
 
 def test_ceiling_needs_at_least_two_chains():

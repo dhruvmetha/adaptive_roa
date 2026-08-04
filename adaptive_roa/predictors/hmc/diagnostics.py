@@ -12,7 +12,24 @@ import torch
 
 
 def function_space_rhat(predictions: torch.Tensor) -> torch.Tensor:
-    """Split-free Gelman-Rubin per point. ``predictions`` is [chains, draws, N]."""
+    """Split-free Gelman-Rubin per point. ``predictions`` is [chains, draws, N].
+
+    Limitation: this is classic location-based Gelman-Rubin, so it is
+    structurally blind to scale mismatch between chains. Four chains sharing
+    a mean but with per-chain variance differing 100-fold still report
+    R-hat ~ 1.0 (verified empirically) -- a chain sampling a much wider
+    region than its siblings (e.g. from a step-size mismatch) would pass
+    this gate unflagged. Rank-normalized or folded R-hat closes that gap if
+    scale mismatches ever need to be caught; this function does not attempt
+    it.
+
+    Edge case: at a query point where every chain has collapsed to an
+    identical constant, both within-chain variance W and between-chain
+    variance B are 0. The `clamp_min(1e-12)` guard on the denominator then
+    makes this point's R-hat read 0.0, not the conventional 1.0 -- harmless
+    against a >1.1 threshold (0.0 never trips it) but worth knowing if this
+    tensor is inspected directly rather than just thresholded.
+    """
     if predictions.shape[0] < 2:
         raise ValueError(
             f"R-hat needs at least 2 chains, got {predictions.shape[0]}"
@@ -42,6 +59,15 @@ def hmc_vs_hmc_ceiling(predictions: torch.Tensor) -> dict:
     This is the ceiling an approximation competes against. Without it, an
     agreement of 0.71 invites comparison against 1.0 when the achievable maximum
     at this sample size may be 0.85.
+
+    Reports both the mean and the worst (min agreement / max total variation)
+    leave-one-out fold, not just the mean. Averaging across folds can dilute a
+    single badly-diverged chain: its low-agreement fold gets blended away by
+    the other, well-agreeing folds, inflating the reported ceiling exactly
+    when the diagnostic most needs to flag trouble. A large gap between
+    `agreement` and `agreement_min` means one chain disagrees with the rest;
+    `agreement_min` (and `total_variation_max`) is the conservative bound to
+    quote when this ceiling is used to judge an approximation's fidelity.
     """
     if predictions.shape[0] < 2:
         raise ValueError(
@@ -56,6 +82,8 @@ def hmc_vs_hmc_ceiling(predictions: torch.Tensor) -> dict:
         tvs.append(total_variation(held, rest_mean))
     return {
         "agreement": float(sum(agreements) / len(agreements)),
+        "agreement_min": float(min(agreements)),
         "total_variation": float(sum(tvs) / len(tvs)),
+        "total_variation_max": float(max(tvs)),
         "n_chains": int(predictions.shape[0]),
     }

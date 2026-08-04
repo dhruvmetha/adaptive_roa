@@ -826,3 +826,28 @@ The previous campaign's classifier arms did not use the ensemble predictor, so t
 **`docs/stoch_compare/` verdicts stand as delivered** — med-FM, high-FM, med-CLF, high-CLF and
 xhigh-CLF are unaffected. Only this campaign's floor was broken, and only for the ensemble
 classifier.
+
+## 2026-08-04 11:00 — FM arms diverge; selectivity ordering holds and the epistemic arms reduce epistemic mass
+
+FM high, first post-divergence epoch (arms now hold different training sets):
+
+| arm | ratio ep0 | ratio ep1 | epi_pool ep0 → ep1 |
+|---|---|---|---|
+| `epi_bald` | 1.87 | **1.87** | 0.01946 → 0.01653 (−15%) |
+| `epi_var` | 1.47 | 1.54 | 0.01946 → **0.01394 (−28%)** |
+| `total` | 0.50 | 0.59 | 0.01946 → 0.02099 (**+8%**) |
+| `aleat` | 0.36 | 0.31 | 0.01946 → 0.01828 (−6%) |
+
+The selectivity ordering `epi_bald` > `epi_var` > `total` > `aleat` is unchanged from epoch 0 and
+matches the classifier, so it now holds across both predictors.
+
+The new signal is the pool trajectory: **the epistemic arms are actually reducing epistemic
+uncertainty in the candidate pool** (−15% and −28%), which is what acquiring on it is supposed to
+achieve, while `total` *increases* it (+8%) and the negative control barely moves it. Notably
+`epi_var` reduces it almost twice as fast as `epi_bald` despite having the lower selectivity
+ratio — consistent with `epi_bald`'s score being 97% constant bias, which inflates its apparent
+selectivity without concentrating the acquisition where genuine disagreement actually lives.
+
+Two caveats. Only two epochs, so this is a direction and not a trend. And `epi_pool` is measured
+per-arm against that arm's own model on its own data, so cross-arm comparison of the *level* is
+confounded — only the within-arm change is meaningful.

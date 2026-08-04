@@ -534,3 +534,36 @@ but both point the same way: genuine member disagreement at epoch 0 is very smal
 estimator is reporting mostly sampling noise while the debiased one is not. This is precisely the
 situation the design predicted for flow matching and did not expect for the classifier, and it
 sets up the estimator comparison the campaign exists to settle.
+
+## 2026-08-04 07:50 — prediction refuted: naive BALD still separates best on FM despite being 97% bias
+
+Last entry predicted that on flow matching `epi_bald` would behave like a mildly
+aleatoric-seeking arm, because 97.3% of its score is finite-K bias. **That prediction is wrong.**
+First FM acquisition, epoch 0 (all arms see identical pre-acquisition data):
+
+| arm | enrich_epi | enrich_ale | ratio |
+|---|---|---|---|
+| `epi_bald` | **3.41** | **1.82** | **1.87** |
+| `epi_var` | 3.39 | 2.31 | 1.47 |
+| `total` | 1.61 | 3.25 | 0.50 |
+| `aleat` | 1.19 | 3.28 | 0.36 |
+
+`epi_bald` has the highest epistemic enrichment *and* the lowest aleatoric enrichment of any arm
+— the opposite of aleatoric-seeking. It also beats `epi_var` on separation (1.87 vs 1.47),
+reproducing the ordering seen on the classifier.
+
+The reason is the half of the design's own analysis I under-weighted when predicting: the bias is
+**near-constant across the interior**, and a constant offset does not reorder points. It inflates
+the *mean* of the score without reordering the ranking, and acquisition only ever uses the
+ranking. So a score can be 97% artefact in magnitude and still select correctly. The design said
+this explicitly — "a near-constant offset does not reorder points *within* the interior" — and
+the concern it actually raised was narrower: that the offset lifts non-deterministic states above
+confidently-decided ones. That specific effect is not visible here either; `epi_bald`'s aleatoric
+enrichment is the lowest of the four.
+
+What this does not yet settle: epoch 0 is the structural minimum for genuine disagreement (all
+members share the same seed-42 data and differ only by initialisation), and the design's argument
+is that the bias matters *most* late in training, once real disagreement decays toward the same
+0.02 scale. The estimator question is therefore still open — but the mechanism by which `epi_var`
+was expected to win has now failed its first direct test, and the debiased estimator is currently
+the *worse* separator on both predictors.

@@ -42,3 +42,16 @@ def test_empty_restriction_means_no_gpus_not_all_gpus():
         # CUDA_VISIBLE_DEVICES="" hides every device; falling back to a device
         # count here would hand members GPUs the parent was explicitly denied.
         assert _device_for_member(0, visible_devices()) in ("", "0")
+
+
+def test_legacy_int_count_still_works():
+    """A parent launched before the signature change passes a COUNT, not a list.
+
+    Every mp.spawn child re-imports this module fresh from disk, so a list-only
+    signature makes already-running parents crash at their next epoch boundary with
+    "object of type 'int' has no len()". That destroyed fm_high_total 13.5 hours
+    into its run. Editing a module that live jobs re-import means the new shape must
+    stay compatible with the old one.
+    """
+    assert [_device_for_member(r, 4) for r in range(5)] == ["0", "1", "2", "3", "0"]
+    assert _device_for_member(0, 0) == ""      # CPU-only, no modulo-by-zero

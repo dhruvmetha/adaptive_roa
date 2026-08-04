@@ -156,6 +156,14 @@ def _device_for_member(rank: int, devices: list[str]) -> str:
     hides all devices, and FlowMatchingTrainer already falls back to the "cpu"
     accelerator when torch.cuda.is_available() is False.
     """
+    # Accept an int as well as a list. Long-running parents started before this
+    # signature changed still pass a device COUNT through the mp.spawn args tuple,
+    # and every child re-imports this module fresh from disk -- so a list-only
+    # signature makes those parents crash at their next epoch boundary with
+    # "object of type 'int' has no len()". That killed fm_high_total 13.5 hours in.
+    # Never let an edit here break a process already running against the old shape.
+    if isinstance(devices, int):
+        devices = [str(i) for i in range(max(devices, 0))]
     if not devices:
         return _CPU_SENTINEL
     return devices[rank % len(devices)]

@@ -1037,3 +1037,31 @@ accurate is its own failure mode.
 This is currently a hypothesis, not a result. It is testable: correlate per-candidate epistemic
 score against |true p − 0.5| on the eval grid at each level. Worth doing before any writeup, since
 it would explain the campaign's single most counterintuitive number.
+
+### Addendum — the puzzle resolves with data already in hand
+
+`epi_bald` selects (near-)argmax of the epistemic score, so the true-p distribution of what it
+picked *is* a readout of where that score peaks:
+
+| level | where epistemic peaks (mean_p of `epi_bald`'s picks) | frac of picks that are near-certain |
+|---|---|---|
+| low | 0.460 | 0.679 |
+| med | 0.207 | 0.593 |
+| high | **0.010** | **0.978** |
+| xhigh | 0.365 | 0.050 |
+
+At high, **97.8% of the highest-epistemic states are near-deterministic** (true p < 0.05 or
+> 0.95). Member disagreement is therefore concentrated where the outcome is essentially certain —
+members differ about *how* close to 0 the probability is, not about which way it goes. At xhigh
+the same score peaks squarely in the ambiguous middle (5% near-certain).
+
+So the failure at high is **not** an acquisition-rule failure. The decomposition faithfully finds
+where the ensemble disagrees; at high noise the ensemble simply disagrees in a useless place. That
+is a property of the fitted model, not of the score, and no choice among `total`/`epi_*`/`aleat`
+can repair it — which is exactly what the downstream metrics show (all four arms equally harmed at
+high).
+
+This makes the campaign's conclusion sharper: epistemic acquisition helps **only when member
+disagreement co-locates with genuine ambiguity**. That held at xhigh and failed at high, and the
+selected-point diagnostic above is the cheap test for whether it holds in any new setting — it
+needs no extra compute, just the `d2_indices` already written every epoch.

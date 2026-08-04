@@ -501,3 +501,36 @@ and differ only by initialisation, so genuine disagreement is at its structural 
 fraction should fall as acquisition differentiates the arms. That it is 97% at epoch 0 is the
 worst case, not the steady state — but it is also exactly the regime where acquisition decisions
 are first being made.
+
+## 2026-08-04 07:44 — decomposition identity verified exactly on real flow-matcher outputs
+
+All four scoring FM arms have now written epoch-0 diagnostics, and because epoch 0 is
+pre-acquisition they see byte-identical data. That makes it a free end-to-end check of the
+implementation:
+
+```
+epistemic (BALD)      0.01945593111927176
+aleatoric             0.19070883102554209
+sum                   0.21016476214481386
+total arm score_mean  0.21016476214481386
+residual                          0.0e+00
+```
+
+`H(p̄) = E_m[H(p_m)] + I(y;m|x)` holds to **exact float precision** on real model outputs, not
+just in unit tests. The `total` arm independently computed the left-hand side while `epi_bald`
+and `aleat` computed the two right-hand terms, and they agree to the last bit. Combined with the
+identical `epi`/`ale` values across all four arms, this re-confirms epoch-0 identity for the FM
+half as well as the classifier half.
+
+The two epistemic estimators on the same data:
+
+| arm | score_mean | note |
+|---|---|---|
+| `epi_bald` | 0.019456 | naive MI; 97.3% is the analytic K=20 bias (0.02000) |
+| `epi_var` | 0.001855 | debiased between-member variance |
+
+The two are in different units (nats vs a variance), so the ratio is not meaningful on its own —
+but both point the same way: genuine member disagreement at epoch 0 is very small, and the naive
+estimator is reporting mostly sampling noise while the debiased one is not. This is precisely the
+situation the design predicted for flow matching and did not expect for the classifier, and it
+sets up the estimator comparison the campaign exists to settle.

@@ -1313,3 +1313,32 @@ at adjacent noise levels, which is why no single arm wins everywhere on the clas
 Caveat unchanged: floors are measured at epochs 1–2 against gaps at epochs 5–7, and the measured
 floor growth on this metric is not yet known (the previous campaign showed CLF floors growing up
 to ~2.7x). The large multiples (13x, 22x, 25x) survive that; the 2–4x ones do not.
+
+## 2026-08-04 12:50 — DETERMINISTIC VERDICT ESTABLISHED (floor now exists)
+
+det floor from three genuinely-distinct seeds: SD 0.00071, **2*SD = 0.00143** at epoch 4
+(3/3 distinct, so the seed fix is confirmed on this level too).
+
+Final epoch (018), gap vs the non-adaptive control in floor units:
+
+| arm | Brier | gap | x floor |
+|---|---|---|---|
+| `aleat` | 0.00090 | −0.00267 | −1.9x |
+| `total` | 0.00094 | −0.00264 | −1.8x |
+| `epi_bald` | 0.00129 | −0.00229 | −1.6x |
+| `epi_var` | 0.00132 | −0.00226 | −1.6x |
+
+**Verdict:** on the deterministic pendulum every adaptive arm beats random sampling by 1.6–1.9x
+the run-to-run floor, and **the differences between them (0.3x) are well inside the floor**. The
+design's validation prediction is confirmed quantitatively: with aleatoric ~ 0 there is nothing to
+separate, so the choice of score does not matter, while adaptive-vs-random does.
+
+This also right-sizes the earlier claim. I reported the adaptive arms as "~4x better Brier" — true
+as a ratio (0.0009 vs 0.0036), but in floor units the effect is 1.6–1.9x, i.e. real but modest.
+The ratio was the more flattering framing; the floor units are the honest one.
+
+**One transient worth recording.** At epoch 4, `aleat` was **+10.7x the floor worse** than the
+control while every other arm already helped — then it recovered to the best arm by epoch 18. A
+single-epoch read at 4 would have called the negative control catastrophic on a deterministic
+system, which the final data contradicts. That is a concrete instance of the campaign rule (never
+call a verdict from one epoch) catching something real, on the only level with a complete curve.

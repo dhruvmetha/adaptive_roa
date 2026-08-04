@@ -50,14 +50,15 @@ All arms distinguishably harmful at two consecutive epochs. **The ordering among
 stable** and is not reported.
 
 ### xhigh (classifier): total entropy does real damage; the epistemic split removes it
-Recorded 2026-08-04 12:20 at two consecutive epochs against a valid floor:
+Re-verified 2026-08-04 14:25 against a **pooled** floor (4 epochs; recal 2×SD = 0.00095),
+at two consecutive epochs:
 
-| arm | ep6 | ep7 |
+| arm | ep7 | ep8 |
 |---|---|---|
-| `total` | +17.4× | +22.5× |
-| `aleat` | +28.1× | +25.3× |
+| `aleat` | +27.2× | +30.9× |
 | `epi_bald` | −0.5× | −0.5× |
-| `epi_var` | −0.6× | −0.3× |
+| `epi_var` | −0.3× | −0.5× |
+| `total` | +17.4× / +22.5× (ep6/7, single-epoch floor; relaunch re-deriving) | – |
 
 Acquiring on total entropy — or on the aleatoric component — is **17–28× the floor worse than
 random sampling**. Acquiring on either epistemic component is **indistinguishable from random**.

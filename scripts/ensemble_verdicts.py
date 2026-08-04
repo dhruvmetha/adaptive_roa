@@ -104,9 +104,36 @@ def verdicts(data, predictor: str, level: str):
     return (floor, n_ep, rows), None
 
 
+def load_det(exp_root: Path, field: str = "brier"):
+    """Deterministic runs, from artifacts_v2.json label metrics.
+
+    The probability metrics cannot cover det at all: they score against a
+    ground-truth p_success estimated from repeated rollouts, and a deterministic
+    system has no such thing (its p is degenerate {0,1}). So det is judged on the
+    label metrics the evaluator already writes. Same floor and stability rules.
+    """
+    import json
+
+    out = collections.defaultdict(dict)
+    for run in sorted(exp_root.glob("clf_det_*")):
+        arm = run.name[len("clf_det_"):]
+        for f in sorted(run.glob("epoch_*/artifacts_v2.json")):
+            try:
+                v = json.load(open(f))["eval_metrics"]["threshold_free"][field]
+                out[("clf", "det", arm)][int(f.parent.name.split("_")[1])] = v
+            except Exception:
+                continue
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--metrics", type=Path, required=True)
+    ap.add_argument("--exp-root", type=Path,
+                    default=Path("/common/users/shared/pracsys/adaptive_roa_experiments/ensemble_epistemic"),
+                    help="run tree, used for the deterministic level (label metrics)")
+    ap.add_argument("--det-field", default="brier",
+                    help="threshold_free field for det: brier (default), log_score, auc")
     ap.add_argument("--metric", default="recal",
                     help="'recal' (UNC-RES, default) or a column such as sAUROC / brier_debiased")
     ap.add_argument("--levels", nargs="*", default=["low", "med", "high", "xhigh"])
@@ -115,6 +142,22 @@ def main() -> None:
 
     data = _load(a.metrics, a.metric)
     print(f"metric: {a.metric}   (pooled floor, 2 consecutive epochs, epoch 0 excluded)\n")
+
+    # det first: different metric source, same rules.
+    if "det" in a.levels or a.levels == ["low", "med", "high", "xhigh"]:
+        det = load_det(a.exp_root, a.det_field)
+        if det:
+            res, why = verdicts(det, "clf", "det")
+            if res is None:
+                print(f"clf det ({a.det_field}): -- {why}\n")
+            else:
+                floor, n_ep, rows = res
+                print(f"clf det ({a.det_field}, label metric): pooled 2*SD = {floor:.5f} over {n_ep} epochs")
+                for arm, eps, gaps, mult, label in rows:
+                    cells = "  ".join(f"ep{e}: {g:+.5f} ({m:+.1f}x)" for e, g, m in zip(eps, gaps, mult))
+                    print(f"   {arm:<10} {cells}   -> {label}")
+                print()
+
     for pred in a.predictors:
         for lvl in a.levels:
             res, why = verdicts(data, pred, lvl)

@@ -1444,3 +1444,27 @@ xhigh is temporarily unavailable: `clf_xhigh_total` was deleted and relaunched a
 preemption, so no epoch is yet shared by all five arms. The earlier xhigh verdict
 (`total`/`aleat` 17-28x worse, epistemic arms tie) stands on the data recorded at 12:20 and will
 be re-derived on the clean run.
+
+## 2026-08-04 13:55 — classifier arms will hit their walltime around epoch 17-18
+
+The Amarel classifier arms were submitted with `--time=1-00:00:00`. At 12:09 elapsed they have
+8-11 epochs done, i.e. ~1.28h per adaptive epoch, so 19 epochs needs ~25h against a 24h limit.
+They will be killed roughly half an hour short.
+
+`scontrol update JobId=... TimeLimit=2-00:00:00` is refused — **a user cannot raise TimeLimit on
+a running job** ("Access/permission denied"). The only fix is submitting with enough walltime,
+which `scripts/ensemble/launch_clf.sh` now does (2 days).
+
+**Impact is acceptable and no action is being taken on the running arms.** Analysis is
+matched-epoch, so all arms converging at ~17 rather than 19 costs one or two epochs of depth and
+nothing else. Relaunching to gain them would discard 12h of completed training across ~15 arms —
+a bad trade.
+
+**Two things to watch as they expire:**
+1. A TIMEOUT kill can leave the final epoch dir partially written. The scoring spec already
+   filters on `full_roa_per_point.npz` existing, so a half-written epoch is skipped rather than
+   silently scored — but that guard is what makes this safe, and it should not be removed.
+2. The arms carry `--requeue`. TIMEOUT does not normally trigger requeue, but if any arm does
+   come back as PENDING it will restart from epoch 0 and overwrite its own results, since the
+   engine has no resume. `check_preempted.sh` section 2 now detects exactly that (PENDING job with
+   epochs already on disk).

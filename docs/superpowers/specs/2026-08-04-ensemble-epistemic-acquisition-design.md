@@ -151,19 +151,35 @@ exact `.2`, "enough to flip decisions near lambda*". K=100, M=5 gives exactly 20
 
 Phase 1: 5 arms × {stoch-high, stoch-xhigh, deterministic-pendulum}, both predictors.
 
-| | per instance | phase 1 |
+The two predictors get deliberately different GPU shapes, because their costs differ by more
+than an order of magnitude:
+
+| | shape | per instance |
 |---|---|---|
-| FM (M=5, one member/GPU, parallel) | 5 arms × 5 GPUs = 25, ~50h | 3 instances |
-| CLF (M=5, members sequential — MLPs are cheap) | 5 arms × 1 GPU = 5, ~30h | 5 instances |
+| FM | one member per GPU, M members in parallel | 5 arms × 5 GPUs = **25**, ~50h |
+| CLF | members sequential within an arm, and 2–3 arms packed per GPU | 5 arms ≈ **2 GPUs**, ~30h |
+
+An MLP member uses little VRAM and its eval is a single forward pass over ~40k points, so
+packing several classifier arms onto one card costs almost nothing (each process holds ~1.6 GB
+of host RAM for the training npz, which is the real constraint). Flow matching gets whole
+GPUs per member — that is where the parallelism actually buys wall-clock.
 
 The classifier extends to all four noise levels plus the deterministic pendulum, giving the
-full noise dose-response cheaply and testing whether the epistemic advantage grows
-monotonically with aleatoric content.
+full noise dose-response for ~10 GPUs total.
 
-Capacity: Amarel ~40 (L40S, ~3× an iLab a4000) + iLab 12 (currently held by the previous
-campaign) + arrakis 4. Westeros contributes **0** — GPU5 is faulted and poisons NVML
-box-wide, stranding 7 healthy cards; worth a sysadmin ticket independently of this work.
-Two FM instances run concurrently, the third follows.
+**Phase 1 runs in waves rather than all at once.** Capacity is Amarel ~40 (L40S, ~3× an iLab
+a4000) + iLab 12 (currently held by the previous campaign) + arrakis 4; westeros contributes
+**0** — GPU5 is faulted and poisons NVML box-wide, stranding 7 healthy cards, which is worth a
+sysadmin ticket independently of this work.
+
+- **Wave A** — the two stochastic FM instances (high, xhigh) at 25 GPUs each, plus all five
+  classifier instances packed onto ~2–3 cards. The classifier finishes first (~30h) and reads
+  out while FM is still training.
+- **Wave B** — the deterministic-pendulum FM instance (25 GPUs), once Wave A frees capacity or
+  the previous campaign's iLab arms complete.
+
+Wave composition is decided at launch against live capacity rather than fixed here; the
+experiment log records what actually ran when.
 
 All phase-1 data is already staged on Amarel: `noisy/pendulum/lqr/{low,med,high,xhigh}` and
 `deterministic/pendulum`.

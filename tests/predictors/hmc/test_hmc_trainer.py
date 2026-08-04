@@ -1,4 +1,5 @@
 import json
+import warnings
 
 import numpy as np
 import pytest
@@ -6,7 +7,12 @@ import torch
 from omegaconf import OmegaConf
 
 from adaptive_roa.adaptive_v2.trainers.bayesian_mlp_trainer import BayesianMLPTrainer
-from adaptive_roa.adaptive_v2.trainers.hmc_trainer import HMCTrainer
+from adaptive_roa.adaptive_v2.trainers.hmc_trainer import (
+    HMCConvergenceError,
+    HMCTrainer,
+    _convergence_warning,
+)
+from adaptive_roa.predictors.heads import FinalStateHead
 from adaptive_roa.systems.cartpole import CartPoleSystem
 
 
@@ -24,12 +30,15 @@ def _write_endpoints(path, n=160, seed=0):
     return str(path)
 
 
-def _cfg(head, **overrides):
+def _cfg(head, run_seed=0, **overrides):
+    """Mirrors the shipped arm configs: NO `predictor.hmc.seed`, so the chains
+    follow the run seed exactly as they do in production."""
     hmc = {"hidden_dims": [8, 8], "activation": "tanh", "prior_sigma": 1.0,
-           "n_chains": 2, "n_samples": 20, "n_warmup": 20, "n_leapfrog": 8, "seed": 0}
+           "n_chains": 2, "n_samples": 20, "n_warmup": 20, "n_leapfrog": 8}
     hmc.update(overrides)
     return OmegaConf.create({
         "device": "cpu",
+        "seed": run_seed,
         "predictor": {"type": "classifier" if head == "outcome" else "generative",
                       "name": "hmc" if head == "outcome" else "hmc_reg",
                       "head": head, "batch_size": 64, "hmc": hmc},
@@ -80,33 +89,81 @@ def test_writes_a_checkpoint_matching_the_engine_glob(head, tmp_path, outcome_fi
     assert list((out / "checkpoints").glob("best*.ckpt"))
 
 
-def test_writes_an_auditable_diagnostics_artifact(outcome_files, tmp_path):
-    """A reference arm whose own convergence cannot be audited is not a reference."""
-    out = tmp_path / "out"
-    HMCTrainer(_cfg("outcome"), CartPoleSystem(), "cartpole_pybullet").fit(
-        outcome_files, str(out)
-    )
+@pytest.mark.parametrize("head", ["outcome", "final_state"])
+def test_writes_an_auditable_diagnostics_artifact(head, tmp_path, outcome_files,
+                                                  endpoint_files):
+    """A reference arm whose own convergence cannot be audited is not a reference.
+
+    Parameterized over BOTH heads. It used to hardcode `outcome`, which is the
+    head that happens to pass: on `final_state` it would have failed on
+    `agreement == 0.0`, and that failure was the visible end of two real defects
+    -- chains that do not mix, and a total-variation "distance" of 3.89 from
+    feeding an unbounded scalar to a function defined on probabilities.
+    """
+    files = outcome_files if head == "outcome" else endpoint_files
+    out = tmp_path / f"out_{head}"
+    with warnings.catch_warnings():   # a non-converged fixture is expected here
+        warnings.simplefilter("ignore", RuntimeWarning)
+        HMCTrainer(_cfg(head), CartPoleSystem(), "cartpole_pybullet").fit(files, str(out))
     d = json.loads((out / "checkpoints" / "hmc_diagnostics.json").read_text())
+
     assert len(d["chains"]) == 2
     for c in d["chains"]:
         assert 0.0 <= c["accept_rate"] <= 1.0
         assert c["step_size"] > 0.0
-        assert "divergences" in c
+        assert c["divergences"] >= 0 and c["warmup_divergences"] >= 0
+        # ESS and lag-1 autocorrelation: the only recorded quantities that can
+        # see a trajectory-length resonance, which reads as full acceptance and
+        # zero divergences while destroying the chain's second moments.
+        assert 0.0 < c["ess"] <= 20.0     # n_samples in _cfg
+        assert -1.0 <= c["acf1"] <= 1.0
+
     assert d["rhat_max"] >= 1.0
-    assert 0.0 < d["ceiling"]["agreement"] <= 1.0
+    assert d["converged"] == (d["rhat_max"] <= d["rhat_threshold"])
+    # The ceiling is defined on PROBABILITIES for both heads: agreement
+    # thresholds at 0.5 and total_variation is a distance in [0, 1].
+    ceiling = d["ceiling"]
+    assert 0.0 <= ceiling["agreement"] <= 1.0
+    assert 0.0 <= ceiling["agreement_min"] <= ceiling["agreement"]
+    assert 0.0 <= ceiling["total_variation"] <= 1.0
+    assert ceiling["total_variation"] <= ceiling["total_variation_max"] <= 1.0
 
 
-def test_reference_tier_pins_pos_weight_and_beta(outcome_files, endpoint_files, tmp_path):
-    """beta-NLL is not a likelihood and pos_weight tempers one, so neither may
-    reach the reference target -- otherwise HMC references a posterior no arm
-    is approximating."""
-    t = HMCTrainer(_cfg("outcome"), CartPoleSystem(), "cartpole_pybullet")
-    t.fit(outcome_files, str(tmp_path / "a"))
-    assert t.pos_weight == 1.0
+@pytest.mark.parametrize("key,value", [("pos_weight", 2.0), ("beta_nll", 0.5),
+                                       ("beta", 0.5)])
+def test_a_tempering_key_is_refused_rather_than_ignored(key, value, outcome_files,
+                                                        tmp_path):
+    """These keys are never read, so accepting one would let a caller believe the
+    reference had been tempered to match an arm when it had not.
 
-    t2 = HMCTrainer(_cfg("final_state"), CartPoleSystem(), "cartpole_pybullet")
-    t2.fit(endpoint_files, str(tmp_path / "b"))
-    assert t2.head.beta == 0.0
+    This replaces an assert that read back a literal assigned two lines above
+    (`self.pos_weight = 1.0; assert self.pos_weight == 1.0`) against an
+    attribute nothing else used. That assert could not fail; this can.
+    """
+    with pytest.raises(ValueError, match="REFERENCE arm"):
+        HMCTrainer(_cfg("outcome", **{key: value}), CartPoleSystem(),
+                   "cartpole_pybullet").fit(outcome_files, str(tmp_path / "out"))
+
+
+def test_the_head_the_handle_serves_is_the_untempered_one(endpoint_files, tmp_path):
+    """beta-NLL multiplies each dim by a detached sigma^(2*beta) and is not a
+    likelihood, so the reference must run at beta=0. Read off the RETURNED
+    HANDLE -- the object that actually scores at serve time -- not off a
+    trainer attribute that exists only to be read back.
+    """
+    handle = HMCTrainer(_cfg("final_state"), CartPoleSystem(), "cartpole_pybullet").fit(
+        endpoint_files, str(tmp_path / "b")
+    )
+    assert handle.head.beta == 0.0
+
+    # Behavioural, not just the attribute: at beta=0 the head's NLL is the plain
+    # Gaussian one, which differs from any beta != 0 reweighting on a fixture
+    # whose sigmas are not all 1.
+    params = torch.randn(16, handle.head.n_params) * 0.5
+    target = torch.randn(16, 4) * 0.3
+    tempered = FinalStateHead(CartPoleSystem(), beta=0.5)
+    assert not torch.allclose(handle.head.nll(params, target),
+                              tempered.nll(params, target))
 
 
 def test_resume_checkpoint_raises_rather_than_being_ignored(outcome_files, tmp_path):
@@ -188,3 +245,102 @@ def test_reference_tier_pos_weight_override_reaches_the_bnn_module(tmp_path):
     assert override_pw == pytest.approx(1.0)
     assert default_pw == pytest.approx(data_derived)
     assert override_pw != pytest.approx(default_pw)
+
+
+#
+# Run-seed plumbing (the reference arm's own run-to-run floor)
+# -----------------------------------------------------------
+# `base_seed = int(hmc_cfg.get("seed", 0))` read `predictor.hmc.seed`, which both
+# shipped arm configs pinned to 0. Every source of randomness in the arm derives
+# from it, so run seeds 42/43/44 produced BIT-IDENTICAL draws and
+# `pl.seed_everything(cfg.seed)` had no effect. For a reference arm that is the
+# worst version of this bug: the reference's own sampling variability is exactly
+# the scale an approximation's gap must be judged against, and it was 0 by
+# construction.
+#
+def test_chain_seed_base_follows_the_run_seed():
+    for seed in (42, 43, 44):
+        t = HMCTrainer(_cfg("outcome", run_seed=seed), CartPoleSystem(),
+                       "cartpole_pybullet")
+        assert t._chain_seed_base() == seed
+
+
+def test_an_explicit_hmc_seed_still_wins():
+    t = HMCTrainer(_cfg("outcome", run_seed=43, seed=7), CartPoleSystem(),
+                   "cartpole_pybullet")
+    assert t._chain_seed_base() == 7
+
+
+def test_different_run_seeds_draw_different_chains(outcome_files, tmp_path):
+    """The behavioural end of it: two run seeds must not produce identical draws."""
+    def samples(seed):
+        out = tmp_path / f"s{seed}"
+        HMCTrainer(_cfg("outcome", run_seed=seed), CartPoleSystem(),
+                   "cartpole_pybullet").fit(outcome_files, str(out))
+        return torch.load(out / "checkpoints" / "best-hmc.ckpt",
+                          map_location="cpu", weights_only=False)["samples"]
+
+    a, b = samples(42), samples(43)
+    assert a.shape == b.shape
+    assert not torch.allclose(a, b), "seed replicates are bit-identical"
+    # Same seed still reproduces exactly.
+    assert torch.equal(a, samples(42))
+
+
+def test_the_shipped_arm_configs_do_not_pin_the_chain_seed():
+    """Pinning `seed` in the arm config is what made the run seed unreachable, so
+    an explicit-wins fallback alone is not enough -- the key must be absent."""
+    for name in ("hmc", "hmc_reg"):
+        cfg = OmegaConf.load(f"configs/adaptive_v2/predictor/{name}.yaml")
+        assert cfg.predictor.hmc.get("seed") is None, (
+            f"{name}.yaml pins predictor.hmc.seed; run seeds cannot reach the chains"
+        )
+
+
+#
+# Convergence gate
+# ----------------
+# `fit()` wrote `rhat_max: 91.4` to hmc_diagnostics.json, returned a
+# normal-looking handle, and flowed into the benchmark. Nothing anywhere read
+# that file (`grep -rn hmc_diagnostics` found only the writer), so a fully
+# diverged reference was indistinguishable from a healthy one.
+#
+def test_the_gate_passes_a_converged_run():
+    assert _convergence_warning(1.02, [{"accept_rate": 0.8, "step_size": 0.03,
+                                        "divergences": 0}], 1.1) is None
+
+
+@pytest.mark.parametrize("rhat_max", [1.19, 26.0, 91.4])
+def test_the_gate_fires_on_the_observed_non_converged_values(rhat_max):
+    """1.19 is the outcome arm at the production budget; 26.0 and 91.4 are the
+    final-state arm at the truncated and production budgets. All three exceed
+    the 1.1 Gelman-Rubin convention and must be flagged."""
+    msg = _convergence_warning(
+        rhat_max,
+        [{"accept_rate": 0.295, "step_size": 4.2e-4, "divergences": 46},
+         {"accept_rate": 0.72, "step_size": 6.9e-4, "divergences": 0}],
+        1.1,
+    )
+    assert msg is not None
+    assert "DID NOT CONVERGE" in msg
+    assert f"{rhat_max:.4g}" in msg
+    assert "46" in msg, "the worst chain's divergence count must be reported"
+
+
+def test_a_non_converged_fit_warns_and_records_it(endpoint_files, tmp_path):
+    """The final-state fixture is the real non-mixing case (rhat_max ~ 26 at this
+    budget). fit() must say so out loud AND leave a machine-readable flag."""
+    out = tmp_path / "out"
+    with pytest.warns(RuntimeWarning, match="DID NOT CONVERGE"):
+        HMCTrainer(_cfg("final_state"), CartPoleSystem(), "cartpole_pybullet").fit(
+            endpoint_files, str(out)
+        )
+    d = json.loads((out / "checkpoints" / "hmc_diagnostics.json").read_text())
+    assert d["converged"] is False
+    assert d["rhat_max"] > d["rhat_threshold"]
+
+
+def test_strict_convergence_refuses_to_return_the_handle(endpoint_files, tmp_path):
+    with pytest.raises(HMCConvergenceError, match="DID NOT CONVERGE"):
+        HMCTrainer(_cfg("final_state", strict_convergence=True), CartPoleSystem(),
+                   "cartpole_pybullet").fit(endpoint_files, str(tmp_path / "out"))

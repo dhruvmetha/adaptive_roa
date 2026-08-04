@@ -13,6 +13,7 @@ from adaptive_roa.adaptive_v2.trainers.hmc_trainer import (
     _convergence_warning,
 )
 from adaptive_roa.predictors.heads import FinalStateHead
+from adaptive_roa.predictors.hmc.sampler import _ess_and_acf1
 from adaptive_roa.systems.cartpole import CartPoleSystem
 
 
@@ -102,20 +103,32 @@ def test_writes_an_auditable_diagnostics_artifact(head, tmp_path, outcome_files,
     """
     files = outcome_files if head == "outcome" else endpoint_files
     out = tmp_path / f"out_{head}"
+    n_samples = 20   # _cfg's budget
     with warnings.catch_warnings():   # a non-converged fixture is expected here
         warnings.simplefilter("ignore", RuntimeWarning)
         HMCTrainer(_cfg(head), CartPoleSystem(), "cartpole_pybullet").fit(files, str(out))
     d = json.loads((out / "checkpoints" / "hmc_diagnostics.json").read_text())
+    samples = torch.load(out / "checkpoints" / "best-hmc.ckpt", map_location="cpu",
+                         weights_only=False)["samples"]
 
     assert len(d["chains"]) == 2
-    for c in d["chains"]:
+    for i, c in enumerate(d["chains"]):
         assert 0.0 <= c["accept_rate"] <= 1.0
         assert c["step_size"] > 0.0
         assert c["divergences"] >= 0 and c["warmup_divergences"] >= 0
-        # ESS and lag-1 autocorrelation: the only recorded quantities that can
-        # see a trajectory-length resonance, which reads as full acceptance and
-        # zero divergences while destroying the chain's second moments.
-        assert 0.0 < c["ess"] <= 20.0     # n_samples in _cfg
+
+        # ESS and lag-1 autocorrelation are the ONLY recorded quantities that
+        # can see a trajectory-length resonance -- it reads as full acceptance
+        # and zero divergences while destroying the chain's second moments. So
+        # they are checked against a recomputation from the chain's own stored
+        # draws, not merely for being in range: a plausible-looking constant
+        # (`ess = n_samples`, `acf1 = 0`) is exactly what a dead field looks
+        # like, and it satisfies any range assertion.
+        chain = samples[i * n_samples:(i + 1) * n_samples]
+        per_dim = [_ess_and_acf1(chain[:, dim] ** 2) for dim in range(chain.shape[1])]
+        assert c["ess"] == pytest.approx(min(e for e, _ in per_dim), rel=1e-9)
+        assert c["acf1"] == pytest.approx(max(a for _, a in per_dim), rel=1e-9)
+        assert 0.0 < c["ess"] <= n_samples
         assert -1.0 <= c["acf1"] <= 1.0
 
     assert d["rhat_max"] >= 1.0

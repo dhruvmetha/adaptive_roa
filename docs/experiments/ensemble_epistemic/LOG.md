@@ -996,3 +996,44 @@ genuinely ambiguous set is half as large, and the epistemic signal does not loca
 representative, balanced sample — which is what random sampling already provides. So parity is
 the *expected* ceiling for this fix, not a disappointment. The value is entirely in avoiding
 `total`'s catastrophic skew, and that is worth 28–44x the run-to-run floor.
+
+## 2026-08-04 11:45 — acquisition quality across ALL levels completes the mechanism (and raises one puzzle)
+
+True `p_success` of the 1000 points each arm acquired, epoch 4, every stochastic level:
+
+| level | arm | mean_p | frac ambiguous | frac decided |
+|---|---|---|---|---|
+| low | `epi_bald` / `epi_var` / `total` / `aleat` | 0.41–0.47 | **0.139–0.149** | 0.68–0.71 |
+| med | all four | 0.21–0.37 | **0.222–0.278** | 0.41–0.59 |
+| high | `epi_bald` | 0.010 | **0.001** | 0.978 |
+| high | `epi_var` | 0.025 | 0.026 | 0.894 |
+| high | `total` / `aleat` | 0.017–0.024 | **0.000** | 0.86–0.94 |
+| xhigh | `epi_bald` | 0.365 | **0.552** | 0.050 |
+| xhigh | `epi_var` | 0.176 | 0.256 | 0.005 |
+| xhigh | `total` / `aleat` | 0.126–0.127 | **0.028–0.037** | 0.004–0.009 |
+
+This confirms the threshold claim from the diagnostics directly, in terms of what was actually
+bought rather than what was scored:
+
+- **low and med**: all four arms acquire near-identically (ambiguous fraction within 0.01 of each
+  other at low) with healthy marginals. Nothing to separate — matching the finding that arms only
+  differentiate above `ale_pool` ~0.1.
+- **xhigh**: only the epistemic arms recover ambiguity (0.55 and 0.26 vs 0.03 for `total`/`aleat`).
+- **high**: every arm collapses to ~0% ambiguous and a marginal of 0.01–0.02.
+
+### The puzzle
+
+**High is worse than xhigh, despite having less noise.** At xhigh `epi_bald` finds 55% ambiguous
+points; at high it finds 0.1% — the worst of any arm at any level. More process noise makes the
+problem *easier* for the epistemic score, which is backwards from the naive expectation.
+
+A plausible reading: at high the classifier is already very accurate (sAUROC 0.98) and the
+surviving member disagreement sits in the far tails — states where p is essentially 0 but members
+disagree about *how* close to 0 — rather than in the genuinely ambiguous middle. At xhigh the
+model is weaker (sAUROC 0.90) and disagreement coincides with real ambiguity. If that is right,
+epistemic acquisition needs the model to be uncertain in the *right region*, and being too
+accurate is its own failure mode.
+
+This is currently a hypothesis, not a result. It is testable: correlate per-candidate epistemic
+score against |true p − 0.5| on the eval grid at each level. Worth doing before any writeup, since
+it would explain the campaign's single most counterintuitive number.

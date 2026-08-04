@@ -947,3 +947,52 @@ The previous campaign's CLF floors (SD 0.007-0.02) are ~3x larger than this camp
 members damps run-to-run variance. It means the ensemble predictor buys tighter reproducibility
 as well as better calibration — and that comparisons in this campaign have more resolving power
 per seed than the previous one did.
+
+## 2026-08-04 11:40 — MECHANISM: at xhigh the epistemic split finds genuinely ambiguous states; total entropy does not
+
+The `d2_indices` recorded per epoch are pool indices, so the true `p_success` of every acquired
+point can be looked up on the eval grid (same method as the previous campaign's
+`acquisition_diagnostics.py`). This is what each arm actually bought:
+
+**xhigh — true p_success of the 1000 acquired points**
+| arm | ep | mean_p | frac ambiguous (0.2<p<0.8) | frac decided |
+|---|---|---|---|---|
+| `epi_bald` | 2 | **0.485** | **0.676** | 0.004 |
+| `epi_bald` | 5 | 0.300 | **0.511** | 0.001 |
+| `epi_var` | 2 | 0.252 | 0.452 | 0.002 |
+| `epi_var` | 5 | 0.210 | 0.311 | 0.001 |
+| `total` | 5 | 0.124 | **0.024** | 0.011 |
+| `aleat` | 5 | 0.125 | **0.030** | 0.002 |
+
+**high — true p_success of the acquired points**
+| arm | ep | mean_p | frac ambiguous | frac decided |
+|---|---|---|---|---|
+| `epi_bald` | 5 | 0.012 | **0.000** | 0.937 |
+| `epi_var` | 5 | 0.014 | 0.000 | 0.946 |
+| `total` | 5 | 0.021 | 0.000 | 0.883 |
+| `aleat` | 5 | 0.020 | 0.000 | 0.908 |
+
+**This is the whole story, and it is causal.**
+
+At **xhigh** `epi_bald` acquires points that are 51–68% genuinely ambiguous with a near-balanced
+marginal (mean_p 0.30–0.49), while `total` and `aleat` acquire 2–3% ambiguous points with a
+marginal crushed to 0.12. The previous campaign diagnosed exactly this pathology — entropy
+acquisition at xhigh scoring *worse than random* on ambiguity (frac 0.269 → 0.080) and dragging
+the training marginal from 0.481 to 0.138. Our `total` arm reproduces it (0.024, 0.124). **The
+epistemic split repairs it**: `epi_bald` recovers the ambiguous fraction by ~20x and restores a
+balanced marginal.
+
+At **high**, *every* arm fails the same way: 0.0% ambiguous, 88–95% near-certain, marginal
+crushed to 0.01–0.02. The epistemic score finds no more ambiguity than total entropy does. That
+is why no arm helps at high, and it explains the otherwise puzzling result that the negative
+control `aleat` is indistinguishable from the others there — at high, all four arms are buying
+the same junk, so there is nothing for the decomposition to separate downstream.
+
+The reason for the difference is the size of the ambiguous region itself: the previous campaign
+measured random sampling hitting 13.3% ambiguous states at high but 26.9% at xhigh. At high the
+genuinely ambiguous set is half as large, and the epistemic signal does not locate it.
+
+**This also explains the "does not beat random" null.** `epi_bald` at xhigh restores a
+representative, balanced sample — which is what random sampling already provides. So parity is
+the *expected* ceiling for this fix, not a disappointment. The value is entirely in avoiding
+`total`'s catastrophic skew, and that is worth 28–44x the run-to-run floor.

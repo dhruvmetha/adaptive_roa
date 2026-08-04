@@ -193,8 +193,16 @@ class BayesianMLPTrainer:
         # `.states` and `.labels` as full in-memory tensors.
         n_train = len(data_module._train)
 
+        # The reference tier pins pos_weight = 1 so every arm targets ONE shared
+        # posterior. Class reweighting tempers the likelihood per class, so an arm
+        # trained under it is not approximating the posterior HMC samples. An
+        # explicit config value therefore overrides the data-derived default.
+        cfg_pos_weight = bnn.get("pos_weight", None)
+        pos_weight = (float(cfg_pos_weight) if cfg_pos_weight is not None
+                      else data_module.pos_weight)
+
         common = dict(
-            system=self.system, pos_weight=data_module.pos_weight,
+            system=self.system, pos_weight=pos_weight,
             lr=float(bnn.get("lr", 1e-3)),
             weight_decay=float(bnn.get("weight_decay", 1e-5)),
             n_train=n_train,

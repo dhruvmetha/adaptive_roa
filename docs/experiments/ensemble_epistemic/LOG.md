@@ -744,3 +744,62 @@ failed replication.
 Floor status: the adaptive-arm replicates (`clf_xhigh_epi_bald_s43/s44`) have created epoch_001
 but not yet written its artifacts, so the adaptive floor is still pending. The headline xhigh
 claim currently rests on the `dir00` floor, which is a lower bound.
+
+## 2026-08-04 08:40 — RETRACTION: the run-to-run floor was invalid, and every significance claim with it
+
+While extending the floor to all noise levels I found that three different seeds produced
+**bit-identical** metrics at med, and that at high, s43 and s44 were bit-identical while s42
+differed. Independent seeds cannot do that.
+
+**Root cause.** `bayesian_mlp_trainer.py:185` seeded members with
+`torch.manual_seed(int(bnn.get("seed", 0)) + m)`. `predictor.bnn.seed` exists in **no** predictor
+config, so it resolved to 0 in every run: members were always seeded 0..M−1 and `seed=43` /
+`seed=44` trained bit-identical ensembles. The engine's `pl.seed_everything(cfg.seed)` does not
+compensate, because this per-member `manual_seed` immediately overrides the global RNG for
+initialisation and shuffling.
+
+The cluster assignments confirm it exactly:
+
+| level | seed 42 | seed 43 | seed 44 | result |
+|---|---|---|---|---|
+| med | amarel | amarel | amarel | all three bit-identical |
+| high | arrakis | ilab | ilab | s43 ≡ s44; s42 differs |
+
+So the only variation between "replicates" was **cross-cluster floating-point nondeterminism**.
+Same cluster → identical to the last bit → an apparent floor of exactly zero.
+
+### What this retracts
+
+Every "distinguishable / within noise" verdict in the entries of 2026-08-04 07:55 and 08:15 is
+**unsupported**. Specifically:
+
+- "the epistemic arms beat random sampling at xhigh by 14–30x the floor" — the floor was
+  hardware noise, not seed noise. The comparison is unmeasured, not confirmed.
+- the `floor 2*SD` column in the dose-response table is meaningless.
+- the correction I made at 07:55 ("my hedge was too conservative") was itself wrong; the original
+  hedge was right for the wrong reason.
+
+**What survives unchanged**, because none of it depends on the floor:
+- the raw and post-recalibration metric *trajectories* and their orderings, which are consistent
+  across 5–6 consecutive epochs;
+- that `epi_bald`'s apparent catastrophe at high is calibration and shrinks 124x under the
+  perfect-recalibration floor;
+- that `total`/`aleat` lose resolution at xhigh while the epistemic arms do not;
+- the selectivity diagnostics and the noise dose-response of *separation*;
+- the deterministic validation case;
+- the FM finite-K bias measurement.
+
+These remain descriptive claims about observed trajectories. They are not significance claims and
+should not be written up as such until a real floor exists.
+
+### Fix and relaunch
+
+`_member_seed_base()` now takes the run seed, with `predictor.bnn.seed` still winning if set
+explicitly (commit 4c7c561, 4 unit tests, full suite green). Code synced to Amarel and verified
+on the far side. All ten replicates cancelled, output dirs deleted on both sides, and relaunched
+on the fixed code: `clf_{high,xhigh,med,low}_dir00_s{43,44}` and `clf_xhigh_epi_bald_s{43,44}`
+(jobs 60199855–60199866).
+
+**The main arms are unaffected and were not relaunched.** They all ran at `seed=42` with member
+seeds 0..4 — arbitrary but consistent across every arm, so the comparisons between them remain
+valid. Only the floor was broken.

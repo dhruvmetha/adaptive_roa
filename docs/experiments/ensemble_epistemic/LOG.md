@@ -460,3 +460,44 @@ gains or loses meaningful discriminative power there.
 Net: the earlier reading that "`epi_bald` is the worst arm at high" was a calibration artifact
 and should not be carried forward. On the component that recalibration cannot repair, `epi_bald`
 is the best arm at xhigh and tied at high.
+
+## 2026-08-04 07:40 — FIRST FM ACQUISITION, and naive BALD is 97% finite-K bias on real models
+
+`fm_high_aleat` completed adaptive epoch 0 and fired the first FM acquisition. The path the
+smoke test was built to de-risk ran clean on real flow matchers: `n_members = 5`,
+`member_sample_size = 20`, 50 000 candidates scored, no errors, no NaN.
+
+The diagnostics deliver the design's central empirical question immediately. `epistemic_mean` is
+computed with **naive, uncorrected** `epistemic_bald` (decomposition.py:115), and on real models
+at K=20, M=5 it reads:
+
+| quantity | value |
+|---|---|
+| analytic finite-K BALD bias, (1/2K)(1−1/M) | 0.02000 |
+| measured `epistemic_mean` on real FM | 0.01946 |
+| **fraction of the measured signal explained by bias alone** | **97.3%** |
+| implied true member disagreement | −0.00054 (i.e. ~0) |
+
+The design predicted this bias analytically and measured it in synthetic trials (0.0206 at
+p=0.5, 40k trials). It now reproduces on real flow matchers to within 3%. **Naive BALD on the FM
+arms is measuring almost pure MC sampling noise, not genuine ensemble disagreement.**
+
+The contrast with the classifier is exact and is the cleanest possible control: the classifier
+enumerates its members (`K = None`, no sampling), so its BALD carries zero finite-K bias, and its
+`epistemic_mean` at high noise reads 0.005–0.008 — real disagreement, five times smaller than the
+FM figure that is almost entirely artefact.
+
+**This is why `epi_var` exists, and the campaign is now positioned to settle it.** A near-constant
++0.02 offset does not reorder points within the interior, but it lifts every non-deterministic
+state above every confidently-decided one regardless of whether members disagree — an
+aleatoric-correlated preference. The prediction is therefore that on FM, `epi_bald` behaves like a
+mildly aleatoric-seeking arm while `epi_var` does not, which is the opposite of what was observed
+on the classifier (where `epi_bald` was the best-separating arm precisely because it is unbiased
+there). The remaining four FM arms are at best-epoch 193/200 and will provide their own
+diagnostics shortly.
+
+Caveat on interpretation: at adaptive epoch 0 all five members train on the *same* seed-42 data
+and differ only by initialisation, so genuine disagreement is at its structural minimum. The bias
+fraction should fall as acquisition differentiates the arms. That it is 97% at epoch 0 is the
+worst case, not the steady state — but it is also exactly the regime where acquisition decisions
+are first being made.

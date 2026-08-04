@@ -1231,3 +1231,39 @@ targets p = 0.5 by construction — is misled hardest, landing on states whose t
 The epistemic scores are less misled because they key on member *disagreement* rather than on the
 absolute probability. It is **not** a verdict on these estimators for a well-calibrated model;
 the FM arms test that and are at epoch 3–4 of 19 with no floor yet.
+
+## 2026-08-04 12:30 — DETERMINISTIC PENDULUM COMPLETE (all 5 arms, 19/19 epochs)
+
+First level to finish. Final epoch (018), label metrics (probability metrics need rollout ground
+truth, which a deterministic system does not have):
+
+| arm | AUC | Brier | log_score | accuracy |
+|---|---|---|---|---|
+| `dir00` (control) | 0.999918 | 0.00358 | 0.01163 | 0.99493 |
+| `aleat` | 0.999995 | **0.00090** | 0.00316 | 0.99924 |
+| `total` | 0.999994 | 0.00094 | 0.00316 | 0.99881 |
+| `epi_bald` | 0.999990 | 0.00129 | 0.00462 | **0.99903** |
+| `epi_var` | 0.999990 | 0.00132 | 0.00442 | 0.99807 |
+
+Gap vs control: every adaptive arm improves Brier by −0.0023 to −0.0027 (a ~4x reduction),
+log score by −0.007 to −0.008, and accuracy by +0.003 to +0.004.
+
+**Two findings:**
+
+1. **Adaptive acquisition clearly helps on a deterministic system**, and by a wide margin — ~4x
+   lower Brier than random sampling. This is the opposite sign to the classifier at high/xhigh
+   noise, completing the dose-response: adaptive helps when there is little aleatoric mass and
+   hurts when aleatoric mass dominates.
+2. **The choice of score barely matters here**, exactly as the design predicted for this
+   validation case. All four adaptive arms land within 1.5x of each other (0.00090–0.00132)
+   against a 4x gap to the control. With aleatoric ~ 0 there is nothing for the decomposition to
+   separate, so the arms converge — which is the intended behaviour, not a null result.
+
+AUC is saturated (0.99999, spread 8e-05) and carries no signal at this level; Brier, log score and
+accuracy are the discriminating metrics.
+
+**Caveat:** `aleat` and `total` are nominally best (0.0009) and the epistemic arms nominally
+behind (0.0013), but **no floor exists for det yet** — its replicates were cancelled during the
+seed-bug cleanup and I missed them in the relaunch. Now running (jobs 60231676/60231677). Until
+they land, the 1.4x spread among adaptive arms is not interpretable; only the 4x adaptive-vs-control
+gap is large enough to be safe on its face.

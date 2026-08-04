@@ -91,6 +91,25 @@ def test_ceiling_is_high_for_agreeing_chains_and_low_for_disagreeing_ones():
     assert out_split["n_chains"] == 3
 
 
+def test_the_ceiling_min_exposes_one_diverged_chain_that_the_mean_hides():
+    """The case agreement_min exists for: three chains agree, one does not.
+
+    Three of four leave-one-out folds compare a well-behaved chain against a
+    rest-mean that the diverged chain only partly shifts, so they still agree and
+    drag the mean up. Only the fold holding out the diverged chain sees it. A mean
+    alone would report a healthy ceiling for a run with a chain that never
+    converged -- which is the failure this diagnostic is supposed to surface.
+    """
+    good = torch.full((3, 200, 60), 0.85)
+    bad = torch.full((1, 200, 60), 0.05)
+    out = hmc_vs_hmc_ceiling(torch.cat([good, bad], dim=0))
+
+    assert out["agreement"] > 0.7          # the mean still looks healthy
+    assert out["agreement_min"] < 0.3      # the worst fold does not
+    assert out["agreement_min"] < out["agreement"] - 0.4
+    assert out["total_variation_max"] > out["total_variation"]
+
+
 def test_ceiling_needs_at_least_two_chains():
     with pytest.raises(ValueError, match="chains"):
         hmc_vs_hmc_ceiling(torch.rand(1, 50, 10))

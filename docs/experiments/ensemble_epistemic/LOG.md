@@ -358,3 +358,60 @@ only whether the epistemic split reduces the damage, and at xhigh it clearly doe
   before then.
 - Effect sizes are large (4x at high) relative to the old campaign's ~0.015 CLF floor, so the
   direction is unlikely to be pure noise — but "unlikely" is not the standard this campaign set.
+
+## 2026-08-04 07:35 — mechanism: the high-noise "failure" is pure miscalibration, and it is the fixable part
+
+Murphy decomposition of the same epoch-5 numbers (Brier = REL - RES + UNC; REL is
+miscalibration, lower better; RES is resolution, higher better):
+
+**high**
+| arm | REL_deb | RES | Brier | sAUROC |
+|---|---|---|---|---|
+| `dir00` | 0.0512 | 0.1896 | 0.0532 | 0.9811 |
+| `total` | 0.1217 | 0.1873 | 0.1265 | 0.9799 |
+| `epi_var` | 0.1541 | 0.1890 | 0.1571 | 0.9809 |
+| `epi_bald` | **0.2257** | 0.1882 | 0.2297 | 0.9797 |
+| `aleat` | 0.1175 | 0.1817 | 0.1277 | 0.9755 |
+
+**xhigh**
+| arm | REL_deb | RES | Brier | sAUROC |
+|---|---|---|---|---|
+| `dir00` | 0.0698 | 0.1322 | 0.0714 | 0.8976 |
+| `total` | 0.1460 | **0.1021** | 0.1779 | 0.8546 |
+| `epi_var` | 0.1159 | 0.1325 | 0.1173 | 0.8977 |
+| `epi_bald` | 0.0787 | 0.1330 | 0.0795 | 0.8984 |
+| `aleat` | 0.1423 | **0.1102** | 0.1661 | 0.8695 |
+
+**At high, RES is identical across every arm** (0.1817-0.1896) and sAUROC is flat
+(0.9755-0.9811), while REL spans 0.051-0.226. The entire Brier spread — including `epi_bald`
+looking like the worst arm — is *miscalibration*. No arm loses any discriminative power.
+
+**At xhigh the damage is different in kind.** `total` and `aleat` lose resolution outright
+(RES 0.102/0.110 against the control's 0.132) *and* calibration, and their sAUROC drops to
+0.855/0.870. The epistemic arms preserve both (RES 0.133, sAUROC 0.898).
+
+### This reverses the apparent conclusion
+
+Judged on a calibration-free metric, `epi_bald` **never hurts and sometimes helps**:
+
+| level | sAUROC: control | `total` | `epi_bald` |
+|---|---|---|---|
+| high  | 0.9811 | 0.9799 | 0.9797 (tied) |
+| xhigh | 0.8976 | 0.8546 | **0.8984** (best, beats control) |
+
+So "epi_bald is the worst arm at high" is true only of calibration, which is the component
+routinely repaired post hoc — and this codebase already fits λ*/δ* and q_hat per epoch.
+Resolution loss is not repairable by recalibration. On that reading the epistemic split does
+exactly what it was designed to do: it protects the *irrecoverable* component at xhigh, where
+acquiring on total entropy destroys it.
+
+The likely mechanism for the calibration hit is covariate shift: concentrating acquisition in a
+narrow epistemically-uncertain region pulls the training marginal away from the evaluation
+marginal, so probabilities are skewed even though the ranking is intact. That is consistent with
+the previous campaign's measurement that scored acquisition dragged the training marginal from
+~41% success to ~5% at high.
+
+**Caveats unchanged and still binding:** one seed per arm, epochs 5-7 of 19, and the run-to-run
+floor is still not available at these epochs (replicates at epoch 3-4). Do not promote any of
+this to a verdict yet. The concrete next test is to compare arms *after* recalibration, which
+would confirm or kill the "calibration is fixable" reading directly.

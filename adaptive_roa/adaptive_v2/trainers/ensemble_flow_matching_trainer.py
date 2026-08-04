@@ -1,0 +1,228 @@
+"""Deep ensemble of flow matchers, trained one member per GPU in parallel.
+
+Members are statistically independent, so training them is embarrassingly
+parallel: M processes, member m pinned to device m, no communication. Wall-clock
+equals a SINGLE member. The sequential loop used for the classifier ensemble
+would be ~M x 50h per arm here, which is why this exists.
+"""
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Any
+
+import torch
+import torch.multiprocessing as mp
+
+from adaptive_roa.adaptive_v2.trainers.flow_matching_trainer import FlowMatchingTrainer
+
+
+class EnsembleFlowMatcherHandle:
+    """M flow matchers behind one object.
+
+    `predict_endpoint` round-robins members EXACTLY rather than sampling one at
+    random. EnsemblePosterior.predictive_logit_samples documents why: a seeded
+    generator produced fixed weights [.125, .281, .109, .234, .250] against an
+    exact .2, "enough to flip decisions near lambda*". A biased marginal is a
+    systematic error, not noise that averages out.
+
+    `predict_endpoint_member` forwards `x` to the member's own `predict_endpoint`
+    UNCHANGED -- it does not embed or normalize. Every concrete flow matcher's
+    `predict_endpoint` (adaptive_roa/flow_matching/base/flow_matcher.py:746)
+    accepts RAW states and does normalization + embedding internally via
+    `_prepare_model_inputs`; the existing single-model caller
+    (adaptive_v2/eval/full_roa.py:740) passes raw batch tensors straight through
+    for the same reason. Reaching past that and pre-embedding here would double
+    -embed and crash with a shape mismatch -- the exact bug Task 2 had on the
+    classifier path, where the ensemble backend skipped
+    `system.embed_state_for_model(system.normalize_state(x))` because it called
+    a raw net-forward instead of the module's own `predict_endpoint`.
+    """
+
+    def __init__(self, members: list):
+        members = list(members)
+        if len(members) < 2:
+            raise ValueError(
+                f"EnsembleFlowMatcherHandle needs at least 2 members, got {len(members)}")
+        self.members = members
+        self._cursor = 0
+
+    @property
+    def n_members(self) -> int:
+        return len(self.members)
+
+    def predict_endpoint_member(self, m: int, x: torch.Tensor, **kw) -> torch.Tensor:
+        if not 0 <= m < len(self.members):
+            raise IndexError(f"member {m} out of range for {len(self.members)} members")
+        return self.members[m].predict_endpoint(x, **kw)
+
+    def predict_endpoint(self, x: torch.Tensor, **kw) -> torch.Tensor:
+        m = self._cursor % len(self.members)
+        self._cursor += 1
+        return self.predict_endpoint_member(m, x, **kw)
+
+    def eval(self):
+        for mem in self.members:
+            if hasattr(mem, "eval"):
+                mem.eval()
+        return self
+
+    def to(self, device):
+        """Required by AdaptiveEngine.run: `model_handle.to(self.device)` is
+        called unconditionally right after `.eval()` for every predictor type
+        (adaptive_v2/engine.py:137-138). Without this, every real epoch would
+        crash with AttributeError before the first acquisition call.
+        """
+        for mem in self.members:
+            if hasattr(mem, "to"):
+                mem.to(device)
+        return self
+
+    # ------------------------------------------------------------------
+    # Manifold-aware error reporting passthroughs.
+    #
+    # adaptive/endpoint_evaluation.py:100,116 (compute_endpoint_prediction_error,
+    # called unconditionally from engine.py:179 for every non-classifier,
+    # non-smoke, eval epoch) calls these two methods on the handle with no
+    # hasattr guard. eval/full_roa.py:760,782,786 additionally checks
+    # hasattr(flow_matcher, "distance_manifold") to decide whether to use
+    # geodesic (circular-aware) distance or fall back to raw Euclidean --
+    # skipping this attribute wouldn't crash there, but it would silently
+    # degrade pendulum/cartpole error reporting to a wrong metric (raw
+    # Euclidean over an angle that wraps at +-pi). All members share the same
+    # system and were built from the same manifold structure, so delegating to
+    # member 0 is exact, not an approximation.
+    # ------------------------------------------------------------------
+
+    @property
+    def distance_manifold(self):
+        return self.members[0].distance_manifold
+
+    def get_manifold_component_names(self) -> list:
+        return self.members[0].get_manifold_component_names()
+
+    def compute_manifold_distance_per_component(
+        self, predicted_endpoints: torch.Tensor, true_endpoints: torch.Tensor
+    ) -> torch.Tensor:
+        return self.members[0].compute_manifold_distance_per_component(
+            predicted_endpoints, true_endpoints
+        )
+
+
+def _train_one_member(rank: int, cfg_blob, system_name: str, dataset_files, out_dir,
+                       resume, seed_base):
+    """Child process: train member `rank` on device `rank`.
+
+    `system_name` is passed explicitly and `system` is rebuilt from `cfg_blob`
+    here rather than pickled across the process boundary: FlowMatchingTrainer
+    requires a real `system_name` string (it looks it up in `_DATAMODULES` and
+    raises otherwise -- see flow_matching_trainer.py:43-44), and every field the
+    flow matcher needs from `system` (bounds, manifold structure, embedding) is
+    fully determined by `cfg.system`, so reconstructing it with
+    `hydra.utils.instantiate` is both correct and mirrors exactly what
+    AdaptiveEngine.__init__ does for the parent process (engine.py:68).
+    """
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(rank)
+    torch.manual_seed(seed_base + rank)
+    import hydra
+    from omegaconf import OmegaConf
+    cfg = OmegaConf.create(cfg_blob)
+    # Each child sees exactly one GPU, so it must address it as device 0.
+    OmegaConf.update(cfg, "predictor.lightning_trainer.devices", 1, force_add=True)
+    system = hydra.utils.instantiate(cfg.system)
+    trainer = FlowMatchingTrainer(cfg, system, system_name)
+    member_dir = Path(out_dir) / f"member_{rank}"
+    member_dir.mkdir(parents=True, exist_ok=True)
+    trainer.fit(dataset_files, str(member_dir), resume_checkpoint=resume)
+
+
+class EnsembleFlowMatchingTrainer:
+    """Trains M flow matchers concurrently and assembles them into one handle."""
+
+    def __init__(self, cfg: Any, system: Any, system_name: str):
+        self.cfg = cfg
+        self.system = system
+        self.system_name = system_name
+        self.n_members = int(cfg.predictor.ensemble.n_members)
+        self.seed_base = int(cfg.get("seed", 42))
+
+    def fit(self, dataset_files: dict, output_dir: str,
+            resume_checkpoint: str | None = None):
+        from omegaconf import OmegaConf
+        blob = OmegaConf.to_container(self.cfg, resolve=True)
+        mp.spawn(
+            _train_one_member,
+            args=(blob, self.system_name, dataset_files, output_dir,
+                  resume_checkpoint, self.seed_base),
+            nprocs=self.n_members, join=True,
+        )
+        members = [self._load_member(output_dir, m) for m in range(self.n_members)]
+        return EnsembleFlowMatcherHandle(members)
+
+    def _load_member(self, output_dir: str, m: int):
+        """Reload member m from disk.
+
+        The child process already reloaded its own best checkpoint, but that
+        object cannot cross the process boundary, so the parent reloads from
+        disk using the same path FlowMatchingTrainer.fit uses: glob best*.ckpt
+        and let Lightning reconstruct from the saved hyperparameters.
+        """
+        import glob
+
+        from hydra.utils import get_class
+
+        member_dir = Path(output_dir) / f"member_{m}"
+        ckpts = sorted(glob.glob(str(member_dir / "**" / "best*.ckpt"), recursive=True))
+        if not ckpts:
+            raise FileNotFoundError(
+                f"no best*.ckpt under {member_dir}; member {m} did not finish training. "
+                "Assembling an ensemble from a partially-trained member would report a "
+                "silently wrong epistemic estimate."
+            )
+        cls = get_class(self.cfg.flow_matcher._target_)
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        try:
+            return cls.load_from_checkpoint(ckpts[0], device=device)
+        except Exception as exc:  # mirrors the fallback in FlowMatchingTrainer.fit
+            print(f"Warning: load_from_checkpoint failed for member {m} ({exc}); "
+                  "loading state dict directly")
+            import hydra
+            from omegaconf import OmegaConf
+
+            # Reuse FlowMatchingTrainer's own cfg-navigation (predictor.flow_matching
+            # vs. top-level flow_matching, local vs. global) instead of duplicating
+            # it, so this fallback cannot silently drift from the primary trainer.
+            inner = FlowMatchingTrainer(self.cfg, self.system, self.system_name)
+            flow_matching = inner._flow_matching_cfg
+
+            model = hydra.utils.instantiate(self.cfg.model)
+            flow_matcher_kwargs = {
+                "system": self.system,
+                "model": model,
+                "optimizer": self.cfg.optimizer,
+                "scheduler": self.cfg.scheduler,
+                "model_config": OmegaConf.to_container(self.cfg.model, resolve=True),
+                "latent_dim": flow_matching.latent_dim,
+                "mae_val_frequency": flow_matching.mae_val_frequency,
+                "use_loss_weights": flow_matching.get("use_loss_weights", False),
+                "use_manifold": flow_matching.get("use_manifold", True),
+                "use_log_loss_weights": flow_matching.get("use_log_loss_weights", False),
+                "clamp_noise": flow_matching.get("clamp_noise", True),
+                "zero_latent": flow_matching.get("zero_latent", False),
+                "noise_scale": flow_matching.get("noise_scale", 1.0),
+                "val_error_log_file": None,
+                "_recursive_": False,
+            }
+            if self.system_name == "quadrotor3d":
+                flow_matcher_kwargs["quat_loss_weight"] = flow_matching.get("quat_loss_weight", 1.0)
+            if inner.is_local:
+                flow_matcher_kwargs["sequence_length"] = flow_matching.get("sequence_length", 32)
+                flow_matcher_kwargs["history_length"] = flow_matching.get("history_length", 1)
+
+            flow_matcher = hydra.utils.instantiate(self.cfg.flow_matcher, **flow_matcher_kwargs)
+            ckpt = torch.load(ckpts[0], map_location="cpu", weights_only=False)
+            model_state_dict = {k.replace("model.", ""): v
+                                 for k, v in ckpt["state_dict"].items()
+                                 if k.startswith("model.")}
+            flow_matcher.model.load_state_dict(model_state_dict)
+            return flow_matcher

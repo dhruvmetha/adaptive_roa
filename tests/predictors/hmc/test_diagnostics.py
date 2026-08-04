@@ -61,33 +61,33 @@ def test_ceiling_is_high_for_agreeing_chains_and_low_for_disagreeing_ones():
 
     # Chains on opposite sides of the 0.5 decision boundary: agreement must drop.
     #
-    # Measured (deterministic -- no randomness in this fixture): overall mean
-    # agreement is 2/3, not the <0.6 a naive reading of "1 chain vs. 2" might
-    # suggest. The fold that actually holds out the odd chain (index 0, the
-    # 0.9 chain) reads agreement 0.0 -- complete disagreement, as expected.
-    # But because 0.9 + 0.1 == 1.0 exactly, the other two folds average one
-    # 0.9-chain with one 0.1-chain to exactly 0.5, the decision boundary
-    # itself; floating-point rounding lands that average a hair *below* 0.5
-    # (0.499999...), which happens to fall on the same side as the held-out
-    # 0.1 chain and reads as "agreement" rather than "disagreement". This is
-    # a property of this exact fixture (verified identical in float32 and
-    # float64, so it is a structural artifact of the 0.9/0.1 split summing to
-    # 1.0, not sampling noise) -- not a defect in `agreement`/`hmc_vs_hmc_ceiling`.
-    # It is exactly the case `agreement_min` exists to surface: the mean
-    # (0.667) looks only mildly reduced, but the worst fold (0.0) shows one
-    # chain is in complete disagreement with the rest.
+    # Deliberately 0.9 vs. 0.2, not 0.9 vs. 0.1: 0.9 + 0.1 sums to exactly
+    # 1.0, so a leave-one-out fold that averages one 0.9-chain with one
+    # 0.1-chain lands exactly on the 0.5 decision boundary, and which side
+    # of that boundary the reduction rounds to then depends on dtype and
+    # reduction order (a natively-float64 mean() rounds up through 0.5 here;
+    # a float32 mean() cast up to float64 carries its already-rounded-down
+    # float32 result instead -- same nominal fixture, different outcome).
+    # 0.9 vs. 0.2 keeps every rest-mean comfortably away from 0.5 (0.2, or
+    # (0.9+0.2)/2 = 0.55), so every fold shows genuine disagreement
+    # regardless of dtype or reduction order. Measured: agreement ==
+    # agreement_min == 0.0 -- all three leave-one-out folds disagree, so
+    # this fixture demonstrates "low ceiling", not the mean-dilutes-a-single
+    # bad-fold case (that needs at least one fold that *does* agree, which
+    # requires a 4th, non-adversarial chain to set up without reintroducing
+    # a boundary-adjacent rest-mean).
     split = torch.cat([
         torch.full((1, 200, 60), 0.9),
-        torch.full((2, 200, 60), 0.1),
+        torch.full((2, 200, 60), 0.2),
     ], dim=0)
     out_split = hmc_vs_hmc_ceiling(split)
     assert set(out_split) >= {
         "agreement", "agreement_min", "total_variation",
         "total_variation_max", "n_chains",
     }
-    assert out_split["agreement"] < 0.7
+    assert out_split["agreement"] == pytest.approx(0.0)
     assert out_split["agreement_min"] == pytest.approx(0.0)
-    assert out_split["agreement_min"] < out_split["agreement"]
+    assert out_split["agreement_min"] <= out_split["agreement"]
     assert out_split["n_chains"] == 3
 
 

@@ -5,6 +5,10 @@
 # the one-member-per-GPU treatment later, where parallelism actually buys
 # wall-clock.
 set -u
+# --time=2-00:00:00, not 1 day. At ~1.3h per adaptive epoch a 19-epoch classifier
+# run needs ~25h, so the 1-day limit killed the first wave at epoch 17-18. SLURM
+# will not let a user RAISE TimeLimit on a running job ("Access/permission denied"),
+# so the only fix is to submit with enough walltime in the first place.
 REPO=/home/st1122/Projects/adaptive_roa
 EXP=/scratch/st1122/adaptive_roa/experiments/ensemble_epistemic
 LOG=/common/home/st1122/Projects/adaptive_roa/docs/experiments/ensemble_epistemic/runs.jsonl
@@ -31,7 +35,7 @@ for lvl in high xhigh med low det; do
   for arm in dir00 total epi_var epi_bald aleat; do
     RID="clf_${lvl}_${arm}"
     JID=$(timeout 90 ssh amarel.rutgers.edu "cd $REPO && sbatch --parsable --requeue \
-      -J en_${RID} --time=1-00:00:00 scripts/sbatch_amarel.sh \
+      -J en_${RID} --time=2-00:00:00 scripts/sbatch_amarel.sh \
       $(sys_overrides $lvl) $(arm_overrides $arm) predictor=clf_ensemble \
       seed=42 output_dir=$EXP/${RID}" 2>/dev/null | tail -1)
     if [ -z "$JID" ]; then echo "FAILED to submit $RID"; continue; fi

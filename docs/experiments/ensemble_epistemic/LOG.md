@@ -1267,3 +1267,49 @@ behind (0.0013), but **no floor exists for det yet** — its replicates were can
 seed-bug cleanup and I missed them in the relaunch. Now running (jobs 60231676/60231677). Until
 they land, the 1.4x spread among adaptive arms is not interpretable; only the 4x adaptive-vs-control
 gap is large enough to be safe on its face.
+
+## 2026-08-04 12:40 — CLF dose-response, all levels, VALID floors (supersedes the 08:05 table)
+
+Post-recalibration gap vs the non-adaptive control, in multiples of the seed floor
+(3 distinct seeds of `dir00`, deepest shared epoch >= 1). Negative = better than random.
+|x| > 1 = distinguishable from run-to-run noise.
+
+| level | arm epoch | floor 2*SD | `epi_bald` | `epi_var` | `total` | `aleat` |
+|---|---|---|---|---|---|---|
+| det   | 18 | (floor still running) | −0.0023 raw | −0.0023 raw | −0.0026 raw | −0.0027 raw |
+| low   | 6  | 0.00040 | −0.8x | −0.9x | −1.1x | −1.0x |
+| med   | 5  | 0.00037 | **−2.0x** | −1.1x | **−2.1x** | −1.5x |
+| high  | 7  | 0.00046 | **+13.0x** | +3.4x | +4.5x | −0.6x |
+| xhigh | 7  | 0.00102 | −0.5x | −0.3x | **+22.5x** | **+25.3x** |
+
+**The pattern is non-monotone, and the two high-noise rows are near-inverses of each other.**
+
+- **det / low / med**: adaptive helps or ties, and the score barely matters — all four arms land
+  within ~1x of each other. Consistent with there being no aleatoric mass to separate.
+- **high**: `aleat` is the *only* arm that ties the control (−0.6x); `epi_bald` is the worst by
+  far (+13.0x).
+- **xhigh**: exactly reversed — the epistemic arms tie the control (−0.3 to −0.5x) while `total`
+  and `aleat` are 22–25x the floor worse.
+
+The `high` row now has a mechanism consistent with the curvature finding. All arms acquire
+near-certain states there (0.0–2.6% ambiguous), but they differ in *how far* into the tail they
+go, and harm tracks that depth:
+
+| arm @high | mean_p of picks | post-recal harm |
+|---|---|---|
+| `epi_bald` | 0.012 | +13.0x |
+| `epi_var` | 0.014 | +3.4x |
+| `total` | 0.021 | +4.5x |
+| `aleat` | 0.020 | −0.6x |
+
+BALD's `1/(p(1−p))` weighting drives it furthest into the tail, it produces the most skewed
+training set, and it does the most damage. `aleat` — which targets per-member entropy and so
+prefers p nearer 0.5 — goes least far and does no measurable harm.
+
+So at high the ranking is essentially "how badly does this score distort the training marginal",
+and at xhigh it is "which score can still find ambiguous states at all". Different failure modes
+at adjacent noise levels, which is why no single arm wins everywhere on the classifier.
+
+Caveat unchanged: floors are measured at epochs 1–2 against gaps at epochs 5–7, and the measured
+floor growth on this metric is not yet known (the previous campaign showed CLF floors growing up
+to ~2.7x). The large multiples (13x, 22x, 25x) survive that; the 2–4x ones do not.

@@ -1109,3 +1109,50 @@ poorly-calibrated model puts more mass at extreme p than it should and feeds the
 Flow matching is 7.7x better calibrated than the classifier at high (measured at epoch 0), so if
 calibration drives this, BALD should be markedly less tail-biased on the FM arms. The same
 `d2_indices` diagnostic answers it with no extra compute once FM has a few more epochs.
+
+## 2026-08-04 12:00 — MAJOR CORRECTION: the high-noise collapse is a CLASSIFIER pathology, not a property of the scores
+
+Ran the acquisition-quality diagnostic on the FM arms at the **same** noise level and pool as the
+classifier. The difference is total:
+
+| predictor | arm | ep | mean_p | frac ambiguous | frac decided |
+|---|---|---|---|---|---|
+| **FM** | `aleat` | 1 | 0.516 | **0.798** | 0.003 |
+| **FM** | `total` | 1 | 0.558 | **0.783** | 0.034 |
+| **FM** | `epi_var` | 1 | 0.585 | 0.310 | 0.393 |
+| **FM** | `epi_bald` | 1 | 0.540 | 0.214 | 0.531 |
+| CLF | `total` | 2 | 0.029 | **0.000** | 0.785 |
+| CLF | `aleat` | 2 | 0.032 | **0.000** | 0.739 |
+| CLF | `epi_var` | 2 | 0.031 | 0.004 | 0.773 |
+| CLF | `epi_bald` | 2 | 0.019 | 0.013 | 0.906 |
+
+**On flow matching every arm acquires a balanced marginal (mean_p ~ 0.52-0.59) with 21-80%
+genuinely ambiguous points. On the classifier everything collapses to mean_p ~ 0.02-0.03 and ~0%
+ambiguous.** Same states available to both.
+
+So the "all arms fail at high" result is a **classifier** failure. Its probability estimates are
+distorted enough (7.7x worse Brier than FM at epoch 0) that *every* score — including plain total
+entropy, which is maximised at p = 0.5 by construction — lands on states whose true p is ~0.02.
+The scores are computed on p̄ values that are simply wrong, so no score can select correctly.
+
+This corrects the framing of the previous three entries. "BALD is worse than non-adaptive at high"
+remains true **as measured on this classifier**, but it is not evidence about BALD as a method.
+
+### What survives, and what the FM data adds
+
+The curvature argument still holds and is now visible on a *well-calibrated* predictor: even on
+FM, ordering by ambiguity is `aleat` (0.798) > `total` (0.783) > `epi_var` (0.310) >
+`epi_bald` (0.214). Total entropy peaks at p = 0.5 by construction; BALD peaks where
+`Var/(p(1−p))` is large, i.e. away from 0.5. So the epistemic scores really are systematically
+less drawn to ambiguous states — that part was never a classifier artefact.
+
+But on FM this is no longer obviously a *defect*, and that is the whole premise of the campaign:
+states at p ~ 0.5 under heavy process noise are **irreducibly** uncertain, so `total` and `aleat`
+buying 80% of them may be exactly the waste the epistemic split exists to avoid. Whether
+`epi_bald`'s 53%-decided picks are better or worse than `aleat`'s 80%-ambiguous picks is an
+empirical question that only the FM downstream metrics can answer — and they are not in yet
+(FM is at epoch 3-4 of 19).
+
+**The FM half is therefore the real experiment**, and the classifier half mostly measures how
+badly a miscalibrated model misleads every acquisition rule. That is a useful negative result in
+its own right, but it must not be reported as a verdict on the estimators.

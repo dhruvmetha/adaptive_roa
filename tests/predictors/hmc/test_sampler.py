@@ -1,6 +1,3 @@
-import math
-
-import pytest
 import torch
 
 from adaptive_roa.predictors.hmc.sampler import hmc_chain, leapfrog
@@ -53,20 +50,21 @@ def test_leapfrog_conserves_energy_to_second_order():
 
 
 def test_chain_recovers_a_gaussian_target():
-    torch.manual_seed(0)
     lp, glp = _gaussian_target(sigma=2.0)
     res = hmc_chain(lp, glp, torch.zeros(3), n_samples=800, n_warmup=400,
                     n_leapfrog=20, seed=0)
     assert res.samples.shape == (800, 3)
     assert res.samples.mean(0).abs().max().item() < 0.35
-    assert abs(res.samples.std(0).mean().item() - 2.0) < 0.6
+    assert abs(res.samples.std(0).mean().item() - 2.0) < 0.35
 
 
 def test_step_size_adapts_toward_the_target_acceptance():
-    """Dual averaging should track the requested acceptance, so a stricter
-    target must yield a higher achieved acceptance and a smaller step size.
-    Asserting an absolute band instead pins the target's difficulty, not the
-    adaptation."""
+    """Dual averaging should track the requested acceptance level itself, not
+    just its direction: a stricter target must yield a higher achieved
+    acceptance and a smaller step size, AND the achieved rate must land near
+    the requested target for each of two distinct target_accept values --
+    ordering alone would also be satisfied by a mechanism that moves the
+    right way but overshoots or undershoots by a large, uncontrolled amount."""
     lp, glp = _gaussian_target()
     kw = dict(theta_init=torch.zeros(4), n_samples=400, n_warmup=400,
               n_leapfrog=15, seed=0)
@@ -76,7 +74,8 @@ def test_step_size_adapts_toward_the_target_acceptance():
     assert high.accept_rate >= low.accept_rate
     assert high.step_size < low.step_size
     assert low.divergences == 0 and high.divergences == 0
-    assert 0.3 < low.accept_rate <= 1.0 and 0.3 < high.accept_rate <= 1.0
+    assert abs(low.accept_rate - 0.65) < 0.15
+    assert abs(high.accept_rate - 0.95) < 0.15
 
 
 def test_different_seeds_give_different_chains_and_same_seed_reproduces():
@@ -104,6 +103,30 @@ def test_divergences_are_counted_not_silently_accepted():
                     n_warmup=50, n_leapfrog=20, seed=0)
     assert res.warmup_divergences + res.divergences > 0
     assert torch.isfinite(res.samples).all()
+
+
+def test_persistent_divergences_on_a_pathological_target_are_counted_post_warmup():
+    """Nothing else in this suite asserts divergences > 0 on the post-warmup
+    counter -- it could be hardcoded to 0 and every other test would stay
+    green. Neal's funnel has curvature that varies by orders of magnitude
+    across its neck, so no single global step size (which is all fixed-length
+    HMC ever adapts) is stable everywhere; even a well-adapted chain
+    occasionally diverges when it revisits the neck."""
+    def log_prob(theta):
+        v = theta[0]
+        x = theta[1:]
+        return -0.5 * (v / 3.0) ** 2 - 0.5 * v - 0.5 * (x ** 2 * torch.exp(-v)).sum()
+
+    def grad_log_prob(theta):
+        v = theta[0]
+        x = theta[1:]
+        dv = -v / 9.0 - 0.5 + 0.5 * (x ** 2 * torch.exp(-v)).sum()
+        dx = -x * torch.exp(-v)
+        return torch.cat([dv.reshape(1), dx])
+
+    res = hmc_chain(log_prob, grad_log_prob, torch.zeros(3), n_samples=800,
+                    n_warmup=200, n_leapfrog=20, seed=0)
+    assert res.divergences > 0
 
 
 def test_a_well_behaved_target_produces_no_divergences_after_warmup():

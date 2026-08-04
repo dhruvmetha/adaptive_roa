@@ -21,6 +21,38 @@ class HMCResult:
     accept_rate: float
     divergences: int
     warmup_divergences: int
+    ess: float                 # worst-dimension effective sample size
+    acf1: float                # worst-dimension lag-1 autocorrelation
+
+
+def _ess_and_acf1(x: torch.Tensor) -> tuple:
+    """Effective sample size and lag-1 autocorrelation for a 1D chain, via the
+    integrated autocorrelation time with Geyer's initial positive sequence
+    (stop summing once consecutive lag pairs go negative -- the standard
+    safeguard against noisy long-lag estimates inflating tau).
+    """
+    n = x.numel()
+    if n < 4:
+        return float(n), 0.0
+    xc = x - x.mean()
+    var = (xc ** 2).mean().item()
+    if var <= 0.0:
+        return float(n), 1.0
+
+    def rho(k):
+        return (xc[:-k] * xc[k:]).mean().item() / var
+
+    acf1 = rho(1)
+    tau = 1.0
+    k = 1
+    while k + 1 < n:
+        pair = rho(k) + rho(k + 1)
+        if pair < 0:
+            break
+        tau += 2.0 * pair
+        k += 2
+    ess = n / max(tau, 1e-8)
+    return min(ess, float(n)), acf1
 
 
 def leapfrog(theta: torch.Tensor, momentum: torch.Tensor,
@@ -71,14 +103,14 @@ def find_reasonable_epsilon(log_prob: Callable[[torch.Tensor], torch.Tensor],
     delta = h0 - trial(eps)
     a = 1.0 if delta > math.log(0.5) else -1.0
     for _ in range(100):   # bounded: never spin on a pathological target
-        delta = h0 - trial(eps)
         if not math.isfinite(delta):
             delta = -math.inf
-        if a * delta > a * math.log(0.5):
+        if a * delta <= a * math.log(0.5):
             break
         eps *= 2.0 ** a
         if eps < 1e-10 or eps > 1e10:
             break
+        delta = h0 - trial(eps)
     return eps
 
 
@@ -109,12 +141,24 @@ def hmc_chain(log_prob: Callable[[torch.Tensor], torch.Tensor],
     warmup_divergences = 0
     total = int(n_warmup) + int(n_samples)
 
+    # Jitter the trajectory length each iteration (Neal 2011 Sec 4.2): a fixed
+    # L can resonate with a target's natural oscillation period and make the
+    # chain antithetic (theta -> -theta each step), which looks perfectly
+    # healthy -- full acceptance, zero divergences -- while destroying the
+    # second-moment information the chain exists to produce. Drawing L from
+    # the chain's own generator, independent of the current state, keeps the
+    # Metropolis correction valid.
+    l_low = max(1, int(0.8 * n_leapfrog))
+    l_high = int(1.2 * n_leapfrog) + 1
+
     for t in range(1, total + 1):
         eps = math.exp(log_eps if t <= n_warmup else log_eps_bar)
+        l_t = int(torch.randint(l_low, l_high, (1,), generator=gen,
+                                device=theta.device).item())
         momentum = torch.randn(dim, generator=gen, device=theta.device, dtype=theta.dtype)
 
         current_h = -log_prob(theta) + 0.5 * (momentum ** 2).sum()
-        new_theta, new_mom = leapfrog(theta, momentum, grad_log_prob, eps, n_leapfrog)
+        new_theta, new_mom = leapfrog(theta, momentum, grad_log_prob, eps, l_t)
         new_h = -log_prob(new_theta) + 0.5 * (new_mom ** 2).sum()
 
         delta = (current_h - new_h).item()
@@ -145,10 +189,28 @@ def hmc_chain(log_prob: Callable[[torch.Tensor], torch.Tensor],
         else:
             kept.append(theta.detach().clone())
 
+    samples = torch.stack(kept, dim=0) if kept else torch.empty(0, dim)
+
+    # ESS/ACF on theta**2, not theta: under trajectory-length resonance theta
+    # itself can look artificially well-mixed (it alternates sign every draw,
+    # which is high lag-1 *negative* autocorrelation but not necessarily a low
+    # theta-ESS by the usual estimator) while the variance information theta**2
+    # carries is exactly what gets destroyed. Reported as the worst dimension
+    # so a single badly-mixing coordinate cannot hide behind the others.
+    if samples.shape[0] >= 4:
+        per_dim = [_ess_and_acf1(samples[:, d] ** 2) for d in range(dim)]
+        ess = min(e for e, _ in per_dim)
+        acf1 = min(a for _, a in per_dim)
+    else:
+        ess = float(samples.shape[0])
+        acf1 = 0.0
+
     return HMCResult(
-        samples=torch.stack(kept, dim=0) if kept else torch.empty(0, dim),
+        samples=samples,
         step_size=math.exp(log_eps_bar),
         accept_rate=accepts / max(int(n_samples), 1),
         divergences=divergences,
         warmup_divergences=warmup_divergences,
+        ess=ess,
+        acf1=acf1,
     )

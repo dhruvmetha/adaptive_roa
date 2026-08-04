@@ -118,34 +118,51 @@ class EnsembleFlowMatcherHandle:
 _CPU_SENTINEL = ""
 
 
-def _device_for_member(rank: int, n_visible: int) -> str:
-    """Map ensemble member `rank` onto a CUDA_VISIBLE_DEVICES value.
+def visible_devices() -> list[str]:
+    """The device ids this process may use, as CUDA_VISIBLE_DEVICES understands them.
 
-    Members round-robin across whatever GPUs the parent process can see:
-    `rank % n_visible`. With 5 members and 4 visible GPUs, members 0-3 each
-    get their own card and member 4 wraps back onto device 0 -- balanced
-    (no device gets more than ceil(M / n_visible) members) rather than
-    piling every overflow member onto device 0.
+    Returns the INHERITED id strings when CUDA_VISIBLE_DEVICES is already set, not
+    a 0..n-1 range. That distinction is the whole point: a child that rewrites the
+    variable with an absolute index discards its parent's restriction and lands on
+    physical device 0 regardless of what the parent was given.
 
-    `n_visible` must come from the PARENT process (torch.cuda.device_count()
-    read before CUDA_VISIBLE_DEVICES is narrowed for any child) and be passed
-    in explicitly. Querying it again inside the child, after this function's
-    return value has already been written to CUDA_VISIBLE_DEVICES, would see
-    exactly 1 device and silently pin every subsequent member to device 0.
-
-    n_visible <= 0 (CPU-only machine, or no GPUs visible at all) returns the
-    CPU sentinel "" instead of raising ZeroDivisionError on `rank % 0`;
-    setting CUDA_VISIBLE_DEVICES="" hides all devices from CUDA, and
-    FlowMatchingTrainer already falls back to the "cpu" accelerator when
-    torch.cuda.is_available() is False (flow_matching_trainer.py:191).
+    Under SLURM this is masked -- cgroup device isolation means the allocation's
+    cards ARE 0..n-1 inside the job, so absolute indices happen to be right. On a
+    direct box with no cgroup (arrakis), launching five arms with
+    CUDA_VISIBLE_DEVICES=0..4 put all 25 members on physical GPU 0 at 99% while the
+    other four cards sat idle.
     """
-    if n_visible <= 0:
+    raw = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if raw is not None and raw.strip() != "":
+        return [d.strip() for d in raw.split(",") if d.strip()]
+    return [str(i) for i in range(torch.cuda.device_count())]
+
+
+def _device_for_member(rank: int, devices: list[str]) -> str:
+    """Map ensemble member `rank` onto one of the parent's visible devices.
+
+    Members round-robin over the parent's OWN device ids: `devices[rank % len]`.
+    With 5 members and 4 devices, members 0-3 each get a card and member 4 wraps
+    onto the first -- balanced (no device gets more than ceil(M / n) members)
+    rather than piling every overflow member onto one card.
+
+    `devices` must be captured by the PARENT before any child narrows its own
+    CUDA_VISIBLE_DEVICES. Re-deriving it inside a child, after this function's
+    return value has been written to the environment, would see exactly one device
+    and silently pin every later member to it.
+
+    An empty list (CPU-only machine, or no GPUs visible) returns the CPU sentinel
+    "" rather than raising ZeroDivisionError on `rank % 0`; CUDA_VISIBLE_DEVICES=""
+    hides all devices, and FlowMatchingTrainer already falls back to the "cpu"
+    accelerator when torch.cuda.is_available() is False.
+    """
+    if not devices:
         return _CPU_SENTINEL
-    return str(rank % n_visible)
+    return devices[rank % len(devices)]
 
 
 def _train_one_member(rank: int, cfg_blob, system_name: str, dataset_files, out_dir,
-                       resume, seed_base, n_visible_gpus: int):
+                       resume, seed_base, devices: list[str]):
     """Child process: train member `rank` on its assigned device.
 
     `system_name` is passed explicitly and `system` is rebuilt from `cfg_blob`
@@ -157,12 +174,12 @@ def _train_one_member(rank: int, cfg_blob, system_name: str, dataset_files, out_
     `hydra.utils.instantiate` is both correct and mirrors exactly what
     AdaptiveEngine.__init__ does for the parent process (engine.py:68).
 
-    `n_visible_gpus` is captured by the PARENT (EnsembleFlowMatchingTrainer.fit,
-    via torch.cuda.device_count() before any child narrows its own
-    CUDA_VISIBLE_DEVICES) and threaded through the mp.spawn args tuple -- see
-    _device_for_member's docstring for why re-querying it here would be wrong.
+    `devices` is captured by the PARENT (EnsembleFlowMatchingTrainer.fit, via
+    visible_devices() before any child narrows its own CUDA_VISIBLE_DEVICES) and
+    threaded through the mp.spawn args tuple -- see _device_for_member's docstring
+    for why re-deriving it here would be wrong.
     """
-    os.environ["CUDA_VISIBLE_DEVICES"] = _device_for_member(rank, n_visible_gpus)
+    os.environ["CUDA_VISIBLE_DEVICES"] = _device_for_member(rank, devices)
     torch.manual_seed(seed_base + rank)
     import hydra
     from omegaconf import OmegaConf
@@ -191,14 +208,14 @@ class EnsembleFlowMatchingTrainer:
             resume_checkpoint: str | None = None):
         from omegaconf import OmegaConf
         blob = OmegaConf.to_container(self.cfg, resolve=True)
-        # Read the visible device count HERE, in the parent, before any child
-        # narrows its own CUDA_VISIBLE_DEVICES -- see _device_for_member's
-        # docstring for why the child must not re-query this itself.
-        n_visible_gpus = torch.cuda.device_count()
+        # Capture the visible device IDS here, in the parent, before any child
+        # narrows its own CUDA_VISIBLE_DEVICES. Ids, not a count: a child that
+        # writes back an absolute index discards the parent's restriction.
+        devices = visible_devices()
         mp.spawn(
             _train_one_member,
             args=(blob, self.system_name, dataset_files, output_dir,
-                  resume_checkpoint, self.seed_base, n_visible_gpus),
+                  resume_checkpoint, self.seed_base, devices),
             nprocs=self.n_members, join=True,
         )
         members = [self._load_member(output_dir, m) for m in range(self.n_members)]

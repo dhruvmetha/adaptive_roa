@@ -66,3 +66,21 @@ def test_score_by_mode_dispatches_and_rejects_unknown():
         assert score_by_mode(mode, p, k=20).shape == (2,)
     with pytest.raises(ValueError, match="unknown score mode"):
         score_by_mode("nope", p, k=20)
+
+
+def test_out_of_domain_input_raises_rather_than_returning_nan():
+    with pytest.raises(ValueError, match="probabilities in .0, 1."):
+        binary_entropy(np.array([-0.5, 0.5]))
+    with pytest.raises(ValueError, match="probabilities in .0, 1."):
+        binary_entropy(np.array([0.5, 1.5]))
+
+
+def test_tiny_float_drift_is_absorbed_not_rejected():
+    # values that can arise from averaging/rounding, not from a real bug
+    e = binary_entropy(np.array([-1e-15, 1.0 + 1e-15]))
+    np.testing.assert_allclose(e, 0.0, atol=1e-12)
+
+
+def test_boundaries_remain_exact_after_the_domain_guard():
+    e = binary_entropy(np.array([0.0, 1.0]))
+    assert e[0] == 0.0 and e[1] == 0.0     # exactly, not approximately

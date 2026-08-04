@@ -24,6 +24,7 @@ import numpy as np
 from scipy.special import xlogy
 
 SCORE_MODES: tuple[str, ...] = ("total", "aleatoric", "epistemic_bald", "epistemic_var")
+_DOMAIN_TOL = 1e-9
 
 
 def binary_entropy(p: np.ndarray) -> np.ndarray:
@@ -33,8 +34,22 @@ def binary_entropy(p: np.ndarray) -> np.ndarray:
     clipped. That exactness is load-bearing: the finite-K bias in
     epistemic_bald vanishes at deterministic states and is ~(1/2K)(1-1/M)
     across the interior, and a clipped boundary would blur that distinction.
+
+    Inputs outside [0, 1] by more than _DOMAIN_TOL raise rather than silently
+    returning NaN -- a silent NaN would be dropped by acquisition ranking
+    instead of surfacing the upstream bug that produced it. Drift within
+    tolerance (e.g. from averaging or rounding) is absorbed by clipping to
+    exactly [0, 1], which keeps the p=0/p=1 boundaries exact.
     """
     p = np.asarray(p, dtype=np.float64)
+    if p.size and (np.nanmin(p) < -_DOMAIN_TOL or np.nanmax(p) > 1.0 + _DOMAIN_TOL):
+        raise ValueError(
+            f"binary_entropy expects probabilities in [0, 1]; got range "
+            f"[{np.nanmin(p)!r}, {np.nanmax(p)!r}]. Out-of-domain input means an "
+            "upstream bug, and xlogy would return a silent NaN that acquisition "
+            "ranking drops without complaint."
+        )
+    p = np.clip(p, 0.0, 1.0)   # absorb drift within tolerance only; boundaries stay exact
     return -(xlogy(p, p) + xlogy(1.0 - p, 1.0 - p))
 
 

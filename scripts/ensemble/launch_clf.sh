@@ -33,7 +33,7 @@ for lvl in high xhigh med low det; do
     JID=$(timeout 90 ssh amarel.rutgers.edu "cd $REPO && sbatch --parsable --requeue \
       -J en_${RID} --time=1-00:00:00 scripts/sbatch_amarel.sh \
       $(sys_overrides $lvl) $(arm_overrides $arm) predictor=clf_ensemble \
-      seed=42 predictor.lightning_trainer.enable_progress_bar=false output_dir=$EXP/${RID}" 2>/dev/null | tail -1)
+      seed=42 output_dir=$EXP/${RID}" 2>/dev/null | tail -1)
     if [ -z "$JID" ]; then echo "FAILED to submit $RID"; continue; fi
     "$LOCAL/env/bin/python" "$LOCAL/scripts/exp_log.py" append --log "$LOG" \
       --run-id "$RID" --system "$( [ "$lvl" = det ] && echo pendulum || echo pendulum_stoch )" \

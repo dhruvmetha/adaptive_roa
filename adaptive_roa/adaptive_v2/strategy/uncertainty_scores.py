@@ -41,25 +41,60 @@ def binary_entropy(p: np.ndarray) -> np.ndarray:
     tolerance (e.g. from averaging or rounding) is absorbed by clipping to
     exactly [0, 1], which keeps the p=0/p=1 boundaries exact.
     """
-    p = np.asarray(p, dtype=np.float64)
-    if p.size and (np.nanmin(p) < -_DOMAIN_TOL or np.nanmax(p) > 1.0 + _DOMAIN_TOL):
-        raise ValueError(
-            f"binary_entropy expects probabilities in [0, 1]; got range "
-            f"[{np.nanmin(p)!r}, {np.nanmax(p)!r}]. Out-of-domain input means an "
-            "upstream bug, and xlogy would return a silent NaN that acquisition "
-            "ranking drops without complaint."
-        )
-    p = np.clip(p, 0.0, 1.0)   # absorb drift within tolerance only; boundaries stay exact
+    p = _validate_probabilities(p, "binary_entropy")
     return -(xlogy(p, p) + xlogy(1.0 - p, 1.0 - p))
 
 
+def _validate_probabilities(p: np.ndarray, caller: str) -> np.ndarray:
+    """Reject non-probabilities loudly, then absorb sub-tolerance drift.
+
+    Both halves are load-bearing, and for the same reason: `select_greedy` skips
+    non-finite scores, so anything that reaches ranking as NaN removes candidates
+    from acquisition without raising. An arm can therefore degrade to
+    partially-non-adaptive and still report a full run.
+
+    NaN is checked explicitly because `np.nanmin`/`np.nanmax` ignore it by
+    construction -- a range check alone passes NaN straight through to xlogy,
+    which propagates it. Clipping is applied only after the check, so it absorbs
+    float drift from averaging without ever masking a real out-of-domain value,
+    and leaves the p=0/p=1 boundaries exact.
+    """
+    p = np.asarray(p, dtype=np.float64)
+    if not p.size:
+        return p
+    if np.isnan(p).any():
+        raise ValueError(
+            f"{caller} received NaN probabilities ({int(np.isnan(p).sum())} of "
+            f"{p.size}). This means an upstream bug -- most likely a diverged "
+            "ensemble member -- and NaN scores are silently dropped by "
+            "acquisition ranking rather than surfacing it."
+        )
+    lo, hi = float(p.min()), float(p.max())
+    if lo < -_DOMAIN_TOL or hi > 1.0 + _DOMAIN_TOL:
+        raise ValueError(
+            f"{caller} expects probabilities in [0, 1]; got range [{lo!r}, {hi!r}]. "
+            "Out-of-domain input means an upstream bug, and the resulting score "
+            "would be either a silent NaN or a spuriously large finite value that "
+            "ranks first."
+        )
+    return np.clip(p, 0.0, 1.0)
+
+
 def _check(p_members: np.ndarray) -> np.ndarray:
+    """Shape/member validation plus the same domain guard every mode needs.
+
+    The domain check lives here, not only in `binary_entropy`, because
+    `epistemic_variance` never calls `binary_entropy`. Without it the
+    `epistemic_var` arm -- the flagship one -- was the single unguarded mode:
+    p_members = [[5.0], [7.0]] would return a large finite score and rank first
+    instead of raising.
+    """
     p = np.asarray(p_members, dtype=np.float64)
     if p.ndim != 2:
         raise ValueError(f"p_members must be [M, N], got shape {p.shape}")
     if p.shape[0] < 2:
         raise ValueError(f"need >= 2 members to separate epistemic, got {p.shape[0]}")
-    return p
+    return _validate_probabilities(p, "score_by_mode")
 
 
 def total_uncertainty(p_members: np.ndarray) -> np.ndarray:

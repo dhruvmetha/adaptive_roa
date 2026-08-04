@@ -84,3 +84,35 @@ def test_tiny_float_drift_is_absorbed_not_rejected():
 def test_boundaries_remain_exact_after_the_domain_guard():
     e = binary_entropy(np.array([0.0, 1.0]))
     assert e[0] == 0.0 and e[1] == 0.0     # exactly, not approximately
+
+
+def test_nan_raises_rather_than_passing_the_range_check():
+    # np.nanmin/np.nanmax ignore NaN by construction, so a range-only guard lets
+    # NaN through to xlogy and out to acquisition ranking, which drops non-finite
+    # scores silently. A diverged ensemble member must be loud, not invisible.
+    with pytest.raises(ValueError, match="NaN"):
+        binary_entropy(np.array([np.nan, 0.5]))
+    with pytest.raises(ValueError, match="NaN"):
+        binary_entropy(np.array([np.nan]))          # all-NaN: nan < -tol is False
+
+
+def test_every_score_mode_rejects_non_probabilities():
+    # epistemic_variance never calls binary_entropy, so before the guard moved
+    # into _check the epi_var arm was the one unguarded mode: it returned a large
+    # finite score for inputs that are not probabilities, and that score ranks first.
+    bad_domain = np.array([[5.0, 0.1], [7.0, 0.1]])
+    bad_nan = np.array([[np.nan, 0.1], [0.2, 0.1]])
+    for mode in SCORE_MODES:
+        with pytest.raises(ValueError):
+            score_by_mode(mode, bad_domain, k=20)
+        with pytest.raises(ValueError):
+            score_by_mode(mode, bad_nan, k=20)
+
+
+def test_guard_does_not_disturb_the_debiased_estimator():
+    # the guard clips only sub-tolerance drift, so unbiasedness must be untouched
+    rng = np.random.default_rng(0)
+    p_true, k, m = 0.3, 20, 5
+    est = [epistemic_variance(rng.binomial(k, p_true, size=(m, 1)) / k, k)
+           for _ in range(20000)]
+    assert abs(float(np.mean(est))) < 1e-4

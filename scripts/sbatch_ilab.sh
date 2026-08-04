@@ -45,6 +45,18 @@ cd "$REPO"
 # parent blocks in mp.spawn(join=True) -- a silent hang, not a crash.
 export PYTHONNOUSERSITE=1
 
+# Cap per-process thread pools. Without this each torch process opens an OpenMP
+# pool sized to the node's core count (64-96 here). An ensemble FM arm is 5 member
+# processes plus their DataLoader workers, and several arms share a node, so the
+# pools multiply into thousands of threads and members die with
+# "RuntimeError: can't start new thread" -- which surfaces as the misleading
+# "DataLoader worker exited unexpectedly". Killed the dir00 control arm at 15
+# minutes while its three co-tenants survived, so it is load-dependent and would
+# recur at every adaptive epoch's dataloader rebuild. GPU training needs almost no
+# OMP width; the DataLoader workers do the CPU work.
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+
 echo "Node:  $(hostname)"
 echo "GPU:   $(nvidia-smi --query-gpu=name --format=csv,noheader | paste -sd, -)"
 echo "Start: $(date)"

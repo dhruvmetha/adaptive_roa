@@ -58,15 +58,16 @@ def test_forward_sample_is_reproducible_under_a_seeded_generator():
                                post.forward_sample(x, generator=g2))
 
 
-def test_forward_sample_accepts_a_generator_on_the_parameter_device():
-    """Regression pin: forward_sample must draw its index on the SAME device
-    as the posterior's own parameters (mirroring EnsemblePosterior and the
-    generator OutcomeModelHandle constructs via
-    torch.Generator(device=param_device)), not an unconditional CPU draw --
-    a mismatch raises RuntimeError on a CUDA model paired with the CUDA
-    generator the handle hands down. CUDA is unavailable on this machine, so
-    this only exercises the CPU/CPU pairing; see the report for what that
-    does and does not cover."""
+def test_forward_sample_is_reproducible_under_a_same_device_generator():
+    """forward_sample must draw its index on the SAME device as the
+    posterior's own parameters (mirroring EnsemblePosterior and the generator
+    OutcomeModelHandle constructs via torch.Generator(device=param_device)),
+    not an unconditional CPU draw. This CPU test only shows the CPU/CPU
+    pairing is accepted and reproducible -- on this machine `param_device`
+    IS `cpu`, so it cannot distinguish the fix from a hardcoded `device="cpu"`
+    bug. The cross-device case (a CUDA generator against a hardcoded-CPU
+    draw, which raises RuntimeError) cannot be exercised without CUDA; see
+    test_forward_sample_accepts_a_device_matched_generator_on_cuda below."""
     post = _posterior()
     x = torch.randn(6, 4)
     param_device = next(post.parameters()).device
@@ -74,6 +75,20 @@ def test_forward_sample_accepts_a_generator_on_the_parameter_device():
     g2 = torch.Generator(device=param_device).manual_seed(11)
     torch.testing.assert_close(post.forward_sample(x, generator=g1),
                                post.forward_sample(x, generator=g2))
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+def test_forward_sample_accepts_a_device_matched_generator_on_cuda():
+    """The bug this guards: OutcomeModelHandle builds its generator with
+    torch.Generator(device=param_device) (handles.py:62), so on CUDA the index
+    draw receives a CUDA generator. A CPU-pinned randint raises there, and no
+    CPU-only test can see it -- which is how the sibling arms shipped the mirror
+    image of this bug once already.
+    """
+    post = _posterior().to("cuda:0")
+    gen = torch.Generator(device="cuda:0").manual_seed(0)
+    out = post.forward_sample(torch.randn(6, 4, device="cuda:0"), generator=gen)
+    assert torch.isfinite(out).all()
 
 
 def test_predictive_enumerates_the_support_exactly_and_ignores_S():

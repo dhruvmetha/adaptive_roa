@@ -6,7 +6,10 @@ flow-matching arms at epoch 4 of 19. This file holds only what is *currently def
 
 Standard of evidence used throughout: a gap counts only if it exceeds **2×SD of three
 genuinely-distinct seeds** of the same configuration (the run-to-run floor) at **two consecutive
-epochs**. Metrics are reported post-recalibration (`UNC − RES`) — the component recalibration
+epochs**. The floor is **pooled across epochs** (`2·sqrt(mean(var_e))`), not taken from a single
+epoch: with three seeds each epoch's SD has two degrees of freedom, and the deterministic floor
+was measured to vary **15.6×** between epochs — enough to flip a verdict depending on which slice
+was used. Metrics are reported post-recalibration (`UNC − RES`) — the component recalibration
 cannot repair — because raw Brier differences at high noise turned out to be almost entirely
 calibration, which is routinely fixed post hoc.
 
@@ -34,13 +37,13 @@ Every adaptive arm beats random sampling by **1.6–1.9× the floor**, and the s
 (0.3×) is inside the floor. With aleatoric ≈ 0 there is nothing to separate, so the score choice
 does not matter while adaptive-vs-random does. This is the design's validation case, passed.
 
-### low noise is a null
-All four arms sit at −0.8 to −1.0× the floor at two consecutive epochs — indistinguishable from
-random sampling, score irrelevant. Predicted behaviour below the aleatoric threshold.
+### low noise is marginal; med noise is a null
+Against a **pooled** floor (variance averaged across epochs, not one epoch's slice), low sits at
+−0.9 to −1.2× — three of four arms barely over the threshold, in the helping direction — and med
+sits at −0.8 to −0.9×, inside the noise. Neither level shows a score effect.
 
-### med noise: adaptive helps, score irrelevant
-Three of four arms exceed the floor at both epochs (−1.5 to −3.1×), all in the same direction,
-with between-arm spread smaller than the gap to the control.
+*Superseded: med was previously reported as "adaptive helps (−1.5 to −3.1×)" against a
+single-epoch floor. The pooled floor is 3.4× larger and the effect does not survive it.*
 
 ### high noise: every adaptive arm is worse than random
 All arms distinguishably harmful at two consecutive epochs. **The ordering among them is not

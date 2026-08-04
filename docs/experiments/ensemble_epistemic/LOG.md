@@ -41,3 +41,55 @@ iLab's mixed pool at different speeds.
 
 Running (iLab, seed 42, high): epi_var 199892, total 199894, dir00 199895,
 epi_bald 199896, aleat 199897. The 25 CLF arms continue on Amarel and arrakis.
+
+## 2026-08-04 05:00-06:00 — final review, two guard fixes, FM restart
+
+Whole-branch review: **0 Critical, 9 Important, 9 Minor**, 199 tests passing. It
+confirmed directly that the estimators, mode dispatch, eval member-weighting and arm
+configs are correct, and that members are never sampled anywhere.
+
+Fixed and committed (ee40097), then restarted all five FM arms on the fixed code —
+they were still inside adaptive epoch 0, so nothing was lost:
+
+- The domain guard used `np.nanmin`/`np.nanmax`, which ignore NaN, so a NaN
+  probability returned NaN instead of raising. `select_greedy` skips non-finite
+  scores, so one diverged member could have silently emptied an epoch's adaptive
+  batch while the run reported success.
+- `epistemic_variance` never calls `binary_entropy`, so `epi_var` — the flagship
+  arm — was the one unguarded mode. Validation moved into `_check`, covering all four.
+- OMP/MKL thread pools capped in the iLab template. Each torch process opened a pool
+  sized to the node's core count; 5 members x several arms per node exhausted the
+  thread limit and killed the dir00 control arm at 15 minutes with "can't start new
+  thread", surfaced as "DataLoader worker exited unexpectedly". Verified fixed:
+  dir00 v2 passed 16:51 clean.
+
+Also fixed: `predictor.lightning_trainer.enable_progress_bar` is not in the classifier
+config struct, so Hydra rejected it outright. It killed the seed replicate and would
+have killed all four CLF resubmissions. `BayesianMLPTrainer` already hardcodes
+`enable_progress_bar=False`, so the override was redundant as well as invalid.
+
+### Open caveats the analysis must account for (deliberately NOT changed mid-campaign)
+
+- **FM ensemble hardcodes `p_invalid = 0`.** `estimate_members` folds `classify_attractor`'s
+  0 (outside every attractor) into `1 - p`, so `ConfidencePairFilter` classifies high-invalid
+  states as FAILURE and drops them, where the single-model FM kept them UNKNOWN. All five FM
+  arms share this, so **within-campaign comparisons are unaffected**; it makes the FM ensemble
+  non-comparable to the previous single-model FM campaign.
+- **`fm_ensemble.yaml` uses max_epochs 200 vs generative.yaml's 1000** (and adds EarlyStopping
+  min_delta). Again shared by all five arms. It does confound the design's secondary
+  "ensemble-total vs single-total measures pure ensembling" comparison — raising it to 1000
+  would roughly 5x the campaign's runtime, so that comparison is abandoned rather than bought.
+- **`epi_var` is unbiased in the mean but not under argmax.** Its sampling variance is
+  proportional to p(1-p)^2 — largest exactly where aleatoric uncertainty is — so with
+  n_candidates=50000 the selected tail sits ~4 sigma out and, once genuine disagreement decays
+  below that scale, `epi_var` preferentially selects high-p(1-p) states. Check
+  `epistemic_mean_selected` / `aleatoric_mean_selected` (already recorded per epoch) before
+  concluding that `epi_var` ~ `epi_bald` means the BALD bias did not matter.
+- **The FM acquisition path has still never executed.** The smoke test covers CLF only; the
+  arms are inside adaptive epoch 0's member training, so `estimate_members`, `_load_member`
+  and the FM `ConfidencePairFilter` first run on real models in ~a day, on all five arms at
+  once. Highest-value remaining pre-emptive check.
+- Latent, not live: FM warm start is a silent no-op (path mismatch) and would collapse the
+  ensemble if naively fixed, since all members would resume from one checkpoint — guarded only
+  by `warm_start: false`. `K % M == 0` is load-bearing for threshold/calibration and asserted
+  nowhere (currently 10 % 5 and 100 % 5, both fine).

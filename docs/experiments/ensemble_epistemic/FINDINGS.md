@@ -45,9 +45,16 @@ sits at −0.8 to −0.9×, inside the noise. Neither level shows a score effect
 *Superseded: med was previously reported as "adaptive helps (−1.5 to −3.1×)" against a
 single-epoch floor. The pooled floor is 3.4× larger and the effect does not survive it.*
 
-### high noise: every adaptive arm is worse than random
-All arms distinguishably harmful at two consecutive epochs. **The ordering among them is not
-stable** and is not reported.
+### high noise: three of four adaptive arms are worse than random
+`epi_bald`, `epi_var` and `total` all exceed the pooled floor in the harmful direction at two
+consecutive epochs (+3.1× to +12.0×). The negative control `aleat` does **not**: it reads −0.6×
+at one epoch and +2.6× at the next, so it is inconsistent.
+
+Only the *sign* is reportable here. Magnitudes swing between consecutive epochs (`epi_bald`
++12.0× → +4.1×) and **the ordering among arms is not stable** — both are excluded from the claim.
+
+Open question: `aleat` is the least harmful arm at high and the most harmful at xhigh. This
+inversion survives a pooled floor and is unexplained.
 
 ### xhigh (classifier): total entropy does real damage; the epistemic split removes it
 Re-verified 2026-08-04 14:25 against a **pooled** floor (4 epochs; recal 2×SD = 0.00095),

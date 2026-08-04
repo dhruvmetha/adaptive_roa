@@ -1342,3 +1342,39 @@ control while every other arm already helped — then it recovered to the best a
 single-epoch read at 4 would have called the negative control catastrophic on a deterministic
 system, which the final data contradicts. That is a concrete instance of the campaign rule (never
 call a verdict from one epoch) catching something real, on the only level with a complete curve.
+
+## 2026-08-04 12:55 — FM at two consecutive epochs: total entropy is the only arm that hurts
+
+FM high, gap vs the non-adaptive control (negative Brier/recal = helps; positive sAUROC = helps):
+
+| arm | ep | Brier gap | sAUROC gap | post-recal gap |
+|---|---|---|---|---|
+| `epi_bald` | 1 | −0.00265 | **+0.00060** | −0.00042 |
+| `epi_bald` | 2 | −0.00057 | **+0.00029** | −0.00050 |
+| `epi_var` | 1 | −0.00303 | +0.00034 | −0.00083 |
+| `epi_var` | 2 | −0.00043 | +0.00011 | −0.00040 |
+| `aleat` | 1 | −0.00286 | +0.00027 | −0.00091 |
+| `aleat` | 2 | −0.00075 | +0.00019 | −0.00078 |
+| `total` | 1 | −0.00166 | **−0.00031** | −0.00037 |
+| `total` | 2 | −0.00032 | **−0.00018** | −0.00036 |
+
+**Stable across both epochs:**
+1. Every adaptive arm beats the control on Brier — the opposite sign to the classifier at the same
+   noise level, where every arm lost.
+2. **`total` is the worst adaptive arm at both epochs, and the only arm with a negative sAUROC
+   gap** — i.e. the only one that costs discriminative power relative to random sampling. The
+   three others all gain a little.
+
+**Not stable:** the ordering among `epi_bald`, `epi_var` and `aleat` flips between epoch 1 and 2,
+so nothing should be read into which of those three is "best".
+
+Absolute values show why the gaps shrink: the control itself improves fast
+(Brier 0.00454 → 0.00124 between epochs 1 and 2), so the same relative advantage becomes a smaller
+absolute gap.
+
+**No FM floor yet** — `fm_high_dir00_s43` has only epoch 0 scored and `s44` started an hour ago.
+For scale, the previous campaign's *single-model* FM floor was SD 0.00343 at epoch 0, larger than
+every gap above; the ensemble floor should be tighter but is unmeasured. So the direction is
+consistent over two epochs, but **none of these gaps is yet established as distinguishable from
+noise.** The `total`-is-worst pattern is the one to watch, because it is the only claim that is
+consistent on both metrics and both epochs.

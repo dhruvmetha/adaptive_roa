@@ -1576,3 +1576,49 @@ ranking among arms (which I already retracted at 13:25).
 
 low and med are unchanged by the deeper floors: low marginally helping (−1.0 to −1.4x,
 consistently just over threshold), med borderline null. The med retraction stands.
+
+## 2026-08-04 14:45 — testing "harm tracks marginal distortion": holds across levels, FAILS within high
+
+Correlated what each arm bought against how much it hurt, over **112 arm-epochs** spanning all
+four stochastic levels (true `p_success` of the acquired points vs post-recalibration gap):
+
+| relationship | r |
+|---|---|
+| mean_p of picks vs harm | **−0.403** |
+| frac ambiguous picks vs harm | **−0.429** |
+| \|mean_p − 0.5\| (marginal skew) vs harm | **+0.406** |
+
+So across the campaign as a whole, the more an arm drags the training marginal away from balanced,
+the more it hurts — a moderate but consistent relationship, and the unifying mechanism behind the
+dose-response.
+
+**But it does not hold within every level:**
+
+| level | corr(frac ambiguous, harm) | mean_p range |
+|---|---|---|
+| low | +0.065 | 0.215–0.566 |
+| med | −0.163 | 0.176–0.474 |
+| **high** | **+0.259** | **0.008–0.079** |
+| xhigh | **−0.748** | 0.125–0.485 |
+
+Only xhigh shows the effect strongly and in the right direction. At **high the correlation has the
+wrong sign**.
+
+### Retraction
+
+At 12:40 I explained the `high` ordering as "harm tracks how deep into the tail an arm goes —
+BALD's `1/(p(1−p))` weighting drives it furthest and does the most damage", supported by a table
+of four points. **That explanation is not supported.** Across 32 arm-epochs at high the
+correlation is +0.259, i.e. weakly the opposite. The four-point table was a coincidence of the
+epoch I happened to tabulate.
+
+I had already retracted the *ordering* it purported to explain (13:25, when the arms swapped
+places across epochs). The mechanism should have gone with it, and I am withdrawing it now.
+
+**What survives:** the curvature result itself — `BALD ≈ Var/(2·p̄(1−p̄))`, amplifying identical
+disagreement 34.9× at p = 0.01 — is arithmetic, not an empirical claim, and stands. So does the
+observation that at high *every* arm buys near-certain states (0–2.6% ambiguous) while at xhigh
+the epistemic arms recover ambiguity. What does **not** stand is any claim that the small
+differences *between* arms at high are explained by tail depth. At high the arms are compressed
+into mean_p 0.008–0.079 — too narrow a band for the mechanism to discriminate, which is likely why
+the correlation is meaningless there.

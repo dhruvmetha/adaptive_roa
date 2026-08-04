@@ -28,7 +28,11 @@ sync_one() {  # remote_subdir local_subdir delete_flag
           --exclude='*' \
           "$REMOTE/$1/" "$LOCAL/$2/" >/dev/null 2>&1
     n=$(ls -d "$LOCAL/$2"/*/ 2>/dev/null | wc -l)
-    echo "synced $1 -> $LOCAL/$2 ($n runs)${3:+ [mirror]}"
+    # Tag ONLY on --delete. This line is the operator's signal that a destructive
+    # mirror ran; flagging it for any rsync option (e.g. an --exclude) would make a
+    # harmless filter look like a delete.
+    case "$3" in *--delete*) tag=" [mirror, --delete]";; *) tag="";; esac
+    echo "synced $1 -> $LOCAL/$2 ($n runs)$tag"
 }
 
 sync_one stoch_compare       stoch_compare_amarel --delete
@@ -40,4 +44,11 @@ sync_one stoch_compare_seeds stoch_compare_seeds  ""
 #     write to it concurrently. --delete would erase every locally-run arm on the
 #     first sync, because none of them exist on Amarel. Run names do not collide,
 #     so a plain merge is correct.
-sync_one ensemble_epistemic  ensemble_epistemic   ""
+#   fm_xhigh_* EXISTS TWICE. Those arms run on arrakis (writing straight into the
+#     local tree) AND are queued on Amarel under the same run names. Merging the
+#     Amarel copies into the same local directories would interleave two
+#     independent runs inside one arm's curve -- the exact corruption --delete
+#     exists to prevent, arriving by a different route. They are kept apart here
+#     rather than by cancelling either copy, which is the user's call to make.
+sync_one ensemble_epistemic  ensemble_epistemic   "--exclude=fm_xhigh_*"
+sync_one ensemble_epistemic  ensemble_epistemic_amarel_fmxhigh "--include=fm_xhigh_*/*** --exclude=*"

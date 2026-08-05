@@ -1,0 +1,6 @@
+model,task,lambda_star,n_test,base_success_rate,accuracy,f1,auc,accuracy_at_0p5,tp,fp,tn,fn
+rl,reach G1 (rl_success),0.000,48770,0.9976,0.9976,0.9988,0.7841,0.9364,48653,117,0,0
+rl-weak,reach G1 (rl_success),0.005,48770,0.6912,0.9844,0.9888,0.9960,0.9647,33513,561,14498,198
+lqr,upright (roa label),0.405,48770,0.3863,0.9952,0.9938,0.9999,0.9952,18784,178,29752,56
+rl_to_lqr,composition (lqr_success),0.105,48770,0.8109,0.9206,0.9522,0.9150,0.8490,38597,2921,6301,951
+rl-weak_to_lqr,composition (lqr_success),0.205,48770,0.5757,0.9698,0.9740,0.9860,0.9502,27600,992,19699,479

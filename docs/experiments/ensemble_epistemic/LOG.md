@@ -1837,3 +1837,31 @@ seven metrics. That is the one result in this campaign strong enough that no pla
 methodological objection touches it.
 
 low is upgraded from "marginal" to "small but consistent". med and high are unchanged.
+
+## 2026-08-05 01:50 — nine [CLF] arms hit the 24h walltime; data final at 12-15 epochs
+
+The walltime ceiling forecast at 13:55 arrived. Nine arms terminated at exactly 1-00:00:22:
+
+| level | arm | final epochs |
+|---|---|---|
+| xhigh | `dir00` / `epi_bald` / `aleat` | 14 / 15 / 13 |
+| med | `total` / `epi_var` / `aleat` | 13 / 13 / 12 |
+| low | `dir00` / `epi_bald` / `aleat` | 12 / 15 / 14 |
+
+Shallower than the ~17-18 projected, because CPU contention on Amarel grew through the run as
+the restoration jobs started. **TIMEOUT does not requeue**, so unlike the preempted arms these
+will not restart or overwrite — their data is final and clean.
+
+**Impact on results: none in kind, only in depth.** Every `[CLF]` verdict was established at
+epochs 5-10 against floors pooled over 6-7 epochs, and the xhigh headline (7/7 epochs, monotone
+growth, three metric families, seven metrics) sits entirely inside the completed range. No
+conclusion depended on reaching 19.
+
+**Still outstanding on this level:**
+- `clf_xhigh_epi_var`, `clf_med_dir00`, `clf_low_epi_var` — preempted, PENDING, will restart at
+  epoch 0 and overwrite themselves. All three preserved on both sides.
+- `clf_low_total` and `clf_xhigh_total` — clean relaunches, still running.
+- Floor seeds (`low_dir00_s43/s44`, `xhigh_epi_bald_s43/s44`, `high_dir00_s43/s44`) at ~15h,
+  approaching their own 24h limits.
+
+Run statuses reconciled: 9 timeout, 27 running, 5 completed, 7 failed, 45 superseded.

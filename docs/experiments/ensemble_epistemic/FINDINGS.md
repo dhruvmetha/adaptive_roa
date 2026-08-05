@@ -54,8 +54,13 @@ at one epoch and +2.6× at the next, so it is inconsistent.
 Only the *sign* is reportable here. Magnitudes swing between consecutive epochs (`epi_bald`
 +12.0× → +4.1×) and **the ordering among arms is not stable** — both are excluded from the claim.
 
-Open question: `aleat` is the least harmful arm at high and the most harmful at xhigh. This
-inversion survives a pooled floor and is unexplained.
+*Withdrawn: an earlier entry flagged `aleat` as the least harmful arm at high (an inversion
+against xhigh) as an open question. With six more epochs it is now among the most harmful there
+(+20.3×) and `total` the least (+1.6×). The inversion was shallow-epoch noise.*
+
+**At high, only the sign has ever replicated.** Three finer patterns read there — the arm
+ordering, a tail-depth mechanism, and this inversion — each dissolved with more data. Report
+"adaptive is worse than random at high" and nothing beyond it.
 
 ### xhigh (classifier): total entropy does real damage; the epistemic split removes it
 Re-verified 2026-08-04 14:25 against a **pooled** floor (4 epochs; recal 2×SD = 0.00095),
@@ -63,10 +68,13 @@ at two consecutive epochs:
 
 | arm | ep7 | ep8 |
 |---|---|---|
-| `aleat` | +27.2× | +30.9× |
-| `epi_bald` | −0.5× | −0.5× |
-| `epi_var` | −0.3× | −0.5× |
-| `total` | +17.4× / +22.5× (ep6/7, single-epoch floor; relaunch re-deriving) | – |
+| `aleat` | +30.4× | +39.4× |
+| `total` | +30.4× | +25.4× |
+| `epi_bald` | −1.1× | −1.1× |
+| `epi_var` | −0.3× | −0.8× |
+
+(pooled over 7 epochs; `total` is the clean post-preemption relaunch, so every arm here is
+first-run data)
 
 Acquiring on the aleatoric component is **27–31× the pooled floor worse than random sampling**;
 `total` measured 17–22× against a single-epoch floor before its relaunch and is being re-derived.

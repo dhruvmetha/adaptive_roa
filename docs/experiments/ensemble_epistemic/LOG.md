@@ -1646,3 +1646,43 @@ repo. `scripts/` and analysis code are safe.
 
 `fm_high_total` has **not** been relaunched: 5 epochs are on disk, and restarting costs ~13h from
 epoch 0 since the engine has no resume.
+
+## 2026-08-04 20:10 — xhigh confirmed on the relaunched arm; the "aleat inversion" reverses
+
+Floors have deepened (xhigh pools 7 epochs, high 6) and `clf_xhigh_total` — relaunched clean after
+its preemption — has caught up enough to re-enter the comparison.
+
+**xhigh (pooled 2*SD = 0.00073, 7 epochs):**
+
+| arm | ep5 | ep6 | verdict |
+|---|---|---|---|
+| `aleat` | +30.4x | +39.4x | harmful |
+| `total` | +30.4x | +25.4x | harmful |
+| `epi_bald` | −1.1x | −1.1x | marginally better than random |
+| `epi_var` | −0.3x | −0.8x | null |
+
+The headline survives on the clean relaunch: total-entropy and aleatoric acquisition are 25-39x
+the floor worse than random. `epi_bald` now reads marginally *better* than random (−1.1x at both
+epochs, just over threshold) rather than tied — but 1.1x is barely distinguishable and should not
+be promoted beyond "ties or slightly beats random".
+
+**high (pooled 2*SD = 0.00040, 6 epochs): all four arms harmful**
+
+| arm | ep9 | ep10 |
+|---|---|---|
+| `aleat` | +8.1x | **+20.3x** |
+| `epi_bald` | +8.1x | +14.2x |
+| `epi_var` | +8.0x | +10.1x |
+| `total` | +3.5x | +1.6x |
+
+### The `aleat` inversion has reversed
+
+I flagged as an open question that `aleat` was the *least* harmful arm at high and the most
+harmful at xhigh. With six more epochs it is now among the **most** harmful at high (+20.3x) and
+`total` is the least (+1.6x). So the inversion was an artefact of shallow epochs, not a property
+of the method, and the open question is withdrawn rather than answered.
+
+This is the third time a mid-campaign pattern at high has dissolved with more data (after the
+arm ordering and the tail-depth mechanism). The consistent lesson: **at high noise only the sign
+is stable — every finer structure I have read there has failed to replicate.** xhigh, where
+effects are 25-39x rather than 2-20x, has been stable throughout.

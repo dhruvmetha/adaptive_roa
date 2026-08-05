@@ -87,6 +87,13 @@ def verdicts(data, predictor: str, level: str):
     eps = common[-2:]
     rows = []
     for a in present:
+        # Full-trajectory sign check, not just the two-epoch window. At [CLF] high the
+        # least-harmful arm rotated almost every epoch and ALL FOUR arms held that slot,
+        # so two adjacent epochs agreed by luck -- even across independent metrics. A
+        # two-epoch window cannot detect a quantity oscillating on a two-epoch timescale.
+        traj = [data[key(a)][e] - data[key(CONTROL)][e] for e in common if e >= 1]
+        sign_stable = len({g > 0 for g in traj}) == 1 if traj else False
+        n_traj = len(traj)
         gaps = [data[key(a)][e] - data[key(CONTROL)][e] for e in eps]
         mult = [g / floor for g in gaps]
         # Three outcomes, not two. Collapsing them loses the campaign's most
@@ -100,6 +107,10 @@ def verdicts(data, predictor: str, level: str):
             label = "within noise (null)"
         else:
             label = "not stable"
+        if label == "DISTINGUISHABLE" and not sign_stable:
+            label += f"  [!] sign flips over {n_traj} epochs -- treat as unstable"
+        elif label == "DISTINGUISHABLE":
+            label += f"  (sign stable {n_traj}/{n_traj} ep)"
         rows.append((a, eps, gaps, mult, label))
     return (floor, n_ep, rows), None
 

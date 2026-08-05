@@ -89,7 +89,9 @@ def test_verdict_labels_distinguish_null_from_unstable():
     assert res is not None, why
     labels = {arm: label for arm, _, _, _, label in res[2]}
     assert labels["epi_bald"] == "within noise (null)"
-    assert labels["total"] == "DISTINGUISHABLE"
+    # DISTINGUISHABLE now carries a trajectory annotation; the verdict is the prefix.
+    assert labels["total"].startswith("DISTINGUISHABLE")
+    assert "sign stable" in labels["total"]
     assert labels["aleat"] == "not stable"
 
 
@@ -97,3 +99,27 @@ def test_missing_floor_seeds_reports_why_instead_of_skipping():
     data = _mk("xhigh", {"dir00": {1: 0.0, 2: 0.0}, "total": {1: 1.0, 2: 1.0}})
     res, why = ev.verdicts(data, "clf", "xhigh")
     assert res is None and "floor incomplete" in why
+
+
+def test_sign_flip_over_the_full_trajectory_is_flagged():
+    """Two adjacent epochs can agree while the quantity oscillates underneath.
+
+    At [CLF] high the least-harmful arm rotated almost every epoch and all four arms
+    held that slot, so a two-epoch window -- even with two independent metrics
+    agreeing -- reported a stable effect that did not exist. The verdict must carry
+    the full-trajectory sign check, not just the window.
+    """
+    data = _mk("high", {
+        "dir00":     {e: 0.0 for e in range(1, 8)},
+        "dir00_s43": {e: 0.1 for e in range(1, 8)},
+        "dir00_s44": {e: 0.2 for e in range(1, 8)},
+        # large and same-signed in the last two epochs, but flips earlier
+        "total":     {1: -5.0, 2: 5.0, 3: 5.0, 4: 5.0, 5: 5.0, 6: 5.0, 7: 6.0},
+        # large and same-signed throughout
+        "aleat":     {e: 5.0 + e for e in range(1, 8)},
+    })
+    res, why = ev.verdicts(data, "clf", "high")
+    assert res is not None, why
+    labels = {arm: label for arm, _, _, _, label in res[2]}
+    assert "[!]" in labels["total"], "an early sign flip must be flagged"
+    assert "[!]" not in labels["aleat"] and "sign stable" in labels["aleat"]

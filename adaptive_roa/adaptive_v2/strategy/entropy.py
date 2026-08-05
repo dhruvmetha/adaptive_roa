@@ -73,11 +73,18 @@ class EntropyAcquisitionStrategy:
 
         system = getattr(probability_backend, "system", None)
         radius = getattr(probability_backend, "attractor_radius", None)
-        if system is None or radius is None or not hasattr(probability_backend, "sample_endpoints"):
+        has_cloud = hasattr(probability_backend, "sample_endpoints")
+        has_estimate = hasattr(probability_backend, "estimate")
+        if system is None or radius is None or not (has_cloud or has_estimate):
             raise RuntimeError(
                 "EntropyAcquisitionStrategy needs a probability backend exposing "
-                "system, attractor_radius and sample_endpoints(); got "
-                f"{type(probability_backend).__name__}"
+                "system, attractor_radius and either sample_endpoints() or "
+                f"estimate(); got {type(probability_backend).__name__}"
+            )
+        if not has_cloud and self.tie_breaker != "none":
+            raise ValueError(
+                f"tie_breaker={self.tie_breaker!r} needs an endpoint cloud, which "
+                f"{type(probability_backend).__name__} does not produce"
             )
 
         states, indices = pool.sample_candidates_without_marking(
@@ -96,21 +103,32 @@ class EntropyAcquisitionStrategy:
                 f"rule={self.selection_rule}, selecting {target_count}"
             )
 
-        cloud = probability_backend.sample_endpoints(
-            states, num_samples=self.num_mc_samples, verbose=self.verbose
-        )
-        M, K, D = cloud.shape
+        if has_cloud:
+            cloud = probability_backend.sample_endpoints(
+                states, num_samples=self.num_mc_samples, verbose=self.verbose
+            )
+            M, K, D = cloud.shape
 
-        labels = system.classify_attractor(
-            torch.as_tensor(cloud.reshape(-1, D), dtype=torch.float32), radius=radius
-        ).reshape(M, K)
-        p_success = (labels == 1).float().mean(dim=1).cpu().numpy().astype(np.float64)
+            labels = system.classify_attractor(
+                torch.as_tensor(cloud.reshape(-1, D), dtype=torch.float32), radius=radius
+            ).reshape(M, K)
+            p_success = (labels == 1).float().mean(dim=1).cpu().numpy().astype(np.float64)
+            finite = np.isfinite(cloud).all(axis=(1, 2))
+        else:
+            # Discriminative backends (e.g. a classifier) hand back p(success)
+            # directly, so the same binary entropy is read off one forward pass
+            # instead of a K-sample endpoint cloud. p then varies continuously
+            # rather than on a K+1 grid, so exact ties are vanishingly rare.
+            cloud = None
+            p_success = np.asarray(
+                probability_backend.estimate(np.asarray(states)).p_success, dtype=np.float64
+            )
+            finite = np.isfinite(p_success)
 
         eps = 1e-12
         pc = np.clip(p_success, eps, 1.0 - eps)
         entropy = -(pc * np.log(pc) + (1.0 - pc) * np.log(1.0 - pc))
-        finite_cloud = np.isfinite(cloud).all(axis=(1, 2))
-        entropy = np.where(finite_cloud, entropy, np.nan)
+        entropy = np.where(finite, entropy, np.nan)
 
         tie = None
         if self.tie_breaker == "mode_sep":

@@ -119,10 +119,12 @@ first-run data)
 **Verified on all seven available metrics** (post-recal, sAUROC, brier_debiased, log_score,
 skill_score, AURC, KL), each with its own 7-epoch pooled floor:
 
-- `total` and `aleat` are distinguishably harmful on **every one**, at **24–45× the floor**.
-- `epi_bald` cuts that by roughly **10×** on the raw metrics (+1.9 to +2.9× against `total`'s
-  +26 to +29×) and is **indistinguishable from or slightly better than random** on the two
-  calibration-free metrics.
+- `total` and `aleat` are distinguishably harmful on **every one**. On terminal data with a
+  9-epoch pooled floor: `aleat` +44.8×/+31.7× and `total` +29.1×/+26.9× post-recal, with the
+  matching sAUROC figures −51.8×/−32.8× and −27.1×/−23.1×, sign-stable 9/9 epochs.
+- `epi_bald` cuts that by roughly **10×** on the raw metrics and **ties random sampling** on the
+  calibration-free ones (0.7–1.5×, straddling the threshold). *An earlier claim that it slightly
+  beats random did not survive the terminal data.*
 - `epi_var` is clearly worse than `epi_bald` here — 9–18× on every raw metric. Both estimators
   are exact on the classifier (members enumerated, K=None), so this is a genuine ranking
   difference between the two epistemic scores, favouring the naive one.

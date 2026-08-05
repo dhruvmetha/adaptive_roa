@@ -1759,3 +1759,38 @@ reader to accept recalibration as the right lens.
 `epi_bald`'s 1-3x. On the classifier both estimators are exact (members enumerated, K=None), so
 this is not the finite-K story; it is a genuine ranking difference between the two epistemic
 scores, and it favours the naive one.
+
+## 2026-08-05 21:25 — [CLF] high: the ordering is provably unstable (full trajectory)
+
+The `[CLF]` high arms have reached epochs 12-15, so the level was re-tested well past the
+epochs 7/8 used earlier. At epochs 9/10 both the post-recal metric and sAUROC agreed that `total`
+was the **least** harmful arm — the opposite of xhigh — which looked like a finding.
+
+It is not. Gap vs the non-adaptive control in floor units (2*SD = 0.00040, pooled over 6 epochs),
+every epoch:
+
+| ep | `total` | `epi_var` | `epi_bald` | `aleat` | least harmful |
+|---|---|---|---|---|---|
+| 1 | +14.9 | +5.6 | +9.1 | +9.9 | `epi_var` |
+| 2 | +6.9 | +6.7 | +7.7 | +6.3 | `aleat` |
+| 3 | +6.4 | +6.6 | +7.2 | +5.0 | `aleat` |
+| 4 | +3.3 | +5.6 | +12.3 | +23.9 | `total` |
+| 5 | +5.7 | +1.5 | +3.5 | +19.5 | `epi_var` |
+| 6 | +3.7 | +0.6 | +14.4 | +12.2 | `epi_var` |
+| 7 | +5.1 | +3.9 | +14.8 | −0.7 | `aleat` |
+| 8 | +6.4 | +8.1 | +5.0 | +3.2 | `aleat` |
+| 9 | +3.5 | +8.0 | +8.1 | +8.1 | `total` |
+| 10 | +1.6 | +10.1 | +14.2 | +20.3 | `total` |
+
+**All four arms have held the "least harmful" slot**, and the rank order changes almost every
+epoch. The ep9/10 agreement between two metrics was two adjacent samples of a rotating sequence,
+not a stable effect — a two-epoch window is simply too short here, even with metric agreement.
+
+**The only thing that replicates at high is the sign:** every arm is positive (harmful) at every
+epoch bar one (`aleat`, −0.7 at ep7). That has now survived four attempts to find finer structure
+— the arm ordering, a tail-depth mechanism, the `aleat` inversion, and now this.
+
+**Rule for this level: report "all adaptive arms are worse than random at [CLF] high" and nothing
+else.** Any statement distinguishing the arms there requires far more than two consecutive
+epochs, and the campaign's two-epoch rule is not sufficient protection when the underlying
+quantity oscillates on that timescale.

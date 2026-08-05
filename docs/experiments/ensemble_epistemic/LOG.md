@@ -1686,3 +1686,36 @@ This is the third time a mid-campaign pattern at high has dissolved with more da
 arm ordering and the tail-depth mechanism). The consistent lesson: **at high noise only the sign
 is stable — every finer structure I have read there has failed to replicate.** xhigh, where
 effects are 25-39x rather than 2-20x, has been stable throughout.
+
+## 2026-08-05 20:35 — the deterministic verdict is Brier-only and does not replicate
+
+det is the one fully-finished level: all 5 arms at 19/19 and both floor seeds at 19/19, giving a
+pooled floor over 18 epochs. With that complete floor, the verdict was re-tested on every
+threshold-free metric the evaluator writes:
+
+| metric | pooled 2*SD (18 ep) | all four arms, ep17/ep18 | verdict |
+|---|---|---|---|
+| **brier** | 0.00155 | −1.3x to −1.8x | DISTINGUISHABLE (adaptive helps) |
+| **log_score** | 0.02357 | −0.3x to −0.4x | **within noise** |
+| auprc | 0.00143 | +0.1x | within noise |
+| auc | 0.00046 | +0.2x | within noise |
+
+**The "adaptive beats random on the deterministic pendulum" result rests on Brier alone.**
+
+auc and auprc carry little weight here — both are saturated on det (0.9999) and cannot
+discriminate anything, so their nulls are uninformative. The meaningful comparison is **Brier vs
+log score**: two proper scoring rules on identical predictions, disagreeing. Log score has a
+~15x larger seed floor (0.0236 vs 0.0016), because it is far more sensitive to extreme
+probabilities, and the same gaps vanish inside it.
+
+### Downgrade
+
+det moves from **established** to **marginal and metric-dependent**. The honest claim is: adaptive
+acquisition produces a small Brier improvement (~1.5x the floor) that does not replicate on log
+score. It remains true that the four adaptive arms are indistinguishable from *each other* on
+every metric — the design's actual validation prediction — and that part is unaffected.
+
+This is the rule from the med retraction firing again: **1-5x the floor is hostage to estimation
+choices.** Here the choice is not the floor's epoch pooling but the metric itself. Only xhigh, at
+25-39x, has survived every robustness check applied to it — floor methodology, clean relaunch,
+and now (for the classifier) multiple metrics.

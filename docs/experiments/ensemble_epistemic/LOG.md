@@ -1794,3 +1794,46 @@ epoch bar one (`aleat`, −0.7 at ep7). That has now survived four attempts to f
 else.** Any statement distinguishing the arms there requires far more than two consecutive
 epochs, and the campaign's two-epoch rule is not sufficient protection when the underlying
 quantity oscillates on that timescale.
+
+## 2026-08-05 21:35 — trajectory test on every [CLF] level: xhigh is solid, high is the outlier
+
+After the high ordering proved unstable, the same full-trajectory test was applied to the other
+levels. Gap vs control in floor units, every epoch (not a two-epoch window):
+
+**xhigh — the headline. Rock solid.**
+
+| ep | `total` | `epi_var` | `epi_bald` | `aleat` |
+|---|---|---|---|---|
+| 1 | +4.0 | −3.5 | −4.1 | +5.8 |
+| 2 | +16.8 | −1.7 | −1.9 | +17.0 |
+| 3 | +18.5 | −1.5 | −2.2 | +19.4 |
+| 4 | +24.5 | +2.5 | −0.5 | +33.0 |
+| 5 | +30.4 | −0.3 | −1.1 | +30.4 |
+| 6 | +25.4 | −0.8 | −1.1 | +39.4 |
+| 7 | +34.5 | −0.4 | −0.7 | +35.6 |
+
+`total` and `aleat` are harmful at **every one of 7 epochs** and **grow monotonically** (+4 → +34,
++5.8 → +35.6). A dose-response in training time, not a noise excursion. `epi_bald` is negative
+(tied or better than random) at **all 7**. `epi_var` is negative at 6 of 7, with one +2.5 excursion
+at ep4 — so it is slightly less clean than `epi_bald`, consistent with the seven-metric result
+that also favoured `epi_bald`.
+
+**low — a consistent small help.** All four arms −1.1 to −3.3× from epoch 2 onward, sign stable
+for 3 of 4 (`total` starts at +3.0 at ep1 then goes negative and stays). Better described as
+"adaptive gives a small consistent improvement at low noise" than as the earlier "marginal".
+
+**med — consistent direction, marginal magnitude.** All arms hover at −0.5 to −1.8× for nine
+epochs. The direction never flips, but the magnitude sits on the threshold, so it stays a weak
+effect rather than a null.
+
+**high — the outlier.** Only the sign replicates; the ordering rotates every epoch (previous
+entry).
+
+### What this changes
+
+The two-epoch rule is now backed by a full-trajectory check on all four stochastic levels. The
+xhigh headline does not depend on it at all: 7 of 7 epochs, monotone growth, two metric families,
+seven metrics. That is the one result in this campaign strong enough that no plausible
+methodological objection touches it.
+
+low is upgraded from "marginal" to "small but consistent". med and high are unchanged.

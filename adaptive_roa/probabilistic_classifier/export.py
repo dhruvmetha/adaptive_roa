@@ -164,6 +164,7 @@ def export_run(run_dir, out_dir, device="cuda", epochs=None):
         eds = [d for d in eds if epoch_num(d) in set(epochs)]
 
     counts = {}
+    load_failures = {}
     for ed in eds:
         ep = epoch_num(ed)
         odir = Path(out_dir) / f"epoch_{ep:03d}"
@@ -172,6 +173,7 @@ def export_run(run_dir, out_dir, device="cuda", epochs=None):
         except (FileNotFoundError, RuntimeError, IndexError) as e:
             print(f"[skip epoch {ep:03d}] load failed: {type(e).__name__}: {e}", flush=True)
             counts[ep] = {"error": str(e)}
+            load_failures[ep] = str(e)
             continue
         c = {}
         for split in split_states:
@@ -219,4 +221,22 @@ def export_run(run_dir, out_dir, device="cuda", epochs=None):
     }
     Path(out_dir).mkdir(parents=True, exist_ok=True)
     (Path(out_dir) / "metadata.json").write_text(json.dumps(meta, indent=2))
+
+    # A load failure on ONE epoch can be a legitimate gap (e.g. a checkpoint
+    # not yet written mid-training) and is left as a per-epoch "[skip epoch]"
+    # so a long run keeps exporting the epochs that do load. But a load
+    # failure on EVERY epoch found is never that -- it means the arm's
+    # checkpoint shape doesn't match what `cfg` builds (e.g. a wrong config
+    # path), so nothing for this run was ever going to load. That failure mode
+    # previously looked identical, from the caller's side, to "this run simply
+    # has no checkpoints yet": `export_probabilities.py` would still print
+    # "done. wrote N epochs" and exit 0. Make the total-failure case loud.
+    if eds and len(load_failures) == len(eds):
+        first_ep = next(iter(load_failures))
+        raise RuntimeError(
+            f"export_run: every epoch in {run_dir} failed to load "
+            f"({len(load_failures)}/{len(eds)}); nothing was exported. "
+            f"Per-epoch errors were still written to {out_dir}/metadata.json. "
+            f"First failure (epoch {first_ep:03d}): {load_failures[first_ep]}"
+        )
     return counts

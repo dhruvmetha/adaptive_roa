@@ -83,9 +83,19 @@ at two consecutive epochs:
 (pooled over 7 epochs; `total` is the clean post-preemption relaunch, so every arm here is
 first-run data)
 
-Acquiring on the aleatoric component is **27–31× the pooled floor worse than random sampling**;
-`total` measured 17–22× against a single-epoch floor before its relaunch and is being re-derived.
-Acquiring on either epistemic component is **indistinguishable from random** (0.3–0.5×).
+**Verified on all seven available metrics** (post-recal, sAUROC, brier_debiased, log_score,
+skill_score, AURC, KL), each with its own 7-epoch pooled floor:
+
+- `total` and `aleat` are distinguishably harmful on **every one**, at **24–45× the floor**.
+- `epi_bald` cuts that by roughly **10×** on the raw metrics (+1.9 to +2.9× against `total`'s
+  +26 to +29×) and is **indistinguishable from or slightly better than random** on the two
+  calibration-free metrics.
+- `epi_var` is clearly worse than `epi_bald` here — 9–18× on every raw metric. Both estimators
+  are exact on the classifier (members enumerated, K=None), so this is a genuine ranking
+  difference between the two epistemic scores, favouring the naive one.
+
+Stated without requiring recalibration as the lens: **acquiring on the epistemic component
+reduces the harm ~10×, and removes it entirely once calibration is accounted for.**
 Parity is the expected ceiling, not a shortfall: the epistemic split restores a balanced,
 representative sample, which is what random already provides. The value is in avoiding total
 entropy's skew.

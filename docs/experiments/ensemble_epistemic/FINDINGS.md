@@ -32,10 +32,17 @@ Arms only diverge once aleatoric mass in the candidate pool exceeds roughly 0.1:
 | high | 0.17–0.21 | yes |
 | xhigh | 0.34–0.41 | yes, most |
 
-### Deterministic pendulum (complete, 19/19 epochs)
-Every adaptive arm beats random sampling by **1.3–1.6× the pooled floor** (2×SD = 0.00171 over 13
-epochs), and the spread *between* arms is inside the floor. (An earlier figure of 1.6–1.9× used a
-single-epoch floor, before pooling was adopted.) With aleatoric ≈ 0 there is nothing to separate, so the score choice
+### Deterministic pendulum (complete, 19/19 epochs) — MARGINAL, metric-dependent
+With the complete 18-epoch floor, "adaptive beats random" holds on **Brier only** (−1.3× to −1.8×)
+and **fails on log score** (−0.3× to −0.4×, within noise). auc/auprc are saturated (0.9999) and
+uninformative. Two proper scoring rules on identical predictions disagree, because log score's
+seed floor is ~15× larger (0.0236 vs 0.0016).
+
+Claim as: *a small Brier improvement that does not replicate on log score.*
+
+**Unaffected:** the four adaptive arms are indistinguishable from each other on every metric —
+which is the design's actual validation prediction for this level (aleatoric ≈ 0, so the score
+choice should not matter). With aleatoric ≈ 0 there is nothing to separate, so the score choice
 does not matter while adaptive-vs-random does. This is the design's validation case, passed.
 
 ### low noise is marginal; med noise is a null

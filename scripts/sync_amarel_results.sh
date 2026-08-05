@@ -50,5 +50,9 @@ sync_one stoch_compare_seeds stoch_compare_seeds  ""
 #     independent runs inside one arm's curve -- the exact corruption --delete
 #     exists to prevent, arriving by a different route. They are kept apart here
 #     rather than by cancelling either copy, which is the user's call to make.
-sync_one ensemble_epistemic  ensemble_epistemic   "--exclude=fm_xhigh_*"
-sync_one ensemble_epistemic  ensemble_epistemic_amarel_fmxhigh "--include=fm_xhigh_*/*** --exclude=*"
+#     The excludes name the five ARM directories exactly (anchored, trailing slash).
+#     A blanket fm_xhigh_* would also divert fm_xhigh_dir00_s43/s44 -- floor seeds
+#     that exist only on Amarel, do not collide, and must land beside the arms or
+#     ensemble_verdicts.py cannot pair them into a floor.
+sync_one ensemble_epistemic  ensemble_epistemic   "--exclude=/fm_xhigh_epi_var/ --exclude=/fm_xhigh_total/ --exclude=/fm_xhigh_dir00/ --exclude=/fm_xhigh_epi_bald/ --exclude=/fm_xhigh_aleat/"
+sync_one ensemble_epistemic  ensemble_epistemic_amarel_fmxhigh "--include=/fm_xhigh_epi_var/*** --include=/fm_xhigh_total/*** --include=/fm_xhigh_dir00/*** --include=/fm_xhigh_epi_bald/*** --include=/fm_xhigh_aleat/*** --exclude=*"

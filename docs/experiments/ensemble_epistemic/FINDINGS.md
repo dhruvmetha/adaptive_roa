@@ -70,10 +70,12 @@ which is the design's actual validation prediction for this level (aleatoric ≈
 choice should not matter). With aleatoric ≈ 0 there is nothing to separate, so the score choice
 does not matter while adaptive-vs-random does. This is the design's validation case, passed.
 
-### [CLF] low noise is marginal; med noise is a null
-Against **pooled** floors over 4 epochs, low sits at −1.0 to −1.4× (all four arms just over the
-threshold, in the helping direction) and med at −0.4 to −1.1× (straddling it). Neither level shows
-a score effect: the arms are within ~0.4× of each other at both levels.
+### [CLF] low: small but consistent help; med: consistent direction, marginal size
+Full-trajectory check (every epoch, not a two-epoch window): **low** runs −1.1 to −3.3× from
+epoch 2 onward with the sign stable for 3 of 4 arms — a small but consistent improvement, not a
+marginal one. **med** hovers at −0.5 to −1.8× across nine epochs: direction never flips, magnitude
+sits on the threshold, so it is a weak effect rather than a null. Neither level shows a score
+effect — the arms track each other within ~0.4×.
 
 *Superseded: med was previously reported as "adaptive helps (−1.5 to −3.1×)" against a
 single-epoch floor. The pooled floor is 3.4× larger and the effect does not survive it.*

@@ -90,9 +90,15 @@ Only the *sign* is reportable here. Magnitudes swing between consecutive epochs 
 against xhigh) as an open question. With six more epochs it is now among the most harmful there
 (+20.3×) and `total` the least (+1.6×). The inversion was shallow-epoch noise.*
 
-**At high, only the sign has ever replicated.** Three finer patterns read there — the arm
-ordering, a tail-depth mechanism, and this inversion — each dissolved with more data. Report
-"adaptive is worse than random at high" and nothing beyond it.
+**At high, only the sign has ever replicated.** Now demonstrated over 10 epochs: the
+least-harmful arm rotates almost every epoch and **all four arms have held that slot**
+(`epi_var`→`aleat`→`total`→`epi_var`→`aleat`→`total`). Four finer patterns read there — the arm
+ordering, a tail-depth mechanism, the `aleat` inversion, and a "`total` is least harmful" reading
+that two metrics agreed on at ep9/10 — each dissolved with more data.
+
+Report *"adaptive is worse than random at [CLF] high"* and nothing beyond it. Note the campaign's
+two-consecutive-epoch rule is **not** sufficient protection here: the quantity oscillates on that
+timescale, so two adjacent samples can agree by luck even across independent metrics.
 
 ### [CLF] xhigh: total entropy does real damage; the epistemic split cuts it ~10x
 Re-verified 2026-08-04 14:25 against a **pooled** floor (4 epochs; recal 2×SD = 0.00095),

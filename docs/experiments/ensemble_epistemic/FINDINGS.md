@@ -15,15 +15,21 @@ calibration, which is routinely fixed post hoc.
 
 ---
 
-## 1. Established
+## 1. Established — ALL CLASSIFIER (CLF)
 
-### The decomposition is mechanically correct
+> **Every result in this section is the ensemble CLASSIFIER (`predictor=clf_ensemble`).**
+> The flow-matching arms have produced **no verdicts at all** — see §4. Do not read any number
+> below as a statement about flow matching, and do not read it as a statement about the
+> estimators in general: §3 shows this classifier is badly miscalibrated at high noise, so every
+> score here is computed on distorted p̄.
+
+### [CLF + FM] The decomposition is mechanically correct
 `H(p̄) = E_m[H(p_m)] + I(y;m|x)` holds to **exact float precision** on real model outputs (the
 `total` arm computes the left side, `epi_bald`/`aleat` the two right-hand terms; residual 0.0e+00).
 Epoch-0 identity confirmed on both predictors: before the first acquisition all five arms are
 identical to within 6e-05.
 
-### Separation is a monotone function of noise, with a threshold
+### [CLF] Separation is a monotone function of noise, with a threshold
 Arms only diverge once aleatoric mass in the candidate pool exceeds roughly 0.1:
 
 | level | aleatoric pool mass | do arms separate? |
@@ -32,7 +38,7 @@ Arms only diverge once aleatoric mass in the candidate pool exceeds roughly 0.1:
 | high | 0.17–0.21 | yes |
 | xhigh | 0.34–0.41 | yes, most |
 
-### Deterministic pendulum (complete, 19/19 epochs) — MARGINAL, metric-dependent
+### [CLF] Deterministic pendulum (complete, 19/19 epochs) — MARGINAL, metric-dependent
 With the complete 18-epoch floor, "adaptive beats random" holds on **Brier only** (−1.3× to −1.8×)
 and **fails on log score** (−0.3× to −0.4×, within noise). auc/auprc are saturated (0.9999) and
 uninformative. Two proper scoring rules on identical predictions disagree, because log score's
@@ -45,7 +51,7 @@ which is the design's actual validation prediction for this level (aleatoric ≈
 choice should not matter). With aleatoric ≈ 0 there is nothing to separate, so the score choice
 does not matter while adaptive-vs-random does. This is the design's validation case, passed.
 
-### low noise is marginal; med noise is a null
+### [CLF] low noise is marginal; med noise is a null
 Against **pooled** floors over 4 epochs, low sits at −1.0 to −1.4× (all four arms just over the
 threshold, in the helping direction) and med at −0.4 to −1.1× (straddling it). Neither level shows
 a score effect: the arms are within ~0.4× of each other at both levels.
@@ -53,7 +59,7 @@ a score effect: the arms are within ~0.4× of each other at both levels.
 *Superseded: med was previously reported as "adaptive helps (−1.5 to −3.1×)" against a
 single-epoch floor. The pooled floor is 3.4× larger and the effect does not survive it.*
 
-### high noise: three of four adaptive arms are worse than random
+### [CLF] high noise: three of four adaptive arms are worse than random
 `epi_bald`, `epi_var` and `total` all exceed the pooled floor in the harmful direction at two
 consecutive epochs (+3.1× to +12.0×). The negative control `aleat` does **not**: it reads −0.6×
 at one epoch and +2.6× at the next, so it is inconsistent.
@@ -69,7 +75,7 @@ against xhigh) as an open question. With six more epochs it is now among the mos
 ordering, a tail-depth mechanism, and this inversion — each dissolved with more data. Report
 "adaptive is worse than random at high" and nothing beyond it.
 
-### xhigh (classifier): total entropy does real damage; the epistemic split removes it
+### [CLF] xhigh: total entropy does real damage; the epistemic split cuts it ~10x
 Re-verified 2026-08-04 14:25 against a **pooled** floor (4 epochs; recal 2×SD = 0.00095),
 at two consecutive epochs:
 
@@ -110,7 +116,7 @@ shared by all five arms.)*
 Each epoch records the pool indices it acquired, so the **true** success probability of every
 purchased point is recoverable.
 
-### Harm tracks how far an arm drags the training marginal — across levels, not within them
+### [CLF] Harm tracks how far an arm drags the training marginal — across levels, not within them
 Over 112 arm-epochs spanning all four stochastic levels: corr(fraction of ambiguous points
 acquired, harm) = **−0.429**, corr(marginal skew |mean_p − 0.5|, harm) = **+0.406**. The effect is
 strong at xhigh (r = −0.748) and **absent within high** (r = +0.259, wrong sign), where all arms
@@ -118,7 +124,7 @@ are compressed into mean_p 0.008–0.079 — too narrow a band to discriminate. 
 dose-response *between* noise levels, and explains nothing about differences *between arms* at
 high.
 
-### Why total entropy fails at xhigh
+### [CLF] Why total entropy fails at xhigh
 | arm | fraction of acquired points genuinely ambiguous |
 |---|---|
 | `epi_bald` | **51–68%** |
@@ -129,7 +135,7 @@ Total entropy harvests near-certain failures and crushes the training marginal t
 epistemic score recovers ambiguous states by ~20× and restores a near-balanced marginal. This is
 exactly the pathology the previous campaign diagnosed, and the decomposition repairs it.
 
-### BALD is not "epistemic focus" — it is epistemic focus divided by p(1−p)
+### [predictor-independent] BALD is not "epistemic focus" — it is epistemic focus divided by p(1−p)
 `BALD ≈ Var_m[p] / (2·p̄(1−p̄))`, because `H''(p) = −1/(p(1−p))`. For **identical** member
 disagreement, BALD is amplified **34.9× at p = 0.01** versus p = 0.5. `epi_var` (debiased variance)
 has no such factor and is flat.
@@ -166,7 +172,7 @@ test and are at epoch 4 of 19.
 
 ---
 
-## 4. Not yet established
+## 4. Not yet established — THE ENTIRE FLOW-MATCHING (FM) HALF
 
 - **All flow-matching results.** No FM floor exists yet (both seed replicates still early). Two
   consecutive epochs show every adaptive arm beating the control, with `total` the only arm

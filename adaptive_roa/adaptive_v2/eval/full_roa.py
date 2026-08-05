@@ -96,6 +96,146 @@ def _conservative_metrics(pred_labels: np.ndarray, y_true: np.ndarray) -> dict[s
     }
 
 
+_LOG_SCORE_CLIP = 1e-15
+
+
+def _auc(scores: np.ndarray, y01: np.ndarray) -> float:
+    """ROC AUC via the tie-aware Mann-Whitney U statistic.
+
+    Implemented in numpy rather than sklearn: this module is on the core eval
+    path and scikit-learn is not an install_requires dependency.
+    Ties get average ranks, which is what makes this agree with
+    ``sklearn.metrics.roc_auc_score`` on quantised MC probabilities.
+    """
+    order = np.argsort(scores, kind="mergesort")
+    sorted_scores = scores[order]
+
+    group = np.cumsum(np.r_[True, sorted_scores[1:] != sorted_scores[:-1]]) - 1
+    counts = np.bincount(group)
+    starts = np.r_[0, np.cumsum(counts)[:-1]]
+    avg_rank = starts + (counts - 1) / 2.0 + 1.0  # 1-based average rank per tie group
+
+    ranks = np.empty(len(scores), dtype=np.float64)
+    ranks[order] = avg_rank[group]
+
+    n_pos = float(y01.sum())
+    n_neg = float(len(y01) - n_pos)
+    return float((ranks[y01 == 1].sum() - n_pos * (n_pos + 1.0) / 2.0) / (n_pos * n_neg))
+
+
+def _auprc(scores: np.ndarray, y01: np.ndarray) -> float:
+    """Average precision: sum_n (R_n - R_{n-1}) * P_n over distinct thresholds.
+
+    Matches ``sklearn.metrics.average_precision_score`` (step-wise, no
+    interpolation). Tied scores must collapse into one threshold, otherwise
+    quantised MC probabilities give an inflated value.
+    """
+    order = np.argsort(-scores, kind="mergesort")
+    y_sorted = y01[order]
+    scores_sorted = scores[order]
+
+    distinct = np.nonzero(np.diff(scores_sorted))[0]
+    idx = np.r_[distinct, len(y_sorted) - 1]
+
+    tp = np.cumsum(y_sorted)[idx]
+    fp = (idx + 1.0) - tp
+    n_pos = float(y01.sum())
+
+    precision = tp / (tp + fp)
+    recall = tp / n_pos
+    return float(np.sum(np.diff(np.r_[0.0, recall]) * precision))
+
+
+def _print_threshold_free(m: dict[str, Any], tag: str) -> None:
+    if m["auc"] is None:
+        print(f"  [{tag}] threshold-free: n/a (single class in eval set)")
+        return
+    sat = ""
+    if m["n_scored"] and m["n_saturated"]:
+        sat = f"  saturated={m['n_saturated'] / m['n_scored']:.1%}"
+    print(f"  [{tag}] threshold-free: AUC={m['auc']:.4f}  AUPRC={m['auprc']:.4f}  "
+          f"Brier={m['brier']:.4f}  logscore={m['log_score']:.4f}"
+          f" ({m['log_score_smoothing']}){sat}")
+
+
+def _threshold_free_metrics(
+    p_success: np.ndarray,
+    y_true: np.ndarray,
+    num_mc_samples: int | None = None,
+    p_invalid: np.ndarray | None = None,
+) -> dict[str, Any]:
+    """Summarise p(success|x) against the label without picking an operating point.
+
+    Scored on raw ``p_success`` -- the same quantity the lambda/delta rule
+    thresholds -- so AUC/AUPRC predict what threshold search can reach.
+
+    AUC and AUPRC are rank-based, hence invariant to any monotone recalibration.
+    That is the part lambda/delta tuning *cannot* recover, so they are the
+    metrics to compare arms on. Brier and log score additionally charge for
+    miscalibration, which the downstream threshold search largely absorbs.
+
+    Count-based arms emit ``p = k/K`` and land on exactly 0.0/1.0, where the log
+    score diverges. Those are smoothed to ``(k+0.5)/(K+1)`` (Krichevsky-Trofimov)
+    rather than clipped at an arbitrary epsilon, which keeps the score finite and
+    comparable across arms with different ``K``. Continuous arms saturate too (a
+    float32 sigmoid reaches exactly 1.0), so they fall back to a fixed clip;
+    ``n_saturated`` reports how many points sit at the boundary and therefore how
+    clip-sensitive the log score is.
+    """
+    p = np.asarray(p_success, dtype=np.float64).ravel()
+    y = np.asarray(y_true).ravel()
+    n_scored = int(p.size)
+
+    empty = {
+        "_doc": "Threshold-free scores for p(success|x); AUC/AUPRC are rank-based "
+                "(monotone-invariant), Brier and log score also charge for calibration. "
+                "log_score is mean negative log-likelihood in nats -- lower is better.",
+        "n_scored": n_scored,
+        "base_rate": None,
+        "auc": None,
+        "auprc": None,
+        "brier": None,
+        "log_score": None,
+        "log_score_smoothing": None,
+        "n_saturated": 0,
+        "mean_p_invalid": None,
+    }
+    if n_scored == 0:
+        return empty
+
+    y01 = (y == 1).astype(np.float64)
+    n_saturated = int(np.count_nonzero((p <= 0.0) | (p >= 1.0)))
+
+    if num_mc_samples is not None and int(num_mc_samples) > 1:
+        k = int(num_mc_samples)
+        counts = np.rint(p * k)
+        p_smooth = (counts + 0.5) / (k + 1.0)
+        smoothing = "kt_count"
+    else:
+        p_smooth = np.clip(p, _LOG_SCORE_CLIP, 1.0 - _LOG_SCORE_CLIP)
+        smoothing = "clip"
+
+    log_score = -float(np.mean(y01 * np.log(p_smooth) + (1.0 - y01) * np.log(1.0 - p_smooth)))
+
+    auc: float | None = None
+    auprc: float | None = None
+    if 0 < int(y01.sum()) < n_scored:
+        auc = _auc(p, y01)
+        auprc = _auprc(p, y01)
+
+    return {
+        **empty,
+        "base_rate": float(y01.mean()),
+        "auc": auc,
+        "auprc": auprc,
+        "brier": float(np.mean((p - y01) ** 2)),
+        "log_score": log_score,
+        "log_score_smoothing": smoothing,
+        "n_saturated": n_saturated,
+        "mean_p_invalid": 0.0 if p_invalid is None else float(np.mean(np.asarray(p_invalid, dtype=np.float64))),
+    }
+
+
 def optimize_lambda_delta_for_f1_targets(
     p_success: np.ndarray,
     p_failure: np.ndarray,
@@ -756,7 +896,12 @@ def evaluate_full_roa_fast(
     else:
         metrics_conservative_qhat = None
 
+    metrics_threshold_free = _threshold_free_metrics(
+        p_success, y_all, num_mc_samples=num_mc_samples, p_invalid=p_invalid,
+    )
+
     if verbose:
+        _print_threshold_free(metrics_threshold_free, tag="Full ROA")
         mc_p_inv_mean = float(np.mean(p_invalid))
         mc_p_inv_median = float(np.median(p_invalid))
         print(f"  [Full ROA] MC probs: p_success mean={np.mean(p_success):.4f}, "
@@ -866,6 +1011,7 @@ def evaluate_full_roa_fast(
         "q_hat": float(q_hat) if q_hat is not None else None,
         "q_hat_success": float(q_hat_success) if q_hat_success is not None else None,
         "q_hat_failure": float(q_hat_failure) if q_hat_failure is not None else None,
+        "threshold_free": metrics_threshold_free,
         "lambda_delta": {
             "_doc": "Classification using conformal lambda +/- delta band: success if p>lambda+delta, failure if p<lambda-delta, uncertain otherwise",
             **metrics_conformal,
@@ -1043,9 +1189,16 @@ def evaluate_full_roa_classifier(
 
     metrics_conservative_ld = _conservative_metrics(pred_conformal, y_all)
 
+    # A classifier forward pass is a point estimate, not a K-sample average, so
+    # there are no counts to smooth -- the log score falls back to clipping.
+    metrics_threshold_free = _threshold_free_metrics(
+        p_success, y_all, num_mc_samples=None, p_invalid=p_invalid,
+    )
+
     if verbose:
         print(f"  [Full ROA / classifier] N={n_total} ({n_success_true} success, {n_failure_true} failure), "
               f"λ*={lambda_star:.4f}, δ={delta:.4f}, rule={effective_rule}")
+        _print_threshold_free(metrics_threshold_free, tag="Full ROA / classifier")
         print(f"  [Full ROA / classifier] p_success mean={np.mean(p_success):.4f}")
         print(f"  [Full ROA / classifier] λ±δ:  F1={metrics_conformal['f1']:.4f}  "
               f"acc={metrics_conformal['accuracy']:.4f}  prec={metrics_conformal['precision']:.4f}  "
@@ -1063,6 +1216,7 @@ def evaluate_full_roa_classifier(
         "q_hat": None,
         "q_hat_success": None,
         "q_hat_failure": None,
+        "threshold_free": metrics_threshold_free,
         "lambda_delta": {
             "_doc": "Classification using lambda +/- delta band: success if p>lambda+delta, failure if p<lambda-delta, uncertain otherwise",
             **metrics_conformal,

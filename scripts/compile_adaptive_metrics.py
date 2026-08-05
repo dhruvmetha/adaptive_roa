@@ -77,6 +77,13 @@ def extract_metrics_from_epoch(results: dict[str, Any]) -> dict[str, Any]:
     metrics["fp"] = conformal.get("fp", 0)
     metrics["fn"] = conformal.get("fn", 0)
 
+    # Threshold-free scores (no lambda/delta operating point).
+    # Default None, not 0 -- auc=0.0 is a real value meaning inverted ranking.
+    threshold_free = full_roa.get("threshold_free") or {}
+    for key in ("auc", "auprc", "brier", "log_score", "log_score_smoothing",
+                "n_saturated", "base_rate"):
+        metrics[key] = threshold_free.get(key)
+
     # Endpoint errors (training data)
     endpoint_error = results.get("endpoint_error", {})
     metrics["endpoint_mae_overall"] = endpoint_error.get("overall_mae", 0)

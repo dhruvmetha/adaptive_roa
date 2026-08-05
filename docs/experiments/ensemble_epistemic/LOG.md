@@ -1865,3 +1865,39 @@ conclusion depended on reaching 19.
   approaching their own 24h limits.
 
 Run statuses reconciled: 9 timeout, 27 running, 5 completed, 7 failed, 45 superseded.
+
+## 2026-08-05 02:00 — FINAL [CLF] verdicts on terminal data
+
+Nine arms are terminal (walltime) and the floors have deepened to 8-10 pooled epochs, so these
+supersede every earlier `[CLF]` number.
+
+**xhigh — the headline. Two calibration-free metrics, 9/9 epochs sign-stable:**
+
+| arm | post-recal (ep8/ep9) | sAUROC (ep8/ep9) |
+|---|---|---|
+| `aleat` | **+44.8x / +31.7x** | **−51.8x / −32.8x** |
+| `total` | **+29.1x / +26.9x** | **−27.1x / −23.1x** |
+| `epi_bald` | −0.7x / −1.1x (not stable) | +0.7x / +1.5x (not stable) |
+| `epi_var` | −0.7x / −0.9x (null) | +0.9x / +1.1x (not stable) |
+
+**Withdrawn:** the claim that `epi_bald` *marginally beats* random at xhigh. On terminal data it
+straddles the threshold (0.7x then 1.1x) and reads "not stable". The correct statement is the
+original one: **it ties random sampling.** The epistemic split removes the harm; it does not
+improve on random.
+
+**Other levels, final:**
+
+| level | result |
+|---|---|
+| low | **strengthened** — all arms −2.2 to −2.8x, sign-stable 3 of 4. Adaptive genuinely helps. |
+| med | null, confirmed (floor now 10 epochs) |
+| high | all four harmful, sign-stable 3 of 4 |
+| det | **weakest** — now flags sign-unstable over 18 epochs, on top of the Brier-only metric dependence found earlier. Do not report as a positive finding. |
+
+The contamination guard ran first and flagged nothing, so none of this rests on a stitched run.
+
+### The [CLF] half is complete
+
+Every level has a pooled floor over 8-18 epochs, verdicts checked on multiple metrics and full
+trajectories, and the one preemption-contaminated arm (`clf_xhigh_total`) was relaunched clean
+before contributing. What remains is entirely `[FM]`, still gated on `s44`.

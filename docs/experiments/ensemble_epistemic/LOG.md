@@ -1719,3 +1719,43 @@ This is the rule from the med retraction firing again: **1-5x the floor is hosta
 choices.** Here the choice is not the floor's epoch pooling but the metric itself. Only xhigh, at
 25-39x, has survived every robustness check applied to it — floor methodology, clean relaunch,
 and now (for the classifier) multiple metrics.
+
+## 2026-08-05 20:45 — xhigh across SEVEN metrics: the headline sharpens
+
+After det's verdict collapsed under a metric change, the xhigh headline got the same treatment on
+every metric available. Floor pooled over 7 epochs in each case; gaps vs the non-adaptive control
+at two consecutive epochs.
+
+| metric | `epi_bald` | `epi_var` | `total` | `aleat` |
+|---|---|---|---|---|
+| post-recal (UNC−RES) | −1.1x helps | −0.3x null | **+25 to +30x** | **+30 to +39x** |
+| sAUROC | +1.0/+1.4x helps | +0.2/+0.9x null | **−25 to −32x** | **−32 to −45x** |
+| brier_debiased | +2.8x harms | +13.7/+18.1x harms | **+26x** | **+33 to +36x** |
+| log_score | +1.9/+2.9x harms | +11.2/+16.1x harms | **+29x** | **+35 to +44x** |
+| skill_score | −2.8x harms | −13.7/−18.1x harms | **−26x** | **−33 to −36x** |
+| AURC | +1.2/+2.5x harms | +9.6/+13.3x harms | **+28 to +31x** | **+33 to +44x** |
+| KL | +1.9/+2.9x harms | +11.2/+16.1x harms | **+29x** | **+35 to +44x** |
+
+**`total` and `aleat` are distinguishably harmful on all seven metrics, at 24-45x the floor.**
+That is as robust as this campaign can make a result, and it is the opposite of det, which rested
+on a single metric.
+
+**The epistemic arms split by metric type, and the split is exactly the calibration story.** On
+the two calibration-free metrics they tie or slightly beat random; on the five that charge for
+calibration they are distinguishably worse. So "the epistemic split removes the harm" is precise
+only after recalibration.
+
+The better framing, true on every metric:
+
+> At xhigh, acquiring on total entropy or on the aleatoric component costs 24-45x the run-to-run
+> floor. Acquiring on the epistemic component cuts that by roughly **10x** on raw metrics
+> (`epi_bald` +1.9 to +2.9x against `total`'s +26 to +29x) and **eliminates it entirely** once
+> calibration is accounted for.
+
+That is stronger than the earlier "ties random" claim, because it holds without requiring the
+reader to accept recalibration as the right lens.
+
+**`epi_var` is clearly worse than `epi_bald` here** — 9-18x the floor on every raw metric against
+`epi_bald`'s 1-3x. On the classifier both estimators are exact (members enumerated, K=None), so
+this is not the finite-K story; it is a genuine ranking difference between the two epistemic
+scores, and it favours the naive one.

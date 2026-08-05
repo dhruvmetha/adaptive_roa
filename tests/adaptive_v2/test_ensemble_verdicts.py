@@ -123,3 +123,36 @@ def test_sign_flip_over_the_full_trajectory_is_flagged():
     labels = {arm: label for arm, _, _, _, label in res[2]}
     assert "[!]" in labels["total"], "an early sign flip must be flagged"
     assert "[!]" not in labels["aleat"] and "sign stable" in labels["aleat"]
+
+
+def test_restart_in_place_contamination_is_detected(tmp_path):
+    """A requeued job overwrites its own epoch dirs from 0, stitching two runs.
+
+    Nothing about the result looks wrong -- every epoch still carries a valid
+    full_roa_per_point.npz, so the scorer consumes it happily. The only signature is
+    that epoch mtimes stop increasing with epoch number.
+    """
+    import os
+
+    clean = tmp_path / "clf_high_dir00"
+    for e in range(5):
+        d = clean / f"epoch_{e:03d}"
+        d.mkdir(parents=True)
+        os.utime(d, (1000 + e * 10, 1000 + e * 10))     # written in order
+
+    stitched = tmp_path / "clf_high_total"
+    for e in range(5):
+        d = stitched / f"epoch_{e:03d}"
+        d.mkdir(parents=True)
+        # epochs 0-1 rewritten by the restart, so they are NEWER than 2-4
+        t = 9000 + e if e < 2 else 1000 + e
+        os.utime(d, (t, t))
+
+    # a preserved backup must never be flagged -- it is the rescue copy
+    backup = tmp_path / "_preserved_clf_high_total_preempt_1931"
+    (backup / "epoch_000").mkdir(parents=True)
+
+    bad = ev.contaminated_runs(tmp_path)
+    assert "clf_high_total" in bad, "an out-of-order rewrite must be caught"
+    assert "clf_high_dir00" not in bad, "a clean run must not be flagged"
+    assert not any(k.startswith("_preserved") for k in bad), "backups are not runs"

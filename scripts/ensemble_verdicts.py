@@ -115,6 +115,33 @@ def verdicts(data, predictor: str, level: str):
     return (floor, n_ep, rows), None
 
 
+def contaminated_runs(exp_root: Path) -> dict[str, int]:
+    """Runs whose epoch dirs were rewritten out of order -- a restart-in-place.
+
+    AdaptiveEngine has no resume: a requeued job restarts at epoch 0 and overwrites
+    its own epoch dirs. The result is one arm's curve stitched from two runs, and
+    nothing about it looks wrong -- every epoch still has a valid
+    full_roa_per_point.npz, so the scorer consumes it happily.
+
+    The signature is that epoch mtimes stop increasing with epoch number: a clean run
+    writes epoch_000 first and epoch_018 last, while a restart makes the early dirs
+    NEWER than the late ones. rsync -a preserves mtimes, so this survives the sync.
+
+    Returns {run_name: n_inversions}. Any nonzero entry must be excluded from
+    analysis until the run is cleaned and relaunched.
+    """
+    out: dict[str, int] = {}
+    for run in sorted(exp_root.glob("*/")):
+        if run.name.startswith("_preserved"):
+            continue
+        eps = sorted(run.glob("epoch_*"), key=lambda q: int(q.name.split("_")[1]))
+        ts = [q.stat().st_mtime for q in eps]
+        inv = sum(1 for a, b in zip(ts, ts[1:]) if b < a)
+        if inv:
+            out[run.name] = inv
+    return out
+
+
 def load_det(exp_root: Path, field: str = "brier"):
     """Deterministic runs, from artifacts_v2.json label metrics.
 
@@ -153,6 +180,14 @@ def main() -> None:
 
     data = _load(a.metrics, a.metric)
     print(f"metric: {a.metric}   (pooled floor, 2 consecutive epochs, epoch 0 excluded)\n")
+
+    bad = contaminated_runs(a.exp_root)
+    if bad:
+        print("!! RESTART-IN-PLACE CONTAMINATION -- these runs are stitched from two")
+        print("!! runs and must NOT be scored until cleaned and relaunched:")
+        for name, n in sorted(bad.items()):
+            print(f"!!   {name}  ({n} epoch-mtime inversion(s))")
+        print()
 
     # det first: different metric source, same rules.
     if "det" in a.levels or a.levels == ["low", "med", "high", "xhigh"]:

@@ -9,9 +9,28 @@ genuinely-distinct seeds** of the same configuration (the run-to-run floor) at *
 epochs**. The floor is **pooled across epochs** (`2·sqrt(mean(var_e))`), not taken from a single
 epoch: with three seeds each epoch's SD has two degrees of freedom, and the deterministic floor
 was measured to vary **15.6×** between epochs — enough to flip a verdict depending on which slice
-was used. Metrics are reported post-recalibration (`UNC − RES`) — the component recalibration
-cannot repair — because raw Brier differences at high noise turned out to be almost entirely
-calibration, which is routinely fixed post hoc.
+was used. ### What "post-recalibration" means here — NO recalibration was performed
+
+Three distinct things, easy to conflate:
+
+1. **The scored probabilities are raw and uncalibrated.** `full_roa_per_point.npz` stores
+   `p_success` as the ensemble-averaged model output; `lambda_star` and `delta` sit beside it as
+   separate fields. Nothing transforms `p`.
+2. **The pipeline calibrates the DECISION RULE, not the probabilities.** `conformal_threshold` /
+   `conformal_calibration` fit λ* and δ each epoch — the bands turning a probability into
+   success / failure / uncertain. That is conformal coverage on decisions; it cannot repair a
+   miscalibrated `p`.
+3. **`post-recal` in this document is `UNC − RES` from the Murphy decomposition**
+   (`Brier = REL − RES + UNC`) — what Brier *would* be if reliability error were driven to zero.
+   It is an idealisation computed from the data. **No Platt scaler, isotonic fit or temperature
+   was ever fitted.**
+
+So "the epistemic split removes the harm once calibration is accounted for" means the residual
+damage lives entirely in the component a *perfect* recalibrator would remove — not that
+recalibration was applied and observed to help. A real recalibrator recovers only part of that
+floor, so the achievable benefit lies between the raw and post-recal columns. This is why the
+headline is stated as a **~10× harm reduction on raw metrics**, which assumes nothing about
+recalibration.
 
 ---
 

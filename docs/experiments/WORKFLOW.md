@@ -4,6 +4,11 @@ This tree holds **experiment cards**: point-in-time records of what a run showed
 from `docs/superpowers/specs/` (which answers "what are we building") — a card *links to* a spec,
 it does not replace one. Finished experiment *lines* are frozen into `docs/research_journal/`.
 
+**Not everything in this tree is a card.** `ensemble_epistemic/` predates this system and keeps its
+own `FINDINGS.md` / `LOG.md` / `runs.jsonl` shape. `scripts/docs_lint.py` walks only `log/` and
+`archive/`, so that campaign is neither linted nor on `DASHBOARD.md` — an empty dashboard does not
+mean no experiments are running.
+
 ## The loop
 
 1. Create `log/EXP-<date>-<slug>.md` from `_templates/experiment.md` (status `idea`). Write the

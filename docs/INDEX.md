@@ -29,9 +29,27 @@ code wins and the page gets fixed or archived.
 | **the method end-to-end** — threshold optimisation, D1/D2 adaptive sampling, reevaluation | **`METHODS.md`** | current |
 | optimize λ*/δ*, calibrate q̂, understand the decision band | **`THRESHOLD_OPTIMIZATION.md`** | current — *strongest doc in the repo* |
 | trace the q̂ calibration chain specifically | `QHAT_CALIBRATION_PIPELINE.md` | current; overlaps THRESHOLD_OPTIMIZATION |
+| **split predictive uncertainty for acquisition** — aleatoric vs epistemic, and why BALD is *not* "epistemic focus" | `experiments/ensemble_epistemic/FINDINGS.md` §2 | current — campaign in progress |
+| score p(success\|x) **without** committing to an operating point — Murphy decomposition, debiased Brier | `superpowers/specs/2026-07-31-two-way-outcome-classification-design.md` | current |
 
 > The epoch loop itself: read `adaptive_roa/adaptive_v2/engine.py`. The prose walkthrough that used
 > to live here was retired — its CLI examples had all rotted, and the code is shorter than the doc.
+
+## Live campaigns — in progress, do not cite as settled
+
+`experiments/ensemble_epistemic/` — acquiring on the epistemic half of the entropy decomposition.
+`FINDINGS.md` holds only what is currently defensible; `LOG.md` is the chronological record
+*including superseded claims and their corrections*, so read the pair, not either alone.
+
+> The classifier half is a **negative result about miscalibration**, not a result about BALD. That
+> classifier's p̄ is distorted enough that every score — including total entropy, which targets
+> p = 0.5 by construction — lands on states whose true p is ≈0.02. So "adaptive is worse than random
+> at high noise" is true *of this classifier* and is **not** evidence about the method. The
+> flow-matching arms are the fair test, and they were unfinished as of 2026-08-05.
+
+> This campaign predates the card system and does not use it. `scripts/docs_lint.py` walks only
+> `experiments/log/` and `experiments/archive/`, so nothing under `ensemble_epistemic/` is linted,
+> and it will never appear on `experiments/DASHBOARD.md`.
 
 ## Evidence — frozen, never edit
 
@@ -41,6 +59,10 @@ Point-in-time records. They are not stale; they are what happened. Do not "fix" 
 |---|---|
 | **what's broken / what's already been cleared** (verified audit) | **`research_journal/2026-07-15-audit-findings.md`** |
 | what actually won: classifier vs flow matching, 4 systems | `research_journal/2026-06-21-classifier-vs-flowmatching.md` |
+| **stochastic pendulum, adaptive vs non-adaptive × FM vs classifier** (FINAL — 5 arms × 4 noise levels × 2 predictors) | `stoch_compare/FINDINGS.md`; tables in `stoch_compare/report.md` |
+| the run-to-run seed floor those verdicts are judged against | `stoch_compare/seed_variance.md` |
+| threshold-free scoring of the matched-budget arms | `experiment_analysis_report_2026-08-01_1030.md` (supersedes the `07-31_1950` cut) |
+| adaptive vs random on classification ROA, the 2026-06-23 campaign | `classification_adaptive_vs_random_report_2026-06-23.md` ⚠ its CLI examples predate 2026-06-29: top-level `d2_ratio=` was removed, and `sampling_mode=` is cosmetic |
 | Part-X first real run, 2-D pendulum (volume stabilises, tree tracks the separatrix) | `partx_pendulum_run.md` |
 | Part-X first real run, 4-D cartpole (**honest negative**: 0/64 leaves resolve) | `partx_cartpole_run.md` |
 | per-region MC sample errors | `mc_sample_errors_report.md` |

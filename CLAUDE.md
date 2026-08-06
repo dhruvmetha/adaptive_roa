@@ -67,7 +67,8 @@ python adaptive_roa/flow_matching/pendulum/latent_conditional/train.py
 # Flow-matching ROA eval (add evaluation.probabilistic=true for uncertainty)
 python adaptive_roa/flow_matching/evaluate_roa.py --config-name=evaluate_cartpole_roa
 
-# adaptive_v2 loop (predictor = generative | classifier | gp), config_name="default"
+# adaptive_v2 loop, config_name="default". `ls configs/adaptive_v2/predictor/` is the live list
+# (16 as of 2026-08-06, incl. ensembles and HMC) — an enumeration here would only rot.
 # NOTE: top-level `d2_ratio=` was REMOVED 2026-06-29. Select via the acquisition group:
 python scripts/run_adaptive.py system=quadrotor2d predictor=classifier acquisition=direct acquisition.d2_ratio=1.0 device=cuda:0
 # Part-X GP + level-set BO variant:

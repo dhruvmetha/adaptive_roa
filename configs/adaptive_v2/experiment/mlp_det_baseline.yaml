@@ -1,0 +1,16 @@
+# @package _global_
+# Deterministic-MLP final-state arm as a FIXED-DATASET baseline.
+#
+# d2_ratio must be zeroed here rather than in configs/adaptive_v2/predictor/mlp_det.yaml:
+# default.yaml lists `predictor` before `acquisition`, and a later group wins, so an
+# acquisition override written in the predictor group is silently discarded. Setting it
+# from the experiment group works because +experiment is composed last.
+#
+# Usage:
+#   python scripts/run_adaptive.py +experiment=mlp_det_baseline
+
+defaults:
+  - override /predictor: mlp_det
+
+acquisition:
+  d2_ratio: 0.0

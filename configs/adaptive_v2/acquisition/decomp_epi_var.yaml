@@ -1,0 +1,11 @@
+# @package _global_
+# Debiased between-member variance: unbiased at any K.
+sampling_mode: decomp_epi_var
+acquisition:
+  _target_: adaptive_roa.adaptive_v2.strategy.decomposition.DecompositionAcquisitionStrategy
+  score: epistemic_var
+  d2_ratio: 1.0
+  n_candidates: 50000
+  selection_rule: greedy_diverse
+  diversity_pool_multiplier: 5
+  verbose: true

@@ -1,0 +1,12 @@
+# @package _global_
+# Naive mutual information. Carries a ~(1/2K)(1-1/M) upward bias when p_m is
+# MC-estimated; run as its own arm to measure whether that bias matters.
+sampling_mode: decomp_epi_bald
+acquisition:
+  _target_: adaptive_roa.adaptive_v2.strategy.decomposition.DecompositionAcquisitionStrategy
+  score: epistemic_bald
+  d2_ratio: 1.0
+  n_candidates: 50000
+  selection_rule: greedy_diverse
+  diversity_pool_multiplier: 5
+  verbose: true

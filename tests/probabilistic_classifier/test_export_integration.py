@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 import torch
 import yaml
 
@@ -71,3 +72,47 @@ def test_export_run_classifier_writes_four_splits(tmp_path):
     meta = json.loads((out_dir / "metadata.json").read_text())
     assert meta["predictor"] == "classifier"
     assert meta["native_probs"] == ["p_success"]
+
+
+def test_export_run_raises_when_every_epoch_fails_to_load(tmp_path):
+    """A load failure on every epoch found is never a legitimate `[skip
+    epoch]` gap (that only covers a checkpoint not yet written mid-training)
+    -- it means the arm's checkpoint shape doesn't match what `cfg` builds, so
+    the run was never going to export anything. Before this test, that case
+    printed `[skip epoch NNN] load failed` and still returned/exited 0 with
+    `epoch_counts` full of `{"error": ...}` -- indistinguishable, from the
+    caller's side, from a run that legitimately has no checkpoints yet. That
+    is how a reference-tier classifier arm exported nothing without anyone
+    noticing.
+    """
+    system = PendulumSystem()
+    sd = int(system.state_dim)
+    run_dir = tmp_path / "run"
+    (run_dir / "datasets").mkdir(parents=True)
+    _save_clf_ckpt(run_dir / "epoch_000", system)  # checkpoint trained at hidden_dims=[8]
+    _write_clf_rows(run_dir / "datasets" / "train_classification_dataset.txt", 6, sd)
+    _write_clf_rows(run_dir / "datasets" / "val_classification_dataset.txt", 4, sd)
+    cal_file = tmp_path / "cal_set.txt"
+    test_file = tmp_path / "test_set.txt"
+    _write_eval_states(cal_file, 5, sd)
+    _write_eval_states(test_file, 7, sd)
+
+    cfg = {
+        "predictor": "classifier",
+        "system": {"_target_": "adaptive_roa.systems.pendulum.PendulumSystem"},
+        # No "classifier" block, so the loader falls back to its default
+        # hidden_dims ([256, 512, 256]), which does not match the [8]-wide
+        # checkpoint above -- the same "silent size mismatch" shape as N1.
+        "data_source": {"cal_set_file": str(cal_file), "test_set_file": str(test_file)},
+    }
+    hydra_dir = run_dir / ".hydra"
+    hydra_dir.mkdir()
+    (hydra_dir / "config.yaml").write_text(yaml.safe_dump(cfg))
+
+    out_dir = tmp_path / "out"
+    with pytest.raises(RuntimeError, match="every epoch"):
+        export_run(str(run_dir), str(out_dir), device="cpu")
+
+    # Diagnostics still land on disk even though the call raises.
+    meta = json.loads((out_dir / "metadata.json").read_text())
+    assert "error" in meta["epoch_counts"]["0"]

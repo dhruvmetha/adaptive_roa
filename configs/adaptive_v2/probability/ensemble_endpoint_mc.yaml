@@ -1,0 +1,5 @@
+# @package _global_
+probability:
+  _target_: adaptive_roa.adaptive_v2.probability.ensemble_prob.EnsembleEndpointMCProbabilityBackend
+  attractor_radius: ${attractor_radius}
+  num_mc_samples: 20

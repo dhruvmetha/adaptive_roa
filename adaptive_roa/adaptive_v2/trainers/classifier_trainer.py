@@ -34,6 +34,27 @@ class ClassifierTrainer:
         pred = self.cfg.get("predictor")
         return pred if pred is not None else self.cfg
 
+    @staticmethod
+    def _pos_weight(cls_cfg, data_module):
+        """Explicit ``predictor.classifier.pos_weight`` wins over the data-derived one.
+
+        Mirrors the override ``BayesianMLPTrainer`` already honours. Without it
+        the reference tier's ``pos_weight: 1.0`` could not reach this arm at
+        all: the tier composes the key under ``predictor.bnn``, only
+        ``BayesianMLPTrainer`` read it, and this trainer hardcoded
+        ``data_module.pos_weight``. The classifier therefore trained against a
+        CLASS-TEMPERED likelihood while HMC referenced the untempered one, and
+        nothing in the diagnostics could show it.
+
+        The default is unchanged: without the key, the data-derived weight is
+        still used, which is what every production run wants (quad2d is ~8%
+        success).
+        """
+        explicit = cls_cfg.get("pos_weight")
+        if explicit is not None:
+            return float(explicit)
+        return data_module.pos_weight
+
     def _embedded_dim(self) -> int:
         dummy = torch.zeros(1, int(self.system.state_dim))
         embedded = self.system.embed_state_for_model(self.system.normalize_state(dummy))
@@ -57,11 +78,14 @@ class ClassifierTrainer:
             hidden_dims=list(cls_cfg.get("hidden_dims", [256, 512, 256])),
             output_dim=1,
             dropout=float(cls_cfg.get("dropout", 0.0)),
+            # Mirrored by load_clf_module in probabilistic_classifier/classifier.py;
+            # the two MUST agree, since a mismatched activation loads silently.
+            activation=str(cls_cfg.get("activation", "relu")),
         )
         module = ClassifierModule(
             mlp=mlp,
             system=self.system,
-            pos_weight=data_module.pos_weight,
+            pos_weight=self._pos_weight(cls_cfg, data_module),
             lr=float(cls_cfg.get("lr", 1e-3)),
             weight_decay=float(cls_cfg.get("weight_decay", 1e-5)),
         )

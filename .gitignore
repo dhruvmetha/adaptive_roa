@@ -17,11 +17,18 @@ attractor_analysis*
 !.env.example
 
 **/env/
+# Second conda env for the Blackwell cards; same rationale as env/, but the
+# **/env/ glob does not match a suffixed name.
+env_blackwell/
 **/*.egg-info/
 
 # Per-user context: concrete env paths and machine facts. CLAUDE.md is shared and
 # carries rules only; the values that differ per person live here.
 CLAUDE.local.md
+
+# Lightning writes here when a run is launched without an output dir override
+checkpoints/
+*.ckpt
 
 # Generated artifacts
 *.pdf

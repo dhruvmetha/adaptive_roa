@@ -24,7 +24,18 @@ def clf_forward(module, system, states, device, bs=8192):
 
 
 def load_clf_module(epoch_dir, system, cfg, device):
-    cls = cfg.get("classifier", {})
+    # `export_run` (the real caller, via `load_from_run`) passes the full run
+    # config. In current run configs the arm lives at `predictor.classifier`,
+    # the same shape every sibling wrapper reads (bayesian.py's
+    # `predictor.bnn`, bayesian_final_state.py's `predictor.final_state`).
+    # Older, pre-name run configs record `predictor` as the bare string
+    # "classifier" and keep the arm block flat at the top level (see
+    # `resolve_predictor_name`'s docstring) -- fall back to that shape too.
+    predictor = cfg.get("predictor", None)
+    if predictor is None or isinstance(predictor, str):
+        cls = cfg.get("classifier", {})
+    else:
+        cls = predictor.get("classifier", {})
     dummy = torch.zeros(1, int(system.state_dim))
     input_dim = int(system.embed_state_for_model(system.normalize_state(dummy)).shape[-1])
     mlp = ClassifierMLP(
@@ -32,6 +43,10 @@ def load_clf_module(epoch_dir, system, cfg, device):
         hidden_dims=list(cls.get("hidden_dims", [256, 512, 256])),
         output_dim=1,
         dropout=float(cls.get("dropout", 0.0)),
+        # MUST mirror ClassifierTrainer's default. Activations carry no
+        # parameters, so a mismatch here loads the checkpoint cleanly and then
+        # computes different logits -- there is no error to catch it.
+        activation=str(cls.get("activation", "relu")),
     )
     module = ClassifierModule(
         mlp=mlp, system=system, pos_weight=torch.tensor(1.0), lr=1e-3, weight_decay=1e-5

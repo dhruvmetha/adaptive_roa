@@ -1,0 +1,30 @@
+# @package _global_
+defaults:
+  - /probability: endpoint_mc
+predictor:
+  type: generative           # family tag
+  name: hmc_reg               # arm name
+  head: final_state
+  trainer_target: adaptive_roa.adaptive_v2.trainers.hmc_trainer.HMCTrainer
+  batch_size: 1024
+  hmc:
+    hidden_dims: [50, 50]   # reference tier: full-batch HMC is routine at ~3k params
+    activation: tanh        # NOT relu: its non-differentiability degrades the
+                            # leapfrog local error to O(eps) (Dinh et al. 2024)
+    prior_sigma: 1.0        # isotropic Gaussian, identical across arms
+    n_chains: 3
+    n_samples: 200          # trajectory-length jitter (sampler.py) costs roughly
+                            # HALF the effective sample size on well-behaved
+                            # seeds (measured: median ESS 320 -> 176 at 800
+                            # draws) in exchange for killing a resonance that
+                            # otherwise silently destroys second moments. This
+                            # tier budgets draws with that cost already in mind
+                            # rather than a naive setting.
+    n_warmup: 200
+    n_leapfrog: 20
+    # NO `seed` key: chain seeds follow the RUN seed (cfg.seed) so replicates
+    # 42/43/44 actually differ. Pinning it here made every replicate
+    # bit-identical, which set the reference arm's own sampling variability --
+    # the scale an approximation's gap must be judged against -- to exactly 0.
+    rhat_threshold: 1.1        # Gelman-Rubin convention, NOT tuned to this arm
+    strict_convergence: false  # true => a non-converged run raises instead of warning

@@ -116,7 +116,41 @@ class AdaptiveEngine:
         # Track unfiltered row count for confidence filter (rows, not trajectories)
         n_existing_rows = self._count_file_rows(dataset_files["train"])
 
-        for epoch in range(n_epochs):
+        return self._run_loop(
+            start_epoch=0,
+            n_epochs=n_epochs,
+            epoch_results=epoch_results,
+            previous_best_checkpoint=previous_best_checkpoint,
+            dataset_files=dataset_files,
+            n_existing_rows=n_existing_rows,
+        )
+
+    def _run_loop(
+        self,
+        start_epoch: int,
+        n_epochs: int,
+        epoch_results: list[dict[str, Any]],
+        previous_best_checkpoint: str | None,
+        dataset_files: dict[str, str],
+        n_existing_rows: int,
+    ) -> dict[str, Any]:
+        """Run epochs [start_epoch, n_epochs) and write final_results.json.
+
+        Split out of run() so an interrupted run can be continued from disk.
+        scripts/resume_adaptive.py restores the pool from
+        dataset_builder_state.json and calls this with the epoch after the last
+        completed one; run() is the same loop with start_epoch=0. Everything the
+        loop needs beyond its arguments is re-derived from cfg here, so the two
+        entry points cannot drift apart.
+        """
+        dataset_kind = "classification" if self.predictor_type == "classifier" else "endpoint"
+        samples_per_epoch = int(self.cfg.get("samples_per_epoch", 50))
+        d2_ratio = self.acquisition.d2_ratio
+        warm_start = bool(self.cfg.get("warm_start", False))
+        acquisition_mode = self.acquisition.mode
+        eval_every = int(self.cfg.get("eval_every", 1))
+
+        for epoch in range(start_epoch, n_epochs):
             print("\n" + "=" * 70)
             print(f"EPOCH {epoch}")
             print("=" * 70)

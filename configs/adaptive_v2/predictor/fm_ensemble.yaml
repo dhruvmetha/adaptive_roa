@@ -1,0 +1,48 @@
+# @package _global_
+# Deep ensemble of flow matchers, members trained one per GPU in parallel.
+# Requires n_members GPUs on the node.
+defaults:
+  - /probability: ensemble_endpoint_mc
+predictor:
+  type: generative
+  name: fm_ensemble
+  trainer_target: adaptive_roa.adaptive_v2.trainers.ensemble_flow_matching_trainer.EnsembleFlowMatchingTrainer
+  batch_size: 1024
+  val_batch_size: 2048
+  ensemble:
+    n_members: 5
+  flow_matching:
+    latent_dim: ${flow_matching.latent_dim}
+    num_integration_steps: 100
+    mae_val_frequency: 10
+    use_loss_weights: false
+    use_log_loss_weights: false
+    use_manifold: false
+    clamp_noise: false
+    zero_latent: true
+    noise_scale: 1.0
+    quat_loss_weight: 1.0
+  lightning_trainer:
+    max_epochs: 200
+    accelerator: gpu
+    devices: 1
+    precision: 32
+    gradient_clip_val: 1.0
+    log_every_n_steps: 10
+    check_val_every_n_epoch: 1
+    enable_progress_bar: true
+    enable_model_summary: true
+    callbacks:
+      - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+        monitor: val_loss
+        mode: min
+        save_top_k: 1
+        save_last: true
+        filename: "best-{epoch:02d}-{val_loss:.4f}"
+        auto_insert_metric_name: false
+      - _target_: lightning.pytorch.callbacks.EarlyStopping
+        monitor: val_loss
+        mode: min
+        patience: 100
+        verbose: true
+        min_delta: 0.0001

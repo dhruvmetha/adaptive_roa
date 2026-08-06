@@ -16,6 +16,7 @@ import torch.nn.functional as F
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import CSVLogger
 
+from adaptive_roa.adaptive_v2.trainers._seeding import resolve_seed_base
 from adaptive_roa.data.adaptive_classification_data import AdaptiveClassificationDataModule
 from adaptive_roa.predictors.bayesian_mlp import build_from_cfg, outcome_handle_from_cfg
 from adaptive_roa.predictors.posteriors import EnsemblePosterior
@@ -95,6 +96,15 @@ class BayesianMLPTrainer:
         pred = self.cfg.get("predictor")
         return pred if pred is not None else self.cfg
 
+    def _member_seed_base(self) -> int:
+        """Seed base for the ensemble members, from the RUN seed.
+
+        See ``_seeding.resolve_seed_base`` for the bug this replaced and why a
+        bit-identical seed replicate is worse than a missing feature.
+        `predictor.bnn.seed` still wins if explicitly set.
+        """
+        return resolve_seed_base(self.cfg, self._predictor_cfg.get("bnn", {}))
+
     def _build(self, bnn, posterior_kind):
         # Shared with the export wrapper so the two can never build different
         # architectures from the same config (see bayesian_mlp.build_from_cfg).
@@ -169,8 +179,16 @@ class BayesianMLPTrainer:
         # `.states` and `.labels` as full in-memory tensors.
         n_train = len(data_module._train)
 
+        # The reference tier pins pos_weight = 1 so every arm targets ONE shared
+        # posterior. Class reweighting tempers the likelihood per class, so an arm
+        # trained under it is not approximating the posterior HMC samples. An
+        # explicit config value therefore overrides the data-derived default.
+        cfg_pos_weight = bnn.get("pos_weight", None)
+        pos_weight = (float(cfg_pos_weight) if cfg_pos_weight is not None
+                      else data_module.pos_weight)
+
         common = dict(
-            system=self.system, pos_weight=data_module.pos_weight,
+            system=self.system, pos_weight=pos_weight,
             lr=float(bnn.get("lr", 1e-3)),
             weight_decay=float(bnn.get("weight_decay", 1e-5)),
             n_train=n_train,
@@ -182,7 +200,7 @@ class BayesianMLPTrainer:
             # Members must be independent: own seed, own optimizer, own shuffling.
             members, use_gpu, device = [], False, "cpu"
             for m in range(n_members):
-                torch.manual_seed(int(bnn.get("seed", 0)) + m)
+                torch.manual_seed(self._member_seed_base() + m)
                 member = self._build(bnn, "deterministic")
                 if member_states is not None:
                     _load_warm_start(member, member_states[m],

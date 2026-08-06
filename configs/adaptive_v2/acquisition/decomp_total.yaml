@@ -1,0 +1,12 @@
+# @package _global_
+# Ensemble entropy of the marginal -- the current method, re-run on the ensemble
+# so it is comparable to the epistemic arms without an ensembling confound.
+sampling_mode: decomp_total
+acquisition:
+  _target_: adaptive_roa.adaptive_v2.strategy.decomposition.DecompositionAcquisitionStrategy
+  score: total
+  d2_ratio: 1.0
+  n_candidates: 50000
+  selection_rule: greedy_diverse
+  diversity_pool_multiplier: 5
+  verbose: true

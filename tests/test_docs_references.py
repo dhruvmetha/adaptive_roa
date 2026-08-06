@@ -24,6 +24,9 @@ FROZEN = {
     "mc_sample_errors_report.md",   # generated evidence tables
     "partx_pendulum_run.md",        # dated run note
     "partx_cartpole_run.md",        # dated run note
+    "classification_adaptive_vs_random_report_2026-06-23.md",   # dated campaign report
+    "experiment_analysis_report_2026-07-31_1950.md",            # generated evidence tables
+    "experiment_analysis_report_2026-08-01_1030.md",            # generated evidence tables
 }
 
 LIVING = [REPO / "CLAUDE.md", REPO / "README.md"] + [

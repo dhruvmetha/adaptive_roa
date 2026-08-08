@@ -156,3 +156,34 @@ def test_restart_in_place_contamination_is_detected(tmp_path):
     assert "clf_high_total" in bad, "an out-of-order rewrite must be caught"
     assert "clf_high_dir00" not in bad, "a clean run must not be flagged"
     assert not any(k.startswith("_preserved") for k in bad), "backups are not runs"
+
+
+def test_load_det_reads_the_requested_predictor(tmp_path):
+    """load_det was hardcoded to clf_det_*, so FM det runs scored as nothing.
+
+    The failure was silent: `ensemble_verdicts.py --levels det --predictors fm`
+    printed no FM row at all rather than erroring, so a whole level looked
+    un-launched when it was actually running.
+    """
+    import json
+
+    def write(run, arm, epochs):
+        for e, v in epochs.items():
+            d = tmp_path / f"{run}_{arm}" / f"epoch_{e:03d}"
+            d.mkdir(parents=True)
+            (d / "artifacts_v2.json").write_text(
+                json.dumps({"eval_metrics": {"threshold_free": {"brier": v}}}))
+
+    write("clf_det", "dir00", {0: 0.10, 1: 0.11})
+    write("fm_det", "dir00", {0: 0.20, 1: 0.21})
+    write("fm_det", "total", {0: 0.30, 1: 0.31})
+
+    clf = ev.load_det(tmp_path, "brier", "clf")
+    assert set(clf) == {("clf", "det", "dir00")}
+    assert clf[("clf", "det", "dir00")][1] == 0.11
+
+    fm = ev.load_det(tmp_path, "brier", "fm")
+    assert set(fm) == {("fm", "det", "dir00"), ("fm", "det", "total")}
+    assert fm[("fm", "det", "total")][1] == 0.31
+    # the clf runs must not leak into the fm view
+    assert all(k[0] == "fm" for k in fm)

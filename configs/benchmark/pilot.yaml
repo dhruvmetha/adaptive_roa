@@ -1,0 +1,9 @@
+# Pilot campaign: cheapest systems, full arm set, enough seeds for a variance
+# claim. Validates the harness before the quadrotor phase is committed.
+tier: production
+arms: [mlp, gp, bnn_mfvi, bnn_ensemble, bnn_laplace,
+       fm, mlp_det, gp_reg, bnn_mfvi_reg, bnn_ensemble_reg, bnn_laplace_reg]
+systems: [pendulum, cartpole]
+acquisition: [ranked, random]   # paired control per arm
+seeds: [42, 43, 44]
+n_epochs: 10

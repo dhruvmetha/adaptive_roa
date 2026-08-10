@@ -20,6 +20,7 @@ from adaptive_roa.adaptive.endpoint_evaluation import (
     compute_endpoint_prediction_error,
     sample_val_data_for_optimization,
 )
+from adaptive_roa.benchmark.provenance import git_sha
 from adaptive_roa.adaptive_v2.pool.trajectory_pool import TrajectoryPool
 from adaptive_roa.adaptive_v2.filters.confidence_filter import ConfidencePairFilter
 from adaptive_roa.adaptive_v2.types import AcquisitionResult, EpochArtifacts, ThresholdState
@@ -379,6 +380,7 @@ class AdaptiveEngine:
                 extra={
                     "n_cal_eval": n_cal_eval,
                     "optimize_mode": self.threshold_backend.optimize_mode,
+                    "commit": git_sha(),
                 },
             )
             with open(epoch_output_dir / "artifacts_v2.json", "w") as f:

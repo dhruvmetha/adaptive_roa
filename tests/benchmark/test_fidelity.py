@@ -48,3 +48,27 @@ def test_threshold_is_honoured():
 def test_shape_mismatch_raises():
     with pytest.raises(ValueError, match="shape"):
         fidelity_vs_reference(np.array([0.9, 0.1]), np.array([0.8]), CONVERGED)
+
+
+# `hmc_vs_hmc_ceiling` was once fed a raw, unbounded network output as if it
+# were a probability and reported total_variation = 3.89 -- a value a [0, 1]
+# distance cannot produce. That shipped as a plausible-looking number; the
+# fix was to raise, never clamp. These three pin the identical guard here.
+def test_a_value_above_one_is_refused_not_clamped():
+    with pytest.raises(ValueError):
+        fidelity_vs_reference(np.array([1.5, 0.2]), np.array([0.8, 0.2]), CONVERGED)
+
+
+def test_a_value_below_zero_is_refused_not_clamped():
+    with pytest.raises(ValueError):
+        fidelity_vs_reference(np.array([-0.1, 0.2]), np.array([0.8, 0.2]), CONVERGED)
+
+
+def test_a_nan_value_is_refused_not_silently_propagated():
+    with pytest.raises(ValueError):
+        fidelity_vs_reference(np.array([np.nan, 0.2]), np.array([0.8, 0.2]), CONVERGED)
+
+
+def test_the_reference_array_is_checked_too_not_only_the_approximation():
+    with pytest.raises(ValueError):
+        fidelity_vs_reference(np.array([0.8, 0.2]), np.array([1.5, 0.2]), CONVERGED)

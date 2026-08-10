@@ -52,6 +52,14 @@ from dataclasses import dataclass
 
 import numpy as np
 
+# Reused directly, not reimplemented: one definition of "is this actually a
+# probability" in this subsystem, not two that can drift apart. Underscore
+# name means module-private by convention only -- Python does not enforce it,
+# and duck typing (`.min()`/`.max()`/`float()`) means it works unmodified on
+# the plain numpy arrays this module passes it, despite its torch.Tensor type
+# hint (verified: raises correctly on values > 1, < 0, and NaN inputs here).
+from adaptive_roa.predictors.hmc.diagnostics import _require_probabilities
+
 
 @dataclass(frozen=True)
 class FidelityResult:
@@ -79,6 +87,17 @@ def fidelity_vs_reference(approx_probs, ref_probs, ref_diagnostics,
     - ``approx_probs`` and ``ref_probs`` disagree in shape -- they must be
       predictions at the same evaluation points, and a shape mismatch means
       they are not.
+    - either array is not actually a probability (a value outside ``[0, 1]``,
+      or NaN) -- via ``_require_probabilities``, reused from
+      ``adaptive_roa/predictors/hmc/diagnostics.py`` rather than
+      reimplemented. This is not a generic input check: this exact mistake
+      already shipped in this subsystem once, when ``hmc_vs_hmc_ceiling`` was
+      fed a raw, unbounded network output as if it were a probability and
+      reported ``total_variation = 3.89`` -- a value a ``[0, 1]`` distance
+      cannot produce -- as a plausible-looking number. The fix there was to
+      raise, never clamp: clamping would turn an invalid input into a
+      plausible in-range output, which is the exact failure mode this guard
+      exists to prevent, so it is not offered as an option here either.
     - ``ref_diagnostics`` carries no ``rhat_max``. A missing diagnostic is
       refused, not treated as "assume converged": that assumption is exactly
       what this gate exists to prevent, and a reference run that somehow
@@ -100,6 +119,8 @@ def fidelity_vs_reference(approx_probs, ref_probs, ref_diagnostics,
             f"Both must be predictive probabilities at the same evaluation "
             f"points."
         )
+    _require_probabilities(approx)
+    _require_probabilities(ref)
     if "rhat_max" not in (ref_diagnostics or {}):
         raise ValueError(
             "reference diagnostic 'rhat_max' is absent. Refusing to assume the "
@@ -116,6 +137,8 @@ def fidelity_vs_reference(approx_probs, ref_probs, ref_diagnostics,
                     f"posterior is undefined, so no number is reported."),
         )
 
+    # Mean ABSOLUTE DIFFERENCE across points, not one joint TV distance for
+    # the whole evaluation set -- see the module docstring's naming note.
     tv = float(np.mean(np.abs(approx - ref)))
     agreement = float(np.mean((approx >= 0.5) == (ref >= 0.5)))
     return FidelityResult(available=True, agreement=agreement,

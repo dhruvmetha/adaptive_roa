@@ -61,17 +61,35 @@ def resolve_run(root: Path) -> Path | None:
     return runs[0] if runs else None
 
 
-def find_arm(level: str, kind: str) -> Path | None:
-    """kind: 'outcome' | 'clf' | 'fm'. Deepest copy wins, Amarel breaks ties."""
-    if kind == "outcome":
-        return resolve_run(OUTCOME_ROOT / f"fm_outcome_{level}")
+ROOTS = ("stoch_compare_amarel", "stoch_compare", "stoch_compare_seeds")
+
+
+def _best_copy(name: str) -> Path | None:
+    """Deepest copy of a run across all roots, Amarel breaking ties.
+
+    The same run name exists under several roots; taking the first match found
+    silently discards deeper data when a preempted Amarel copy is shallower.
+    """
     cands = []
-    for sub in ("stoch_compare_amarel", "stoch_compare"):
-        d = resolve_run(EXP / sub / f"{kind}_{level}_dir00")
+    for sub in ROOTS:
+        d = resolve_run(EXP / sub / name)
         if d is not None:
             cands.append((d, sub != "stoch_compare_amarel"))
     cands.sort(key=lambda t: (-len(epoch_dirs(t[0])), t[1]))
     return cands[0][0] if cands else None
+
+
+def seed_runs(level: str, kind: str) -> list[Path]:
+    """All seed replicates of a reference arm: base (s42) plus s43/s44."""
+    names = [f"{kind}_{level}_dir00"] + [f"{kind}_{level}_dir00_s{s}" for s in (43, 44)]
+    return [r for r in (_best_copy(n) for n in names) if r is not None]
+
+
+def find_arm(level: str, kind: str) -> Path | None:
+    """kind: 'outcome' | 'clf' | 'fm'. Deepest copy wins, Amarel breaks ties."""
+    if kind == "outcome":
+        return resolve_run(OUTCOME_ROOT / f"fm_outcome_{level}")
+    return _best_copy(f"{kind}_{level}_dir00")
 
 
 def matched_epoch(runs: dict[str, Path]) -> int | None:
@@ -97,34 +115,102 @@ def verdict(outcome: float, clf: float, fm: float, floor: float | None) -> str:
         return (f"INDETERMINATE: reference arms differ by {span:.5f}, inside the "
                 f"{floor:.5f} run-to-run floor -- nothing to attribute")
 
+    lo, hi = min(fm, clf), max(fm, clf)
+    weak = " [no noise floor available -- weak]" if floor is None else ""
+
+    # Outside the bracket the "% of span" framing is meaningless (it goes
+    # negative), and the finding is different in kind: the arm is not
+    # interpolating between the two mechanisms at all.
+    if outcome < lo - (floor or 0.0):
+        who = "endpoint-FM" if fm < clf else "the classifier"
+        return (f"OUTSIDE THE BRACKET (provisional): better calibrated than BOTH references "
+                f"(by {lo - outcome:.5f} vs the better one, {who}) -- not an interpolation, "
+                f"so the two-factor framing does not explain it{weak}")
+    if outcome > hi + (floor or 0.0):
+        who = "the classifier" if clf > fm else "endpoint-FM"
+        return (f"OUTSIDE THE BRACKET (provisional): worse calibrated than BOTH references "
+                f"(by {outcome - hi:.5f} vs the worse one, {who}) -- the scalar target costs "
+                f"more than either mechanism explains{weak}")
+
     frac = d_fm / span  # 0 = sits on endpoint-FM, 1 = sits on the classifier
     if floor is not None and min(d_fm, d_clf) > floor and 0.25 < frac < 0.75:
         return (f"BOTH CONTRIBUTE (provisional): sits {frac:.0%} of the way from "
                 f"endpoint-FM toward the classifier, resolvably far from each")
     if d_fm < d_clf:
         near = "" if floor is None or d_fm > floor else " (within the noise floor of it)"
-        return f"MACHINERY (provisional): tracks endpoint-FM{near}, {frac:.0%} of the span from it"
+        return f"MACHINERY (provisional): tracks endpoint-FM{near}, {frac:.0%} of the span from it{weak}"
     near = "" if floor is None or d_clf > floor else " (within the noise floor of it)"
-    return f"TARGET (provisional): tracks the classifier{near}, {1 - frac:.0%} of the span from it"
+    return f"TARGET (provisional): tracks the classifier{near}, {1 - frac:.0%} of the span from it{weak}"
 
 
-def noise_floor(level: str) -> float | None:
-    """Run-to-run spread on this metric, from the campaign's seed replicates.
-
-    Uses the fm_*_dir00 seed family at its deepest shared epoch. Returns None
-    when fewer than 3 seeds exist, rather than inventing a denominator.
-    """
-    seeds = [EXP / "stoch_compare_seeds" / f"fm_{level}_dir00_s{s}" for s in (43, 44)]
-    base = find_arm(level, "fm")
-    runs = [r for r in ([base] + [resolve_run(s) for s in seeds]) if r is not None]
-    if len(runs) < 3:
-        return None
-    ep = matched_epoch({str(i): r for i, r in enumerate(runs)})
-    if ep is None:
-        return None
+def seed_scores(level: str, kind: str, epoch: int) -> list[float]:
+    """Score every seed replicate of a reference arm that reached `epoch`."""
     gt = load_ground_truth(DATA / level)
-    vals = [score_epoch(r / f"epoch_{ep:03d}", gt, None, None)[KEY] for r in runs]
-    return float(2.0 * np.std(vals, ddof=1))
+    out = []
+    for r in seed_runs(level, kind):
+        d = r / f"epoch_{epoch:03d}"
+        if (d / "full_roa_per_point.npz").exists():
+            out.append(float(score_epoch(d, gt, None, None)[KEY]))
+    return out
+
+
+def reference_value(level: str, kind: str, epoch: int) -> tuple[float, int, float]:
+    """(median across seeds, n seeds, spread) for a reference arm.
+
+    The MEDIAN, not a single arbitrarily-chosen run. Individual runs spike: at
+    med epoch 18 the base fm seed reads 0.00318 against siblings at 0.00098 and
+    0.00057, and anchoring 'endpoint-FM' on that would bias the attribution
+    purely from which copy the discovery happened to pick.
+    """
+    vals = seed_scores(level, kind, epoch)
+    if not vals:
+        return float("nan"), 0, float("nan")
+    spread = (max(vals) - min(vals)) if len(vals) > 1 else float("nan")
+    return float(np.median(vals)), len(vals), spread
+
+
+def noise_floor(level: str, epoch: int) -> tuple[float | None, str]:
+    """(2xSD across fm seed replicates at `epoch`, reason if unavailable).
+
+    Returns the reason rather than a bare None: 'fewer than 3 seeds' and 'seeds
+    exist but none reached this epoch' call for different responses, and
+    collapsing them into one message previously reported '<3 seeds' for levels
+    that in fact had all three.
+
+    Strictly within-campaign. `low` and `xhigh` have same-named dir00 seeds under
+    ensemble_epistemic/, but that is a DIFFERENT campaign whose configuration
+    could not be confirmed equivalent from the stored artifacts. A floor is the
+    denominator of every verdict here, so an unverified one would turn a guess
+    into a confident claim. See `cross_campaign_floor` for a labelled estimate
+    that is reported but never used to decide.
+    """
+    runs = seed_runs(level, "fm")
+    if len(runs) < 3:
+        return None, f"only {len(runs)} within-campaign seed run(s) found"
+    vals = seed_scores(level, "fm", epoch)
+    if len(vals) < 3:
+        return None, f"{len(runs)} seeds exist but only {len(vals)} reached epoch {epoch}"
+    return float(2.0 * np.std(vals, ddof=1)), ""
+
+
+def cross_campaign_floor(level: str, epoch: int) -> float | None:
+    """Floor estimated from ensemble_epistemic's dir00 seeds. CONTEXT ONLY.
+
+    Never feeds a verdict: those runs come from a different campaign and their
+    equivalence to the stoch_compare arms is unverified.
+    """
+    gt = load_ground_truth(DATA / level)
+    vals = []
+    for name in (f"fm_{level}_dir00_s43", f"fm_{level}_dir00_s44"):
+        r = resolve_run(EXP / "ensemble_epistemic" / name)
+        if r is None:
+            continue
+        d = r / f"epoch_{epoch:03d}"
+        if (d / "full_roa_per_point.npz").exists():
+            vals.append(float(score_epoch(d, gt, None, None)[KEY]))
+    base = seed_scores(level, "fm", epoch)
+    vals.extend(base[:1])
+    return float(2.0 * np.std(vals, ddof=1)) if len(vals) >= 3 else None
 
 
 def mc_vs_exact(level: str, epoch: int) -> str | None:
@@ -187,21 +273,36 @@ def report_level(level: str, with_mc: bool) -> None:
 
     gt = load_ground_truth(DATA / level)
     scored = {k: score_epoch(v / f"epoch_{ep:03d}", gt, None, None) for k, v in runs.items()}
-    floor = noise_floor(level)
+    floor, floor_why = noise_floor(level, ep)
+
+    # Reference arms use the seed MEDIAN; the outcome arm has one run so far.
+    ref = {k: reference_value(level, k, ep) for k in ("fm", "clf")}
 
     print(f"\n## {level} — matched epoch {ep}")
-    print(f"| arm | debiased Brier | skill | sAUROC | mean p_invalid |")
-    print(f"|---|---|---|---|---|")
+    print("| arm | debiased Brier | seeds | seed spread | skill | sAUROC | mean p_invalid |")
+    print("|---|---|---|---|---|---|---|")
     for k, label in (("fm", "endpoint FM (generative x state)"),
                      ("outcome", "**outcome FM (generative x binary)**"),
                      ("clf", "classifier (discriminative x binary)")):
         s = scored[k]
-        print(f"| {label} | {s[KEY]:.5f} | {s.get('skill_score', float('nan')):.4f} | "
+        if k in ref and ref[k][1] > 0:
+            val, n, spread = ref[k]
+            n_s, sp_s = str(n), f"{spread:.5f}" if np.isfinite(spread) else "—"
+        else:
+            val, n_s, sp_s = s[KEY], "1", "—"
+        print(f"| {label} | {val:.5f} | {n_s} | {sp_s} | {s.get('skill_score', float('nan')):.4f} | "
               f"{s.get('soft_auroc', float('nan')):.4f} | {s.get('mean_p_invalid', 0.0):.4f} |")
 
-    print(f"\n    noise floor (2xSD, fm dir00 seeds): "
-          f"{'unavailable (<3 seeds)' if floor is None else f'{floor:.5f}'}")
-    print(f"    VERDICT: {verdict(scored['outcome'][KEY], scored['clf'][KEY], scored['fm'][KEY], floor)}")
+    print(f"\n    noise floor (2xSD, fm seeds @ep{ep}): "
+          f"{f'{floor:.5f}' if floor is not None else f'unavailable — {floor_why}'}")
+    if floor is None:
+        xc = cross_campaign_floor(level, ep)
+        if xc is not None:
+            print(f"    (context only, NOT used for the verdict: ensemble_epistemic dir00 "
+                  f"seeds give ~{xc:.5f}; different campaign, config equivalence unverified)")
+    fm_ref = ref["fm"][0] if ref["fm"][1] > 0 else scored["fm"][KEY]
+    clf_ref = ref["clf"][0] if ref["clf"][1] > 0 else scored["clf"][KEY]
+    print(f"    VERDICT: {verdict(scored['outcome'][KEY], clf_ref, fm_ref, floor)}")
 
     # The campaign's separation claim: FM and CLF tie on ranking, differ on
     # calibration. If outcome-FM breaks the tie, that claim is less clean than

@@ -80,7 +80,14 @@ def _best_copy(name: str) -> Path | None:
 
 
 def seed_runs(level: str, kind: str) -> list[Path]:
-    """All seed replicates of a reference arm: base (s42) plus s43/s44."""
+    """All seed replicates of an arm: base (s42) plus s43/s44.
+
+    The outcome arm lives under its own root but follows the same naming, so the
+    verdict can stop being provisional once it has three seeds of its own.
+    """
+    if kind == "outcome":
+        names = [f"fm_outcome_{level}"] + [f"fm_outcome_{level}_s{s}" for s in (43, 44)]
+        return [r for r in (resolve_run(OUTCOME_ROOT / n) for n in names) if r is not None]
     names = [f"{kind}_{level}_dir00"] + [f"{kind}_{level}_dir00_s{s}" for s in (43, 44)]
     return [r for r in (_best_copy(n) for n in names) if r is not None]
 
@@ -269,8 +276,9 @@ def report_level(level: str, with_mc: bool) -> None:
     scored = {k: score_epoch(v / f"epoch_{ep:03d}", gt, None, None) for k, v in runs.items()}
     floor, floor_why = noise_floor(level, ep)
 
-    # Reference arms use the seed MEDIAN; the outcome arm has one run so far.
-    ref = {k: reference_value(level, k, ep) for k in ("fm", "clf")}
+    # All three arms use the seed median where seeds exist.
+    ref = {k: reference_value(level, k, ep) for k in ("fm", "clf", "outcome")}
+    n_outcome_seeds = ref["outcome"][1]
 
     print(f"\n## {level} — matched epoch {ep}")
     print("| arm | debiased Brier | seeds | seed spread | skill | sAUROC | mean p_invalid |")
@@ -296,7 +304,18 @@ def report_level(level: str, with_mc: bool) -> None:
                   f"seeds give ~{xc:.5f}; different campaign, config equivalence unverified)")
     fm_ref = ref["fm"][0] if ref["fm"][1] > 0 else scored["fm"][KEY]
     clf_ref = ref["clf"][0] if ref["clf"][1] > 0 else scored["clf"][KEY]
-    print(f"    VERDICT: {verdict(scored['outcome'][KEY], clf_ref, fm_ref, floor)}")
+    out_ref = ref["outcome"][0] if n_outcome_seeds > 0 else scored["outcome"][KEY]
+
+    v = verdict(out_ref, clf_ref, fm_ref, floor)
+    # "provisional" is about the OUTCOME arm's own replication, not the
+    # references'. With three of its own seeds the verdict stands on the same
+    # footing as the campaign's other n=3 claims, so stop hedging.
+    if n_outcome_seeds >= 3 and floor is not None:
+        v = v.replace(" (provisional)", "").replace("(provisional): ", "")
+        v += f"  [n={n_outcome_seeds} outcome seeds, spread {ref['outcome'][2]:.5f}]"
+    else:
+        v += f"  [outcome arm has {n_outcome_seeds or 1} seed(s); 3 needed to drop 'provisional']"
+    print(f"    VERDICT: {v}")
 
     # The campaign's separation claim: FM and CLF tie on ranking, differ on
     # calibration. If outcome-FM breaks the tie, that claim is less clean than

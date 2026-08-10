@@ -222,7 +222,7 @@ def cross_campaign_floor(level: str, epoch: int) -> float | None:
     return float(2.0 * np.std(vals, ddof=1)) if len(vals) >= 3 else None
 
 
-def mc_vs_exact(level: str, epoch: int) -> str | None:
+def mc_vs_exact(level: str, epoch: int, n_sample: int = 4000) -> str | None:
     """Re-score the outcome arm with the MC readout to bound sampling noise.
 
     Requires rebuilding the model from the epoch checkpoint: OutcomeFlowMatcher
@@ -249,15 +249,29 @@ def mc_vs_exact(level: str, epoch: int) -> str | None:
     model.to(dev).eval()
 
     with np.load(ep_dir / "full_roa_per_point.npz") as z:
-        states = torch.as_tensor(z["start_states"].astype(np.float32), device=dev)
-        p_pipeline = z["p_success"].astype(np.float64)
+        all_states = z["start_states"].astype(np.float32)
+        all_pipeline = z["p_success"].astype(np.float64)
+
+    # Subsample: this is a diagnostic on the ESTIMATOR, not a headline metric, and
+    # its precision is set by MC noise (SE ~ 0.05/sqrt(K)) rather than by n. The
+    # full 48,770-point grid at K=100 is minutes on a GPU and far worse on the
+    # login node where this report usually runs, which made the flag unusable.
+    n = min(int(n_sample), all_states.shape[0])
+    sel = np.random.default_rng(0).choice(all_states.shape[0], n, replace=False)
+    states = torch.as_tensor(all_states[sel], device=dev)
+    p_pipeline = all_pipeline[sel]
 
     p_mc = model.p_success_mc(states, num_samples=100, num_steps=50).cpu().numpy()
     p_ex, mono = model.p_success_exact(states, num_steps=50)
     p_ex = p_ex.cpu().numpy()
 
-    return (f"    MC vs exact: mean|d|={np.abs(p_mc - p_ex).mean():.5f}  "
+    # Expected MC-only SE, so the reader can tell "readouts disagree" from
+    # "MC is just noisy". If mean|d| sits at or below this, there is no
+    # model-level disagreement and the exact readout is strictly better.
+    se = float(np.mean(np.sqrt(np.clip(p_ex * (1 - p_ex), 0, None) / 100.0)))
+    return (f"    MC vs exact (n={n}): mean|d|={np.abs(p_mc - p_ex).mean():.5f}  "
             f"max|d|={np.abs(p_mc - p_ex).max():.5f}  "
+            f"[expected MC-only SE {se:.5f}]  "
             f"non-monotone={1 - float(mono.double().mean()):.4%}  "
             f"(exact vs pipeline p: {np.abs(p_ex - p_pipeline).max():.2e})")
 

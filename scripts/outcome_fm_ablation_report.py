@@ -33,7 +33,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from stoch_prob_metrics import (  # noqa: E402
-    epoch_dirs, load_ground_truth, match_to_truth, score_epoch,
+    epoch_dirs, load_ground_truth, score_epoch,
 )
 
 EXP = Path("/common/users/shared/pracsys/adaptive_roa_experiments")
@@ -287,13 +287,8 @@ def report_level(level: str, with_mc: bool) -> None:
     # (+0.026/+0.038/+0.138 at low/med/high on dir00) rather than random error,
     # while endpoint-FM is near-unbiased. Brier alone conflates the two, and the
     # ablation's whole question is which mechanism carries that bias.
-    gt_starts, gt_p, _, _ = load_ground_truth(DATA / level)
-    bias = {}
-    for k, v in runs.items():
-        with np.load(v / f"epoch_{ep:03d}" / "full_roa_per_point.npz") as z:
-            st, ph = z["start_states"], z["p_success"].astype(np.float64)
-        bias[k] = float(np.mean(ph - gt_p[match_to_truth(st, gt_starts)]))
-
+    # `bias` comes straight from the metric suite -- recomputing it here agreed
+    # to 5 dp but duplicated code that already existed.
     print(f"\n## {level} — matched epoch {ep}")
     print("| arm | debiased Brier | mean bias | seeds | seed spread | skill | sAUROC | mean p_invalid |")
     print("|---|---|---|---|---|---|---|---|")
@@ -306,9 +301,9 @@ def report_level(level: str, with_mc: bool) -> None:
             n_s, sp_s = str(n), f"{spread:.5f}" if np.isfinite(spread) else "—"
         else:
             val, n_s, sp_s = s[KEY], "1", "—"
-        print(f"| {label} | {val:.5f} | {bias[k]:+.4f} | {n_s} | {sp_s} | "
+        print(f"| {label} | {val:.5f} | {s.get('bias', float('nan')):+.4f} | {n_s} | {sp_s} | "
               f"{s.get('skill_score', float('nan')):.4f} | "
-              f"{s.get('soft_auroc', float('nan')):.4f} | {s.get('mean_p_invalid', 0.0):.4f} |")
+              f"{s.get('sAUROC', float('nan')):.4f} | {s.get('mean_p_invalid', 0.0):.4f} |")
 
     print(f"\n    noise floor (2xSD, fm seeds @ep{ep}): "
           f"{f'{floor:.5f}' if floor is not None else f'unavailable — {floor_why}'}")
@@ -335,10 +330,15 @@ def report_level(level: str, with_mc: bool) -> None:
     # The campaign's separation claim: FM and CLF tie on ranking, differ on
     # calibration. If outcome-FM breaks the tie, that claim is less clean than
     # believed -- worth stating loudly because it was a recorded prediction.
-    aurocs = {k: scored[k].get("soft_auroc", float("nan")) for k in scored}
-    spread = np.nanmax(list(aurocs.values())) - np.nanmin(list(aurocs.values()))
-    print(f"    sAUROC spread across all three arms: {spread:.4f}"
-          f"{'  <-- PREDICTION HELD (ranking unaffected)' if spread < 5e-3 else '  <-- PREDICTION BROKEN: ranking moved'}")
+    aurocs = [scored[k].get("sAUROC", float("nan")) for k in scored]
+    if not all(np.isfinite(a) for a in aurocs):
+        # Silence is the only honest output here. Treating a missing metric as a
+        # broken prediction is how a tooling bug becomes a reported finding.
+        print("    sAUROC unavailable for at least one arm -- ranking prediction NOT evaluated")
+    else:
+        spread = max(aurocs) - min(aurocs)
+        print(f"    sAUROC spread across all three arms: {spread:.4f}"
+              f"{'  <-- PREDICTION HELD (ranking unaffected)' if spread < 5e-3 else '  <-- PREDICTION BROKEN: ranking moved'}")
 
     if with_mc:
         line = mc_vs_exact(level, ep)

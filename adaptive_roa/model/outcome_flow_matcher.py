@@ -266,6 +266,7 @@ class OutcomeFlowMatcher(pl.LightningModule):
         grid_size: int = 33,
         bisect_iters: int = 20,
         chunk_size: int = 4096,
+        fallback_grid_size: int = 1025,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Exact success mass under the learned flow, with no MC noise.
 
@@ -328,6 +329,30 @@ class OutcomeFlowMatcher(pl.LightningModule):
                 upper_is_success = ~self._grid_value_positive(sign_pos[idx], first)
                 tail = 1.0 - normal.cdf(root.double())
                 p_exact[idx] = torch.where(upper_is_success, tail, 1.0 - tail)
+
+            # Quadrature on the BRACKETING grid resolves x0 to 10/(g-1) ~ 0.31,
+            # i.e. up to ~0.12 in p -- five orders coarser than the bisection
+            # path's 1.9e-6, and far coarser than the effects being measured. A
+            # fallback that silently degrades precision that much is worse than
+            # no fallback, so non-monotone rows are re-integrated on a fine grid.
+            # They are rare (0% observed on trained fields), so the cost is small.
+            folded = ~monotone
+            if bool(folded.any()) and fallback_grid_size > grid_size:
+                idx = torch.nonzero(folded).view(-1)
+                fine = torch.linspace(-_X0_LIMIT, _X0_LIMIT, int(fallback_grid_size),
+                                      device=device)
+                fw = torch.exp(normal.log_prob(fine)).to(torch.float64)
+                sub = cond[idx]
+                fine_p = []
+                # Chunk over points: b*1025 rows at once can dwarf the main pass.
+                step = max(1, chunk_size // int(fallback_grid_size))
+                for s in range(0, sub.shape[0], step):
+                    blk = sub[s:s + step]
+                    rep = blk.repeat_interleave(fine.shape[0], dim=0)
+                    x0f = fine.repeat(blk.shape[0]).to(cond.dtype)
+                    psif = self.flow_map(rep, x0f, num_steps).view(blk.shape[0], -1)
+                    fine_p.append(((psif > 0).to(torch.float64) * fw).sum(dim=1) / fw.sum())
+                p_quad[idx] = torch.cat(fine_p)
 
             p_out.append(torch.where(monotone, p_exact, p_quad))
             mono_out.append(monotone)

@@ -212,3 +212,34 @@ def test_from_checkpoint_infers_shape_and_refuses_mismatch(tmp_path):
 
     with pytest.raises(ValueError, match="different system"):
         OutcomeFlowMatcher.from_checkpoint(ckpt, _WrongSystem())
+
+
+def test_nonmonotone_fallback_is_precise_not_just_present():
+    """A fallback that silently drops precision by five orders is worse than none.
+
+    Uses a folding field whose success mass is known analytically: with
+    Psi(x0) = x0 + c applied to a field that folds, we instead check the
+    coarse-vs-fine fallback agree closely, which they only can if the fallback
+    grid actually resolves the crossings.
+    """
+    class _Folding(nn.Module):
+        def forward(self, condition, x_t, t):
+            return 6.0 * x_t * torch.abs(x_t) - 4.0 * x_t
+
+    model = _matcher(_Folding())
+    states = torch.zeros(4, 1)
+
+    p_coarse, mono_c = model.p_success_exact(states, grid_size=33, fallback_grid_size=33)
+    p_fine, mono_f = model.p_success_exact(states, grid_size=33, fallback_grid_size=4097)
+
+    assert not bool(mono_c.all()) and not bool(mono_f.all()), "test needs the folding path"
+    # The default fallback must land near the well-resolved answer, which a
+    # 33-point quadrature cannot do.
+    p_default, _ = model.p_success_exact(states, grid_size=33)
+    assert np.abs(p_default.numpy() - p_fine.numpy()).max() < 2e-3, (
+        f"default fallback off by {np.abs(p_default.numpy() - p_fine.numpy()).max():.4f}; "
+        "the fine-grid refinement is not being applied"
+    )
+    # And the coarse one should be measurably worse, else the test proves nothing.
+    assert np.abs(p_coarse.numpy() - p_fine.numpy()).max() > np.abs(
+        p_default.numpy() - p_fine.numpy()).max()

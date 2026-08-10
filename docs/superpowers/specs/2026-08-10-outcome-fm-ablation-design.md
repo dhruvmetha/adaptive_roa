@@ -163,6 +163,43 @@ All runs use `d2_ratio: 0`. Fixed acquisition is required, not incidental: the
 ablation varies target × machinery, so the data-selection rule must be held constant
 or the two factors are confounded with a third.
 
+## What differs between the arms (complete enumeration)
+
+An attribution is only as good as the list of things that were *not* held fixed,
+so the full list is here rather than left implicit:
+
+| axis | classifier | outcome-FM | matched? |
+|---|---|---|---|
+| loss | weighted BCE | velocity MSE | **intended difference** |
+| p readout | `sigmoid(logit)` | exact x0 threshold | **intended difference** |
+| training rows | prefix of fixed shuffle | identical | yes (verified, no RNG) |
+| backbone dims | `[256,512,256]` | same | yes |
+| parameters | 264,193 | 266,753 | +0.97% |
+| activation | relu | relu | yes |
+| optimizer / lr / weight decay | AdamW / 1e-3 / 1e-5 | same | yes |
+| max_epochs / patience | 200 / 20 | same | yes |
+| **`pos_weight`** | **n_neg/n_pos ≈ 1.5** | **none** | **NO — confound** |
+| early-stop criterion | val BCE | val velocity MSE | different *quantity* |
+
+Two rows are not clean and both are stated rather than buried.
+
+**`pos_weight` is a genuine confound for the machinery comparison.** BCE weighted
+by `w` does not minimise to the posterior; its minimiser is `w·p/(w·p + 1−p)`, a
+deliberate upward tilt. Measured on the non-adaptive `dir00` arms, the classifier
+over-predicts success at every level (+0.026 / +0.038 / +0.138 at low / med /
+high) while endpoint-FM is near-unbiased (−0.003 / −0.016 / −0.010). The tilt
+predicts the right *sign* but roughly a fifth of the magnitude, because most
+pendulum cells sit near 0 or 1 where the tilt is weak — so it contributes without
+explaining. A `pos_weight: 1.0` classifier control would separate the two, and
+`ClassifierTrainer._pos_weight` already honours that override, so it is a cheap
+addition if the machinery verdict turns out to hinge on it.
+
+**Early stopping compares different quantities.** Both arms stop on `val_loss`
+with patience 20, but that is BCE for one and velocity MSE for the other. Neither
+is a proper scoring rule for calibration, and they need not reach their optima at
+the same point. This is inherent to comparing the two losses at all, not a defect
+that can be configured away — it is a caveat on the result, not a bug to fix.
+
 ## Known asymmetry
 
 `ClassifierModule` counters class imbalance with `pos_weight`; velocity regression

@@ -38,6 +38,11 @@ predictor:
     patience: 20
     num_time_freqs: 4
     num_ode_steps: 50      # see probability/outcome_fm.yaml for the convergence evidence
+    # THIS is the knob that decides how the pipeline forms p, not
+    # probability.readout: eval and calibration both reach p via `model(x) ->
+    # logits` (full_roa.py:1301). Must match probability.readout, which
+    # bind_model enforces.
+    forward_readout: exact
   lightning_trainer:
     gradient_clip_val: 1.0
     log_every_n_steps: 10

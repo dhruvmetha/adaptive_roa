@@ -1,11 +1,21 @@
 # @package _global_
 probability:
   _target_: adaptive_roa.adaptive_v2.probability.outcome_fm.OutcomeFMProbabilityBackend
-  # Which readout the PIPELINE runs on (calibration, acquisition, eval).
-  # `exact` is the default: it is unquantised and cheaper than the MC estimate
-  # (grid + bisect costs ~47 integrations/point vs 100 at num_mc_samples=100).
-  # The other readout is still computed for scoring via `estimate_both`, so
-  # choosing one here does not lose the comparison.
+  # NOTE: this key does NOT govern the pipeline at d2_ratio=0. With
+  # predictor.type=classifier, full_roa.py:1301 routes evaluation through
+  # evaluate_full_roa_classifier(model_handle) and calibration through
+  # ClassifierProbabilityEstimator -- both call `model(x) -> logits`, so
+  # `predictor.outcome_fm.forward_readout` is what actually decides. This
+  # backend is exercised only when something calls it directly (adaptive
+  # acquisition with d2_ratio>0, or `estimate_both` for post-hoc scoring).
+  #
+  # Keep it EQUAL to predictor.outcome_fm.forward_readout regardless:
+  # OutcomeFMProbabilityBackend.bind_model rejects a mismatch, because a backend
+  # that disagreed with `forward` would make calibration and evaluation optimise
+  # different quantities the moment the backend is wired in.
+  #
+  # `exact` is the default: unquantised, and cheaper than MC (grid + bisect is
+  # ~53 integrations/point vs 100 at num_mc_samples=100).
   readout: exact
   num_mc_samples: 100        # matches endpoint_mc.yaml so the MC readouts are comparable
   # 50 verified sufficient: max|dp| vs a 200-step reference is 3e-5 on an

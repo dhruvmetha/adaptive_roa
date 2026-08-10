@@ -6,10 +6,12 @@ chronological record including superseded claims and their corrections.
 | half | state |
 |---|---|
 | **[CLF]** | det complete 19/19; **high complete 19/19 on all five arms** (rescored, §1); low/med/xhigh from truncated curves (walltime, see §6) |
-| **[FM]** | **high scored six times, floor halved, null (§4)**; **xhigh scored three times, null (§4b)**; det preliminary (§4b); low and med running, not yet scoreable |
+| **[FM]** | **null at low, high and xhigh** — high scored 6x (floor halved), xhigh 3x, low 1x on the first fully within-cluster FM floor; det preliminary; med not yet scoreable |
 
-Three [FM] levels now have verdicts. The [FM] half is no longer "not established" — that framing
-survived into this document after it stopped being true and is corrected here.
+**Headline.** [FM] is null at every level scored so far, including **low** — the one level where
+[CLF] adaptive sampling genuinely worked, and the reason the FM extension was launched. At every
+FM level the negative control `aleat` lands inside the spread of the arms it is supposed to
+underperform, so no FM ranking carries information about acquisition quality.
 
 Standard of evidence used throughout: a gap counts only if it exceeds **2×SD of three
 genuinely-distinct seeds** of the same configuration (the run-to-run floor) at **two consecutive
@@ -310,13 +312,52 @@ general fact about entropy acquisition.
 against arms at 9-10. Widening the window is pending. Unlike [FM] high (four consistent passes),
 this verdict has had one pass.
 
+### [FM] low: the decisive test — [CLF]'s one genuine benefit does NOT reproduce
+
+**This is the level the FM extension was launched to test.** [CLF] low is the only place in the
+whole campaign where adaptive sampling genuinely beat uniform (−1.1× to −3.3×, sign stable for 3
+of 4 arms, §1). The live hypothesis was that the earlier FM nulls only reflected testing at
+high/xhigh — the two levels where even the classifier showed nothing — and that FM would show the
+same benefit where the classifier had one. It does not.
+
+Scored 2026-08-09, 5 shared floor epochs:
+
+```
+fm low: pooled 2*SD = 0.00063 over 5 epochs
+   epi_bald   ep8: -0.00054 (-0.9x)  ep9: -0.00073 (-1.2x)   -> not stable
+   epi_var    ep8: -0.00056 (-0.9x)  ep9: -0.00061 (-1.0x)   -> within noise (null)
+   total      ep8: -0.00058 (-0.9x)  ep9: -0.00075 (-1.2x)   -> not stable
+   aleat      ep8: -0.00057 (-0.9x)  ep9: -0.00067 (-1.1x)   -> not stable
+```
+
+All four arms sit right at the floor (−0.9× to −1.2×), nominally helpful but none clearing the
+two-consecutive-epoch bar. Three are flagged *not stable*; `epi_var` is a flat null.
+
+**The tell is the same as at every other FM level:** `aleat` (−1.1×) is indistinguishable from
+`epi_bald` (−1.2×) and `total` (−1.2×). The four values span 0.00054 to 0.00075 — a range of
+2e-04 across strategies that are supposed to do entirely different things, one of which is
+designed to be useless. A real acquisition effect would not have the negative control sitting
+inside it.
+
+**First fully within-cluster FM floor.** All three seeds ran on Amarel `gpu-redhat`, so unlike
+[FM] high (iLab + arrakis) and xhigh this floor is not inflated by cross-cluster nondeterminism.
+That makes it a *tighter* test than the FM floors above it, not a looser one.
+
+**Scope.** 5 shared epochs with arms at 10–13; the floor will deepen as `s43` (6 epochs) catches
+up. With three arms already reading *not stable*, further depth is more likely to firm the null
+than reverse it — but this has not had the six-pass treatment [FM] high received.
+
 ## 4c. Still not established
 
-- **[FM] med, low, det.** Not launched — no FM runs exist at those levels.
+- **[FM] med.** Running, not yet scoreable (arms at 2–9 epochs, floor seeds at 2–4).
+- **[FM] det.** Preliminary only — see §4b. Its floor is capped at 4 shared epochs because both
+  `dir00` and `total` were preempted 2026-08-09 and are rebuilding, while five of seven runs at
+  that level are already complete at 19/19.
 - **`epi_var` vs `epi_bald`.** On the classifier both are exact (members enumerated, K = None), so
   the comparison there is uninformative about the estimator question. Only FM at K = 20 tests it —
-  and at high noise both are equally null, so the estimator question remains open on the levels
-  where an effect might exist at all.
+  and FM is now null at low, high and xhigh, with the two estimators indistinguishable at every
+  one. The estimator question is therefore unanswerable from this campaign: there is no effect
+  anywhere for the estimators to differ *on*.
 
 ## 5. Cautions learned the hard way
 

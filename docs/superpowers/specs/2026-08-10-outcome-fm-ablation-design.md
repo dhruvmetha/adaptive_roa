@@ -23,8 +23,8 @@ The pipeline already holds three of four cells:
 Flow matching appears only in the final-state column. Adding outcome-target FM
 completes the row and makes the contrast one-factor-at-a-time in both directions:
 
-- **vs `classifier`** — identical data, identical backbone, identical capacity.
-  Only the loss differs: velocity regression against ±1 anchors versus weighted
+- **vs `classifier`** — identical data, same backbone and hidden dims. Only the
+  loss differs: velocity regression against ±1 anchors versus weighted
   cross-entropy. This isolates *machinery*.
 - **vs endpoint FM** — same generative machinery, MC-sampled. Only the target
   differs: a scalar outcome versus a full state on the manifold. This isolates
@@ -61,6 +61,14 @@ loss = MSE( v(xt, t | x),  x1 - x0 )
 the same hidden dims `[256, 512, 256]`. Matching capacity is what makes the
 machinery contrast clean; changing one arm's dims without the other breaks the
 ablation.
+
+Capacity is **near**-identical, not identical, and the exact figure is stated here
+rather than glossed: the velocity net also takes `x_t` and a 9-dimensional time
+embedding, so its input is 13 wide against the classifier's 3. That is
+**266,753 vs 264,193 parameters, +0.97%**, all of it in the first layer. A 1%
+parameter difference cannot account for a 6–43× calibration gap, so it does not
+threaten the attribution — but the arms are not bit-matched on capacity and the
+write-up should not claim they are.
 
 **Readout.** In 1D the ODE is a deterministic map `Psi: x0 -> x1`, so
 `p = P(Psi(x0) > 0)`. Both readouts are computed:

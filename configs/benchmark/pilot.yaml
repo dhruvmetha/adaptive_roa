@@ -1,9 +1,20 @@
 # Pilot campaign: cheapest systems, full arm set, enough seeds for a variance
 # claim. Validates the harness before the quadrotor phase is committed.
+#
+# Every value below names a Hydra config GROUP -- a filename under
+# configs/adaptive_v2/<group>/ -- not an English label. expand_manifest
+# resolves all of them against the tree on disk and raises here rather than
+# letting ~90 jobs die on a MissingConfigException inside SLURM. Two names
+# that read fine and are not files:
+#   `random`   -> the uniform-sampling control group is `direct`
+#                 (acquisition/direct.yaml, DirectAcquisitionStrategy). It is
+#                 also default.yaml's default acquisition, so it is what the
+#                 fixed-dataset baselines already compose under.
+#   `cartpole` -> the system group is `cartpole_pybullet`.
 tier: production
 arms: [mlp, gp, bnn_mfvi, bnn_ensemble, bnn_laplace,
        fm, mlp_det, gp_reg, bnn_mfvi_reg, bnn_ensemble_reg, bnn_laplace_reg]
-systems: [pendulum, cartpole]
-acquisition: [ranked, random]   # paired control per arm
+systems: [pendulum, cartpole_pybullet]
+acquisition: [ranked, direct]   # paired control per arm
 seeds: [42, 43, 44]
 n_epochs: 10

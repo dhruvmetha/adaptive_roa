@@ -6,10 +6,20 @@ from pathlib import Path
 import pytest
 from hydra import compose, initialize_config_dir
 
-from adaptive_roa.benchmark.manifest import ALL_ARMS, ARM_CONFIG_GROUP, RunSpec, expand_manifest
+import yaml
 
-PREDICTOR_CONFIG_DIR = Path(__file__).resolve().parents[2] / "configs/adaptive_v2/predictor"
-ADAPTIVE_V2_CONFIG_DIR = str(Path(__file__).resolve().parents[2] / "configs/adaptive_v2")
+from adaptive_roa.benchmark.manifest import (
+    ALL_ARMS,
+    ARM_CONFIG_GROUP,
+    NON_ADAPTIVE_ACQUISITION,
+    RunSpec,
+    expand_manifest,
+)
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+PREDICTOR_CONFIG_DIR = REPO_ROOT / "configs/adaptive_v2/predictor"
+ADAPTIVE_V2_CONFIG_DIR = str(REPO_ROOT / "configs/adaptive_v2")
+BENCHMARK_MANIFEST_DIR = REPO_ROOT / "configs/benchmark"
 
 
 def _spec(**kw):
@@ -56,11 +66,17 @@ def test_n_epochs_does_not_change_identity():
 
 
 def test_expand_builds_the_full_cross_product():
+    # Every value here names a real Hydra config GROUP -- `cartpole_pybullet`
+    # not `cartpole`, `direct` not `random` -- because expand_manifest now
+    # resolves each one against configs/adaptive_v2/ and refuses a name that
+    # is not a file. That refusal is the point: the shipped pilot manifest
+    # used the two plausible-English names above and 93 of its 126 runs
+    # could not compose.
     specs = expand_manifest({
         "arms": ["bnn_mfvi", "gp_reg"],
-        "systems": ["pendulum", "cartpole"],
+        "systems": ["pendulum", "cartpole_pybullet"],
         "tier": "production",
-        "acquisition": ["ranked", "random"],
+        "acquisition": ["ranked", "direct"],
         "seeds": [42, 43],
         "n_epochs": 10,
     })
@@ -70,11 +86,15 @@ def test_expand_builds_the_full_cross_product():
 
 def test_mlp_det_is_never_expanded_adaptively():
     # Its outcome probability collapses to {0,1}: no ranking signal exists.
+    # The mode it IS recorded under must be the group it actually composes
+    # under (default.yaml's `acquisition: direct`), so run_id agrees with the
+    # `acquisition` column collect_runs reads back out of the artifact.
     specs = expand_manifest({
         "arms": ["mlp_det"], "systems": ["pendulum"], "tier": "production",
-        "acquisition": ["ranked", "random"], "seeds": [42], "n_epochs": 10,
+        "acquisition": ["ranked", "direct"], "seeds": [42], "n_epochs": 10,
     })
-    assert [s.acquisition for s in specs] == ["random"]
+    assert [s.acquisition for s in specs] == [NON_ADAPTIVE_ACQUISITION]
+    assert NON_ADAPTIVE_ACQUISITION == "direct"
 
 
 def test_hydra_overrides_use_the_baseline_experiment_for_mlp_det():
@@ -138,6 +158,123 @@ def test_every_arm_config_group_exists_on_disk():
             f"arm {arm!r} resolves to predictor config group {config_group!r}, "
             f"which has no {config_group}.yaml in {PREDICTOR_CONFIG_DIR}"
         )
+
+
+# ---------------------------------------------------------------------------
+# C1: every config-group override a RunSpec emits is validated, not just the
+# predictor. `acquisition=random` and `system=cartpole` are both plausible
+# English and neither is a file; they shipped in configs/benchmark/pilot.yaml
+# and would have killed ~90 jobs one MissingConfigException at a time.
+# ---------------------------------------------------------------------------
+
+# Exactly the four groups RunSpec.hydra_overrides() can emit, and the value
+# each carries for the spec built by _fake_config_root's caller below.
+_EMITTED_GROUPS = {
+    "system": "pendulum",
+    "predictor": "bnn_mfvi",
+    "acquisition": "ranked",
+    "experiment": "reference_tier",
+}
+
+
+def _fake_config_root(tmp_path: Path, omit: str) -> Path:
+    """A config tree carrying every emitted group except one value."""
+    root = tmp_path / "adaptive_v2"
+    for group, value in _EMITTED_GROUPS.items():
+        (root / group).mkdir(parents=True, exist_ok=True)
+        if group == omit:
+            # The group DIRECTORY still exists -- only the value's file is
+            # missing. A missing directory would be indistinguishable from
+            # "this key is not a config group at all" (e.g. seed=42).
+            continue
+        (root / group / f"{value}.yaml").write_text("{}\n")
+    return root
+
+
+@pytest.mark.parametrize("omit", sorted(_EMITTED_GROUPS))
+def test_expand_rejects_a_value_with_no_config_file_in_every_emitted_group(
+        tmp_path, omit):
+    # One parametrization per group a spec emits. Deleting the guard, or
+    # narrowing it back to the predictor group alone, fails three or four of
+    # these -- which is what "generalized" has to mean to be worth anything.
+    root = _fake_config_root(tmp_path, omit=omit)
+    manifest = {
+        "arms": ["bnn_mfvi"], "systems": ["pendulum"], "tier": "reference",
+        "acquisition": ["ranked"], "seeds": [42], "n_epochs": 10,
+    }
+    with pytest.raises(ValueError, match=f"no {omit}/{_EMITTED_GROUPS[omit]}.yaml"):
+        expand_manifest(manifest, config_root=root)
+
+
+def test_expand_accepts_the_same_manifest_once_every_group_file_exists(tmp_path):
+    # The companion that keeps the test above honest: the four raises are
+    # caused by the one missing file each time, not by the fake tree being
+    # unusable in general.
+    root = _fake_config_root(tmp_path, omit="")
+    specs = expand_manifest({
+        "arms": ["bnn_mfvi"], "systems": ["pendulum"], "tier": "reference",
+        "acquisition": ["ranked"], "seeds": [42], "n_epochs": 10,
+    }, config_root=root)
+    assert len(specs) == 1
+
+
+def test_a_non_group_override_is_not_treated_as_a_missing_config_file(tmp_path):
+    # seed=42 / n_epochs=10 set VALUES inside the composed config; there is
+    # no configs/adaptive_v2/seed/42.yaml and there never will be. A guard
+    # that demanded one would reject every spec ever built.
+    root = _fake_config_root(tmp_path, omit="")
+    specs = expand_manifest({
+        "arms": ["bnn_mfvi"], "systems": ["pendulum"], "tier": "reference",
+        "acquisition": ["ranked"], "seeds": [42], "n_epochs": 10,
+        "overrides": ["predictor.hmc.num_samples=100"],
+    }, config_root=root)
+    assert "seed=42" in specs[0].hydra_overrides()
+    assert "predictor.hmc.num_samples=100" in specs[0].hydra_overrides()
+
+
+def test_an_extra_manifest_override_naming_a_real_group_is_validated(tmp_path):
+    # Extras are not exempt: `eval=` is a real group, so a typo'd value in
+    # one must fail at expansion the same way `system=` does.
+    root = _fake_config_root(tmp_path, omit="")
+    (root / "eval").mkdir()
+    (root / "eval" / "full_roa.yaml").write_text("{}\n")
+    with pytest.raises(ValueError, match="no eval/typo.yaml"):
+        expand_manifest({
+            "arms": ["bnn_mfvi"], "systems": ["pendulum"], "tier": "reference",
+            "acquisition": ["ranked"], "seeds": [42], "n_epochs": 10,
+            "overrides": ["eval=typo"],
+        }, config_root=root)
+
+
+@pytest.mark.parametrize(
+    "manifest_path", sorted(BENCHMARK_MANIFEST_DIR.glob("*.yaml")),
+    ids=lambda p: p.stem)
+def test_every_shipped_manifest_expands_against_the_real_config_tree(manifest_path):
+    # The regression test for the shipped pilot.yaml itself. Runs against
+    # configs/adaptive_v2/ as it exists on disk, so renaming or deleting a
+    # config group that a manifest names breaks this immediately.
+    specs = expand_manifest(yaml.safe_load(manifest_path.read_text()))
+    assert specs
+
+
+@pytest.mark.parametrize(
+    "manifest_path", sorted(BENCHMARK_MANIFEST_DIR.glob("*.yaml")),
+    ids=lambda p: p.stem)
+def test_every_shipped_manifest_actually_composes_under_hydra(manifest_path):
+    # File existence is necessary, not sufficient: composition can still fail
+    # on an override SET (two +experiment= values, a group that exists but
+    # conflicts). Deduped on the override shape -- seed/n_epochs cannot
+    # affect composability -- so this is ~42 compose() calls for the pilot's
+    # 126 runs rather than 126.
+    specs = expand_manifest(yaml.safe_load(manifest_path.read_text()))
+    shapes = {tuple(o for o in spec.hydra_overrides()
+                    if not o.startswith(("seed=", "n_epochs=")))
+              : spec.hydra_overrides() for spec in specs}
+    assert shapes
+    for overrides in shapes.values():
+        with initialize_config_dir(config_dir=ADAPTIVE_V2_CONFIG_DIR,
+                                   version_base=None):
+            assert compose(config_name="default", overrides=list(overrides))
 
 
 @pytest.mark.parametrize("spec", [

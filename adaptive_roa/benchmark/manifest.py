@@ -100,6 +100,25 @@ class RunSpec:
         return ov
 
 
+def acquisition_modes_for(arm: str, modes) -> list[str]:
+    """The acquisition modes a campaign runs ``arm`` under, given its mode list.
+
+    SINGLE SOURCE OF TRUTH for "which acquisition cells is this arm expected
+    to cover". ``expand_manifest`` builds the campaign from it, and
+    ``guards.assert_matched_coverage`` judges a frame's completeness against
+    it, so the expander and the guard cannot drift apart. A global
+    cross-product would (and did) refuse the shipped pilot at 100%
+    completion: ``mlp_det`` has no ``ranked`` cell BY DESIGN -- its outcome
+    probability collapses to {0, 1}, so there is no ranking signal to
+    acquire on -- and a rule that demanded one made the pilot table
+    unproducible with no flag able to fix it, because the missing axis was
+    ``acquisition`` rather than ``system``.
+    """
+    if arm in NON_ADAPTIVE_ARMS:
+        return [NON_ADAPTIVE_ACQUISITION]
+    return list(modes)
+
+
 def _parse_group_override(override: str) -> tuple[str, str] | None:
     """(group, value) for an override that SELECTS a config group, else None.
 
@@ -191,8 +210,7 @@ def expand_manifest(cfg: dict[str, Any], *, config_root=None) -> list[RunSpec]:
 
     specs: list[RunSpec] = []
     for arm in arms:
-        modes = ([NON_ADAPTIVE_ACQUISITION] if arm in NON_ADAPTIVE_ARMS
-                 else list(cfg["acquisition"]))
+        modes = acquisition_modes_for(arm, cfg["acquisition"])
         for system in cfg["systems"]:
             for mode in modes:
                 for seed in cfg["seeds"]:

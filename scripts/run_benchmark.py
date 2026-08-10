@@ -43,7 +43,7 @@ import yaml
 from adaptive_roa.benchmark.aggregate import collect_runs
 from adaptive_roa.benchmark.guards import assert_all_complete, validate_frame
 from adaptive_roa.benchmark.launcher import plan_launch, sbatch_command
-from adaptive_roa.benchmark.manifest import expand_manifest
+from adaptive_roa.benchmark.manifest import CONFIG_ROOT, expand_manifest
 from adaptive_roa.benchmark.pointwise import fidelity_table, separatrix_table
 from adaptive_roa.benchmark.report import (
     EPOCH_SELECTIONS,
@@ -68,8 +68,50 @@ def _parse_epochs(value: str):
         ) from None
 
 
+def _assert_specs_compose(specs) -> None:
+    """Compose every distinct override shape before anything is submitted.
+
+    ``expand_manifest``'s own check covers a config GROUP whose value has no
+    file (``system=cartpole``). It cannot cover a typo in the override's
+    KEY: a manifest ``overrides:`` entry like ``acquisiton=ranked`` names no
+    config group, so it is (correctly) treated as setting a config value,
+    and only Hydra's struct-mode check can say whether that key exists. That
+    check used to happen inside SLURM, once per job.
+
+    So it happens here instead, on the launch path, where it costs one
+    ``compose()`` per distinct override shape (42 for the pilot's 126 runs,
+    a couple of seconds) and where the alternative is ~450 queued jobs
+    dying one at a time. Imported lazily so the ``report`` subcommand never
+    pays for Hydra.
+    """
+    from hydra import compose, initialize_config_dir
+
+    seen = set()
+    for spec in specs:
+        overrides = spec.hydra_overrides()
+        # seed / n_epochs set values, never groups: they cannot change
+        # whether the set composes, so shapes that differ only in those are
+        # the same composition check.
+        shape = tuple(o for o in overrides
+                      if not o.startswith(("seed=", "n_epochs=")))
+        if shape in seen:
+            continue
+        seen.add(shape)
+        try:
+            with initialize_config_dir(config_dir=str(CONFIG_ROOT),
+                                       version_base=None):
+                compose(config_name="default", overrides=list(overrides))
+        except Exception as exc:                       # noqa: BLE001
+            raise SystemExit(
+                f"run {spec.run_id!r} does not compose and would die inside "
+                f"SLURM after being queued.\n  overrides: {overrides}\n"
+                f"  {type(exc).__name__}: {str(exc).splitlines()[0]}"
+            ) from None
+
+
 def _run_launch(args) -> None:
     specs = expand_manifest(yaml.safe_load(args.manifest.read_text()))
+    _assert_specs_compose(specs)
     to_launch, states = plan_launch(specs, args.exp_root)
 
     tally = {s: sum(1 for v in states.values() if v == s)
@@ -138,7 +180,8 @@ def _run_report(args) -> None:
 
     text = build_report(df, fidelity=fidelity, metric=args.metric,
                         epochs=args.epochs, control=args.control,
-                        conditioned=conditioned)
+                        conditioned=conditioned,
+                        provenance_checked=args.validate)
     if args.out is not None:
         args.out.write_text(text)
         print(f"wrote {args.out}")

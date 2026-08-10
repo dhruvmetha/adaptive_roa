@@ -25,17 +25,26 @@ parses. A downstream guard can then treat "short AND run_complete=False" as
 still in progress, and "short AND run_complete=True" as a run that actually
 finished early or lost its tail to corruption.
 
-`run_complete` does not close the whole gap, though. A corrupt INTERIOR
-epoch -- or an epoch on which eval simply did not run, leaving
-`eval_metrics: {}` and a row of NaN metrics that `pivot_table` skips -- is
-invisible to it: the run still reached its last epoch, so `run_complete`
-is True, while the population any reported mean is taken over has silently
-shrunk. So every row also carries `n_epochs_collected`: how many epoch rows
-this run actually contributed. A run whose `n_epochs_collected` is short of
-its configured `n_epochs` lost epochs somewhere, and the reporting path
-says so in the table rather than averaging over an arbitrary subset without
-comment. It is a PROVENANCE column, not a metric: guards must never treat
-it as a quantity to compare across arms.
+`run_complete` does not close the whole gap, though, and it takes TWO
+counters to close it, not one -- an epoch can be lost in two different
+places:
+
+- `n_epochs_collected`: how many epoch rows this run contributed at all,
+  i.e. how many epoch directories held an artifacts_v2.json that PARSED.
+  A corrupt or never-written interior artifact is skipped above and shows
+  up only here (`run_complete` stays True, because the run still reached
+  its last epoch).
+- `n_epochs_evaluated`: how many of those rows carried at least one numeric
+  metric. An epoch on which eval did not run writes a perfectly valid
+  artifact with `eval_metrics: {}`; it produces a row, so
+  `n_epochs_collected` counts it, but every metric on that row is NaN and
+  `pivot_table` silently skips it. Without this second counter a run that
+  lost a third of its metric population is indistinguishable from a
+  complete one -- and the report would state, in as many words, that every
+  run contributed its full number of epochs.
+
+Both are PROVENANCE columns, not metrics: guards must never treat either as
+a quantity to compare across arms.
 """
 from __future__ import annotations
 
@@ -51,7 +60,8 @@ import yaml
 # KeyError, and so provenance columns always sort first.
 PROVENANCE_COLUMNS = [
     "run_id", "arm", "system", "tier", "acquisition", "seed", "epoch",
-    "n_epochs", "n_epochs_collected", "run_complete", "commit",
+    "n_epochs", "n_epochs_collected", "n_epochs_evaluated", "run_complete",
+    "commit",
 ]
 
 
@@ -261,10 +271,12 @@ def collect_runs(exp_root) -> pd.DataFrame:
     read from the `.hydra` config and artifact JSON the engine copied into
     that epoch directory, so renaming the directory cannot relabel a run.
     `run_complete` is computed once per run directory (see
-    `_run_is_complete`) and copied onto every row that run contributes, as is
-    `n_epochs_collected` -- the number of epoch rows the run actually
-    produced, which is how a corrupt or eval-less INTERIOR epoch becomes
-    visible at all (see the module docstring).
+    `_run_is_complete`) and copied onto every row that run contributes, as
+    are `n_epochs_collected` (rows produced) and `n_epochs_evaluated` (rows
+    that carried at least one numeric metric) -- the two counters that make
+    a corrupt interior epoch and an eval-less interior epoch respectively
+    visible at all. See the module docstring for why one counter is not
+    enough.
     """
     exp_root = Path(exp_root)
     rows = []
@@ -279,9 +291,15 @@ def collect_runs(exp_root) -> pd.DataFrame:
                     run_rows.append({"run_id": run_dir.name, **row})
             # Counted AFTER the loop, over the rows that SURVIVED: an epoch
             # whose artifact is missing or unparseable is skipped above, and
-            # this column is the only record that it happened.
+            # these columns are the only record that it happened. A row's
+            # metric columns are whatever _flatten_metrics produced, i.e.
+            # every key that is NOT one of PROVENANCE_COLUMNS -- an empty
+            # set means eval wrote nothing numeric for that epoch.
+            provenance = set(PROVENANCE_COLUMNS)
+            evaluated = sum(1 for row in run_rows if set(row) - provenance)
             for row in run_rows:
                 row["n_epochs_collected"] = len(run_rows)
+                row["n_epochs_evaluated"] = evaluated
             rows.extend(run_rows)
 
     if not rows:

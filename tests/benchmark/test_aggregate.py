@@ -279,6 +279,42 @@ def test_n_epochs_collected_records_a_lost_interior_epoch(tmp_path):
     assert set(df["n_epochs"]) == {None} or df["n_epochs"].isna().all()
 
 
+def test_n_epochs_evaluated_counts_only_epochs_that_produced_metrics(tmp_path):
+    # NEW-3: an epoch on which eval did not run writes a perfectly valid
+    # artifact with eval_metrics: {}. It PARSES, so it produces a row and
+    # n_epochs_collected counts it -- but every metric on that row is NaN
+    # and pivot_table skips it. Without this second counter the report says
+    # "every run contributed its full configured number of epochs" for a run
+    # that lost a third of its metric population.
+    _write_run(tmp_path, "r1", "bnn_mfvi", n_epochs=3)
+    (tmp_path / "r1" / "epoch_001" / "artifacts_v2.json").write_text(json.dumps({
+        "epoch": 1, "sampling_mode": "ranked", "eval_metrics": {},
+        "extra": {"commit": "abc1234"},
+    }))
+    df = collect_runs(tmp_path)
+    assert set(df["n_epochs_collected"]) == {3}, "the row still exists"
+    assert set(df["n_epochs_evaluated"]) == {2}, "but only 2 carried metrics"
+
+
+def test_a_non_numeric_only_eval_payload_does_not_count_as_evaluated(tmp_path):
+    # _flatten_metrics drops strings/bools/lists, so an eval_metrics block
+    # with nothing numeric in it yields no metric columns at all.
+    _write_run(tmp_path, "r1", "bnn_mfvi", n_epochs=2)
+    (tmp_path / "r1" / "epoch_001" / "artifacts_v2.json").write_text(json.dumps({
+        "epoch": 1, "sampling_mode": "ranked",
+        "eval_metrics": {"note": "eval skipped", "ok": True},
+        "extra": {"commit": "abc1234"},
+    }))
+    df = collect_runs(tmp_path)
+    assert set(df["n_epochs_evaluated"]) == {1}
+
+
+def test_a_fully_evaluated_run_has_both_counters_equal(tmp_path):
+    _write_run(tmp_path, "r1", "bnn_mfvi", n_epochs=3)
+    df = collect_runs(tmp_path)
+    assert set(df["n_epochs_collected"]) == set(df["n_epochs_evaluated"]) == {3}
+
+
 def test_n_epochs_collected_is_per_run_not_per_campaign(tmp_path):
     _write_run(tmp_path, "r1", "bnn_mfvi", n_epochs=3)
     _write_run(tmp_path, "r2", "bnn_mfvi", n_epochs=1)

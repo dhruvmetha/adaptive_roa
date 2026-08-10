@@ -49,6 +49,7 @@ import numpy as np
 import pandas as pd
 
 from adaptive_roa.benchmark.aggregate import PROVENANCE_COLUMNS
+from adaptive_roa.benchmark.manifest import NON_ADAPTIVE_ARMS, acquisition_modes_for
 from adaptive_roa.benchmark.provenance import assert_post_fix
 
 __all__ = [
@@ -58,6 +59,7 @@ __all__ = [
     "assert_post_fix",
     "assert_matched_budget",
     "assert_matched_coverage",
+    "assert_one_run_per_cell",
     "assert_comparable",
     "assert_distinct_seeds",
     "assert_all_complete",
@@ -167,6 +169,12 @@ _SEED_CELL_COLUMNS = ("system", "acquisition", "tier", "epoch")
 # aggregate.py's `n_epochs_collected`. `tier` is excluded because
 # build_report already refuses a mixed-tier frame outright.
 _COVERAGE_COLUMNS = ("system", "acquisition", "seed")
+
+# The cell a single run occupies. Exactly one run_id may sit in one of these:
+# `run_id` embeds a hash of the spec, so a stale run directory from an
+# earlier campaign under the same exp_root lands in the SAME cell under a
+# DIFFERENT run_id and is silently averaged in.
+_RUN_CELL_COLUMNS = ("arm", "system", "acquisition", "seed", "epoch")
 
 
 def _require_columns(df: pd.DataFrame, columns) -> None:
@@ -283,6 +291,24 @@ def assert_matched_coverage(df: pd.DataFrame) -> None:
     True on every row present, because the problem is the rows that are
     absent; and ``validate_frame`` checks relations among the rows it has.
 
+    "The same cells" means the cells an arm is EXPECTED to cover, not a
+    blunt global cross-product. ``mlp_det`` has no ``ranked`` cell BY
+    DESIGN -- its outcome probability collapses to {0, 1}, so there is no
+    ranking signal to acquire on, and ``expand_manifest`` never emits one.
+    A cross-product rule refused the shipped pilot at 100% completion, with
+    no flag able to rescue it (``--system`` cannot help when the missing
+    axis is ``acquisition``). The per-arm expectation is therefore derived
+    from ``manifest.acquisition_modes_for`` -- the same function
+    ``expand_manifest`` builds the campaign with -- so the guard and the
+    expander cannot drift apart. The modes an ADAPTIVE arm is held to are
+    the modes the frame's adaptive arms actually ran, so a control-only or
+    single-mode campaign is judged against itself rather than against a
+    mode only the fixed-dataset baseline contributes.
+
+    The ``system`` and ``seed`` axes stay union-based: a campaign that is
+    equally incomplete across every arm (quadrotor3d still at seed 42 while
+    pendulum has 42/43/44) is comparable and must not be refused.
+
     Scoped to whichever of ``system``/``acquisition``/``seed`` are present,
     degrading the same way every other guard here does, so the minimal
     fixtures in this module and in report.py's tests still work. With none
@@ -311,13 +337,36 @@ def assert_matched_coverage(df: pd.DataFrame) -> None:
         return
 
     union = set().union(*covered.values())
-    missing = {arm: sorted(union - cells, key=repr)
-               for arm, cells in covered.items() if union - cells}
+
+    if "acquisition" in cell_cols:
+        acq = cell_cols.index("acquisition")
+        # What the ADAPTIVE arms in this frame actually ran. Using the frame-
+        # wide set instead would hold every adaptive arm to a mode that only
+        # a fixed-dataset baseline contributes.
+        adaptive_modes = sorted(
+            {cell[acq] for arm, cells in covered.items()
+             if arm not in NON_ADAPTIVE_ARMS for cell in cells},
+            key=repr,
+        )
+
+        def _expected(arm):
+            allowed = set(acquisition_modes_for(arm, adaptive_modes))
+            return {cell for cell in union if cell[acq] in allowed}
+    else:
+        def _expected(arm):
+            return union
+
+    missing = {}
+    for arm, cells in covered.items():
+        gap = sorted(_expected(arm) - cells, key=repr)
+        if gap:
+            missing[arm] = gap
     if not missing:
         return
 
     detail = "; ".join(
-        f"{arm!r} is missing {len(cells)} of {len(union)}: {cells}"
+        f"{arm!r} is missing {len(cells)} of {len(_expected(arm))} expected: "
+        f"{cells}"
         for arm, cells in sorted(missing.items())
     )
     raise ValueError(
@@ -325,8 +374,66 @@ def assert_matched_coverage(df: pd.DataFrame) -> None:
         f"their means are taken over different populations and are not "
         f"comparable -- an arm that has not run on the hard system, or is "
         f"missing a seed, wins for a reason that is not about the arm. "
-        f"{detail}. Restrict the report to a slice every arm covers (e.g. "
-        f"--system), or wait for the missing runs."
+        f"{detail}. (An arm's expected acquisition modes come from "
+        f"manifest.acquisition_modes_for, so a non-adaptive arm is not held "
+        f"to a 'ranked' cell it never runs.) Restrict the report to a slice "
+        f"every arm covers (e.g. --system), or wait for the missing runs."
+    )
+
+
+def assert_one_run_per_cell(df: pd.DataFrame) -> None:
+    """Exactly one run_id per (arm, system, acquisition, seed, epoch) cell.
+
+    ``run_id`` embeds a sha1 of the spec, so a run from an earlier campaign
+    under the same ``exp_root`` -- different ``overrides``, therefore a
+    different hash, therefore a different directory -- lands in the SAME
+    cell as the current run under a DIFFERENT ``run_id``. ``collect_runs``
+    reads both, ``pivot_table`` averages both, and nothing anywhere notices:
+    every run is complete, every budget matches, every arm covers every
+    cell, and provenance is fine because the stale run was also produced by
+    post-fix code.
+
+    This is the one uncaught failure that REVERSES a conclusion rather than
+    merely degrading it. Demonstrated: a stale directory pooling into one
+    cell moved an arm from 0.95 to a reported 0.75 and flipped its paired
+    delta from positive to -0.050, i.e. turned "adaptive helps" into
+    "adaptive hurts".
+
+    Degrades on a frame with no ``run_id`` column: run identity is exactly
+    what this checks, so a frame that carries none has nothing to
+    deduplicate. That is not a hole on the shipped path --
+    ``validate_frame`` hard-requires every ``PROVENANCE_COLUMNS`` entry
+    (``run_id`` among them) and ``run_benchmark.py report`` calls it by
+    default -- it is what keeps the minimal hand-built fixtures working.
+    """
+    if "run_id" not in df.columns:
+        return
+    _require_columns(df, ["arm"])
+    cell_cols = [c for c in _RUN_CELL_COLUMNS if c in df.columns]
+    _require_no_nulls(df, ["run_id", *cell_cols])
+
+    counts = df.groupby(cell_cols, dropna=False)["run_id"].nunique()
+    offenders = counts[counts > 1]
+    if offenders.empty:
+        return
+
+    detail = []
+    for key in offenders.index:
+        key_tuple = key if isinstance(key, tuple) else (key,)
+        mask = pd.Series(True, index=df.index)
+        for column, value in zip(cell_cols, key_tuple):
+            mask &= df[column] == value
+        run_ids = sorted(df.loc[mask, "run_id"].unique().tolist())
+        detail.append(f"{dict(zip(cell_cols, key_tuple))} <- {run_ids}")
+
+    raise ValueError(
+        f"{len(offenders)} cell(s) contain more than one run: "
+        + "; ".join(detail)
+        + ". run_id embeds a hash of the run spec, so a stale run directory "
+          "from an earlier campaign under the same exp_root lands in the "
+          "same cell under a different run_id and is averaged in silently -- "
+          "which can REVERSE a paired delta, not merely blur it. Remove the "
+          "stale directories, or point --exp-root at a clean campaign root."
     )
 
 
@@ -494,6 +601,10 @@ def validate_frame(df: pd.DataFrame, *, repo_root=None) -> None:
       missing one is refused outright rather than having the checks below
       silently skip whatever they can't see (F4/F11: a silent skip here is
       exactly the failure mode this module exists to prevent).
+    - ``assert_one_run_per_cell``: a stale run directory pooled into a cell
+      that already has a run. Included here (unlike ``assert_all_complete``
+      and ``assert_matched_coverage``) because it is never a legitimate
+      state of a live campaign -- it is always an error, at every stage.
     - ``assert_matched_budget``: frame-wide, scoped by system/acquisition/tier.
       Called FIRST, and its own null-identity check (on ``arm``) is what
       catches a null ``arm`` before the provenance loop below ever runs --
@@ -532,6 +643,12 @@ def validate_frame(df: pd.DataFrame, *, repo_root=None) -> None:
     """
     _require_columns(df, PROVENANCE_COLUMNS)
     assert_matched_budget(df)
+    # Fully determined by the frame itself, and never a legitimate state of a
+    # live campaign the way an incomplete run or unequal coverage is: two
+    # run_ids in one cell is always a stale directory, whatever stage the
+    # campaign is at. So unlike assert_all_complete / assert_matched_coverage,
+    # this one belongs in the floor.
+    assert_one_run_per_cell(df)
 
     for column in sorted(NON_COMPARABLE_COLUMNS & set(df.columns)):
         assert_comparable(df, column)

@@ -132,6 +132,7 @@ from .guards import (
     assert_distinct_seeds,
     assert_matched_budget,
     assert_matched_coverage,
+    assert_one_run_per_cell,
 )
 
 __all__ = ["METRIC", "EPOCH_SELECTIONS", "build_report", "select_epochs"]
@@ -276,27 +277,58 @@ def _resolve_control(levels: list, control: str | None) -> str | None:
     return candidates[0] if len(candidates) == 1 else None
 
 
+def _shortfall(df: pd.DataFrame, have: str, want: str) -> list[tuple]:
+    """Runs where `have` is short of `want`, as (run_id, have, want)."""
+    if not {have, want}.issubset(df.columns):
+        return []
+    known = df.dropna(subset=[have, want])
+    short = known[known[have] < known[want]]
+    if short.empty:
+        return []
+    labels = short["run_id"] if "run_id" in short.columns else short.index
+    return sorted({(str(r), int(h), int(w))
+                   for r, h, w in zip(labels, short[have], short[want])})
+
+
 def _coverage_lines(df: pd.DataFrame) -> list[str]:
-    """Say when a run lost epochs, instead of quietly averaging over fewer."""
+    """Say when a run lost epochs, instead of quietly averaging over fewer.
+
+    TWO ways to lose one, and they need separate counters (aggregate.py):
+    an artifact that never parsed leaves no row at all
+    (``n_epochs_collected``), while an epoch on which eval did not run
+    leaves a perfectly valid row of NaN metrics that ``pivot_table``
+    silently skips (``n_epochs_evaluated``). Reporting only the first is how
+    this section came to state "every run contributed its full configured
+    number of epochs" for a run that had lost a third of its metric
+    population.
+    """
     if not {"n_epochs", "n_epochs_collected"}.issubset(df.columns):
         return []
-    known = df.dropna(subset=["n_epochs", "n_epochs_collected"])
-    short = known[known["n_epochs_collected"] < known["n_epochs"]]
-    if short.empty:
-        return ["Every run contributed its full configured number of epochs.",
-                ""]
-    detail = sorted(
-        {(str(r), int(c), int(n)) for r, c, n in zip(
-            short["run_id"] if "run_id" in short.columns else short.index,
-            short["n_epochs_collected"], short["n_epochs"])}
-    )
-    return [
-        f"**{len(detail)} run(s) contributed fewer epochs than configured** "
-        f"(corrupt or eval-less epochs are skipped at aggregation, so the "
-        f"mean below is over a smaller population for these runs): "
-        + ", ".join(f"`{r}` {c}/{n}" for r, c, n in detail),
-        "",
-    ]
+    missing_rows = _shortfall(df, "n_epochs_collected", "n_epochs")
+    missing_evals = _shortfall(df, "n_epochs_evaluated", "n_epochs_collected")
+    if not missing_rows and not missing_evals:
+        return ["Every run contributed its full configured number of epochs, "
+                "and every epoch it contributed carried metrics.", ""]
+
+    lines = []
+    if missing_rows:
+        lines += [
+            f"**{len(missing_rows)} run(s) contributed fewer epochs than "
+            f"configured** (an artifact that was missing or would not parse "
+            f"is skipped at aggregation, so the mean below is over a smaller "
+            f"population for these runs): "
+            + ", ".join(f"`{r}` {h}/{w}" for r, h, w in missing_rows), "",
+        ]
+    if missing_evals:
+        lines += [
+            f"**{len(missing_evals)} run(s) have epochs that produced NO "
+            f"metrics** (eval did not run for those epochs; the rows exist "
+            f"but every metric on them is NaN and is skipped by the "
+            f"aggregation below): "
+            + ", ".join(f"`{r}` {h} of {w} epochs evaluated"
+                        for r, h, w in missing_evals), "",
+        ]
+    return lines
 
 
 def _fmt(value) -> str:
@@ -384,7 +416,8 @@ def _fidelity_lines(fidelity: dict) -> list[str]:
 def build_report(df: pd.DataFrame, fidelity: dict | None = None,
                  metric: str = METRIC, *, epochs="final",
                  control: str | None = None,
-                 conditioned: list | None = None) -> str:
+                 conditioned: list | None = None,
+                 provenance_checked: bool = True) -> str:
     """Render the tier's tables: one per system, never pooled across them.
 
     Args:
@@ -406,6 +439,12 @@ def build_report(df: pd.DataFrame, fidelity: dict | None = None,
         conditioned: optional rows from ``pointwise.separatrix_table`` --
             accuracy split by proximity to the empirical basin boundary,
             which is where arms actually differ.
+        provenance_checked: False when the caller skipped
+            ``guards.validate_frame`` (``run_benchmark.py report
+            --no-validate``). The disclosure then goes into the RENDERED
+            TEXT, not just the caller's stdout: the artifact is what gets
+            saved, read weeks later and pasted into a thread, and a warning
+            that lives only in a terminal scrollback is not attached to it.
     """
     _require_report_columns(df, ["arm", "tier", "acquisition"])
     if df["tier"].nunique() > 1:
@@ -419,6 +458,7 @@ def build_report(df: pd.DataFrame, fidelity: dict | None = None,
 
     assert_matched_budget(df)
     assert_matched_coverage(df)
+    assert_one_run_per_cell(df)
     assert_comparable(df, metric)
     assert_distinct_seeds(df, metric)
 
@@ -435,8 +475,18 @@ def build_report(df: pd.DataFrame, fidelity: dict | None = None,
     resolved_control = _resolve_control(levels, control)
 
     tier = df["tier"].iloc[0]
-    lines = [f"# Benchmark report — {tier} tier", "",
-             f"**Epoch selection:** {epoch_note}.", ""]
+    lines = [f"# Benchmark report — {tier} tier", ""]
+    if not provenance_checked:
+        lines += [
+            "> **PROVENANCE NOT CHECKED.** This report was generated with "
+            "validation disabled (`--no-validate`), so `guards.validate_frame` "
+            "never ran: no arm was checked against its invalidating commit "
+            "(`INVALIDATING_COMMITS`), the multi-seed seeding fix was not "
+            "verified, and no check for a stale duplicate run was made. The "
+            "numbers below may pool pre- and post-fix vintages. Do not quote "
+            "them without regenerating this report without that flag.", "",
+        ]
+    lines += [f"**Epoch selection:** {epoch_note}.", ""]
     lines += _coverage_lines(selected)
 
     if resolved_control is None or ADAPTIVE_LEVEL not in levels:

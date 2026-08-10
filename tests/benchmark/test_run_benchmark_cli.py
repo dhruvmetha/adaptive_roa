@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 
 from adaptive_roa.benchmark.provenance import git_sha
 
@@ -113,6 +114,28 @@ def test_no_validate_skips_the_provenance_check_and_says_so(tmp_path, capsys):
     assert "Benchmark report" in out
 
 
+def test_the_written_artifact_itself_records_that_validation_was_skipped(tmp_path):
+    # NEW-2: the stdout warning is not attached to the file that gets saved,
+    # read weeks later and pasted into a thread. grep the artifact.
+    root = tmp_path / "campaign"
+    root.mkdir()
+    _campaign(root, commit=_PRE_FIX_COMMIT)
+    out_path = tmp_path / "report.md"
+    cli._run_report(_args(root, validate=False, out=out_path))
+    text = out_path.read_text()
+    assert "PROVENANCE NOT CHECKED" in text
+    assert "--no-validate" in text
+
+
+def test_a_validated_written_artifact_carries_no_such_banner(tmp_path):
+    root = tmp_path / "campaign"
+    root.mkdir()
+    _campaign(root)
+    out_path = tmp_path / "report.md"
+    cli._run_report(_args(root, out=out_path))
+    assert "PROVENANCE NOT CHECKED" not in out_path.read_text()
+
+
 def test_report_refuses_an_arm_that_skipped_a_system(tmp_path):
     root = _campaign(tmp_path)
     for acq in ("ranked", "direct"):
@@ -173,6 +196,59 @@ def test_an_empty_exp_root_short_circuits_before_the_guards(tmp_path, capsys):
 # zero call sites anywhere -- two scientific deliverables that no shipped
 # command could produce.
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# NEW-4: a typo'd GROUP NAME in a manifest `overrides:` entry. expand_manifest
+# validates a group's VALUE (system=cartpole) but cannot judge a KEY: a
+# non-dotted key that is not a group directory is legitimately a config value
+# (seed=, n_epochs=, controller=, exp_id=), and only Hydra's struct-mode check
+# can say whether it exists. That check used to happen inside SLURM, per job.
+# ---------------------------------------------------------------------------
+
+def _launch_args(manifest, exp_root, **kw):
+    base = dict(manifest=manifest, exp_root=exp_root, launch=False)
+    base.update(kw)
+    return type("Args", (), base)
+
+
+def _manifest(tmp_path, **extra):
+    body = dict(tier="production", arms=["gp"], systems=["pendulum"],
+                acquisition=["ranked"], seeds=[42], n_epochs=10)
+    body.update(extra)
+    path = tmp_path / "manifest.yaml"
+    path.write_text(yaml.safe_dump(body))
+    return path
+
+
+def test_a_valid_manifest_composes_and_dry_runs(tmp_path, capsys):
+    manifest = _manifest(tmp_path)
+    cli._run_launch(_launch_args(manifest, tmp_path / "exp"))
+    out = capsys.readouterr().out
+    assert "dry run" in out
+    assert "sbatch" in out          # printed, never executed
+
+
+def test_a_typod_override_key_is_refused_before_anything_is_submitted(tmp_path):
+    # `acquisiton=` names no config group, so it is treated as a config
+    # VALUE -- and there is no such key. Hydra refuses it, and now that
+    # refusal happens here rather than ~450 times inside SLURM.
+    manifest = _manifest(tmp_path, overrides=["acquisiton=ranked"])
+    with pytest.raises(SystemExit, match="does not compose"):
+        cli._run_launch(_launch_args(manifest, tmp_path / "exp"))
+
+
+def test_a_typod_override_value_is_still_caught_earlier_by_the_manifest(tmp_path):
+    # The group EXISTS, so expand_manifest's file check fires first and gives
+    # the better message (it lists the groups that do exist).
+    manifest = _manifest(tmp_path, overrides=["acquisition=rankd"])
+    with pytest.raises(ValueError, match="no acquisition/rankd.yaml"):
+        cli._run_launch(_launch_args(manifest, tmp_path / "exp"))
+
+
+def test_the_shipped_pilot_manifest_passes_the_launch_time_compose_check(tmp_path):
+    pilot = Path(cli.__file__).resolve().parents[1] / "configs/benchmark/pilot.yaml"
+    cli._run_launch(_launch_args(pilot, tmp_path / "exp"))
+
 
 def test_separatrix_flag_adds_the_near_boundary_section(tmp_path, capsys):
     root = _campaign(tmp_path)

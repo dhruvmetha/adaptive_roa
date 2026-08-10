@@ -347,9 +347,54 @@ def test_a_run_short_of_its_budget_is_named_in_the_report():
 
 
 def test_a_campaign_with_no_lost_epochs_says_so():
-    df = _multi_system_df(n_epochs_collected=[10] * 8)
+    df = _multi_system_df(n_epochs_collected=[10] * 8,
+                          n_epochs_evaluated=[10] * 8)
     out = build_report(df)
     assert "full configured number of epochs" in out
+
+
+def test_epochs_that_produced_no_metrics_are_reported_separately():
+    # NEW-3: n_epochs_collected alone cannot see this. The rows exist and
+    # parse, so the run looks complete, while a third of its metric
+    # population is NaN and silently skipped by the aggregation.
+    df = _multi_system_df(n_epochs_collected=[10] * 8,
+                          n_epochs_evaluated=[10, 10, 10, 10, 10, 10, 6, 6])
+    out = build_report(df)
+    assert "produced NO metrics" in out
+    assert "`r4` 6 of 10 epochs evaluated" in out
+    assert "full configured number of epochs" not in out
+
+
+def test_both_kinds_of_lost_epoch_are_reported_together():
+    df = _multi_system_df(n_epochs_collected=[10, 10, 10, 10, 10, 10, 8, 8],
+                          n_epochs_evaluated=[10, 10, 10, 10, 6, 6, 8, 8])
+    out = build_report(df)
+    assert "fewer epochs than configured" in out
+    assert "produced NO metrics" in out
+
+
+# ---------------------------------------------------------------------------
+# NEW-2: a report generated with validation disabled must say so IN THE
+# ARTIFACT. The artifact is what gets saved, read weeks later and pasted into
+# a thread; a warning that lives only in a terminal scrollback is not
+# attached to it.
+# ---------------------------------------------------------------------------
+
+def test_a_report_built_without_provenance_checks_says_so_in_its_own_text():
+    out = build_report(_df(), provenance_checked=False)
+    assert "PROVENANCE NOT CHECKED" in out
+    assert "--no-validate" in out
+    assert "INVALIDATING_COMMITS" in out
+
+
+def test_the_disclosure_sits_above_every_number():
+    out = build_report(_df(), provenance_checked=False)
+    banner = out.index("PROVENANCE NOT CHECKED")
+    assert banner < out.index("Downstream task")
+
+
+def test_a_validated_report_carries_no_such_banner():
+    assert "PROVENANCE NOT CHECKED" not in build_report(_df())
 
 
 # ---------------------------------------------------------------------------

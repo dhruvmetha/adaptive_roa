@@ -7,12 +7,14 @@ from adaptive_roa.benchmark.guards import (
     assert_distinct_seeds,
     assert_matched_budget,
     assert_matched_coverage,
+    assert_one_run_per_cell,
     assert_post_fix,
     INVALIDATING_COMMITS,
     NON_COMPARABLE_COLUMNS,
     SEEDING_FIX_COMMIT,
     validate_frame,
 )
+from adaptive_roa.benchmark.manifest import acquisition_modes_for, expand_manifest
 from adaptive_roa.benchmark.provenance import git_sha
 
 # A real commit from this repository's early history: older than every entry
@@ -514,6 +516,163 @@ def test_matched_coverage_degrades_to_the_columns_present():
         assert_matched_coverage(df)
 
 
+# ---------------------------------------------------------------------------
+# NEW-1: coverage is judged against the cells an arm is EXPECTED to cover,
+# derived from manifest.acquisition_modes_for -- the same function
+# expand_manifest builds the campaign with. A blunt cross-product refused the
+# shipped pilot at 100% completion, because mlp_det has no `ranked` cell by
+# design and no CLI flag could rescue it (the missing axis was acquisition).
+# ---------------------------------------------------------------------------
+
+def _pilot_like_frame(arms=("mlp", "gp", "mlp_det"), systems=("pendulum",
+                      "cartpole_pybullet"), seeds=(42, 43, 44), drop=None):
+    """A frame shaped exactly like a COMPLETE pilot campaign."""
+    rows = []
+    for arm in arms:
+        for mode in acquisition_modes_for(arm, ["ranked", "direct"]):
+            for system in systems:
+                for seed in seeds:
+                    rows.append(dict(arm=arm, system=system, acquisition=mode,
+                                     seed=seed, n_epochs=10, accuracy=0.8))
+    df = pd.DataFrame(rows)
+    if drop is not None:
+        df = df[~drop(df)].reset_index(drop=True)
+    return df
+
+
+def test_a_complete_pilot_campaign_passes_despite_the_non_adaptive_arm():
+    # THE regression: mlp_det runs `direct` only, so a global cross-product
+    # marks it missing every `ranked` cell and the pilot table becomes
+    # unproducible at 100% completion.
+    df = _pilot_like_frame()
+    assert set(df.loc[df.arm == "mlp_det", "acquisition"]) == {"direct"}
+    assert "ranked" not in set(df.loc[df.arm == "mlp_det", "acquisition"])
+    assert_matched_coverage(df)
+
+
+def test_a_non_adaptive_arm_missing_a_seed_still_raises():
+    # The exemption is scoped to the acquisition axis only: mlp_det is still
+    # held to every (system, seed) cell its own mode should cover.
+    df = _pilot_like_frame(
+        drop=lambda d: (d.arm == "mlp_det") & (d.seed == 44)
+                       & (d.system == "pendulum"))
+    with pytest.raises(ValueError, match="mlp_det"):
+        assert_matched_coverage(df)
+
+
+def test_a_non_adaptive_arm_missing_a_system_still_raises():
+    df = _pilot_like_frame(
+        drop=lambda d: (d.arm == "mlp_det") & (d.system == "cartpole_pybullet"))
+    with pytest.raises(ValueError, match="cartpole_pybullet"):
+        assert_matched_coverage(df)
+
+
+def test_an_adaptive_arm_missing_the_ranked_arm_of_the_pair_still_raises():
+    # gp is adaptive, so it gets no exemption: a missing `ranked` cell is a
+    # genuinely incomplete campaign.
+    df = _pilot_like_frame(
+        drop=lambda d: (d.arm == "gp") & (d.acquisition == "ranked")
+                       & (d.system == "pendulum"))
+    with pytest.raises(ValueError, match="'gp'"):
+        assert_matched_coverage(df)
+
+
+def test_adaptive_arms_are_not_held_to_a_mode_only_a_baseline_contributes():
+    # A ranked-only campaign that still carries the fixed-dataset baseline:
+    # `direct` exists in the frame ONLY because mlp_det runs it, so holding
+    # the adaptive arms to it would be a false alarm.
+    rows = []
+    for arm, modes in (("mlp", ["ranked"]), ("gp", ["ranked"]),
+                       ("mlp_det", ["direct"])):
+        for mode in modes:
+            rows.append(dict(arm=arm, system="pendulum", acquisition=mode,
+                             seed=42, n_epochs=10, accuracy=0.8))
+    assert_matched_coverage(pd.DataFrame(rows))
+
+
+def test_the_expectation_comes_from_the_same_function_expand_manifest_uses():
+    # Pins the anti-drift property rather than restating the rule: whatever
+    # expand_manifest emits for an arm is what the guard expects of it.
+    assert acquisition_modes_for("mlp_det", ["ranked", "direct"]) == ["direct"]
+    assert acquisition_modes_for("gp", ["ranked", "direct"]) == ["ranked", "direct"]
+    specs = expand_manifest({
+        "arms": ["mlp_det", "gp"], "systems": ["pendulum"],
+        "tier": "production", "acquisition": ["ranked", "direct"],
+        "seeds": [42], "n_epochs": 10,
+    })
+    emitted = {}
+    for spec in specs:
+        emitted.setdefault(spec.arm, set()).add(spec.acquisition)
+    for arm, modes in emitted.items():
+        assert modes == set(acquisition_modes_for(arm, ["ranked", "direct"]))
+
+
+# ---------------------------------------------------------------------------
+# Review §5.7: a stale run directory pooling into an occupied cell. The one
+# uncaught failure that REVERSES a conclusion rather than degrading it.
+# ---------------------------------------------------------------------------
+
+def _cell_df(**cols):
+    base = dict(
+        run_id=["gp_ranked_abcd1234", "gp_ranked_abcd1234"],
+        arm=["gp", "gp"], system=["pendulum"] * 2,
+        acquisition=["ranked"] * 2, seed=[42, 42], epoch=[8, 9],
+        accuracy=[0.94, 0.95],
+    )
+    base.update(cols)
+    return pd.DataFrame(base)
+
+
+def test_one_run_per_cell_passes_on_one_run_across_several_epochs():
+    assert_one_run_per_cell(_cell_df())
+
+
+def test_a_stale_second_run_in_the_same_cell_is_refused():
+    df = _cell_df(run_id=["gp_ranked_abcd1234", "gp_ranked_0f9e8d7c"],
+                  epoch=[9, 9], accuracy=[0.95, 0.55])
+    with pytest.raises(ValueError, match="more than one run"):
+        assert_one_run_per_cell(df)
+
+
+def test_the_duplicate_run_ids_are_named():
+    df = _cell_df(run_id=["gp_ranked_abcd1234", "gp_ranked_0f9e8d7c"],
+                  epoch=[9, 9])
+    with pytest.raises(ValueError) as excinfo:
+        assert_one_run_per_cell(df)
+    assert "gp_ranked_abcd1234" in str(excinfo.value)
+    assert "gp_ranked_0f9e8d7c" in str(excinfo.value)
+
+
+def test_two_runs_in_DIFFERENT_cells_are_fine():
+    df = _cell_df(run_id=["gp_ranked_a", "gp_direct_b"],
+                  acquisition=["ranked", "direct"], epoch=[9, 9])
+    assert_one_run_per_cell(df)
+
+
+def test_one_run_per_cell_degrades_without_a_run_id_column():
+    # Run identity is exactly what this checks, so a frame carrying none has
+    # nothing to deduplicate. The shipped path always has it: validate_frame
+    # hard-requires every PROVENANCE_COLUMNS entry, run_id included.
+    assert_one_run_per_cell(_cell_df().drop(columns=["run_id"]))
+    assert "run_id" in PROVENANCE_COLUMNS
+
+
+def test_one_run_per_cell_raises_on_a_null_run_id():
+    with pytest.raises(ValueError, match="null"):
+        assert_one_run_per_cell(_cell_df(run_id=["r1", None], epoch=[9, 9]))
+
+
+def test_validate_frame_refuses_a_stale_duplicate_run():
+    # Unlike assert_all_complete / assert_matched_coverage, this one IS in
+    # the floor: two run_ids in one cell is never a legitimate state of a
+    # live campaign, at any stage.
+    df = _full_df_for_validate(seed=[42, 42], epoch=[9, 9],
+                               commit=[git_sha(), git_sha()],
+                               accuracy=[0.95, 0.55])
+    with pytest.raises(ValueError, match="more than one run"):
+        validate_frame(df)
+
+
 def test_matched_coverage_is_not_called_by_validate_frame():
     # Deliberate, and the same call this module already makes for
     # assert_all_complete: unequal coverage is the NORMAL state of a live
@@ -579,6 +738,7 @@ def _full_df_for_validate(**overrides):
         epoch=[9, 9],
         n_epochs=[10, 10],
         n_epochs_collected=[10, 10],
+        n_epochs_evaluated=[10, 10],
         run_complete=[True, True],
         commit=[head, head],
         accuracy=[0.80, 0.83],
@@ -606,7 +766,12 @@ def test_validate_frame_raises_on_a_non_comparable_column_across_arms():
 
 
 def test_validate_frame_raises_when_an_arm_predates_its_invalidating_commit():
-    df = _full_df_for_validate(commit=[_PRE_FIX_COMMIT, _PRE_FIX_COMMIT], seed=[42, 42])
+    # Two rows of the SAME run at different epochs, not two runs in one cell:
+    # seed=[42,42] with epoch=[9,9] would be two run_ids in one cell, which
+    # assert_one_run_per_cell now (correctly) refuses first, masking the
+    # provenance failure this test is about.
+    df = _full_df_for_validate(commit=[_PRE_FIX_COMMIT, _PRE_FIX_COMMIT],
+                               seed=[42, 42], epoch=[8, 9])
     with pytest.raises(ValueError, match="predates|not found|unknown"):
         validate_frame(df)
 
@@ -617,8 +782,8 @@ def test_validate_frame_passes_when_an_arm_postdates_its_invalidating_commit():
     df = _full_df_for_validate(
         run_id=["r1"], arm=["bnn_mfvi"], system=["pendulum"],
         tier=["production"], acquisition=["random"], seed=[42], epoch=[9],
-        n_epochs=[10], n_epochs_collected=[10], run_complete=[True],
-        commit=[git_sha()], accuracy=[0.8],
+        n_epochs=[10], n_epochs_collected=[10], n_epochs_evaluated=[10],
+        run_complete=[True], commit=[git_sha()], accuracy=[0.8],
     )
     validate_frame(df)
 

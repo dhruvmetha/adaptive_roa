@@ -362,6 +362,40 @@ def test_a_missing_identity_column_is_refused_with_a_diagnosis(column):
         build_report(_df().drop(columns=[column]))
 
 
+# ---------------------------------------------------------------------------
+# I5: the near-boundary section build_report renders from pointwise rows.
+# ---------------------------------------------------------------------------
+
+def _conditioned_rows(refused=None):
+    return [dict(system="pendulum", arm="bnn_mfvi", acquisition="ranked", k=5,
+                 n_runs=3, overall=0.91, near_boundary=0.64, interior=0.99,
+                 n_near=120, n_interior=880, refused=refused)]
+
+
+def test_the_conditioned_section_reports_the_boundary_split():
+    out = build_report(_df(), conditioned=_conditioned_rows())
+    assert "Near-boundary conditioned accuracy" in out
+    assert "0.640" in out and "0.990" in out
+
+
+def test_the_conditioned_section_states_it_is_not_the_calibrated_rule():
+    # These accuracies are thresholded at 0.5, not at lambda/delta, so they
+    # are a different quantity from the headline table and must say so.
+    out = build_report(_df(), conditioned=_conditioned_rows())
+    assert "0.5" in out and "not a decomposition of it" in out
+
+
+def test_a_refused_conditioned_row_is_printed_verbatim():
+    out = build_report(_df(), conditioned=_conditioned_rows(
+        refused="r7: no full_roa_per_point.npz at /x/r7/epoch_009"))
+    assert "Runs refused while computing the band" in out
+    assert "no full_roa_per_point.npz" in out
+
+
+def test_no_conditioned_rows_means_no_conditioned_section():
+    assert "Near-boundary" not in build_report(_df())
+
+
 def test_build_report_does_not_require_full_provenance_columns():
     # validate_frame (Task 4) hard-requires every PROVENANCE_COLUMNS entry
     # (run_id, system, epoch, run_complete, commit, ...). This fixture --

@@ -134,7 +134,7 @@ from .guards import (
     assert_matched_coverage,
 )
 
-__all__ = ["METRIC", "EPOCH_SELECTIONS", "build_report"]
+__all__ = ["METRIC", "EPOCH_SELECTIONS", "build_report", "select_epochs"]
 
 # Default headline metric. Matches the brief's own constant name/value so its
 # hand-built fixtures (a bare "accuracy" column) work unmodified -- see the
@@ -255,6 +255,13 @@ def _select_epochs(df: pd.DataFrame, epochs) -> tuple[pd.DataFrame, str]:
     return selected, f"epoch {epochs} only"
 
 
+# Public alias: a caller building the per-point tables (pointwise.py) needs
+# the SAME rows the headline table summarizes, so it applies this reduction
+# itself before reading each run's artifacts off disk. Re-applying it inside
+# build_report is idempotent for all three selections.
+select_epochs = _select_epochs
+
+
 def _resolve_control(levels: list, control: str | None) -> str | None:
     """Which acquisition level the paired delta is taken against, or None."""
     if control is not None:
@@ -316,6 +323,42 @@ def _table_lines(section: pd.DataFrame, metric: str, levels: list,
     return lines
 
 
+def _conditioned_lines(conditioned: list) -> list[str]:
+    """Render the near-boundary slice, refusals included verbatim.
+
+    Aggregate accuracy is dominated by basin interiors where every arm is
+    correct, so two arms can rank identically overall while behaving very
+    differently exactly where the outcome flips -- which is the regime
+    adaptive acquisition exists to resolve. Rows are built by
+    ``pointwise.separatrix_table`` from each run's own
+    ``full_roa_per_point.npz``.
+    """
+    lines = ["## Near-boundary conditioned accuracy", "",
+             "Predictions here are thresholded at p(success) >= 0.5, NOT at "
+             "the calibrated lambda/delta rule, so these numbers are a "
+             "different quantity from the table above and are not a "
+             "decomposition of it. A run whose band could not be computed "
+             "shows the refusal verbatim rather than a blank cell.", ""]
+    fields = [c for c in ("system", "arm", "acquisition") if c in conditioned[0]]
+    header = [*fields, "k", "runs", "overall", "near boundary", "interior",
+              "n near", "n interior"]
+    lines += ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
+    refusals = []
+    for row in conditioned:
+        cells = [str(row[f]) for f in fields]
+        cells += [str(row["k"]), str(row["n_runs"]), _fmt(row["overall"]),
+                  _fmt(row["near_boundary"]), _fmt(row["interior"]),
+                  str(row["n_near"]), str(row["n_interior"])]
+        lines.append("| " + " | ".join(cells) + " |")
+        if row.get("refused"):
+            refusals.append(f"- `{'/'.join(str(row[f]) for f in fields)}`: "
+                            f"{row['refused']}")
+    lines.append("")
+    if refusals:
+        lines += ["Runs refused while computing the band above:", *refusals, ""]
+    return lines
+
+
 def _fidelity_lines(fidelity: dict) -> list[str]:
     lines = ["## Posterior fidelity vs the HMC reference", "",
              "| arm | agreement | total variation |", "|---|---|---|"]
@@ -340,7 +383,8 @@ def _fidelity_lines(fidelity: dict) -> list[str]:
 
 def build_report(df: pd.DataFrame, fidelity: dict | None = None,
                  metric: str = METRIC, *, epochs="final",
-                 control: str | None = None) -> str:
+                 control: str | None = None,
+                 conditioned: list | None = None) -> str:
     """Render the tier's tables: one per system, never pooled across them.
 
     Args:
@@ -359,6 +403,9 @@ def build_report(df: pd.DataFrame, fidelity: dict | None = None,
             Auto-detected from ``CONTROL_LEVELS`` when exactly one of them
             is present; pass it explicitly to disambiguate, and this
             function raises if the named level is not in the frame.
+        conditioned: optional rows from ``pointwise.separatrix_table`` --
+            accuracy split by proximity to the empirical basin boundary,
+            which is where arms actually differ.
     """
     _require_report_columns(df, ["arm", "tier", "acquisition"])
     if df["tier"].nunique() > 1:
@@ -422,6 +469,9 @@ def build_report(df: pd.DataFrame, fidelity: dict | None = None,
               f"{resolved_control or 'control'} baseline for that arm — a "
               f"reportable finding, not a bug (cf. Foong et al., NeurIPS "
               f"2020).", ""]
+
+    if conditioned:
+        lines += _conditioned_lines(conditioned)
 
     if fidelity:
         lines += _fidelity_lines(fidelity)

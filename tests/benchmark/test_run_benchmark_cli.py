@@ -63,9 +63,29 @@ def _campaign(root, *, commit=None, arms=("bnn_mfvi", "gp")):
 def _args(exp_root, **kw):
     base = dict(exp_root=exp_root, metric="accuracy", tier=None, system=None,
                 epochs="final", control=None, require_complete=False,
-                validate=True, out=None)
+                validate=True, out=None, separatrix=False, separatrix_k=3,
+                fidelity_vs=None, rhat_threshold=1.1)
     base.update(kw)
     return type("Args", (), base)
+
+
+def _add_per_point(root, run_id, *, epoch, probs_sign=1.0, diagnostics=None):
+    """The per-point artifacts --separatrix / --fidelity-vs read off disk."""
+    import numpy as np
+
+    grid = np.linspace(-1.0, 1.0, 40)
+    directory = root / run_id / f"epoch_{epoch:03d}"
+    directory.mkdir(parents=True, exist_ok=True)
+    probs = np.where(grid * probs_sign > 0, 0.9, 0.1)
+    np.savez(directory / "full_roa_per_point.npz",
+             start_states=np.stack([grid, np.zeros_like(grid)], axis=1),
+             p_success=probs, p_failure=1.0 - probs,
+             p_invalid=np.zeros_like(probs),
+             true_labels=np.where(grid > 0, 1, -1))
+    if diagnostics is not None:
+        (directory / "checkpoints").mkdir(parents=True, exist_ok=True)
+        (directory / "checkpoints" / "hmc_diagnostics.json").write_text(
+            json.dumps(diagnostics))
 
 
 def test_report_renders_a_synthetic_campaign(tmp_path, capsys):
@@ -145,3 +165,64 @@ def test_epochs_argument_accepts_final_all_and_an_integer():
 def test_an_empty_exp_root_short_circuits_before_the_guards(tmp_path, capsys):
     cli._run_report(_args(tmp_path))
     assert "no runs found" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# I5: Tasks 5 and 6 reachable from a real command. Before this, separatrix.py
+# was imported by nothing outside its own test and fidelity_vs_reference had
+# zero call sites anywhere -- two scientific deliverables that no shipped
+# command could produce.
+# ---------------------------------------------------------------------------
+
+def test_separatrix_flag_adds_the_near_boundary_section(tmp_path, capsys):
+    root = _campaign(tmp_path)
+    for run_id in ("bnn_mfvi_ranked", "bnn_mfvi_direct", "gp_ranked", "gp_direct"):
+        _add_per_point(root, run_id, epoch=1)
+    cli._run_report(_args(root, separatrix=True))
+    out = capsys.readouterr().out
+    assert "Near-boundary conditioned accuracy" in out
+    assert "near boundary" in out
+    assert "not a decomposition of it" in out
+
+
+def test_without_the_flag_no_near_boundary_section_is_rendered(tmp_path, capsys):
+    root = _campaign(tmp_path)
+    for run_id in ("bnn_mfvi_ranked", "bnn_mfvi_direct", "gp_ranked", "gp_direct"):
+        _add_per_point(root, run_id, epoch=1)
+    cli._run_report(_args(root))
+    assert "Near-boundary" not in capsys.readouterr().out
+
+
+def test_a_run_missing_its_per_point_artifact_is_named_not_dropped(tmp_path, capsys):
+    root = _campaign(tmp_path)
+    for run_id in ("bnn_mfvi_ranked", "bnn_mfvi_direct", "gp_ranked"):
+        _add_per_point(root, run_id, epoch=1)   # gp_direct writes nothing
+    cli._run_report(_args(root, separatrix=True))
+    out = capsys.readouterr().out
+    assert "Runs refused while computing the band" in out
+    assert "full_roa_per_point.npz" in out
+
+
+def test_fidelity_flag_adds_the_posterior_fidelity_table(tmp_path, capsys):
+    root = tmp_path
+    _write_run(root, "hmc_r", arm="hmc", acquisition="ranked")
+    _write_run(root, "bnn_r", arm="bnn_mfvi", acquisition="ranked")
+    _add_per_point(root, "hmc_r", epoch=1,
+                   diagnostics={"rhat_max": 1.02, "converged": True})
+    _add_per_point(root, "bnn_r", epoch=1)
+    cli._run_report(_args(root, fidelity_vs="hmc"))
+    out = capsys.readouterr().out
+    assert "Posterior fidelity vs the HMC reference" in out
+    assert "| bnn_mfvi |" in out
+
+
+def test_fidelity_withholds_against_a_non_converged_reference(tmp_path, capsys):
+    root = tmp_path
+    _write_run(root, "hmc_r", arm="hmc", acquisition="ranked")
+    _write_run(root, "bnn_r", arm="bnn_mfvi", acquisition="ranked")
+    _add_per_point(root, "hmc_r", epoch=1,
+                   diagnostics={"rhat_max": 91.4, "converged": False})
+    _add_per_point(root, "bnn_r", epoch=1, probs_sign=-1.0)
+    cli._run_report(_args(root, fidelity_vs="hmc"))
+    out = capsys.readouterr().out
+    assert "withheld" in out and "91.4" in out

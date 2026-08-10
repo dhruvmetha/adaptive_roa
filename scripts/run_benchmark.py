@@ -44,7 +44,13 @@ from adaptive_roa.benchmark.aggregate import collect_runs
 from adaptive_roa.benchmark.guards import assert_all_complete, validate_frame
 from adaptive_roa.benchmark.launcher import plan_launch, sbatch_command
 from adaptive_roa.benchmark.manifest import expand_manifest
-from adaptive_roa.benchmark.report import EPOCH_SELECTIONS, METRIC, build_report
+from adaptive_roa.benchmark.pointwise import fidelity_table, separatrix_table
+from adaptive_roa.benchmark.report import (
+    EPOCH_SELECTIONS,
+    METRIC,
+    build_report,
+    select_epochs,
+)
 
 _SUBCOMMANDS = ("launch", "report")
 
@@ -115,8 +121,24 @@ def _run_report(args) -> None:
         print("WARNING: --no-validate -- provenance (INVALIDATING_COMMITS, "
               "the seeding fix) was NOT checked for this report.")
 
-    text = build_report(df, metric=args.metric, epochs=args.epochs,
-                        control=args.control)
+    # The near-boundary slice and the posterior-fidelity table are built
+    # from each run's own per-point artifacts, at the SAME epochs the
+    # headline table summarizes -- hence the explicit reduction here rather
+    # than letting build_report do it and then guessing which rows it kept.
+    conditioned = fidelity = None
+    if args.separatrix or args.fidelity_vs:
+        selected, _ = select_epochs(df, args.epochs)
+        if args.separatrix:
+            conditioned = separatrix_table(selected, args.exp_root,
+                                           k=args.separatrix_k)
+        if args.fidelity_vs:
+            fidelity = fidelity_table(selected, args.exp_root,
+                                      reference_arm=args.fidelity_vs,
+                                      rhat_threshold=args.rhat_threshold)
+
+    text = build_report(df, fidelity=fidelity, metric=args.metric,
+                        epochs=args.epochs, control=args.control,
+                        conditioned=conditioned)
     if args.out is not None:
         args.out.write_text(text)
         print(f"wrote {args.out}")
@@ -174,6 +196,27 @@ def main():
         help="also refuse rows from runs that have not finished "
              "(assert_all_complete) -- for a final report, not a "
              "still-launching campaign")
+    report_ap.add_argument(
+        "--separatrix", action="store_true",
+        help="also report accuracy split by proximity to the empirical "
+             "basin boundary, computed from each run's own "
+             "full_roa_per_point.npz (aggregate accuracy is dominated by "
+             "interiors, where every arm is correct)")
+    report_ap.add_argument(
+        "--separatrix-k", type=int, default=5,
+        help="neighbours examined per point when locating the boundary "
+             "band (default: 5)")
+    report_ap.add_argument(
+        "--fidelity-vs", default=None, metavar="ARM",
+        help="also report posterior fidelity of every arm against this "
+             "reference arm (e.g. 'hmc'), gated on the reference's own "
+             "hmc_diagnostics.json -- a non-converged reference withholds "
+             "the number instead of reporting a meaningless one")
+    report_ap.add_argument(
+        "--rhat-threshold", type=float, default=1.1,
+        help="convergence bar the reference's rhat_max is judged against, "
+             "recomputed here rather than trusting its stored `converged` "
+             "flag (default: 1.1)")
     report_ap.add_argument(
         "--no-validate", dest="validate", action="store_false",
         help="skip guards.validate_frame (provenance and seeding-fix "

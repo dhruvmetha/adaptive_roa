@@ -338,3 +338,59 @@ class OutcomeFlowMatcher(pl.LightningModule):
     def _grid_value_positive(sign_pos: torch.Tensor, first: torch.Tensor) -> torch.Tensor:
         """Sign of Psi at the LOW end of each row's bracketing interval."""
         return sign_pos.gather(1, first.view(-1, 1)).view(-1)
+
+    # ------------------------------------------------------------- checkpoints
+
+    @classmethod
+    def from_checkpoint(cls, ckpt_path, system: Any, **kwargs) -> "OutcomeFlowMatcher":
+        """Rebuild from a Lightning checkpoint, inferring the net shape from it.
+
+        The constructor takes a `system` and a net that Lightning cannot
+        reconstruct, so callers have to rebuild by hand. Doing that with
+        hard-coded hidden dims plus `strict=False` is a silent-failure trap: if
+        the arm's config ever changes width, every weight key mismatches, the
+        load quietly does nothing, and the analysis proceeds on an untrained
+        network that still returns plausible probabilities near 0.5.
+
+        Shapes come from the checkpoint and the load is STRICT, so a mismatch
+        raises instead of producing confident nonsense.
+        """
+        import re
+
+        state = torch.load(ckpt_path, map_location="cpu", weights_only=False)["state_dict"]
+        pat = re.compile(r"^velocity_net\.net\.(\d+)\.weight$")
+        layers = sorted(
+            ((int(m.group(1)), state[k].shape) for k in state if (m := pat.match(k))),
+            key=lambda t: t[0],
+        )
+        if not layers:
+            raise ValueError(f"{ckpt_path}: no velocity_net weights found")
+
+        # Linear shapes are (out, in); hidden dims are every layer's output but
+        # the last, and the input width fixes the time-embedding frequency count.
+        hidden = [int(s[0]) for _, s in layers[:-1]]
+        in_dim = int(layers[0][1][1])
+        cond_dim = int(system.embed_state_for_model(
+            system.normalize_state(torch.zeros(1, int(system.state_dim)))
+        ).shape[-1])
+        # in_dim = cond_dim + 1 (x_t) + (1 + 2*num_freqs)
+        num_freqs = (in_dim - cond_dim - 2) // 2
+        if num_freqs < 0 or cond_dim + 2 + 2 * num_freqs != in_dim:
+            raise ValueError(
+                f"{ckpt_path}: input width {in_dim} is inconsistent with condition dim "
+                f"{cond_dim}; the checkpoint was trained on a different system"
+            )
+
+        model = cls(
+            velocity_net=OutcomeVelocityMLP(cond_dim, hidden, num_time_freqs=num_freqs),
+            system=system,
+            **kwargs,
+        )
+        missing, unexpected = model.load_state_dict(state, strict=False)
+        real_missing = [k for k in missing if k.startswith("velocity_net.")]
+        if real_missing or unexpected:
+            raise RuntimeError(
+                f"{ckpt_path}: state_dict mismatch (missing={real_missing}, unexpected={unexpected})"
+            )
+        model.eval()
+        return model

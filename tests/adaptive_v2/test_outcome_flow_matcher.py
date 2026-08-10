@@ -182,3 +182,33 @@ def test_recovers_known_probability_field():
     assert bool(monotone.all()), "learned field folded the line on a well-posed problem"
     assert np.abs(err).mean() < 0.06, f"mean |error| {np.abs(err).mean():.4f} too high"
     assert np.abs(err).max() < 0.15, f"max |error| {np.abs(err).max():.4f} too high"
+
+
+def test_from_checkpoint_infers_shape_and_refuses_mismatch(tmp_path):
+    """Rebuilding by hand with hard-coded dims plus strict=False is a silent
+    failure: every key mismatches, the load does nothing, and an UNTRAINED net
+    still returns plausible probabilities near 0.5. from_checkpoint must infer
+    the shape from the checkpoint and refuse anything it cannot load."""
+    net = OutcomeVelocityMLP(condition_dim=1, hidden_dims=[32, 16], num_time_freqs=3)
+    model = OutcomeFlowMatcher(velocity_net=net, system=_IdentitySystem())
+    ckpt = tmp_path / "m.ckpt"
+    torch.save({"state_dict": model.state_dict()}, ckpt)
+
+    # Same num_ode_steps as the original: a different step count changes p by the
+    # integration error alone (~3e-4 between 10 and 100 steps), which would make
+    # this assert about the solver rather than about whether the weights loaded.
+    rebuilt = OutcomeFlowMatcher.from_checkpoint(ckpt, _IdentitySystem())
+    assert [m.out_features for m in rebuilt.velocity_net.net if isinstance(m, nn.Linear)][:-1] == [32, 16]
+    assert rebuilt.velocity_net.time_embedding.num_freqs == 3
+
+    probe = torch.randn(6, 1)
+    assert torch.allclose(rebuilt.predict_p_success(probe), model.predict_p_success(probe), atol=1e-9)
+
+    class _WrongSystem(_IdentitySystem):
+        state_dim = 4
+        @staticmethod
+        def embed_state_for_model(x):
+            return torch.zeros(x.shape[0], 4)
+
+    with pytest.raises(ValueError, match="different system"):
+        OutcomeFlowMatcher.from_checkpoint(ckpt, _WrongSystem())

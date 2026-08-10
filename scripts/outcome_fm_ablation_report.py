@@ -220,7 +220,7 @@ def mc_vs_exact(level: str, epoch: int) -> str | None:
     holds a `system` and a net that Lightning cannot reconstruct on its own.
     """
     import torch
-    from adaptive_roa.model.outcome_flow_matcher import OutcomeFlowMatcher, OutcomeVelocityMLP
+    from adaptive_roa.model.outcome_flow_matcher import OutcomeFlowMatcher
     from adaptive_roa.systems.pendulum import PendulumSystem
 
     run = find_arm(level, "outcome")
@@ -231,17 +231,11 @@ def mc_vs_exact(level: str, epoch: int) -> str | None:
     if not ckpts:
         return None
 
-    system = PendulumSystem()
-    dummy = torch.zeros(1, int(system.state_dim))
-    cond_dim = int(system.embed_state_for_model(system.normalize_state(dummy)).shape[-1])
-
-    model = OutcomeFlowMatcher(
-        velocity_net=OutcomeVelocityMLP(cond_dim, [256, 512, 256]),
-        system=system,
-        num_ode_steps=50,
+    # Shapes are read from the checkpoint and the load is strict -- hard-coding
+    # dims here would silently analyse an untrained net if the config ever moved.
+    model = OutcomeFlowMatcher.from_checkpoint(
+        ckpts[0], PendulumSystem(), num_ode_steps=50
     )
-    state = torch.load(ckpts[0], map_location="cpu", weights_only=False)["state_dict"]
-    model.load_state_dict(state, strict=False)
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(dev).eval()
 

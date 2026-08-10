@@ -354,7 +354,17 @@ class OutcomeFlowMatcher(pl.LightningModule):
                     fine_p.append(((psif > 0).to(torch.float64) * fw).sum(dim=1) / fw.sum())
                 p_quad[idx] = torch.cat(fine_p)
 
-            p_out.append(torch.where(monotone, p_exact, p_quad))
+            # Never claim more certainty than the integration domain supports.
+            # With no crossing inside x0 in [-5, 5] the quadrature returns EXACTLY
+            # 0 or 1, but all that was established is that any disagreeing mass
+            # lies in the truncated tails -- Phi(-5) = 2.9e-7. Reporting a hard 0
+            # or 1 makes log-score and KL infinite whenever the truth is interior,
+            # which is exactly the situation at the noisy levels. Clamping to the
+            # tail mass is the honest bound and is far below any effect measured
+            # here, so it cannot manufacture a result either.
+            tail = float(normal.cdf(torch.tensor(-_X0_LIMIT, dtype=torch.float64)))
+            merged = torch.where(monotone, p_exact, p_quad).clamp(tail, 1.0 - tail)
+            p_out.append(merged)
             mono_out.append(monotone)
 
         return torch.cat(p_out), torch.cat(mono_out)

@@ -243,3 +243,23 @@ def test_nonmonotone_fallback_is_precise_not_just_present():
     # And the coarse one should be measurably worse, else the test proves nothing.
     assert np.abs(p_coarse.numpy() - p_fine.numpy()).max() > np.abs(
         p_default.numpy() - p_fine.numpy()).max()
+
+
+def test_saturated_p_is_bounded_by_the_integration_domain():
+    """A field with no crossing inside x0 in [-5,5] must not report p = exactly
+    0 or 1. Only the truncated-tail mass (Phi(-5) = 2.9e-7) is unaccounted for,
+    and a hard 0/1 makes log-score and KL infinite whenever the truth is
+    interior -- which is the normal case at the noisy levels."""
+    hi = _matcher(_ConstantVelocity(50.0))
+    lo = _matcher(_ConstantVelocity(-50.0))
+
+    p_hi, _ = hi.p_success_exact(torch.zeros(3, 1))
+    p_lo, _ = lo.p_success_exact(torch.zeros(3, 1))
+
+    assert (p_hi < 1.0).all() and (p_lo > 0.0).all(), "p saturated to a hard 0/1"
+    # The bound must be the tail mass, not some arbitrary epsilon.
+    assert np.allclose(p_hi.numpy(), 1.0 - 2.866e-7, atol=1e-9)
+    assert np.allclose(p_lo.numpy(), 2.866e-7, atol=1e-9)
+    # And log-score stays finite for an interior truth.
+    for p in (p_hi.numpy(), p_lo.numpy()):
+        assert np.isfinite(-(0.5 * np.log(p) + 0.5 * np.log1p(-p))).all()

@@ -11,11 +11,19 @@ launcher.completed_epochs(), which already treats a truncated artifact as "not
 finished" rather than an error -- the `general` account preempts jobs
 silently, so a bad file here is the routine case, not the exceptional one, and
 a single corrupt epoch out of a ~450-run campaign must not block aggregation
-of the other 449. The cost is that a run whose LAST epoch is corrupt looks
-shorter than it actually ran; Task 4's guards can detect that by comparing the
-per-run row count against the `n_epochs` column this module attaches (the
-budget recorded in that run's own Hydra config), which is a job for the guard
-layer, not for this reader.
+of the other 449.
+
+The cost: a run whose LAST epoch is corrupt then looks IDENTICAL to a run
+that simply has not gotten there yet -- both produce fewer rows than
+`n_epochs` implies, and per launcher.py's own docs "still running" is the
+campaign's normal steady state, not an edge case, so row count alone cannot
+tell the two apart. That distinction is carried explicitly instead: every row
+also gets `run_complete`, True iff the engine's own end-of-run marker
+(`final_results.json`, written once by AdaptiveEngine.run() after its epoch
+loop finishes, directly in the run directory -- see engine.py) exists and
+parses. A downstream guard can then treat "short AND run_complete=False" as
+still in progress, and "short AND run_complete=True" as a run that actually
+finished early or lost its tail to corruption.
 """
 from __future__ import annotations
 
@@ -31,7 +39,7 @@ import yaml
 # KeyError, and so provenance columns always sort first.
 PROVENANCE_COLUMNS = [
     "run_id", "arm", "system", "tier", "acquisition", "seed", "epoch",
-    "n_epochs", "commit",
+    "n_epochs", "run_complete", "commit",
 ]
 
 
@@ -119,27 +127,81 @@ def _resolve_tier(epoch_dir: Path) -> str:
 
 
 def _flatten_metrics(d, prefix: str = "") -> dict:
-    """Recursively flatten a metrics dict into scalar leaf columns.
+    """Recursively flatten a metrics dict into scalar leaf columns, to any depth.
 
     Real `eval_metrics` payloads (adaptive_v2/eval/full_roa.py's
     FullROAEvaluator) nest the numbers anyone actually wants to compare --
     accuracy, f1, precision, recall -- one level below variant names like
-    `lambda_delta` / `fixed_threshold` / `conservative_qhat`. A shallow,
+    `lambda_delta` / `fixed_threshold` / `conservative_qhat`, and deeper still
+    for e.g. `endpoint_errors.mean` under a regression arm. A shallow,
     top-level-only copy would silently produce a frame with NONE of those
-    columns while still passing a test built on a flat fixture. Nested keys
-    are joined with "." (e.g. "lambda_delta.accuracy"); non-numeric leaves
-    (strings, None, lists, bools) are dropped rather than coerced.
+    columns while still passing a test built on a flat fixture, so this
+    recurses without a depth cap. Nested keys are joined with "."
+    (e.g. "lambda_delta.accuracy").
+
+    Deliberately DROPPED, not coerced:
+      - non-numeric leaves (strings, None, bools);
+      - list-valued leaves, e.g. `_compute_geodesic_error_stats`'s
+        `mean_per_dim` / `median_per_dim` / `variance_per_dim` (one float per
+        state dimension). A tidy (run_id, epoch) row is one scalar per column;
+        forcing a per-dimension vector into that shape would need either N
+        further columns whose count varies by system (pendulum is 2D,
+        quadrotor3d is far more), or silently keeping only one element. Both
+        are worse than the current, explicit drop. Comparing per-dimension
+        error is left to a reader that opens the source artifact directly.
+
+    Raises ValueError on a dotted-key collision: a literal top-level key
+    containing "." (e.g. "a.b") that coincides with the flattened name of a
+    nested key (e.g. {"a": {"b": ...}} also produces "a.b"). Silently
+    picking whichever value happens to be visited last would make this
+    frame's content depend on dict iteration order -- for a frame that Task
+    4's guards treat as ground truth, a loud failure here is far preferable
+    to quietly losing one of the two values.
     """
     out = {}
     for k, v in (d or {}).items():
         key = f"{prefix}{k}"
         if isinstance(v, dict):
-            out.update(_flatten_metrics(v, prefix=f"{key}."))
+            leaves = _flatten_metrics(v, prefix=f"{key}.")
         elif isinstance(v, bool):
             continue
         elif isinstance(v, (int, float)):
-            out[key] = v
+            leaves = {key: v}
+        else:
+            continue                     # strings, None, lists: dropped, not coerced
+        for leaf_key, leaf_value in leaves.items():
+            if leaf_key in out:
+                raise ValueError(
+                    f"metric key collision while flattening eval_metrics: "
+                    f"{leaf_key!r} is produced twice -- once as a literal key "
+                    f"and once via nested flattening (or twice via nested "
+                    f"flattening from two different parents). Rename the "
+                    f"source key so flattening is unambiguous."
+                )
+            out[leaf_key] = leaf_value
     return out
+
+
+def _run_is_complete(run_dir: Path) -> bool:
+    """True iff the engine's own end-of-run marker exists and parses.
+
+    AdaptiveEngine.run() writes `final_results.json` directly in the run
+    directory exactly once, after its epoch loop finishes (engine.py,
+    alongside the per-epoch `epoch_*/artifacts_v2.json` writes). It is the
+    ONLY signal that says "this run reached its configured last epoch" --
+    an epoch directory's presence, or even every epoch up to some point
+    having a valid `artifacts_v2.json`, means only that those epochs
+    finished, not that the run itself is done. Malformed the same way an
+    epoch artifact can be (a preempted write): treated as absent, not raised.
+    """
+    final = run_dir / "final_results.json"
+    if not final.is_file():
+        return False
+    try:
+        json.loads(final.read_text())
+    except (json.JSONDecodeError, OSError):
+        return False
+    return True
 
 
 def _epoch_row(epoch_dir: Path) -> dict | None:
@@ -186,14 +248,18 @@ def collect_runs(exp_root) -> pd.DataFrame:
     meaning). Every other identity field (arm, system, tier, seed, commit) is
     read from the `.hydra` config and artifact JSON the engine copied into
     that epoch directory, so renaming the directory cannot relabel a run.
+    `run_complete` is computed once per run directory (see
+    `_run_is_complete`) and copied onto every row that run contributes.
     """
     exp_root = Path(exp_root)
     rows = []
     if exp_root.is_dir():
         for run_dir in sorted(p for p in exp_root.iterdir() if p.is_dir()):
+            run_complete = _run_is_complete(run_dir)
             for epoch_dir in sorted(run_dir.glob("epoch_*")):
                 row = _epoch_row(epoch_dir)
                 if row is not None:
+                    row["run_complete"] = run_complete
                     rows.append({"run_id": run_dir.name, **row})
 
     if not rows:

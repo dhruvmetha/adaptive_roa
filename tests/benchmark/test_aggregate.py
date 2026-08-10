@@ -249,5 +249,133 @@ def test_collect_runs_against_a_real_composed_hydra_config(tmp_path, tier, expec
 def test_empty_root_still_carries_provenance_columns(tmp_path):
     df = collect_runs(tmp_path)
     for col in ("run_id", "arm", "system", "tier", "acquisition", "seed",
-                "epoch", "n_epochs", "commit"):
+                "epoch", "n_epochs", "run_complete", "commit"):
         assert col in df.columns
+
+
+# --- run_complete: the ONLY true completion signal ---------------------------
+# collect_runs never reads final_results.json for anything else, so a run
+# whose last epoch is corrupt is otherwise indistinguishable from a run that
+# is simply still in progress -- which, per launcher.py's own docs, is the
+# campaign's normal steady state, not an edge case. run_complete carries that
+# distinction explicitly per row.
+
+def test_run_complete_is_true_when_final_results_json_exists(tmp_path):
+    _write_run(tmp_path, "r1", "bnn_mfvi", n_epochs=2)
+    (tmp_path / "r1" / "final_results.json").write_text(json.dumps({"final_stats": {}}))
+    df = collect_runs(tmp_path)
+    assert set(df["run_complete"]) == {True}
+
+
+def test_run_complete_is_false_when_final_results_json_is_absent(tmp_path):
+    # The launcher's normal steady state: a run that simply has not gotten
+    # to its last epoch yet. Must NOT be confused with a corrupted tail.
+    _write_run(tmp_path, "r1", "bnn_mfvi", n_epochs=2)
+    df = collect_runs(tmp_path)
+    assert set(df["run_complete"]) == {False}
+
+
+def test_run_complete_is_false_when_final_results_json_is_malformed(tmp_path):
+    # Same "skip, don't raise" treatment as a malformed epoch artifact.
+    _write_run(tmp_path, "r1", "bnn_mfvi", n_epochs=2)
+    (tmp_path / "r1" / "final_results.json").write_text('{"final_stats": {')  # truncated
+    df = collect_runs(tmp_path)   # must not raise
+    assert set(df["run_complete"]) == {False}
+
+
+def test_run_complete_is_computed_per_run_not_shared_across_runs(tmp_path):
+    _write_run(tmp_path, "done", "bnn_mfvi", n_epochs=2)
+    (tmp_path / "done" / "final_results.json").write_text(json.dumps({}))
+    _write_run(tmp_path, "still_running", "bnn_mfvi", n_epochs=2)
+    df = collect_runs(tmp_path)
+    assert set(df.loc[df.run_id == "done", "run_complete"]) == {True}
+    assert set(df.loc[df.run_id == "still_running", "run_complete"]) == {False}
+
+
+# --- tier: must not be fooled by an UNRELATED +experiment= override ----------
+# _resolve_tier matches the override's VALUE ("reference_tier"), not merely
+# the presence of an `experiment=` key. mlp_det always composes under its own
+# +experiment=mlp_det_baseline (manifest.py) and is never valid in the
+# reference tier (expand_manifest rejects that combination outright) -- a
+# broadened match that fires on ANY `experiment=` override would mislabel
+# every real mlp_det run as "reference".
+
+@pytest.mark.parametrize("overrides,expected_tier", [
+    (["system=pendulum", "predictor=hmc", "seed=42", "n_epochs=10",
+      "+experiment=reference_tier", "acquisition=ranked"], "reference"),
+    (["system=pendulum", "predictor=mlp_det", "seed=42", "n_epochs=10",
+      "+experiment=mlp_det_baseline"], "production"),
+    (["system=pendulum", "predictor=bnn_mfvi", "seed=42", "n_epochs=10",
+      "acquisition=ranked"], "production"),
+], ids=["reference_tier", "mlp_det_baseline-is-not-reference", "no-experiment-override"])
+def test_tier_distinguishes_reference_tier_from_other_experiment_overrides(
+        tmp_path, overrides, expected_tier):
+    ed = tmp_path / "r1" / "epoch_000"
+    (ed / ".hydra").mkdir(parents=True)
+    (ed / ".hydra" / "config.yaml").write_text("predictor:\n  name: mlp_det\nseed: 42\n")
+    (ed / ".hydra" / "overrides.yaml").write_text(yaml.dump(overrides))
+    (ed / "artifacts_v2.json").write_text(json.dumps({
+        "epoch": 0, "sampling_mode": "ranked", "eval_metrics": {}, "extra": {},
+    }))
+    df = collect_runs(tmp_path)
+    assert set(df["tier"]) == {expected_tier}
+
+
+# --- metrics: dotted-key collisions must be loud, not silently order-dependent -
+
+def test_flattening_raises_on_a_dotted_key_collision(tmp_path):
+    ed = tmp_path / "r1" / "epoch_000"
+    (ed / ".hydra").mkdir(parents=True)
+    (ed / ".hydra" / "config.yaml").write_text("predictor:\n  name: bnn_mfvi\nseed: 42\n")
+    (ed / "artifacts_v2.json").write_text(json.dumps({
+        "epoch": 0, "sampling_mode": "ranked",
+        # {"a": {"b": 1}} flattens to "a.b"; the literal key "a.b" collides.
+        "eval_metrics": {"a": {"b": 1}, "a.b": 2},
+        "extra": {},
+    }))
+    with pytest.raises(ValueError, match="collision"):
+        collect_runs(tmp_path)
+
+
+# --- metrics: *_per_dim lists are a documented, tested exclusion -------------
+# adaptive_v2/eval/full_roa.py's _compute_geodesic_error_stats emits
+# mean_per_dim / median_per_dim / variance_per_dim as lists (one entry per
+# state dimension). Pinned here so the drop reads as intentional, not an
+# accident a future reader has to rediscover.
+
+def test_per_dim_list_metrics_are_dropped_not_coerced(tmp_path):
+    ed = tmp_path / "r1" / "epoch_000"
+    (ed / ".hydra").mkdir(parents=True)
+    (ed / ".hydra" / "config.yaml").write_text("predictor:\n  name: fm\nseed: 42\n")
+    (ed / "artifacts_v2.json").write_text(json.dumps({
+        "epoch": 0, "sampling_mode": "ranked",
+        "eval_metrics": {
+            "endpoint_errors": {
+                "mean": 0.05,
+                "mean_per_dim": [0.01, 0.02, 0.03, 0.04],
+                "median_per_dim": [0.01, 0.02, 0.03, 0.04],
+                "variance_per_dim": [0.001, 0.002, 0.003, 0.004],
+            },
+        },
+        "extra": {},
+    }))
+    df = collect_runs(tmp_path)   # must not raise
+    assert df.loc[0, "endpoint_errors.mean"] == pytest.approx(0.05)
+    assert "endpoint_errors.mean_per_dim" not in df.columns
+    assert "endpoint_errors.median_per_dim" not in df.columns
+    assert "endpoint_errors.variance_per_dim" not in df.columns
+
+
+# --- metrics: flattening recurses past a single level -------------------------
+
+def test_metrics_flatten_at_depth_two(tmp_path):
+    ed = tmp_path / "r1" / "epoch_000"
+    (ed / ".hydra").mkdir(parents=True)
+    (ed / ".hydra" / "config.yaml").write_text("predictor:\n  name: bnn_mfvi\nseed: 42\n")
+    (ed / "artifacts_v2.json").write_text(json.dumps({
+        "epoch": 0, "sampling_mode": "ranked",
+        "eval_metrics": {"endpoint_errors": {"mc_sample_errors": {"mean": 0.42}}},
+        "extra": {},
+    }))
+    df = collect_runs(tmp_path)
+    assert df.loc[0, "endpoint_errors.mc_sample_errors.mean"] == pytest.approx(0.42)

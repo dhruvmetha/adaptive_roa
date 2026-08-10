@@ -249,8 +249,42 @@ def test_collect_runs_against_a_real_composed_hydra_config(tmp_path, tier, expec
 def test_empty_root_still_carries_provenance_columns(tmp_path):
     df = collect_runs(tmp_path)
     for col in ("run_id", "arm", "system", "tier", "acquisition", "seed",
-                "epoch", "n_epochs", "run_complete", "commit"):
+                "epoch", "n_epochs", "n_epochs_collected", "run_complete",
+                "commit"):
         assert col in df.columns
+
+
+# --- n_epochs_collected: the corrupt-INTERIOR-epoch gap ----------------------
+# run_complete answers "did this run reach the end". It cannot answer "did it
+# lose an epoch on the way": a corrupt interior artifact, or an epoch on which
+# eval did not run, is skipped above and the run still writes
+# final_results.json, so run_complete stays True while the population any
+# reported mean is taken over silently shrinks.
+
+def test_n_epochs_collected_counts_the_rows_a_run_actually_contributed(tmp_path):
+    _write_run(tmp_path, "r1", "bnn_mfvi", n_epochs=3)
+    df = collect_runs(tmp_path)
+    assert set(df["n_epochs_collected"]) == {3}
+
+
+def test_n_epochs_collected_records_a_lost_interior_epoch(tmp_path):
+    # epoch_001 is corrupt; epochs 0 and 2 are fine, and the run finished.
+    # run_complete is True and `epoch` alone would not say anything is wrong.
+    _write_run(tmp_path, "r1", "bnn_mfvi", n_epochs=3)
+    (tmp_path / "r1" / "epoch_001" / "artifacts_v2.json").write_text('{"epoch": 1')
+    (tmp_path / "r1" / "final_results.json").write_text(json.dumps({}))
+    df = collect_runs(tmp_path)
+    assert set(df["run_complete"]) == {True}
+    assert set(df["n_epochs_collected"]) == {2}
+    assert set(df["n_epochs"]) == {None} or df["n_epochs"].isna().all()
+
+
+def test_n_epochs_collected_is_per_run_not_per_campaign(tmp_path):
+    _write_run(tmp_path, "r1", "bnn_mfvi", n_epochs=3)
+    _write_run(tmp_path, "r2", "bnn_mfvi", n_epochs=1)
+    df = collect_runs(tmp_path)
+    assert set(df.loc[df.run_id == "r1", "n_epochs_collected"]) == {3}
+    assert set(df.loc[df.run_id == "r2", "n_epochs_collected"]) == {1}
 
 
 # --- run_complete: the ONLY true completion signal ---------------------------

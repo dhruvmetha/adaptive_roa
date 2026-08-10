@@ -24,6 +24,18 @@ loop finishes, directly in the run directory -- see engine.py) exists and
 parses. A downstream guard can then treat "short AND run_complete=False" as
 still in progress, and "short AND run_complete=True" as a run that actually
 finished early or lost its tail to corruption.
+
+`run_complete` does not close the whole gap, though. A corrupt INTERIOR
+epoch -- or an epoch on which eval simply did not run, leaving
+`eval_metrics: {}` and a row of NaN metrics that `pivot_table` skips -- is
+invisible to it: the run still reached its last epoch, so `run_complete`
+is True, while the population any reported mean is taken over has silently
+shrunk. So every row also carries `n_epochs_collected`: how many epoch rows
+this run actually contributed. A run whose `n_epochs_collected` is short of
+its configured `n_epochs` lost epochs somewhere, and the reporting path
+says so in the table rather than averaging over an arbitrary subset without
+comment. It is a PROVENANCE column, not a metric: guards must never treat
+it as a quantity to compare across arms.
 """
 from __future__ import annotations
 
@@ -39,7 +51,7 @@ import yaml
 # KeyError, and so provenance columns always sort first.
 PROVENANCE_COLUMNS = [
     "run_id", "arm", "system", "tier", "acquisition", "seed", "epoch",
-    "n_epochs", "run_complete", "commit",
+    "n_epochs", "n_epochs_collected", "run_complete", "commit",
 ]
 
 
@@ -249,18 +261,28 @@ def collect_runs(exp_root) -> pd.DataFrame:
     read from the `.hydra` config and artifact JSON the engine copied into
     that epoch directory, so renaming the directory cannot relabel a run.
     `run_complete` is computed once per run directory (see
-    `_run_is_complete`) and copied onto every row that run contributes.
+    `_run_is_complete`) and copied onto every row that run contributes, as is
+    `n_epochs_collected` -- the number of epoch rows the run actually
+    produced, which is how a corrupt or eval-less INTERIOR epoch becomes
+    visible at all (see the module docstring).
     """
     exp_root = Path(exp_root)
     rows = []
     if exp_root.is_dir():
         for run_dir in sorted(p for p in exp_root.iterdir() if p.is_dir()):
             run_complete = _run_is_complete(run_dir)
+            run_rows = []
             for epoch_dir in sorted(run_dir.glob("epoch_*")):
                 row = _epoch_row(epoch_dir)
                 if row is not None:
                     row["run_complete"] = run_complete
-                    rows.append({"run_id": run_dir.name, **row})
+                    run_rows.append({"run_id": run_dir.name, **row})
+            # Counted AFTER the loop, over the rows that SURVIVED: an epoch
+            # whose artifact is missing or unparseable is skipped above, and
+            # this column is the only record that it happened.
+            for row in run_rows:
+                row["n_epochs_collected"] = len(run_rows)
+            rows.extend(run_rows)
 
     if not rows:
         return pd.DataFrame(columns=PROVENANCE_COLUMNS)

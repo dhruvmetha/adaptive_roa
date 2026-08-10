@@ -578,6 +578,7 @@ def _full_df_for_validate(**overrides):
         seed=[42, 43],
         epoch=[9, 9],
         n_epochs=[10, 10],
+        n_epochs_collected=[10, 10],
         run_complete=[True, True],
         commit=[head, head],
         accuracy=[0.80, 0.83],
@@ -616,7 +617,8 @@ def test_validate_frame_passes_when_an_arm_postdates_its_invalidating_commit():
     df = _full_df_for_validate(
         run_id=["r1"], arm=["bnn_mfvi"], system=["pendulum"],
         tier=["production"], acquisition=["random"], seed=[42], epoch=[9],
-        n_epochs=[10], run_complete=[True], commit=[git_sha()], accuracy=[0.8],
+        n_epochs=[10], n_epochs_collected=[10], run_complete=[True],
+        commit=[git_sha()], accuracy=[0.8],
     )
     validate_frame(df)
 

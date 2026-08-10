@@ -1,5 +1,9 @@
+from pathlib import Path
+
 import pytest
-from adaptive_roa.benchmark.manifest import RunSpec, expand_manifest
+from adaptive_roa.benchmark.manifest import ALL_ARMS, ARM_CONFIG_GROUP, RunSpec, expand_manifest
+
+PREDICTOR_CONFIG_DIR = Path(__file__).resolve().parents[2] / "configs/adaptive_v2/predictor"
 
 
 def _spec(**kw):
@@ -75,3 +79,26 @@ def test_hmc_is_rejected_outside_the_reference_tier():
         expand_manifest({"arms": ["hmc"], "systems": ["pendulum"],
                          "tier": "production", "acquisition": ["ranked"],
                          "seeds": [42], "n_epochs": 10})
+
+
+def test_hydra_overrides_translate_arm_identity_to_its_config_group():
+    # classifier.yaml declares `predictor.name: mlp`; generative.yaml declares
+    # `predictor.name: fm`. Hydra selects a config group by FILENAME, not by
+    # that field, so `predictor=mlp` / `predictor=fm` would fail to resolve.
+    assert "predictor=classifier" in _spec(arm="mlp").hydra_overrides()
+    assert "predictor=generative" in _spec(arm="fm").hydra_overrides()
+    # An arm whose filename matches its identity passes through unchanged.
+    assert "predictor=bnn_mfvi" in _spec(arm="bnn_mfvi").hydra_overrides()
+
+
+def test_every_arm_config_group_exists_on_disk():
+    # The check that would have caught the mlp/fm mismatch without a human
+    # noticing, and will catch the next arm someone adds with a mismatched
+    # filename.
+    available = {p.stem for p in PREDICTOR_CONFIG_DIR.glob("*.yaml")}
+    for arm in ALL_ARMS:
+        config_group = ARM_CONFIG_GROUP.get(arm, arm)
+        assert config_group in available, (
+            f"arm {arm!r} resolves to predictor config group {config_group!r}, "
+            f"which has no {config_group}.yaml in {PREDICTOR_CONFIG_DIR}"
+        )

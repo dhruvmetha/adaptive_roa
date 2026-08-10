@@ -25,6 +25,11 @@ MLP_BACKBONE_ARMS = ("bnn_mfvi", "bnn_ensemble", "bnn_laplace",
 
 TIERS = ("production", "reference")
 
+# Arm name is the identity (keys run_id, the export registry, provenance).
+# The Hydra config GROUP is the filename, which differs for the two baselines:
+# classifier.yaml declares name: mlp, generative.yaml declares name: fm.
+ARM_CONFIG_GROUP = {"mlp": "classifier", "fm": "generative"}
+
 
 @dataclass(frozen=True)
 class RunSpec:
@@ -51,7 +56,8 @@ class RunSpec:
         return f"{self.system}_{self.arm}_{self.tier}_{self.acquisition}_s{self.seed}_{digest}"
 
     def hydra_overrides(self) -> list[str]:
-        ov = [f"system={self.system}", f"predictor={self.arm}",
+        config_group = ARM_CONFIG_GROUP.get(self.arm, self.arm)
+        ov = [f"system={self.system}", f"predictor={config_group}",
               f"seed={self.seed}", f"n_epochs={self.n_epochs}"]
         if self.tier == "reference":
             ov.append("+experiment=reference_tier")

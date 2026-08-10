@@ -106,6 +106,12 @@ Reusing the tag also means outcome-FM and the `classifier` arm see **byte-identi
 training data at every adaptive epoch**, so the contrast is clean by construction
 rather than by matching after the fact.
 
+*Verified, not assumed:* with `d2_ratio: 0` the D1 selection in
+`adaptive_roa/adaptive/dataset_builder.py:229-250` sorts the unused indices and takes
+the first n — a deterministic prefix of the fixed on-disk shuffle
+(`train_test_splits/shuffled_indices_0.txt`, shared across levels). No RNG is drawn,
+so the data is identical across arms regardless of each run's `seed` setting.
+
 `OutcomeFlowMatcher.forward(raw_states) -> logit(p_success)` makes the module a
 drop-in for every discriminative code path (threshold optimisation, conformal
 calibration, `ClassifierProbabilityEstimator`), which is what keeps Route B free of

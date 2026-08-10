@@ -1,23 +1,29 @@
 # Ensemble Epistemic Acquisition — current findings
 
-**Status as of 2026-08-09.** This file holds only what is *currently defensible*; `LOG.md` is the
+**Status as of 2026-08-10.** This file holds only what is *currently defensible*; `LOG.md` is the
 chronological record including superseded claims and their corrections.
 
 | half | state |
 |---|---|
 | **[CLF]** | det complete 19/19; **high complete 19/19 on all five arms** (rescored, §1); low/med/xhigh from truncated curves (walltime, see §6) |
-| **[FM]** | **high null** (6 passes, floor halved) · **xhigh null** (3 passes) · **low marginally helpful** (2 arms at 1.0x floor) · **det harmful** (+2.3x to +26.5x, shallow floor) · med not yet scoreable |
+| **[FM]** | **all five levels now scored.** high null (7 passes, floor −52%) · xhigh null (4 passes, floor −39%) · med null (1 pass, shallow) · low marginally helpful (2 arms at 1.3x floor) · det unsettled — sign flipped between passes, do not quote |
 
-**Headline — the constant across every FM level is that the SCORE does not matter.** The sign of
-the adaptive-vs-uniform effect varies with noise (harmful at det, null at high/xhigh, marginally
-helpful at low), but at every single level the four arms are numerically interchangeable, and the
-deliberately-useless negative control `aleat` sits inside the spread of the arms it is supposed to
-underperform. Whatever adaptive sampling does to flow matching, decomposing entropy into
+**Headline — the constant across every FM level is that the SCORE does not matter.** With the med
+verdict in, the [FM] sweep is complete: five noise levels, and at every one the four arms are
+numerically interchangeable. The sign of the adaptive-vs-uniform effect varies with noise (null at
+med/high/xhigh, marginally helpful at low, unsettled at det), but the *ordering* never carries
+information — the deliberately-useless negative control `aleat` sits inside the spread of the arms
+it is supposed to underperform at every level, and at [FM] low and [CLF] low it is the **largest**
+effect of the four. Whatever adaptive sampling does to flow matching, decomposing entropy into
 aleatoric and epistemic parts does not change it.
 
 *Corrected 2026-08-10: an earlier version of this header read "[FM] is null at every level scored
 so far, including low." That was true of the 5-epoch-floor pass; with 6 shared floor epochs
 `epi_var` and `total` cross the threshold at low. See §4b.*
+
+*Corrected 2026-08-10: the header previously read "**det harmful** (+2.3x to +26.5x, shallow
+floor)". At a 9-epoch floor the det arms are mostly *helpful* and only one survives the stability
+flag. The level is unsettled, not harmful. See §4c.*
 
 Standard of evidence used throughout: a gap counts only if it exceeds **2×SD of three
 genuinely-distinct seeds** of the same configuration (the run-to-run floor) at **two consecutive
@@ -95,6 +101,18 @@ effect — the arms track each other within ~0.4×.
 
 *Superseded: med was previously reported as "adaptive helps (−1.5 to −3.1×)" against a
 single-epoch floor. The pooled floor is 3.4× larger and the effect does not survive it.*
+
+**Rescored 2026-08-10 at greater depth; both levels firmed up, and `aleat` remains inseparable.**
+med now clears its floor on **all four** arms with the sign stable 10/10 epochs (−1.2× to −1.9×
+at ep9-10, floor 0.00051 over 13 epochs), promoting it from "weak effect" to distinguishable —
+but `aleat` at −1.7× sits between `epi_bald` (−1.4×) and `epi_var` (−1.8×), so the promotion buys
+no information about which score to use. At low (floor 0.00025 over 10 epochs) `aleat` is the
+**largest** helpful arm at −3.0×, ahead of `epi_var` (−2.6×) and `epi_bald` (−2.4×).
+
+`total` at low is the one arm that breaks the pattern, and it breaks it catastrophically:
+−0.00070 (−2.8×) at ep9 becomes **+0.22484 (+896×)** at ep10 — a three-order-of-magnitude blowup
+in one epoch, flagged "not stable". This is the same total-entropy failure that dominates [CLF]
+high and xhigh (§1), arriving abruptly rather than gradually.
 
 ### [CLF] high noise: `total` is harmful; the other three do not survive full depth
 
@@ -237,18 +255,18 @@ fact: it predicted that a calibrated predictor would show no such harm, and that
 
 ## 4. Flow matching — [FM] high is the campaign's best-powered null
 
-### [FM] high noise: no arm is distinguishable from the non-adaptive control (6 passes, floor halved)
+### [FM] high noise: no arm is distinguishable from the non-adaptive control (7 passes, floor halved)
 
 Post-restart runs (EarlyStopping `patience=30`), pooled floor from `dir00` / `dir00_s43` /
-`dir00_s44`. **Scored six times between 2026-08-06 and 2026-08-09 as the floor deepened.** The
+`dir00_s44`. **Scored seven times between 2026-08-06 and 2026-08-10 as the floor deepened.** The
 final pass is the one to quote:
 
 ```
-FINAL (13 shared floor epochs; dir00 and s43 both complete at 19/19):
-fm high: pooled 2*SD = 0.00102 over 13 epochs
-   epi_bald   ep15: -0.00055 (-0.5x)  ep16: -0.00045 (-0.4x)   -> within noise (null)
+FINAL (15 shared floor epochs; dir00 and s43 both complete at 19/19):
+fm high: pooled 2*SD = 0.00095 over 15 epochs
+   epi_bald   ep15: -0.00055 (-0.6x)  ep16: -0.00045 (-0.5x)   -> within noise (null)
    epi_var    ep15: -0.00059 (-0.6x)  ep16: -0.00056 (-0.6x)   -> within noise (null)
-   total      ep15: -0.00053 (-0.5x)  ep16: -0.00052 (-0.5x)   -> within noise (null)
+   total      ep15: -0.00053 (-0.6x)  ep16: -0.00052 (-0.5x)   -> within noise (null)
    aleat      ep15: -0.00060 (-0.6x)  ep16: -0.00049 (-0.5x)   -> within noise (null)
 ```
 
@@ -261,10 +279,11 @@ fm high: pooled 2*SD = 0.00102 over 13 epochs
 | 3 | 0.00179 | 4 | ep 6-7 | 4 nulls |
 | 4 | 0.00161 | 5 | ep 7-8 | 4 nulls |
 | 5 | 0.00111 | 11 | ep 14-15 | 4 nulls |
-| **6** | **0.00102** | **13** | **ep 15-16** | **4 nulls** |
+| 6 | 0.00102 | 13 | ep 15-16 | 4 nulls |
+| **7** | **0.00095** | **15** | **ep 15-16** | **4 nulls** |
 
-This is the campaign's best-powered null. Six independent windows walking from epoch 4 to epoch
-16, against a floor that tightened by ~50%, and the four arms stay clustered between −0.00045 and
+This is the campaign's best-powered null. Seven independent windows walking from epoch 4 to epoch
+16, against a floor that tightened by ~52%, and the four arms stay clustered between −0.00045 and
 −0.00060 throughout — indistinguishable from each other and from the control at every depth.
 
 **The four arms converge on the same number.** At the final pass they span −0.4x to −0.6x; earlier
@@ -290,15 +309,20 @@ fully within-cluster FM floor.
 
 ### [FM] xhigh: also null — and this is the level where [CLF] broke
 
-Scored 2026-08-07, shared epochs 7-8, floor from `dir00` / `dir00_s43` / `dir00_s44`:
+Floor from `dir00` / `dir00_s43` / `dir00_s44`. **Scored four times; the floor deepened from 2
+shared epochs to 8 and the window walked from ep7-8 to ep11-12 without moving the verdict:**
 
 ```
-fm xhigh: pooled 2*SD = 0.00139 over 2 epochs
-   epi_bald   ep7: -0.00002 (-0.0x)  ep8: -0.00048 (-0.3x)   -> within noise (null)
-   epi_var    ep7: -0.00014 (-0.1x)  ep8: -0.00073 (-0.5x)   -> within noise (null)
-   total      ep7: -0.00022 (-0.2x)  ep8: -0.00069 (-0.5x)   -> within noise (null)
-   aleat      ep7: -0.00033 (-0.2x)  ep8: -0.00066 (-0.5x)   -> within noise (null)
+FINAL (8 shared floor epochs, 2026-08-10):
+fm xhigh: pooled 2*SD = 0.00085 over 8 epochs
+   epi_bald   ep11: +0.00011 (+0.1x)  ep12: -0.00048 (-0.6x)   -> within noise (null)
+   epi_var    ep11: -0.00013 (-0.2x)  ep12: -0.00039 (-0.5x)   -> within noise (null)
+   total      ep11: +0.00103 (+1.2x)  ep12: -0.00050 (-0.6x)   -> not stable
+   aleat      ep11: -0.00007 (-0.1x)  ep12: -0.00040 (-0.5x)   -> within noise (null)
 ```
+
+`total` is the only arm that ever leaves the band, and it does so in *opposite directions* on
+adjacent epochs (+1.2x then −0.6x) — oscillation, not an effect.
 
 **This is a predictor dissociation, and it is the campaign's most informative comparison.**
 xhigh is the ONLY level where anything ever cleared a floor by a wide margin: on [CLF], `total`
@@ -314,9 +338,9 @@ no such failure mode for acquisition to exploit, so acquisition neither helps no
 [CLF] xhigh result should therefore be read as a fact about miscalibrated classifiers, NOT as a
 general fact about entropy acquisition.
 
-**Scope.** Two shared epochs (7-8), the minimum the rule permits; floor seeds are 3-5 epochs deep
-against arms at 9-10. Widening the window is pending. Unlike [FM] high (four consistent passes),
-this verdict has had one pass.
+**Scope.** Now 8 shared epochs with the window at ep11-12 — no longer the thin two-epoch read it
+was on 2026-08-07. Four consistent passes against a floor that tightened from 0.00139 to 0.00085
+(−39%). This is the campaign's second-best-powered null after [FM] high.
 
 ### [FM] low: a marginal helpful effect — far weaker than [CLF]'s, and score-blind
 
@@ -324,33 +348,38 @@ this verdict has had one pass.
 whole campaign where adaptive sampling genuinely beat uniform (−1.1× to −3.3×, sign stable for 3
 of 4 arms, §1). The question was whether flow matching shows the same benefit there.
 
-Scored twice as the floor deepened. **The second pass changed the verdict**, so both are shown:
+Scored three times as the floor deepened. **Pass 2 changed the verdict; pass 3 held it** at a
+deeper window (ep10-11) with the same floor:
 
 ```
-PASS 2 (6 shared floor epochs) -- current:
+PASS 3 (6 shared floor epochs, window ep10-11, 2026-08-10) -- current:
 fm low: pooled 2*SD = 0.00061 over 6 epochs
-   epi_bald   ep9: -0.00073 (-1.2x)  ep10: -0.00060 (-1.0x)   -> not stable
-   epi_var    ep9: -0.00061 (-1.0x)  ep10: -0.00062 (-1.0x)   -> DISTINGUISHABLE (sign stable 10/10 ep)
-   total      ep9: -0.00075 (-1.2x)  ep10: -0.00062 (-1.0x)   -> DISTINGUISHABLE (sign stable 10/10 ep)
-   aleat      ep9: -0.00067 (-1.1x)  ep10: -0.00058 (-0.9x)   -> not stable
+   epi_bald   ep10: -0.00060 (-1.0x)  ep11: -0.00083 (-1.4x)   -> not stable
+   epi_var    ep10: -0.00062 (-1.0x)  ep11: -0.00081 (-1.3x)   -> DISTINGUISHABLE (sign stable 11/11 ep)
+   total      ep10: -0.00062 (-1.0x)  ep11: -0.00078 (-1.3x)   -> DISTINGUISHABLE (sign stable 11/11 ep)
+   aleat      ep10: -0.00058 (-0.9x)  ep11: -0.00089 (-1.4x)   -> not stable
 
+PASS 2 (window ep9-10): same two arms distinguishable, at -1.0x.
 PASS 1 (5 shared floor epochs, window ep8-9): all four "not stable" or null.
 ```
 
 **What can be claimed:** at low noise, `epi_var` and `total` are marginally *better* than the
-non-adaptive control, sign-stable across all 10 epochs. Adaptive edges uniform here — the only FM
-level where anything clears the floor in the helpful direction.
+non-adaptive control, sign-stable across all 11 epochs and now surviving a second, deeper window.
+Adaptive edges uniform here — the only FM level where anything clears the floor in the helpful
+direction.
 
-**What cannot:** three things keep this weak.
+**What cannot:** three things keep this weak, and **pass 3 made the second one worse.**
 
-1. **The margin is 1.0×** — clearing the floor by essentially nothing. The 2×SD threshold is a
-   convention, not a physical boundary; an effect at exactly 1.0× is not meaningfully separated
-   from one at 0.9×.
-2. **`aleat` is LARGER in magnitude than `epi_var`** (−1.1×/−0.9× vs −1.0×/−1.0×). The
-   deliberately-useless negative control fails only the *stability* flag, not the size test. All
-   four arms span 0.00058 to 0.00075 — a 1.7e-04 range.
-3. **`total` matches `epi_var` exactly.** The epistemic split contributes nothing over plain total
-   entropy, which is the campaign's actual question.
+1. **The margin is 1.0–1.3×** — clearing the floor by very little. The 2×SD threshold is a
+   convention, not a physical boundary; an effect at 1.3× is not meaningfully separated from one
+   at 1.4×.
+2. **The two arms that FAIL the test are the two LARGEST in magnitude.** `aleat` (−1.4×) and
+   `epi_bald` (−1.4×) both exceed `epi_var` and `total` (−1.3×) and are excluded only by the
+   *stability* flag. The deliberately-useless negative control posts the campaign's largest
+   helpful [FM] low effect. All four arms span 0.00078 to 0.00089 — a 1.1e-04 range, tighter than
+   at pass 2. What separates "distinguishable" from "not stable" here is bookkeeping, not size.
+3. **`total` matches `epi_var` to within 3e-05.** The epistemic split contributes nothing over
+   plain total entropy, which is the campaign's actual question.
 
 So: adaptive ≳ uniform at [FM] low, and **the choice of acquisition score is irrelevant** — the
 same conclusion as every other level, with the sign flipped from harmful to marginally helpful.
@@ -360,24 +389,66 @@ Compare [CLF] low at −1.1× to −3.3×: the classifier's benefit is up to 3×
 [FM] high (iLab + arrakis) and xhigh this floor is not inflated by cross-cluster nondeterminism —
 a *tighter* test than the FM floors above it, not a looser one.
 
-**Scope.** 6 shared epochs, arms at 11–15, `s43` at 7 and still climbing. The verdict already
-moved once between passes (pass 1 → pass 2 promoted two arms from null to distinguishable), so it
-is not settled; it has not had the six-pass treatment [FM] high received.
+**Scope.** 6 shared epochs, arms at 11–15, `s43` at 7 and still climbing. The verdict moved once
+between passes (pass 1 → pass 2 promoted two arms from null to distinguishable) and then held
+through pass 3, so it is firmer than it was — but it has not had the seven-pass treatment [FM]
+high received, and the floor has not deepened since pass 2.
 
 *Superseded: pass 1 was written up as "[CLF]'s one genuine benefit does NOT reproduce." With one
 more shared floor epoch, two arms cross the threshold. The honest statement is a marginal effect
 at the floor, not a null.*
 
-## 4c. Still not established
+## 4c. Weakly established or still open
 
-- **[FM] med.** Running, not yet scoreable (arms at 2–9 epochs, floor seeds at 2–4).
-- **[FM] det.** Preliminary only. Latest pass (4 shared floor epochs, 2026-08-10):
-  `epi_bald` +3.4x/+6.7x, `epi_var` +2.5x/+2.3x, `total` +3.6x/**+26.5x**, `aleat` +4.9x/+6.5x —
-  all four DISTINGUISHABLE and harmful, sign stable 4/4. **Do not quote these yet.** The floor is
-  capped at 4 shared epochs because `dir00` was preempted 2026-08-09 and sits at 5 while five of
-  seven runs at that level are complete at 19/19. `total`'s +3.6x -> +26.5x is a 7x swing between
-  adjacent epochs, i.e. exactly the oscillation §5 warns about, and [CLF] high showed three
-  "harmful" arms at shallow depth collapse to one at full depth.
+### [FM] med: first verdict — null on all four arms (shallow)
+
+Scored for the first time on 2026-08-10; the level had been unscoreable until `dir00_s43` cleared
+epoch 2.
+
+```
+fm med: pooled 2*SD = 0.00100 over 3 epochs
+   epi_bald   ep4: -0.00021 (-0.2x)  ep5: -0.00045 (-0.4x)   -> within noise (null)
+   epi_var    ep4: -0.00047 (-0.5x)  ep5: -0.00047 (-0.5x)   -> within noise (null)
+   total      ep4: -0.00072 (-0.7x)  ep5: -0.00057 (-0.6x)   -> within noise (null)
+   aleat      ep4: -0.00023 (-0.2x)  ep5: +0.00075 (+0.7x)   -> within noise (null)
+```
+
+Four nulls, all arms inside ±0.7× the floor. **This completes the [FM] sweep: every one of the
+five noise levels has now been scored, and only `low` produces anything that clears its floor.**
+
+**Scope — treat as provisional.** 3 shared floor epochs at a ep4-5 window, the shallowest read in
+the campaign. [FM] low was also null at this depth (pass 1) and later promoted two arms, so a null
+here is not yet evidence of absence. Arms sit at 6–10 epochs; `dir00_s43` at 2 is the binding
+constraint on the floor.
+
+### [FM] det: preliminary, and the sign has now flipped once
+
+Latest pass (label metric, 9 shared floor epochs, 2026-08-10) — this is a **different and much
+larger floor** than the 4-epoch pass quoted on 2026-08-09, and it reverses the direction:
+
+```
+fm det (brier, label metric): pooled 2*SD = 0.02615 over 9 epochs
+   epi_bald   ep8: +0.10120 (+3.9x)  ep9: -0.06345 (-2.4x)   -> not stable
+   epi_var    ep8: -0.03225 (-1.2x)  ep9: -0.08468 (-3.2x)   -> DISTINGUISHABLE [!] sign flips
+   total      ep8: -0.02370 (-0.9x)  ep9: -0.07649 (-2.9x)   -> not stable
+   aleat      ep8: -0.00041 (-0.0x)  ep9: -0.04360 (-1.7x)   -> not stable
+```
+
+**Still do not quote [FM] det.** The 2026-08-09 pass read "all four DISTINGUISHABLE and harmful,
+sign stable 4/4" at +2.3x to +26.5x; one pass later the same arms are mostly *helpful* and only
+one survives the stability flag. `epi_bald` alone swings +3.9x → −2.4x between adjacent epochs.
+The floor here (0.02615) is **26× larger** than any stochastic-level floor, because det is scored
+on the label metric rather than post-recal — so effect sizes on this level are not comparable to
+the four stochastic levels above.
+
+This is §5's "single-epoch reads lie" caution landing on a live claim, and it is the reason the
+2026-08-09 numbers were fenced rather than written up.
+
+### Still open
+
+- **[FM] det** at a settled floor — blocked on `dir00`, resumed and at 11/19 while five of the
+  seven runs at that level are complete.
+- **[FM] med** at a floor deeper than 3 epochs — blocked on `dir00_s43` at 2.
 - **`epi_var` vs `epi_bald`.** On the classifier both are exact (members enumerated, K = None), so
   the comparison there is uninformative about the estimator question. Only FM at K = 20 tests it —
   and FM is now null at low, high and xhigh, with the two estimators indistinguishable at every

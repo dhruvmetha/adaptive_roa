@@ -7,7 +7,6 @@ in the numbers. That detector needs each run to record its own commit.
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
 
 import pandas as pd
 
@@ -20,7 +19,11 @@ def git_sha(repo_root=None) -> str | None:
             cwd=str(repo_root) if repo_root else None,
             capture_output=True, text=True, check=True,
         )
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except (subprocess.CalledProcessError, OSError):
+        # OSError covers FileNotFoundError (no `git` binary), NotADirectoryError
+        # (repo_root exists but isn't a directory), PermissionError, etc. -- any
+        # reason `cwd` or the subprocess launch itself fails means "can't tell",
+        # which this function reports as None, never by raising.
         return None
     return out.stdout.strip() or None
 

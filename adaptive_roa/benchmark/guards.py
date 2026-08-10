@@ -17,6 +17,13 @@ come close to producing, a confident wrong number:
   its rivals, WITHIN the same system/acquisition/tier context -- weak
   baselines are the characteristic failure of this literature. Scoped by
   context because different systems legitimately train to different budgets.
+- ``assert_matched_coverage``: arms ranked against each other after being
+  evaluated on DIFFERENT sets of cells. The mirror of the above, one level
+  up: "same budget" is worthless if one arm's mean is taken over pendulum
+  only and its rival's over pendulum plus quadrotor3d. This is the routine
+  state of a partially-launched ~450-run campaign, and ``run_complete``
+  cannot see it -- every run present really is complete; the missing ones
+  simply contribute no rows.
 - ``assert_comparable``: a criterion CLASS (e.g. "the validation NLL") that
   denotes a different quantity per arm, pooled into one column as if it were
   one quantity.
@@ -38,6 +45,7 @@ is produced is decoration.
 """
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from adaptive_roa.benchmark.aggregate import PROVENANCE_COLUMNS
@@ -49,6 +57,7 @@ __all__ = [
     "NON_COMPARABLE_COLUMNS",
     "assert_post_fix",
     "assert_matched_budget",
+    "assert_matched_coverage",
     "assert_comparable",
     "assert_distinct_seeds",
     "assert_all_complete",
@@ -150,6 +159,15 @@ NON_COMPARABLE_COLUMNS = frozenset({"best_val_nll", "val_nll", "train_loss"})
 _CONTEXT_COLUMNS = ("system", "acquisition", "tier")
 _SEED_CELL_COLUMNS = ("system", "acquisition", "tier", "epoch")
 
+# The cells every arm in one comparison must cover identically. Deliberately
+# NOT including `epoch`: a run legitimately contributes a different number of
+# epoch rows than its rival (preemption, a corrupt interior epoch, an eval
+# that did not run), and the reporting path reduces over epochs explicitly
+# rather than pooling them -- see report.py's epoch selector and
+# aggregate.py's `n_epochs_collected`. `tier` is excluded because
+# build_report already refuses a mixed-tier frame outright.
+_COVERAGE_COLUMNS = ("system", "acquisition", "seed")
+
 
 def _require_columns(df: pd.DataFrame, columns) -> None:
     """Refuse to guess what an absent column would have meant.
@@ -243,6 +261,73 @@ def assert_matched_budget(df: pd.DataFrame) -> None:
                 f"training budget differs across arms: {per_arm.to_dict()}. "
                 f"Equalize the budget or compare within a budget."
             )
+
+
+def assert_matched_coverage(df: pd.DataFrame) -> None:
+    """Every arm in a comparison must cover the same (system, acquisition, seed) cells.
+
+    ``assert_matched_budget`` asks whether two arms trained for the same
+    number of epochs. This asks the question one level up: whether the two
+    numbers being ranked were computed over the same POPULATION at all. An
+    arm that has only finished on the easy system, or is missing one seed,
+    has its mean taken over a different set of experiments than its rival's
+    -- and a mean over an easier subset wins for a reason that has nothing
+    to do with the arm:
+
+        mlp  ran on [pendulum, quadrotor3d] -> 0.792
+        gp   ran on [pendulum]              -> 1.002   <- "wins" by not running
+
+    This is the ROUTINE state of a partially-launched ~450-run campaign, and
+    nothing else catches it: ``assert_matched_budget`` is deliberately scoped
+    BY system so a multi-system frame sails through it; ``run_complete`` is
+    True on every row present, because the problem is the rows that are
+    absent; and ``validate_frame`` checks relations among the rows it has.
+
+    Scoped to whichever of ``system``/``acquisition``/``seed`` are present,
+    degrading the same way every other guard here does, so the minimal
+    fixtures in this module and in report.py's tests still work. With none
+    of them present there is no cell structure to compare and the check is
+    vacuous -- that is a frame carrying no evidence of coverage either way,
+    not a frame this function has silently approved.
+
+    Deliberately NOT called from ``validate_frame``, for the same reason
+    ``assert_all_complete`` is not: unequal coverage is the normal condition
+    of a live campaign, and a status query over one must not fail. It is
+    called from ``build_report``, which is where arms are actually RANKED
+    against each other and where unequal coverage stops being normal and
+    becomes a wrong answer.
+    """
+    _require_columns(df, ["arm"])
+    cell_cols = [c for c in _COVERAGE_COLUMNS if c in df.columns]
+    _require_no_nulls(df, ["arm", *cell_cols])
+    if not cell_cols:
+        return
+
+    covered = {
+        arm: {tuple(row) for row in grp[cell_cols].drop_duplicates().to_numpy().tolist()}
+        for arm, grp in df.groupby("arm")
+    }
+    if len(covered) < 2:
+        return
+
+    union = set().union(*covered.values())
+    missing = {arm: sorted(union - cells, key=repr)
+               for arm, cells in covered.items() if union - cells}
+    if not missing:
+        return
+
+    detail = "; ".join(
+        f"{arm!r} is missing {len(cells)} of {len(union)}: {cells}"
+        for arm, cells in sorted(missing.items())
+    )
+    raise ValueError(
+        f"arms in this comparison do not cover the same {cell_cols} cells, so "
+        f"their means are taken over different populations and are not "
+        f"comparable -- an arm that has not run on the hard system, or is "
+        f"missing a seed, wins for a reason that is not about the arm. "
+        f"{detail}. Restrict the report to a slice every arm covers (e.g. "
+        f"--system), or wait for the missing runs."
+    )
 
 
 def assert_comparable(df: pd.DataFrame, column: str) -> None:
@@ -343,9 +428,45 @@ def assert_all_complete(df: pd.DataFrame) -> None:
     one that simply has not gotten there yet (see aggregate.py) -- cannot be
     silently reported as a finished result next to runs that really did
     finish.
+
+    ``run_complete`` must be genuinely BOOLEAN, and that is enforced rather
+    than assumed. ``~df["run_complete"].astype(bool)`` -- what this used to
+    do -- passes silently on the STRING ``'False'`` (every non-empty string
+    is truthy, so ``['False', 'True'] -> [True, True]``) and on ``NaN``
+    (also truthy). This is the third appearance of that exact failure mode
+    in this project: ``.astype(bool)`` on ``{-1, 1}`` labels already
+    collapsed both classes into "success" once
+    (``separatrix._labels_as_success_bool``), and once in
+    ``full_roa``'s own history. ``collect_runs`` produces real bools today,
+    so the direct CLI path was safe by accident of its inputs -- but a
+    CSV/parquet round-trip, which is routine for a benchmark frame, turns
+    every bool into a string, and a concat over a missing column introduces
+    NaN. Either one silently disarms the one guard designated as the
+    final-report gate. Object dtype holding genuine ``bool``/``np.bool_``
+    values is accepted (a plain ``pd.concat`` produces it); anything else --
+    strings, ints, None -- raises, naming the offending values.
     """
     _require_columns(df, ["run_complete"])
-    incomplete = df.loc[~df["run_complete"].astype(bool)]
+    _require_no_nulls(df, ["run_complete"])
+
+    complete = df["run_complete"]
+    if not pd.api.types.is_bool_dtype(complete):
+        offenders = sorted(
+            {f"{v!r} ({type(v).__name__})" for v in complete
+             if not isinstance(v, (bool, np.bool_))}
+        )
+        if offenders:
+            raise ValueError(
+                f"'run_complete' is not boolean: {complete.dtype} dtype "
+                f"carrying {offenders}. Refusing to coerce -- .astype(bool) "
+                f"maps the string 'False' and NaN to True, which would pass "
+                f"this guard on exactly the frame it exists to refuse (a "
+                f"CSV/parquet round-trip stringifies every bool). Restore "
+                f"the column to real booleans, e.g. "
+                f"df['run_complete'].map({{'True': True, 'False': False}})."
+            )
+
+    incomplete = df.loc[~complete.astype(bool)]
     if not incomplete.empty:
         detail = (
             sorted(incomplete["run_id"].unique().tolist())

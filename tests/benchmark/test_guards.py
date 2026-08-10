@@ -6,6 +6,7 @@ from adaptive_roa.benchmark.guards import (
     assert_comparable,
     assert_distinct_seeds,
     assert_matched_budget,
+    assert_matched_coverage,
     assert_post_fix,
     INVALIDATING_COMMITS,
     NON_COMPARABLE_COLUMNS,
@@ -221,6 +222,26 @@ def test_matched_budget_still_raises_when_arms_differ_within_a_system():
         assert_matched_budget(df)
 
 
+def test_matched_budget_raises_on_budgets_crossed_between_systems():
+    # I4 (surviving mutant): the ONLY frame that distinguishes the
+    # context-scoped cross-arm comparison from the `else:` frame-wide
+    # fallback. Per-arm frame-wide maxima are {mlp: 20, gp: 20} -- nunique 1
+    # -- so the fallback sees nothing wrong, while WITHIN pendulum mlp
+    # trained to 10 against gp's 20 and within cartpole the pairing is
+    # reversed. Deleting the `if context_cols:` branch broke no test before
+    # this one existed, even though it is failure mode #2 of the plan's four.
+    df = pd.DataFrame({
+        "arm": ["mlp", "gp", "mlp", "gp"],
+        "system": ["pendulum", "pendulum", "cartpole", "cartpole"],
+        "n_epochs": [10, 20, 20, 10],
+    })
+    assert df.groupby("arm")["n_epochs"].max().nunique() == 1, (
+        "fixture must be indistinguishable to the frame-wide fallback"
+    )
+    with pytest.raises(ValueError, match="budget differs across arms within context"):
+        assert_matched_budget(df)
+
+
 def test_matched_budget_still_raises_when_one_arm_spans_two_budgets_in_one_system():
     df = pd.DataFrame({
         "arm": ["fm", "fm"], "system": ["pendulum", "pendulum"],
@@ -358,6 +379,154 @@ def test_assert_all_complete_raises_on_any_incomplete_row():
     df = pd.DataFrame({"run_id": ["r1", "r2"], "run_complete": [True, False]})
     with pytest.raises(ValueError, match="run_complete|final_results"):
         assert_all_complete(df)
+
+
+# ---------------------------------------------------------------------------
+# I3: `.astype(bool)` on a non-bool run_complete passes silently. Third
+# appearance of this failure mode in this project (the {-1,1}-label collapse
+# was the previous one), in the guard designated as the final-report gate.
+# ---------------------------------------------------------------------------
+
+def test_assert_all_complete_refuses_a_stringified_run_complete():
+    # The CSV/parquet round-trip case: 'False' is a non-empty string, so
+    # .astype(bool) maps it to True and the incomplete run reports as
+    # finished. There is no correct answer to give here, only a refusal.
+    df = pd.DataFrame({"run_id": ["r1", "r2"],
+                       "run_complete": ["False", "True"]})
+    with pytest.raises(ValueError, match="not boolean"):
+        assert_all_complete(df)
+
+
+def test_assert_all_complete_refuses_a_null_run_complete():
+    # NaN is also truthy under .astype(bool). A row whose completion state is
+    # unknown is not a row this guard can vouch for.
+    df = pd.DataFrame({"run_id": ["r1", "r2"],
+                       "run_complete": [float("nan"), True]})
+    with pytest.raises(ValueError, match="null"):
+        assert_all_complete(df)
+
+
+def test_assert_all_complete_refuses_integer_flags():
+    # 0/1 would coerce "correctly" here and is still refused: the column has
+    # one documented type, and accepting a second invites the next one.
+    df = pd.DataFrame({"run_id": ["r1", "r2"], "run_complete": [1, 0]})
+    with pytest.raises(ValueError, match="not boolean"):
+        assert_all_complete(df)
+
+
+def test_assert_all_complete_accepts_object_dtype_holding_real_bools():
+    # A plain pd.concat over frames can yield object dtype while every value
+    # is a genuine bool. That is not the failure mode above, and refusing it
+    # would make the guard unusable on frames it should accept.
+    df = pd.DataFrame({"run_id": ["r1", "r2"]})
+    df["run_complete"] = pd.Series([True, True], dtype=object)
+    assert df["run_complete"].dtype == object
+    assert_all_complete(df)
+
+
+def test_assert_all_complete_still_catches_a_false_in_object_dtype():
+    df = pd.DataFrame({"run_id": ["r1", "r2"]})
+    df["run_complete"] = pd.Series([True, False], dtype=object)
+    with pytest.raises(ValueError, match="run_complete|final_results"):
+        assert_all_complete(df)
+
+
+# ---------------------------------------------------------------------------
+# C3: arms ranked against each other must cover the same cells. Nothing else
+# catches this -- every run present is complete; the missing ones have no rows.
+# ---------------------------------------------------------------------------
+
+def _coverage_df(**cols):
+    base = dict(
+        arm=["mlp", "mlp", "gp", "gp"],
+        system=["pendulum", "quadrotor3d"] * 2,
+        acquisition=["ranked"] * 4,
+        seed=[42] * 4,
+    )
+    base.update(cols)
+    return pd.DataFrame(base)
+
+
+def test_matched_coverage_passes_when_every_arm_covers_every_cell():
+    assert_matched_coverage(_coverage_df())
+
+
+def test_matched_coverage_raises_when_an_arm_skipped_the_hard_system():
+    # The demonstration from the review: gp "wins" by never running on
+    # quadrotor3d. assert_matched_budget is scoped BY system and passes.
+    df = _coverage_df().drop(index=3).reset_index(drop=True)  # gp @ quadrotor3d
+    assert_matched_budget(df.assign(n_epochs=10))  # the existing guard is happy
+    with pytest.raises(ValueError, match="quadrotor3d"):
+        assert_matched_coverage(df)
+
+
+def test_matched_coverage_raises_when_an_arm_is_missing_one_seed():
+    df = pd.DataFrame({
+        "arm": ["mlp", "mlp", "mlp", "gp", "gp"],
+        "system": ["pendulum"] * 5,
+        "acquisition": ["ranked"] * 5,
+        "seed": [42, 43, 44, 42, 43],
+    })
+    with pytest.raises(ValueError, match="44"):
+        assert_matched_coverage(df)
+
+
+def test_matched_coverage_raises_when_an_arm_is_missing_the_paired_control():
+    df = pd.DataFrame({
+        "arm": ["mlp", "mlp", "gp"],
+        "system": ["pendulum"] * 3,
+        "acquisition": ["ranked", "direct", "ranked"],
+        "seed": [42] * 3,
+    })
+    with pytest.raises(ValueError, match="direct"):
+        assert_matched_coverage(df)
+
+
+def test_matched_coverage_names_which_arm_is_missing_what():
+    df = _coverage_df().drop(index=3).reset_index(drop=True)
+    with pytest.raises(ValueError) as excinfo:
+        assert_matched_coverage(df)
+    message = str(excinfo.value)
+    assert "'gp' is missing" in message
+    assert "'mlp' is missing" not in message
+
+
+def test_matched_coverage_is_vacuous_on_a_single_arm():
+    # One arm cannot disagree with itself about coverage.
+    assert_matched_coverage(_coverage_df(arm=["mlp"] * 4, seed=[42, 42, 43, 43]))
+
+
+def test_matched_coverage_raises_on_a_null_cell_key():
+    df = _coverage_df(system=["pendulum", None, "pendulum", "quadrotor3d"])
+    with pytest.raises(ValueError, match="null"):
+        assert_matched_coverage(df)
+
+
+def test_matched_coverage_degrades_to_the_columns_present():
+    # The minimal report.py fixtures carry acquisition and seed but no
+    # system; the check still compares on what exists rather than skipping.
+    df = pd.DataFrame({
+        "arm": ["mlp", "mlp", "gp"],
+        "acquisition": ["ranked", "direct", "ranked"],
+        "seed": [42, 42, 42],
+    })
+    with pytest.raises(ValueError, match="direct"):
+        assert_matched_coverage(df)
+
+
+def test_matched_coverage_is_not_called_by_validate_frame():
+    # Deliberate, and the same call this module already makes for
+    # assert_all_complete: unequal coverage is the NORMAL state of a live
+    # campaign, so a status query over one must not fail. build_report is
+    # where it is enforced, because that is where arms get ranked.
+    df = _full_df_for_validate(
+        run_id=["r1", "r2"], arm=["mlp", "gp"], system=["pendulum", "pendulum"],
+        acquisition=["ranked", "direct"], seed=[42, 42],
+        commit=[git_sha(), git_sha()], accuracy=[0.8, 0.7],
+    )
+    with pytest.raises(ValueError, match="do not cover the same"):
+        assert_matched_coverage(df)
+    validate_frame(df)
 
 
 # ---------------------------------------------------------------------------

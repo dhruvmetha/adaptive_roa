@@ -1,8 +1,15 @@
 # Ensemble Epistemic Acquisition — current findings
 
-**Status: campaign in progress.** Classifier arms at epochs ~9–13 of 19 and will stop at ~17
-(walltime, see §6); deterministic complete at 19/19; flow-matching arms at epoch 4 of 19. This file holds only what is *currently defensible*.
-`LOG.md` is the chronological record including superseded claims and their corrections.
+**Status as of 2026-08-09.** This file holds only what is *currently defensible*; `LOG.md` is the
+chronological record including superseded claims and their corrections.
+
+| half | state |
+|---|---|
+| **[CLF]** | det complete 19/19; **high complete 19/19 on all five arms** (rescored, §1); low/med/xhigh from truncated curves (walltime, see §6) |
+| **[FM]** | **high scored six times, floor halved, null (§4)**; **xhigh scored three times, null (§4b)**; det preliminary (§4b); low and med running, not yet scoreable |
+
+Three [FM] levels now have verdicts. The [FM] half is no longer "not established" — that framing
+survived into this document after it stopped being true and is corrected here.
 
 Standard of evidence used throughout: a gap counts only if it exceeds **2×SD of three
 genuinely-distinct seeds** of the same configuration (the run-to-run floor) at **two consecutive
@@ -37,10 +44,11 @@ recalibration.
 ## 1. Established — ALL CLASSIFIER (CLF)
 
 > **Every result in this section is the ensemble CLASSIFIER (`predictor=clf_ensemble`).**
-> The flow-matching arms have produced **no verdicts at all** — see §4. Do not read any number
-> below as a statement about flow matching, and do not read it as a statement about the
-> estimators in general: §3 shows this classifier is badly miscalibrated at high noise, so every
-> score here is computed on distorted p̄.
+> Do not read any number below as a statement about flow matching — §4 shows [FM] behaves
+> *differently* at the same noise levels, most sharply at xhigh where [CLF] breaks (+29× to +45×)
+> and [FM] shows nothing. And do not read these as statements about the estimators in general:
+> §3 shows this classifier is badly miscalibrated at high noise, so every score here is computed
+> on distorted p̄.
 
 ### [CLF + FM] The decomposition is mechanically correct
 `H(p̄) = E_m[H(p_m)] + I(y;m|x)` holds to **exact float precision** on real model outputs (the
@@ -80,27 +88,42 @@ effect — the arms track each other within ~0.4×.
 *Superseded: med was previously reported as "adaptive helps (−1.5 to −3.1×)" against a
 single-epoch floor. The pooled floor is 3.4× larger and the effect does not survive it.*
 
-### [CLF] high noise: three of four adaptive arms are worse than random
-`epi_bald`, `epi_var` and `total` all exceed the pooled floor in the harmful direction at two
-consecutive epochs (+3.1× to +12.0×). The negative control `aleat` does **not**: it reads −0.6×
-at one epoch and +2.6× at the next, so it is inconsistent.
+### [CLF] high noise: `total` is harmful; the other three do not survive full depth
 
-Only the *sign* is reportable here. Magnitudes swing between consecutive epochs (`epi_bald`
-+12.0× → +4.1×) and **the ordering among arms is not stable** — both are excluded from the claim.
+**Rescored 2026-08-08 with all five arms complete at 19/19 epochs.** This supersedes every
+earlier reading of this level, all of which came from truncated 12-15 epoch curves against
+2-3 epoch floors.
 
-*Withdrawn: an earlier entry flagged `aleat` as the least harmful arm at high (an inversion
-against xhigh) as an open question. With six more epochs it is now among the most harmful there
-(+20.3×) and `total` the least (+1.6×). The inversion was shallow-epoch noise.*
+```
+clf high: pooled 2*SD = 0.00051 over 10 epochs
+   epi_bald   ep17: +0.00013 (+0.3x)  ep18: +0.00107 (+2.1x)   -> not stable
+   epi_var    ep17: -0.00014 (-0.3x)  ep18: +0.00180 (+3.5x)   -> not stable
+   total      ep17: +0.00968 (+19.1x) ep18: +0.00705 (+13.9x)  -> DISTINGUISHABLE (sign stable 18/18 ep)
+   aleat      ep17: +0.00138 (+2.7x)  ep18: +0.00268 (+5.3x)   -> DISTINGUISHABLE [!] sign flips
+```
 
-**At high, only the sign has ever replicated.** Now demonstrated over 10 epochs: the
-least-harmful arm rotates almost every epoch and **all four arms have held that slot**
-(`epi_var`→`aleat`→`total`→`epi_var`→`aleat`→`total`). Four finer patterns read there — the arm
-ordering, a tail-depth mechanism, the `aleat` inversion, and a "`total` is least harmful" reading
-that two metrics agreed on at ep9/10 — each dissolved with more data.
+**Only `total` holds.** +19.1x and +13.9x the floor with the sign stable across **all 18 epochs** —
+the strongest and best-supported single result in the campaign. Acquiring on total predictive
+entropy actively damages a classifier at high noise, consistently from first epoch to last.
 
-Report *"adaptive is worse than random at [CLF] high"* and nothing beyond it. Note the campaign's
-two-consecutive-epoch rule is **not** sufficient protection here: the quantity oscillates on that
-timescale, so two adjacent samples can agree by luck even across independent metrics.
+**`epi_bald` and `epi_var` are NOT stable** at full depth: both flip sign between the final two
+epochs. **`aleat` clears the floor in the final window but is flagged for sign flips across the
+trajectory**, so it is not reportable either.
+
+Two things produced the change. The floor tightened to **0.00051** pooled over 10 shared epochs
+(the truncated verdict used 2-3 epoch floors, i.e. a far noisier estimate of the same quantity),
+and the full-trajectory sign check finally had 18 epochs to work with rather than a handful.
+
+*Withdrawn: "three of four adaptive arms are worse than random." At 19 epochs only `total`
+qualifies. Also withdrawn: every claim about arm ORDERING at this level — the least-harmful slot
+rotated among all four arms across the run.*
+
+**This is FINDINGS section 5 vindicated, at a second level.** On the deterministic curve `aleat`
+went from +10.7x floor *worse* at epoch 4 to *best* by epoch 18; here `epi_bald`/`epi_var` look
+harmful at shallow depth and dissolve at full depth. The two-consecutive-epoch rule is **not**
+sufficient protection on its own — the quantity oscillates on that timescale, so two adjacent
+samples can agree by luck even across independent metrics. Only the full-trajectory sign check
+plus a deeply-pooled floor separates signal from oscillation.
 
 ### [CLF] xhigh: total entropy does real damage; the epistemic split cuts it ~10x
 Re-verified 2026-08-04 14:25 against a **pooled** floor (4 epochs; recal 2×SD = 0.00095),
@@ -201,23 +224,96 @@ test and are at epoch 4 of 19.
 
 ---
 
-## 4. Not yet established — THE ENTIRE FLOW-MATCHING (FM) HALF
+## 4. Flow matching — [FM] high is the campaign's best-powered null
 
-- **All flow-matching results.** No FM floor exists yet (both seed replicates still early). Two
-  consecutive epochs show every adaptive arm beating the control, with `total` the only arm
-  costing discriminative power — but no gap is yet distinguishable from noise.
+### [FM] high noise: no arm is distinguishable from the non-adaptive control (6 passes, floor halved)
 
-  The FM floor replicates are verified config-identical to the main `dir00` arm apart from the
-  seed (checked against the recorded Hydra overrides, not just the launch command). One asymmetry
-  to carry forward when the floor lands: `dir00` and `s43` run on iLab while `s44` runs on Amarel,
-  so cross-cluster float nondeterminism is folded into that floor. That inflates it, which is
-  **conservative** — it makes significance harder to claim, not easier — but it means the FM floor
-  is not directly comparable in magnitude to the classifier floors, which were measured
-  within-cluster.
-- **Whether the epistemic split helps a well-calibrated predictor at all.** This is the campaign's
-  actual question and it is unanswered.
+Post-restart runs (EarlyStopping `patience=30`), pooled floor from `dir00` / `dir00_s43` /
+`dir00_s44`. **Scored six times between 2026-08-06 and 2026-08-09 as the floor deepened.** The
+final pass is the one to quote:
+
+```
+FINAL (13 shared floor epochs; dir00 and s43 both complete at 19/19):
+fm high: pooled 2*SD = 0.00102 over 13 epochs
+   epi_bald   ep15: -0.00055 (-0.5x)  ep16: -0.00045 (-0.4x)   -> within noise (null)
+   epi_var    ep15: -0.00059 (-0.6x)  ep16: -0.00056 (-0.6x)   -> within noise (null)
+   total      ep15: -0.00053 (-0.5x)  ep16: -0.00052 (-0.5x)   -> within noise (null)
+   aleat      ep15: -0.00060 (-0.6x)  ep16: -0.00049 (-0.5x)   -> within noise (null)
+```
+
+**Every pass, every arm, null.** The floor halved as data accumulated and the verdict never moved:
+
+| pass | floor (2*SD) | shared epochs | window | result |
+|---|---|---|---|---|
+| 1 | 0.00198 | 2 | ep 4-5 | 4 nulls |
+| 2 | 0.00163 | 3 | ep 5-6 | 4 nulls |
+| 3 | 0.00179 | 4 | ep 6-7 | 4 nulls |
+| 4 | 0.00161 | 5 | ep 7-8 | 4 nulls |
+| 5 | 0.00111 | 11 | ep 14-15 | 4 nulls |
+| **6** | **0.00102** | **13** | **ep 15-16** | **4 nulls** |
+
+This is the campaign's best-powered null. Six independent windows walking from epoch 4 to epoch
+16, against a floor that tightened by ~50%, and the four arms stay clustered between −0.00045 and
+−0.00060 throughout — indistinguishable from each other and from the control at every depth.
+
+**The four arms converge on the same number.** At the final pass they span −0.4x to −0.6x; earlier
+(pass 5) they agreed to four decimal places. `epi_bald` (the arm the campaign exists to test),
+`epi_var`, `total`, and `aleat` (the deliberately-useless negative control) are not merely all
+null — they are numerically interchangeable. When the strategy designed *not* to work matches the
+strategy designed to work, the ranking carries no information about acquisition quality.
+
+**The uniform small negative offset is a property of the control, not an effect.** All four arms
+sit slightly below `dir00` rather than scattered around zero. `dir00` is the one run doing
+something structurally different (`d2_ratio=0`, no acquisition at all), so a shared offset against
+it is what the pipeline produces, not what the scores produce.
+
+**Power is not the limitation.** At a comparable floor (0.00051 over 10 epochs) and comparable
+depth, [CLF] high resolved `total` at **+19.1x**, sign-stable 18/18. The instrument detects large
+effects at this scale. It finds none here.
+
+**Cross-cluster caveat (unchanged).** `dir00` and `s43` ran on iLab, `s44` on arrakis, so
+cross-cluster float nondeterminism is folded into this floor. That *inflates* it, which is
+conservative for claiming significance — but it means the FM floor is not directly comparable in
+magnitude to the classifier floors, which were measured within-cluster. [FM] low will be the first
+fully within-cluster FM floor.
+
+### [FM] xhigh: also null — and this is the level where [CLF] broke
+
+Scored 2026-08-07, shared epochs 7-8, floor from `dir00` / `dir00_s43` / `dir00_s44`:
+
+```
+fm xhigh: pooled 2*SD = 0.00139 over 2 epochs
+   epi_bald   ep7: -0.00002 (-0.0x)  ep8: -0.00048 (-0.3x)   -> within noise (null)
+   epi_var    ep7: -0.00014 (-0.1x)  ep8: -0.00073 (-0.5x)   -> within noise (null)
+   total      ep7: -0.00022 (-0.2x)  ep8: -0.00069 (-0.5x)   -> within noise (null)
+   aleat      ep7: -0.00033 (-0.2x)  ep8: -0.00066 (-0.5x)   -> within noise (null)
+```
+
+**This is a predictor dissociation, and it is the campaign's most informative comparison.**
+xhigh is the ONLY level where anything ever cleared a floor by a wide margin: on [CLF], `total`
+and `aleat` were **+29x and +45x** the floor on post-recal with sAUROC collapsing **-27x to -52x**
+(section 1). On [FM] at the same noise level, with the same acquisition code and the same
+decomposition, all four arms sit between 0.0x and 0.5x and are ordered indistinguishably from each
+other and from the negative control.
+
+**The harm does not reproduce on flow matching.** That is consistent with section 3's mechanism:
+the classifier damage was diagnosed as *miscalibration* — arms dragging the training marginal away
+from the evaluation distribution. A predictor that stays calibrated under heavy process noise has
+no such failure mode for acquisition to exploit, so acquisition neither helps nor hurts it. The
+[CLF] xhigh result should therefore be read as a fact about miscalibrated classifiers, NOT as a
+general fact about entropy acquisition.
+
+**Scope.** Two shared epochs (7-8), the minimum the rule permits; floor seeds are 3-5 epochs deep
+against arms at 9-10. Widening the window is pending. Unlike [FM] high (four consistent passes),
+this verdict has had one pass.
+
+## 4c. Still not established
+
+- **[FM] med, low, det.** Not launched — no FM runs exist at those levels.
 - **`epi_var` vs `epi_bald`.** On the classifier both are exact (members enumerated, K = None), so
-  the comparison there is uninformative about the estimator question. Only FM at K = 20 tests it.
+  the comparison there is uninformative about the estimator question. Only FM at K = 20 tests it —
+  and at high noise both are equally null, so the estimator question remains open on the levels
+  where an effect might exist at all.
 
 ## 5. Cautions learned the hard way
 

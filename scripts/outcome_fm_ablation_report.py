@@ -343,6 +343,16 @@ def report_level(level: str, with_mc: bool) -> None:
     out_ref = ref["outcome"][0] if n_outcome_seeds > 0 else scored["outcome"][KEY]
 
     v = verdict(out_ref, clf_ref, fm_ref, floor, ref['outcome'][2])
+    # An OUTSIDE-THE-BRACKET call says the outcome arm beat a reference. That is
+    # only meaningful if the reference is itself stable. At low the fm reference
+    # has ONE seed and moved 0.00096 -> 0.00197 between epochs 5 and 6, so the
+    # call was driven by the reference wobbling rather than by the outcome arm
+    # improving -- the same single-run instability already documented for
+    # ent10_s44 and dir00_s42 in the stochastic campaign.
+    thin = [k for k in ("fm", "clf") if ref[k][1] < 3]
+    if "OUTSIDE THE BRACKET" in v and thin:
+        v += (f"  [DISCOUNT: {'/'.join(thin)} reference has <3 seeds, so 'beats it' "
+              f"may be reference noise, not a real gap]")
     # "provisional" is about the OUTCOME arm's own replication, not the
     # references'. With three of its own seeds the verdict stands on the same
     # footing as the campaign's other n=3 claims, so stop hedging.

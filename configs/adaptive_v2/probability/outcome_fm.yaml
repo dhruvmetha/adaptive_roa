@@ -1,0 +1,23 @@
+# @package _global_
+probability:
+  _target_: adaptive_roa.adaptive_v2.probability.outcome_fm.OutcomeFMProbabilityBackend
+  # Which readout the PIPELINE runs on (calibration, acquisition, eval).
+  # `exact` is the default: it is unquantised and cheaper than the MC estimate
+  # (grid + bisect costs ~47 integrations/point vs 100 at num_mc_samples=100).
+  # The other readout is still computed for scoring via `estimate_both`, so
+  # choosing one here does not lose the comparison.
+  readout: exact
+  num_mc_samples: 100        # matches endpoint_mc.yaml so the MC readouts are comparable
+  # 50 verified sufficient: max|dp| vs a 200-step reference is 3e-5 on an
+  # untrained (deliberately rough) field, i.e. ~1e-5 in Brier -- two orders
+  # below the 1e-4..1e-3 gaps this ablation measures. 20 steps gives 1e-4,
+  # which is NOT safely below the signal, so do not lower this casually.
+  num_ode_steps: 50
+  grid_size: 33              # bracketing grid over x0 in [-5, 5]
+  # Bisection resolution must be well BELOW the effect size, not merely small.
+  # Bracket width 10/2^n in x0, and dp/dx0 <= phi(0) = 0.399, so the worst-case
+  # error in p is ~2*10/2^n. n=14 gives 1.2e-4 -- the same order as the Brier
+  # gaps being measured, which would have been a readout artefact masquerading
+  # as a result. n=20 gives 1.9e-6, and costs only 6 extra integrations of ~53.
+  bisect_iters: 20
+  chunk_size: 4096

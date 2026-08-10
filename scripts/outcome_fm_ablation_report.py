@@ -114,8 +114,20 @@ def matched_epoch(runs: dict[str, Path]) -> int | None:
     return max(common) if common else None
 
 
-def verdict(outcome: float, clf: float, fm: float, floor: float | None) -> str:
-    """Which reference is outcome-FM closer to, and is the gap resolvable?"""
+def verdict(outcome: float, clf: float, fm: float, floor: float | None,
+            outcome_spread: float | None = None) -> str:
+    """Which reference is outcome-FM closer to, and is the gap resolvable?
+
+    `floor` is the preferred denominator (fm seed replicates). When it is
+    unavailable, fall back to the OUTCOME arm's own seed spread rather than to
+    zero: with a zero tolerance any gap at all, however tiny, reads as beating a
+    reference. That fired on low@ep5, where a 0.00008 gap -- a quarter of the
+    outcome arm's own 0.00034 spread -- was announced as 'better calibrated than
+    BOTH references'. Tolerating nothing is not conservatism; it manufactures
+    claims.
+    """
+    if floor is None and outcome_spread is not None and np.isfinite(outcome_spread):
+        floor = float(outcome_spread)
     d_fm, d_clf = abs(outcome - fm), abs(outcome - clf)
     span = abs(clf - fm)
     if span <= 0:
@@ -125,7 +137,7 @@ def verdict(outcome: float, clf: float, fm: float, floor: float | None) -> str:
                 f"{floor:.5f} run-to-run floor -- nothing to attribute")
 
     lo, hi = min(fm, clf), max(fm, clf)
-    weak = " [no noise floor available -- weak]" if floor is None else ""
+    weak = " [no floor of any kind -- weak]" if floor is None else ""
 
     # Outside the bracket the "% of span" framing is meaningless (it goes
     # negative), and the finding is different in kind: the arm is not
@@ -330,7 +342,7 @@ def report_level(level: str, with_mc: bool) -> None:
     clf_ref = ref["clf"][0] if ref["clf"][1] > 0 else scored["clf"][KEY]
     out_ref = ref["outcome"][0] if n_outcome_seeds > 0 else scored["outcome"][KEY]
 
-    v = verdict(out_ref, clf_ref, fm_ref, floor)
+    v = verdict(out_ref, clf_ref, fm_ref, floor, ref['outcome'][2])
     # "provisional" is about the OUTCOME arm's own replication, not the
     # references'. With three of its own seeds the verdict stands on the same
     # footing as the campaign's other n=3 claims, so stop hedging.

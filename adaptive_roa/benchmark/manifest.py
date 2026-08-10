@@ -87,6 +87,17 @@ def expand_manifest(cfg: dict[str, Any]) -> list[RunSpec]:
                 f"so an HMC run at [50,50] says nothing about a posterior at "
                 f"[256,512,256]."
             )
+        if arm in NON_ADAPTIVE_ARMS and tier == "reference":
+            raise ValueError(
+                f"arm {arm!r} is not valid in the reference tier: the reference "
+                f"tier exists to carry posterior-fidelity claims at the shared "
+                f"[50,50] backbone against the HMC reference, but {arm!r} is a "
+                f"deterministic point-estimate baseline with no posterior at "
+                f"all -- there is nothing for HMC to be a reference FOR. The "
+                f"combination is not merely awkward to encode: it also emits "
+                f"two conflicting +experiment= overrides (reference_tier and "
+                f"mlp_det_baseline), which Hydra rejects at composition time."
+            )
 
     specs: list[RunSpec] = []
     for arm in arms:

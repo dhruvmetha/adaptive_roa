@@ -6,12 +6,18 @@ chronological record including superseded claims and their corrections.
 | half | state |
 |---|---|
 | **[CLF]** | det complete 19/19; **high complete 19/19 on all five arms** (rescored, §1); low/med/xhigh from truncated curves (walltime, see §6) |
-| **[FM]** | **null at low, high and xhigh** — high scored 6x (floor halved), xhigh 3x, low 1x on the first fully within-cluster FM floor; det preliminary; med not yet scoreable |
+| **[FM]** | **high null** (6 passes, floor halved) · **xhigh null** (3 passes) · **low marginally helpful** (2 arms at 1.0x floor) · **det harmful** (+2.3x to +26.5x, shallow floor) · med not yet scoreable |
 
-**Headline.** [FM] is null at every level scored so far, including **low** — the one level where
-[CLF] adaptive sampling genuinely worked, and the reason the FM extension was launched. At every
-FM level the negative control `aleat` lands inside the spread of the arms it is supposed to
-underperform, so no FM ranking carries information about acquisition quality.
+**Headline — the constant across every FM level is that the SCORE does not matter.** The sign of
+the adaptive-vs-uniform effect varies with noise (harmful at det, null at high/xhigh, marginally
+helpful at low), but at every single level the four arms are numerically interchangeable, and the
+deliberately-useless negative control `aleat` sits inside the spread of the arms it is supposed to
+underperform. Whatever adaptive sampling does to flow matching, decomposing entropy into
+aleatoric and epistemic parts does not change it.
+
+*Corrected 2026-08-10: an earlier version of this header read "[FM] is null at every level scored
+so far, including low." That was true of the 5-epoch-floor pass; with 6 shared floor epochs
+`epi_var` and `total` cross the threshold at low. See §4b.*
 
 Standard of evidence used throughout: a gap counts only if it exceeds **2×SD of three
 genuinely-distinct seeds** of the same configuration (the run-to-run floor) at **two consecutive
@@ -312,47 +318,66 @@ general fact about entropy acquisition.
 against arms at 9-10. Widening the window is pending. Unlike [FM] high (four consistent passes),
 this verdict has had one pass.
 
-### [FM] low: the decisive test — [CLF]'s one genuine benefit does NOT reproduce
+### [FM] low: a marginal helpful effect — far weaker than [CLF]'s, and score-blind
 
 **This is the level the FM extension was launched to test.** [CLF] low is the only place in the
 whole campaign where adaptive sampling genuinely beat uniform (−1.1× to −3.3×, sign stable for 3
-of 4 arms, §1). The live hypothesis was that the earlier FM nulls only reflected testing at
-high/xhigh — the two levels where even the classifier showed nothing — and that FM would show the
-same benefit where the classifier had one. It does not.
+of 4 arms, §1). The question was whether flow matching shows the same benefit there.
 
-Scored 2026-08-09, 5 shared floor epochs:
+Scored twice as the floor deepened. **The second pass changed the verdict**, so both are shown:
 
 ```
-fm low: pooled 2*SD = 0.00063 over 5 epochs
-   epi_bald   ep8: -0.00054 (-0.9x)  ep9: -0.00073 (-1.2x)   -> not stable
-   epi_var    ep8: -0.00056 (-0.9x)  ep9: -0.00061 (-1.0x)   -> within noise (null)
-   total      ep8: -0.00058 (-0.9x)  ep9: -0.00075 (-1.2x)   -> not stable
-   aleat      ep8: -0.00057 (-0.9x)  ep9: -0.00067 (-1.1x)   -> not stable
+PASS 2 (6 shared floor epochs) -- current:
+fm low: pooled 2*SD = 0.00061 over 6 epochs
+   epi_bald   ep9: -0.00073 (-1.2x)  ep10: -0.00060 (-1.0x)   -> not stable
+   epi_var    ep9: -0.00061 (-1.0x)  ep10: -0.00062 (-1.0x)   -> DISTINGUISHABLE (sign stable 10/10 ep)
+   total      ep9: -0.00075 (-1.2x)  ep10: -0.00062 (-1.0x)   -> DISTINGUISHABLE (sign stable 10/10 ep)
+   aleat      ep9: -0.00067 (-1.1x)  ep10: -0.00058 (-0.9x)   -> not stable
+
+PASS 1 (5 shared floor epochs, window ep8-9): all four "not stable" or null.
 ```
 
-All four arms sit right at the floor (−0.9× to −1.2×), nominally helpful but none clearing the
-two-consecutive-epoch bar. Three are flagged *not stable*; `epi_var` is a flat null.
+**What can be claimed:** at low noise, `epi_var` and `total` are marginally *better* than the
+non-adaptive control, sign-stable across all 10 epochs. Adaptive edges uniform here — the only FM
+level where anything clears the floor in the helpful direction.
 
-**The tell is the same as at every other FM level:** `aleat` (−1.1×) is indistinguishable from
-`epi_bald` (−1.2×) and `total` (−1.2×). The four values span 0.00054 to 0.00075 — a range of
-2e-04 across strategies that are supposed to do entirely different things, one of which is
-designed to be useless. A real acquisition effect would not have the negative control sitting
-inside it.
+**What cannot:** three things keep this weak.
+
+1. **The margin is 1.0×** — clearing the floor by essentially nothing. The 2×SD threshold is a
+   convention, not a physical boundary; an effect at exactly 1.0× is not meaningfully separated
+   from one at 0.9×.
+2. **`aleat` is LARGER in magnitude than `epi_var`** (−1.1×/−0.9× vs −1.0×/−1.0×). The
+   deliberately-useless negative control fails only the *stability* flag, not the size test. All
+   four arms span 0.00058 to 0.00075 — a 1.7e-04 range.
+3. **`total` matches `epi_var` exactly.** The epistemic split contributes nothing over plain total
+   entropy, which is the campaign's actual question.
+
+So: adaptive ≳ uniform at [FM] low, and **the choice of acquisition score is irrelevant** — the
+same conclusion as every other level, with the sign flipped from harmful to marginally helpful.
+Compare [CLF] low at −1.1× to −3.3×: the classifier's benefit is up to 3× larger.
 
 **First fully within-cluster FM floor.** All three seeds ran on Amarel `gpu-redhat`, so unlike
-[FM] high (iLab + arrakis) and xhigh this floor is not inflated by cross-cluster nondeterminism.
-That makes it a *tighter* test than the FM floors above it, not a looser one.
+[FM] high (iLab + arrakis) and xhigh this floor is not inflated by cross-cluster nondeterminism —
+a *tighter* test than the FM floors above it, not a looser one.
 
-**Scope.** 5 shared epochs with arms at 10–13; the floor will deepen as `s43` (6 epochs) catches
-up. With three arms already reading *not stable*, further depth is more likely to firm the null
-than reverse it — but this has not had the six-pass treatment [FM] high received.
+**Scope.** 6 shared epochs, arms at 11–15, `s43` at 7 and still climbing. The verdict already
+moved once between passes (pass 1 → pass 2 promoted two arms from null to distinguishable), so it
+is not settled; it has not had the six-pass treatment [FM] high received.
+
+*Superseded: pass 1 was written up as "[CLF]'s one genuine benefit does NOT reproduce." With one
+more shared floor epoch, two arms cross the threshold. The honest statement is a marginal effect
+at the floor, not a null.*
 
 ## 4c. Still not established
 
 - **[FM] med.** Running, not yet scoreable (arms at 2–9 epochs, floor seeds at 2–4).
-- **[FM] det.** Preliminary only — see §4b. Its floor is capped at 4 shared epochs because both
-  `dir00` and `total` were preempted 2026-08-09 and are rebuilding, while five of seven runs at
-  that level are already complete at 19/19.
+- **[FM] det.** Preliminary only. Latest pass (4 shared floor epochs, 2026-08-10):
+  `epi_bald` +3.4x/+6.7x, `epi_var` +2.5x/+2.3x, `total` +3.6x/**+26.5x**, `aleat` +4.9x/+6.5x —
+  all four DISTINGUISHABLE and harmful, sign stable 4/4. **Do not quote these yet.** The floor is
+  capped at 4 shared epochs because `dir00` was preempted 2026-08-09 and sits at 5 while five of
+  seven runs at that level are complete at 19/19. `total`'s +3.6x -> +26.5x is a 7x swing between
+  adjacent epochs, i.e. exactly the oscillation §5 warns about, and [CLF] high showed three
+  "harmful" arms at shallow depth collapse to one at full depth.
 - **`epi_var` vs `epi_bald`.** On the classifier both are exact (members enumerated, K = None), so
   the comparison there is uninformative about the estimator question. Only FM at K = 20 tests it —
   and FM is now null at low, high and xhigh, with the two estimators indistinguishable at every

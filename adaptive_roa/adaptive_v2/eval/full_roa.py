@@ -662,7 +662,17 @@ def evaluate_full_roa_fast(
     hook = resolve_system_hook(system)
     effective_rule = decision_rule or hook.decision_rule
 
-    X_all, end_states_all, y_all = load_eval_states(eval_states_file, max_rows=max_eval_rows)
+    # state_dim disambiguates the file layout: without it a 5-column file is read
+    # as "2 start + 2 end + label" even when it is "4 state + p_success", which
+    # silently truncated stochastic cartpole to 2-D. See load_eval_states.
+    # getattr, not system.state_dim: `system` is duck-typed here (test fakes and
+    # adapters supply only the methods they need), so requiring the attribute
+    # would turn a working caller into an AttributeError. None keeps the legacy
+    # column-count guess, which is correct for every 2-D system.
+    X_all, end_states_all, y_all = load_eval_states(
+        eval_states_file, max_rows=max_eval_rows,
+        state_dim=getattr(system, "state_dim", None),
+    )
     n_total = len(y_all)
     n_success_true = int(np.sum(y_all == 1))
     n_failure_true = int(np.sum(y_all == -1))
@@ -1147,7 +1157,9 @@ def evaluate_full_roa_classifier(
         if effective_rule is None:
             effective_rule = hook.decision_rule
 
-    X_all, _end_states_all, y_all = load_eval_states(eval_states_file)
+    X_all, _end_states_all, y_all = load_eval_states(
+        eval_states_file, state_dim=getattr(system, "state_dim", None)
+    )
     n_total = len(y_all)
     n_success_true = int(np.sum(y_all == 1))
     n_failure_true = int(np.sum(y_all == -1))

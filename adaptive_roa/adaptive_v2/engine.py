@@ -303,7 +303,9 @@ class AdaptiveEngine:
             cal_file = self.cfg.data_source.get("cal_set_file", None)
             if run_eval and cal_file:
                 X_cal_eval, _, y_cal_eval = load_eval_states(
-                    cal_file, max_rows=self.evaluator.max_eval_rows
+                    cal_file,
+                    max_rows=self.evaluator.max_eval_rows,
+                    state_dim=getattr(self.system, "state_dim", None),
                 )
                 q_hat_eval = self.calibration_backend.calibrate_eval(
                     X_cal_eval, y_cal_eval, threshold_state

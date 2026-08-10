@@ -64,6 +64,52 @@ exist is safe to compare across arms, and never indexes ``df[column]`` at
 all if it isn't in ``NON_COMPARABLE_COLUMNS``. So that presence check is
 this module's own responsibility, not something Task 4 already covers.
 
+Never pools across systems (C2). ``build_report`` refuses to mix TIERS
+outright; systems are handled differently, and deliberately: a tier carries
+a different CLAIM at a different budget, so two tiers are not rows of one
+table at all, whereas two systems are the same claim measured on two
+problems -- they belong in one document, just never in one row. So this
+module emits ONE TABLE PER SYSTEM rather than requiring a caller to invoke
+it once per system: a cross-system comparison IS the benchmark's
+deliverable, and a shipped command that cannot produce it without four
+separate invocations invites exactly the pooling this avoids. Before the
+split, ``df.pivot_table(index="arm")`` averaged pendulum's 0.95 with
+quadrotor3d's 0.55 into a single 0.802 per arm, and no guard fired --
+``assert_matched_budget`` is deliberately scoped BY system, so a
+multi-system frame sails through it. ``--system`` on the CLI additionally
+narrows to one system when that is what a caller wants.
+
+Sectioning alone is not sufficient, though, because the arms in different
+sections can be different arms (C3): the routine state of a partially
+launched ~450-run campaign is that one arm has finished on pendulum only
+while its rival has finished on pendulum AND quadrotor3d, and their means
+are then taken over different populations. ``assert_matched_coverage``
+(guards.py) refuses that here, naming what is missing;
+``--require-complete`` does not catch it, because every run present really
+is complete and the missing ones simply contribute no rows.
+
+Acquisition levels are DERIVED from the frame, never hardcoded (I1). An
+earlier version named ``ranked`` and ``random`` literally, so a frame
+carrying a third level had those rows aggregated, passed through every
+guard, and then vanished from the output with no mention -- and once the
+manifest was corrected to name the real control group (``direct``, not
+``random``), the control column rendered as ``nan`` while the control data
+it had actually collected was discarded. This module refuses loudly when a
+metric COLUMN is absent (``_require_metric_column``); an acquisition level
+gets the same standard, which here means rendering every level present
+rather than raising, since a level nobody asked about is still data.
+
+The epoch reduction is explicit, selectable, and stated in the output (I2).
+``collect_runs`` emits one row per (run_id, EPOCH) and the pivot's
+``aggfunc="mean"`` used to average epoch 0 -- before adaptive acquisition
+has done anything, where ranked and random are near-identical by
+construction -- with the final epoch. The dilution is systematic and biases
+the benchmark's headline claim toward "adaptive doesn't help" (measured on
+synthetic runs: +0.100 at the final epoch became +0.090 pooled over 0..9),
+and the header said only "Downstream task (accuracy)". The default is now
+the final epoch of each run, and whichever selection is in force is printed
+above the table.
+
 Mixed fidelity: a fidelity dict routinely mixes ``available=True`` arms with
 ``available=False`` ones withheld for non-convergence -- this is the
 EXPECTED shape of every real call against the ``hmc_reg`` reference (see
@@ -81,9 +127,14 @@ import pandas as pd
 
 from .aggregate import PROVENANCE_COLUMNS
 from .fidelity import FidelityResult
-from .guards import assert_comparable, assert_distinct_seeds, assert_matched_budget
+from .guards import (
+    assert_comparable,
+    assert_distinct_seeds,
+    assert_matched_budget,
+    assert_matched_coverage,
+)
 
-__all__ = ["METRIC", "build_report"]
+__all__ = ["METRIC", "EPOCH_SELECTIONS", "build_report"]
 
 # Default headline metric. Matches the brief's own constant name/value so its
 # hand-built fixtures (a bare "accuracy" column) work unmodified -- see the
@@ -91,6 +142,19 @@ __all__ = ["METRIC", "build_report"]
 # default against a real aggregated frame, and why callers there must pass
 # `metric=` explicitly (e.g. "lambda_delta.accuracy").
 METRIC = "accuracy"
+
+# The adaptive arm of the paired comparison, and the acquisition levels that
+# can serve as its control. `direct` is the group name (acquisition/direct.yaml,
+# DirectAcquisitionStrategy -- uniform sampling, no ranking signal) and is what
+# a real frame carries, because the engine writes `sampling_mode: direct` into
+# the artifact. `random` is kept because it is the word the literature and
+# every hand-built fixture use, and dropping it would silently stop computing
+# the delta on frames that say "random".
+ADAPTIVE_LEVEL = "ranked"
+CONTROL_LEVELS = ("direct", "random")
+
+# Named epoch reductions. Anything else must be an int (that epoch alone).
+EPOCH_SELECTIONS = ("final", "all")
 
 
 def _require_metric_column(df: pd.DataFrame, metric: str) -> None:
@@ -118,6 +182,140 @@ def _require_metric_column(df: pd.DataFrame, metric: str) -> None:
     )
 
 
+def _require_report_columns(df: pd.DataFrame, columns) -> None:
+    """Refuse a missing identity column with a diagnosis, not a bare KeyError.
+
+    ``df["tier"]`` on a frame without one used to raise ``KeyError: 'tier'``
+    from inside this module -- the one thing ``_require_metric_column``
+    exists to stop happening for metrics.
+    """
+    missing = [c for c in columns if c not in df.columns]
+    if missing:
+        raise ValueError(
+            f"frame is missing required column(s) {missing}. build_report "
+            f"needs them to scope the table it prints (tier heading, one "
+            f"section per system, one column per acquisition level); it will "
+            f"not guess what an absent one would have meant. Columns "
+            f"present: {sorted(df.columns)}"
+        )
+
+
+def _select_epochs(df: pd.DataFrame, epochs) -> tuple[pd.DataFrame, str]:
+    """Reduce over epochs explicitly, and say which epochs survived.
+
+    ``collect_runs`` emits one row per (run_id, epoch). Averaging all of
+    them -- what ``pivot_table(aggfunc="mean")`` does on its own -- pools
+    epoch 0, before adaptive acquisition has selected a single point, with
+    the final epoch, and reports the result under a header that names
+    neither. The returned description goes into the table's own heading.
+    """
+    if "epoch" not in df.columns:
+        return df, ("no `epoch` column in this frame, so no epoch reduction "
+                    "was applied: every row contributes exactly once")
+
+    if epochs == "all":
+        present = sorted(df["epoch"].dropna().unique().tolist())
+        return df, (f"ALL epochs {present} pooled by mean -- including "
+                    f"epoch 0, before adaptive acquisition has done anything, "
+                    f"which dilutes the ranked-vs-control delta toward zero")
+
+    if epochs == "final":
+        # Per RUN, not per frame: runs legitimately end at different epochs
+        # (preemption, a shorter budget), and `df["epoch"].max()` would drop
+        # every run that stopped earlier instead of taking its last epoch.
+        key = ["run_id"] if "run_id" in df.columns else [
+            c for c in ("arm", "system", "tier", "acquisition", "seed")
+            if c in df.columns
+        ]
+        if not key:
+            raise ValueError(
+                "cannot select the final epoch: this frame has neither a "
+                "`run_id` column nor any of arm/system/tier/acquisition/seed "
+                "to identify a run by, so there is no way to tell which rows "
+                "belong to the same run. Pass epochs='all' if pooling every "
+                "row is genuinely what you want."
+            )
+        last = df.groupby(key, dropna=False)["epoch"].transform("max")
+        selected = df[df["epoch"] == last]
+        present = sorted(selected["epoch"].dropna().unique().tolist())
+        return selected, (f"FINAL epoch of each run (grouped by {key}); "
+                          f"epochs contributing: {present}")
+
+    if isinstance(epochs, bool) or not isinstance(epochs, int):
+        raise ValueError(
+            f"epochs={epochs!r} is not a valid epoch selection; expected one "
+            f"of {EPOCH_SELECTIONS} or an integer epoch number."
+        )
+    selected = df[df["epoch"] == epochs]
+    if selected.empty:
+        raise ValueError(
+            f"epochs={epochs} selects no rows; epochs present in this frame: "
+            f"{sorted(df['epoch'].dropna().unique().tolist())}"
+        )
+    return selected, f"epoch {epochs} only"
+
+
+def _resolve_control(levels: list, control: str | None) -> str | None:
+    """Which acquisition level the paired delta is taken against, or None."""
+    if control is not None:
+        if control not in levels:
+            raise ValueError(
+                f"control={control!r} is not an acquisition level in this "
+                f"frame. Levels present: {levels}. Refusing to report a "
+                f"delta against a control that was never collected."
+            )
+        return control
+    candidates = [c for c in CONTROL_LEVELS if c in levels]
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _coverage_lines(df: pd.DataFrame) -> list[str]:
+    """Say when a run lost epochs, instead of quietly averaging over fewer."""
+    if not {"n_epochs", "n_epochs_collected"}.issubset(df.columns):
+        return []
+    known = df.dropna(subset=["n_epochs", "n_epochs_collected"])
+    short = known[known["n_epochs_collected"] < known["n_epochs"]]
+    if short.empty:
+        return ["Every run contributed its full configured number of epochs.",
+                ""]
+    detail = sorted(
+        {(str(r), int(c), int(n)) for r, c, n in zip(
+            short["run_id"] if "run_id" in short.columns else short.index,
+            short["n_epochs_collected"], short["n_epochs"])}
+    )
+    return [
+        f"**{len(detail)} run(s) contributed fewer epochs than configured** "
+        f"(corrupt or eval-less epochs are skipped at aggregation, so the "
+        f"mean below is over a smaller population for these runs): "
+        + ", ".join(f"`{r}` {c}/{n}" for r, c, n in detail),
+        "",
+    ]
+
+
+def _fmt(value) -> str:
+    return "n/a" if pd.isna(value) else f"{value:.3f}"
+
+
+def _table_lines(section: pd.DataFrame, metric: str, levels: list,
+                 control: str | None, heading: str) -> list[str]:
+    pivot = section.pivot_table(index="arm", columns="acquisition",
+                                values=metric, aggfunc="mean")
+    header = ["arm", *[str(l) for l in levels]]
+    if control is not None and ADAPTIVE_LEVEL in levels:
+        header.append(f"delta ({ADAPTIVE_LEVEL} − {control})")
+    lines = [heading, "",
+             "| " + " | ".join(header) + " |",
+             "|" + "---|" * len(header)]
+    for arm, row in pivot.iterrows():
+        cells = [str(arm)] + [_fmt(row.get(level, float("nan"))) for level in levels]
+        if control is not None and ADAPTIVE_LEVEL in levels:
+            delta = row.get(ADAPTIVE_LEVEL, float("nan")) - row.get(control, float("nan"))
+            cells.append("n/a" if pd.isna(delta) else f"{delta:+.3f}")
+        lines.append("| " + " | ".join(cells) + " |")
+    lines.append("")
+    return lines
+
+
 def _fidelity_lines(fidelity: dict) -> list[str]:
     lines = ["## Posterior fidelity vs the HMC reference", "",
              "| arm | agreement | total variation |", "|---|---|---|"]
@@ -141,7 +339,28 @@ def _fidelity_lines(fidelity: dict) -> list[str]:
 
 
 def build_report(df: pd.DataFrame, fidelity: dict | None = None,
-                 metric: str = METRIC) -> str:
+                 metric: str = METRIC, *, epochs="final",
+                 control: str | None = None) -> str:
+    """Render the tier's tables: one per system, never pooled across them.
+
+    Args:
+        df: aggregated frame (``aggregate.collect_runs``, or a fixture
+            carrying at least ``arm``, ``tier``, ``acquisition`` and the
+            metric column).
+        fidelity: optional ``{label: FidelityResult}``, rendered verbatim --
+            a withheld result stays visibly withheld.
+        metric: the headline column. Real frames use dotted names
+            (``lambda_delta.accuracy``); see the module docstring.
+        epochs: ``"final"`` (default -- each run at its own last epoch),
+            ``"all"`` (pool the whole learning curve, epoch 0 included), or
+            an int for one epoch. Whichever is in force is printed above
+            every table.
+        control: the acquisition level the paired delta is taken against.
+            Auto-detected from ``CONTROL_LEVELS`` when exactly one of them
+            is present; pass it explicitly to disambiguate, and this
+            function raises if the named level is not in the frame.
+    """
+    _require_report_columns(df, ["arm", "tier", "acquisition"])
     if df["tier"].nunique() > 1:
         raise ValueError(
             f"refusing to place tiers {sorted(df['tier'].unique())} in one "
@@ -152,26 +371,57 @@ def build_report(df: pd.DataFrame, fidelity: dict | None = None,
     _require_metric_column(df, metric)
 
     assert_matched_budget(df)
+    assert_matched_coverage(df)
     assert_comparable(df, metric)
     assert_distinct_seeds(df, metric)
 
+    selected, epoch_note = _select_epochs(df, epochs)
+    # Levels come from the WHOLE frame, not per section, so every table has
+    # the same columns and a level that exists only on one system is still
+    # visible on the others (as `n/a`) rather than silently absent there.
+    levels = sorted(selected["acquisition"].dropna().unique().tolist(), key=str)
+    if not levels:
+        raise ValueError(
+            "no acquisition level survives the epoch selection, so there is "
+            "nothing to compare; `acquisition` is null on every selected row."
+        )
+    resolved_control = _resolve_control(levels, control)
+
     tier = df["tier"].iloc[0]
-    lines = [f"# Benchmark report — {tier} tier", ""]
+    lines = [f"# Benchmark report — {tier} tier", "",
+             f"**Epoch selection:** {epoch_note}.", ""]
+    lines += _coverage_lines(selected)
 
-    pivot = df.pivot_table(index="arm", columns="acquisition",
-                           values=metric, aggfunc="mean")
-    lines += [f"## Downstream task ({metric})", "",
-              "| arm | ranked | random | delta (ranked − random) |",
-              "|---|---|---|---|"]
-    for arm, row in pivot.iterrows():
-        ranked = row.get("ranked", float("nan"))
-        random_ = row.get("random", float("nan"))
-        delta = ranked - random_
-        lines.append(f"| {arm} | {ranked:.3f} | {random_:.3f} | {delta:+.3f} |")
+    if resolved_control is None or ADAPTIVE_LEVEL not in levels:
+        # Not silent: the delta is the headline claim, so its ABSENCE is
+        # stated as prominently as its value would have been.
+        lines += [
+            f"**No paired delta is reported.** It needs the "
+            f"{ADAPTIVE_LEVEL!r} level plus exactly one control level from "
+            f"{list(CONTROL_LEVELS)}; the levels present are {levels}. Every "
+            f"level present is still tabulated below.", "",
+        ]
 
-    lines += ["", "A negative delta means adaptive acquisition LOST to random "
-                  "selection for that arm — a reportable finding, not a bug "
-                  "(cf. Foong et al., NeurIPS 2020).", ""]
+    systems = ([None] if "system" not in df.columns
+               else sorted(selected["system"].dropna().unique().tolist(), key=str))
+    for system in systems:
+        section = selected if system is None else selected[selected["system"] == system]
+        heading = (f"## Downstream task ({metric})" if system is None
+                   else f"## Downstream task ({metric}) — system: {system}")
+        lines += _table_lines(section, metric, levels, resolved_control, heading)
+
+    if "system" in df.columns and len(systems) > 1:
+        lines += [
+            f"Systems are tabulated separately and never averaged together: "
+            f"pooling {systems} into one row per arm produces a number that "
+            f"describes no system -- an easy system's score and a hard "
+            f"system's score collapse into one value that is neither.", "",
+        ]
+
+    lines += [f"A negative delta means adaptive acquisition LOST to the "
+              f"{resolved_control or 'control'} baseline for that arm — a "
+              f"reportable finding, not a bug (cf. Foong et al., NeurIPS "
+              f"2020).", ""]
 
     if fidelity:
         lines += _fidelity_lines(fidelity)

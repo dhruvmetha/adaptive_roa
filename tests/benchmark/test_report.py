@@ -8,10 +8,16 @@ from adaptive_roa.benchmark.report import build_report
 
 
 def _df(**kw):
+    # NOTE: every arm carries the SAME seed here. The brief's original
+    # fixture gave bnn_mfvi seed 42 and gp_reg seed 43, which
+    # assert_matched_coverage (C3) now correctly refuses: two arms whose
+    # means come from different seeds were evaluated on different
+    # populations, which is the same category error as one arm skipping the
+    # hard system, one level down. The fixture was wrong, not the guard.
     base = dict(
         arm=["bnn_mfvi", "bnn_mfvi", "gp_reg", "gp_reg"],
         tier=["production"] * 4, acquisition=["ranked", "random"] * 2,
-        seed=[42, 42, 43, 43], n_epochs=[10] * 4, accuracy=[0.91, 0.86, 0.88, 0.84],
+        seed=[42] * 4, n_epochs=[10] * 4, accuracy=[0.91, 0.86, 0.88, 0.84],
     )
     base.update(kw)
     return pd.DataFrame(base)
@@ -129,6 +135,231 @@ def test_metric_keyword_selects_a_real_dotted_column():
     df["lambda_delta.accuracy"] = [0.91, 0.86, 0.88, 0.84]
     out = build_report(df, metric="lambda_delta.accuracy")
     assert "bnn_mfvi" in out and "0.910" in out
+
+
+# ---------------------------------------------------------------------------
+# C2: never pool across systems. One table per system, never one row.
+# ---------------------------------------------------------------------------
+
+def _multi_system_df(**kw):
+    base = dict(
+        run_id=["r1", "r1", "r2", "r2", "r3", "r3", "r4", "r4"],
+        arm=["mlp"] * 4 + ["gp"] * 4,
+        system=["pendulum", "pendulum", "quadrotor3d", "quadrotor3d"] * 2,
+        tier=["production"] * 8,
+        acquisition=["ranked", "direct"] * 4,
+        seed=[42] * 8, n_epochs=[10] * 8, epoch=[9] * 8,
+        accuracy=[0.95, 0.85, 0.55, 0.50, 0.93, 0.88, 0.60, 0.52],
+    )
+    base.update(kw)
+    return pd.DataFrame(base)
+
+
+def test_systems_get_their_own_table_and_are_never_averaged_together():
+    # pendulum ranked=0.95 and quadrotor3d ranked=0.55 used to be reported as
+    # a single 0.802 per arm, with no guard firing: assert_matched_budget is
+    # scoped BY system, so a multi-system frame passes it happily.
+    out = build_report(_multi_system_df())
+    assert "system: pendulum" in out and "system: quadrotor3d" in out
+    assert "0.950" in out and "0.550" in out
+    assert "0.802" not in out
+
+
+def test_each_system_section_holds_only_that_system_numbers():
+    out = build_report(_multi_system_df())
+    pendulum, quad = out.split("system: quadrotor3d", 1)
+    assert "0.950" in pendulum and "0.950" not in quad
+    assert "0.550" in quad and "0.550" not in pendulum
+
+
+def test_a_single_system_frame_still_renders_one_table():
+    df = _multi_system_df()
+    out = build_report(df[df["system"] == "pendulum"])
+    assert "system: pendulum" in out
+    assert "never averaged together" not in out
+
+
+# ---------------------------------------------------------------------------
+# C3: unequal arm coverage inverts the ranking, and --require-complete cannot
+# see it (every run present IS complete; the missing ones have no rows).
+# ---------------------------------------------------------------------------
+
+def test_report_refuses_arms_that_did_not_run_on_the_same_systems():
+    # gp finished on pendulum only; its mean would "win" against an mlp
+    # averaged over pendulum plus the hard system.
+    df = _multi_system_df()
+    df = df[~((df["arm"] == "gp") & (df["system"] == "quadrotor3d"))]
+    with pytest.raises(ValueError, match="do not cover the same"):
+        build_report(df)
+
+
+def test_report_refuses_arms_that_did_not_run_on_the_same_seeds():
+    df = _df(seed=[42, 42, 43, 43])
+    with pytest.raises(ValueError, match="do not cover the same"):
+        build_report(df)
+
+
+# ---------------------------------------------------------------------------
+# I1: acquisition levels are derived from the frame, never hardcoded.
+# ---------------------------------------------------------------------------
+
+def test_a_third_acquisition_level_is_rendered_not_discarded():
+    # 'entropy' rows used to be aggregated, pass every guard, and then vanish
+    # from the output with no mention at all.
+    df = pd.DataFrame(dict(
+        arm=["mlp"] * 3 + ["gp"] * 3, tier=["production"] * 6,
+        acquisition=["ranked", "direct", "entropy"] * 2,
+        seed=[42] * 6, n_epochs=[10] * 6,
+        accuracy=[0.95, 0.85, 0.90, 0.93, 0.88, 0.91],
+    ))
+    out = build_report(df)
+    assert "entropy" in out
+    assert "0.900" in out and "0.910" in out
+
+
+def test_the_control_column_is_the_real_group_name_not_a_hardcoded_random():
+    # The manifest's control group is `direct`; a hardcoded "random" column
+    # rendered nan while discarding the control data actually collected.
+    out = build_report(_df(acquisition=["ranked", "direct"] * 2))
+    assert "direct" in out
+    assert "nan" not in out.lower()
+    assert "delta (ranked − direct)" in out
+
+
+def test_no_delta_is_reported_and_said_so_when_no_control_level_exists():
+    df = _df(acquisition=["ranked", "entropy"] * 2)
+    out = build_report(df)
+    assert "No paired delta is reported" in out
+    assert "entropy" in out
+
+
+def test_an_ambiguous_control_is_reported_as_no_delta_not_guessed():
+    df = pd.DataFrame(dict(
+        arm=["mlp"] * 3 + ["gp"] * 3, tier=["production"] * 6,
+        acquisition=["ranked", "direct", "random"] * 2,
+        seed=[42] * 6, n_epochs=[10] * 6,
+        accuracy=[0.95, 0.85, 0.84, 0.93, 0.88, 0.87],
+    ))
+    out = build_report(df)
+    assert "No paired delta is reported" in out
+    # ...and both controls are still tabulated.
+    assert "0.850" in out and "0.840" in out
+
+
+def test_an_explicit_control_disambiguates():
+    df = pd.DataFrame(dict(
+        arm=["mlp"] * 3 + ["gp"] * 3, tier=["production"] * 6,
+        acquisition=["ranked", "direct", "random"] * 2,
+        seed=[42] * 6, n_epochs=[10] * 6,
+        accuracy=[0.95, 0.85, 0.84, 0.93, 0.88, 0.87],
+    ))
+    out = build_report(df, control="direct")
+    assert "delta (ranked − direct)" in out
+    assert "+0.100" in out
+
+
+def test_an_explicit_control_that_was_never_collected_is_refused():
+    with pytest.raises(ValueError, match="never collected|not an acquisition level"):
+        build_report(_df(), control="entropy")
+
+
+# ---------------------------------------------------------------------------
+# I2: the epoch reduction is explicit, selectable, and stated in the output.
+# ---------------------------------------------------------------------------
+
+def _curve_df():
+    # Ranked and the control are near-identical at epoch 0 (adaptive
+    # acquisition has not selected a point yet) and separate by the last
+    # epoch -- the shape that makes a curve-mean dilute the headline delta.
+    rows = []
+    for epoch in range(3):
+        for arm in ("mlp", "gp"):
+            rows.append(dict(run_id=f"{arm}_ranked", arm=arm, tier="production",
+                             system="pendulum", acquisition="ranked", seed=42,
+                             n_epochs=3, epoch=epoch,
+                             accuracy=0.80 + 0.05 * epoch))
+            rows.append(dict(run_id=f"{arm}_direct", arm=arm, tier="production",
+                             system="pendulum", acquisition="direct", seed=42,
+                             n_epochs=3, epoch=epoch,
+                             accuracy=0.80 + 0.01 * epoch))
+    return pd.DataFrame(rows)
+
+
+def test_the_default_report_uses_the_final_epoch_of_each_run():
+    out = build_report(_curve_df())
+    assert "FINAL epoch of each run" in out
+    assert "+0.080" in out          # 0.90 - 0.82, the final-epoch delta
+
+
+def test_pooling_the_whole_curve_is_available_and_labelled_as_such():
+    out = build_report(_curve_df(), epochs="all")
+    assert "ALL epochs" in out
+    assert "epoch 0" in out
+    assert "+0.040" in out          # 0.85 - 0.81, the diluted delta
+    assert "+0.080" not in out
+
+
+def test_a_single_epoch_can_be_selected():
+    out = build_report(_curve_df(), epochs=0)
+    assert "epoch 0 only" in out
+    assert "+0.000" in out
+
+
+def test_the_epoch_selection_is_always_stated_in_the_output():
+    for epochs in ("final", "all", 1):
+        assert "Epoch selection" in build_report(_curve_df(), epochs=epochs)
+
+
+def test_selecting_an_epoch_no_run_reached_is_refused():
+    with pytest.raises(ValueError, match="selects no rows"):
+        build_report(_curve_df(), epochs=99)
+
+
+def test_an_unknown_epoch_selection_is_refused():
+    with pytest.raises(ValueError, match="not a valid epoch selection"):
+        build_report(_curve_df(), epochs="last")
+
+
+def test_the_final_epoch_is_taken_per_run_not_frame_wide():
+    # A preempted run that stopped at epoch 1 must contribute its OWN last
+    # epoch, not be dropped because another run reached epoch 2.
+    df = _curve_df()
+    df = df[~((df["run_id"] == "gp_ranked") & (df["epoch"] == 2))]
+    out = build_report(df)
+    assert "epochs contributing: [1, 2]" in out
+    assert "| gp |" in out
+
+
+def test_a_frame_without_an_epoch_column_says_no_reduction_was_applied():
+    out = build_report(_df())
+    assert "no `epoch` column" in out
+
+
+# ---------------------------------------------------------------------------
+# n_epochs_collected: a run that lost epochs is named, not quietly averaged.
+# ---------------------------------------------------------------------------
+
+def test_a_run_short_of_its_budget_is_named_in_the_report():
+    df = _multi_system_df(n_epochs_collected=[10, 10, 10, 10, 10, 10, 8, 8])
+    out = build_report(df)
+    assert "fewer epochs than configured" in out
+    assert "`r4` 8/10" in out
+
+
+def test_a_campaign_with_no_lost_epochs_says_so():
+    df = _multi_system_df(n_epochs_collected=[10] * 8)
+    out = build_report(df)
+    assert "full configured number of epochs" in out
+
+
+# ---------------------------------------------------------------------------
+# m2: a missing identity column is diagnosed, not a bare KeyError.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("column", ["tier", "acquisition", "arm"])
+def test_a_missing_identity_column_is_refused_with_a_diagnosis(column):
+    with pytest.raises(ValueError, match="missing required column"):
+        build_report(_df().drop(columns=[column]))
 
 
 def test_build_report_does_not_require_full_provenance_columns():

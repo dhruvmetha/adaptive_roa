@@ -1,18 +1,18 @@
 # Ensemble Epistemic Acquisition — current findings
 
-**Status as of 2026-08-10.** This file holds only what is *currently defensible*; `LOG.md` is the
+**Status as of 2026-08-11.** This file holds only what is *currently defensible*; `LOG.md` is the
 chronological record including superseded claims and their corrections.
 
 | half | state |
 |---|---|
 | **[CLF]** | det complete 19/19; **high complete 19/19 on all five arms** (rescored, §1); low/med/xhigh from truncated curves (walltime, see §6) |
-| **[FM]** | **all five levels now scored.** high null (7 passes, floor −52%) · xhigh null (4 passes, floor −39%) · med no verdict (2 passes, shallow) · low marginally helpful — **but the negative control now ranks first** · det unsettled — sign flipped between passes, do not quote |
+| **[FM]** | **all five levels now scored.** high null (7 passes, floor −52%) · xhigh null (4 passes, floor −39%) · med no verdict (2 passes, shallow) · low marginally helpful — **but the negative control now ranks first** · det **the metric decides the winner** — quote nothing from it |
 
-**Headline — the constant across every FM level is that the SCORE does not matter.** With the med
-verdict in, the [FM] sweep is complete: five noise levels, and at every one the four arms are
-numerically interchangeable. The sign of the adaptive-vs-uniform effect varies with noise (null at
-med/high/xhigh, marginally helpful at low, unsettled at det), but the *ordering* never carries
-information.
+**Headline — the constant across every FM level is that the SCORE does not matter.** The [FM]
+sweep is complete: five noise levels, and at every one the four arms are numerically
+interchangeable. The sign of the adaptive-vs-uniform effect varies with noise (null at
+high/xhigh, no verdict at med, marginally helpful at low, field-dependent at det), but the
+*ordering* never carries information.
 
 **As of pass 4 this is no longer a soft statement about overlapping spreads.** At [FM] low, the
 deliberately-useless negative control `aleat` — which acquires on the component that by
@@ -20,16 +20,18 @@ construction *cannot* be reduced by more data — now clears every criterion the
 (DISTINGUISHABLE, sign stable 12/12) and posts the **largest** effect of the four, while the
 flagship estimator `epi_bald` is the only arm failing on stability. The campaign's own decision
 rule, applied at its one positive level, ranks the useless control first and the designed
-estimator last. Whatever adaptive sampling does to flow matching, decomposing entropy into
-aleatoric and epistemic parts does not change it.
+estimator last. At [FM] det the same thing happens by an independent route: on AUC, `aleat` is
+the only arm clearing the floor with a stable sign while `epi_var` carries the wrong sign (§4d).
+Whatever adaptive sampling does to flow matching, decomposing entropy into aleatoric and
+epistemic parts does not change it.
 
 *Corrected 2026-08-10: an earlier version of this header read "[FM] is null at every level scored
 so far, including low." That was true of the 5-epoch-floor pass; with 6 shared floor epochs
-`epi_var` and `total` cross the threshold at low. See §4b.*
+`epi_var` and `total` cross the threshold at low. See §4c.*
 
 *Corrected 2026-08-10: the header previously read "**det harmful** (+2.3x to +26.5x, shallow
 floor)". At a 9-epoch floor the det arms are mostly *helpful* and only one survives the stability
-flag. The level is unsettled, not harmful. See §4c.*
+flag. The level is unsettled, not harmful. See §4d.*
 
 Standard of evidence used throughout: a gap counts only if it exceeds **2×SD of three
 genuinely-distinct seeds** of the same configuration (the run-to-run floor) at **two consecutive
@@ -220,7 +222,7 @@ This is the campaign's headline in one statistic, and it is stronger than the pa
 because it needs no threshold convention: it compares two measured spreads directly.
 
 **Two caveats on individual cells.** `[FM] med`'s 1.85 rests on the campaign's shallowest floor
-(3–4 shared epochs, §4c) and should not be read as evidence that acquisition matters there. And
+(3–4 shared epochs, §4d) and should not be read as evidence that acquisition matters there. And
 `[CLF] low`'s per-epoch ratios contain a single 2700× outlier at ep10, from `total`'s +896×
 blowup (§1); the median is used precisely because it is robust to that, but the mean would be
 meaningless.
@@ -318,7 +320,7 @@ fact: it predicted that a calibrated predictor would show no such harm, and that
 
 ## 4. Flow matching — [FM] high is the campaign's best-powered null
 
-### [FM] high noise: no arm is distinguishable from the non-adaptive control (7 passes, floor halved)
+### 4a. [FM] high noise: no arm is distinguishable from the non-adaptive control (7 passes, floor halved)
 
 Post-restart runs (EarlyStopping `patience=30`), pooled floor from `dir00` / `dir00_s43` /
 `dir00_s44`. **Scored seven times between 2026-08-06 and 2026-08-10 as the floor deepened.** The
@@ -370,7 +372,7 @@ conservative for claiming significance — but it means the FM floor is not dire
 magnitude to the classifier floors, which were measured within-cluster. [FM] low will be the first
 fully within-cluster FM floor.
 
-### [FM] xhigh: also null — and this is the level where [CLF] broke
+### 4b. [FM] xhigh: also null — and this is the level where [CLF] broke
 
 Floor from `dir00` / `dir00_s43` / `dir00_s44`. **Scored four times; the floor deepened from 2
 shared epochs to 8 and the window walked from ep7-8 to ep11-12 without moving the verdict:**
@@ -405,7 +407,7 @@ general fact about entropy acquisition.
 was on 2026-08-07. Four consistent passes against a floor that tightened from 0.00139 to 0.00085
 (−39%). This is the campaign's second-best-powered null after [FM] high.
 
-### [FM] low: a marginal helpful effect — far weaker than [CLF]'s, and score-blind
+### 4c. [FM] low: adaptive edges uniform — but the negative control ranks first
 
 **This is the level the FM extension was launched to test.** [CLF] low is the only place in the
 whole campaign where adaptive sampling genuinely beat uniform (−1.1× to −3.3×, sign stable for 3
@@ -472,9 +474,9 @@ That is the signature of a threshold being crossed by noise, not of an effect be
 more shared floor epoch, two arms cross the threshold. The honest statement is a marginal effect
 at the floor, not a null.*
 
-## 4c. Weakly established or still open
+## 4d. Weakly established or still open
 
-### [FM] med: first verdict — null on all four arms (shallow)
+### [FM] med: two passes, no verdict either way (shallowest floor in the campaign)
 
 Scored twice. Pass 1 (2026-08-10) read four clean nulls at a 3-epoch floor; pass 2 deepened the
 floor to 4 epochs and moved every arm to "not stable" — no verdict either way:

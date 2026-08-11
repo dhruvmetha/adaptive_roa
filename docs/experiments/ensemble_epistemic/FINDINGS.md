@@ -498,3 +498,24 @@ This is §5's "single-epoch reads lie" caution landing on a live claim, and it i
   (versus ~2.5h on iLab) against a 3-day limit, which is Amarel's maximum — so it cannot reach 19.
   The FM *arms* themselves are safe (iLab, 7-day limit, ~48h needed). Consequence: FM comparisons
   are floor-backed up to ~epoch 15 and unbacked beyond it. Any FM claim at epochs 16–19 must say so.
+
+- **No Amarel FM run reaches 19 epochs in a single job — every one needs 2–3 sequential jobs.**
+  Measured 2026-08-11 from `artifacts_v2.json` write times (reliable: written once at epoch end,
+  unlike `epoch_000`'s mtime, which keeps updating while the epoch is live):
+
+  | level | h/epoch | 19 epochs needs | 72h jobs |
+  |---|---|---|---|
+  | low | 4.88 | 93 h | 2 |
+  | det | 6.31 | 120 h | 2 |
+  | med | 8.3–9.8 | 158–186 h | 3 |
+  | xhigh | 9.87 | 188 h | 3 |
+
+  Amarel's walltime maximum is 72h, so a TIMEOUT at 3-00:00 is the *expected* end-state for these
+  runs, not a failure — `fm_med_dir00` and `fm_med_epi_var` both hit it at 7/19 and 8/19 with
+  memory at 60% and no preemption. Each resume additionally pays the queue wait, currently 8h+
+  against 262 pending jobs on `gpu-redhat`.
+
+  **Consequence for the two unsettled levels.** med and xhigh are the *slowest* levels (~10h/epoch)
+  and are the two whose floors are shallowest. Reaching a 19-epoch med floor would take ~8 days of
+  compute plus two queue waits. Plan for med and xhigh to stay floor-capped in the low teens, and
+  do not treat their shallow floors as a temporary state that more waiting will fix.

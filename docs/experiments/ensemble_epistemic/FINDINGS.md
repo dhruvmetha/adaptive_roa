@@ -583,15 +583,33 @@ This is §5's "single-epoch reads lie" caution generalised: on this level, *metr
   are floor-backed up to ~epoch 15 and unbacked beyond it. Any FM claim at epochs 16–19 must say so.
 
 - **No Amarel FM run reaches 19 epochs in a single job — every one needs 2–3 sequential jobs.**
-  Measured 2026-08-11 from `artifacts_v2.json` write times (reliable: written once at epoch end,
-  unlike `epoch_000`'s mtime, which keeps updating while the epoch is live):
 
-  | level | h/epoch | 19 epochs needs | 72h jobs |
-  |---|---|---|---|
-  | low | 4.88 | 93 h | 2 |
-  | det | 6.31 | 120 h | 2 |
-  | med | 8.3–9.8 | 158–186 h | 3 |
-  | xhigh | 9.87 | 188 h | 3 |
+  **Exact rates** (2026-08-11), from the five `en_fm_*` jobs that ran a full 72h continuously
+  from epoch 0 before TIMEOUT. Elapsed ÷ epochs completed, so no dead time is included:
+
+  | run | epochs in 72h | h/epoch | 19 epochs needs | 72h jobs |
+  |---|---|---|---|---|
+  | `fm_low_total` | 14 | 5.14 | 98 h | 2 |
+  | `fm_low_dir00_s44` | 14 | 5.14 | 98 h | 2 |
+  | `fm_med_epi_var` | 8 | 9.00 | 171 h | 3 |
+  | `fm_med_dir00` | 7 | 10.29 | 196 h | 3 |
+  | `fm_med_dir00_s44` | 7 | 10.29 | 196 h | 3 |
+
+  det (~6.3) and xhigh (~9.9) are estimates only — every run at those levels was resumed, so no
+  clean 72h window exists to measure them from.
+
+  **Measurement caveat, learned by getting it wrong.** An earlier version of this table came from
+  `(last artifact mtime − first) / (n−1)` across a whole run directory. That is wrong in two
+  directions at once: it **excludes** the epoch-0 training time before the first artifact
+  (understating clean runs — 4.88 vs the true 5.14 for `fm_low_total`), and it **includes** the
+  TIMEOUT→queue→resume dead time for any run that was resumed (overstating those — it reported a
+  12.5h "epoch" for `fm_med_epi_var` where the job itself ran 4.9h). Per-epoch cost is only
+  measurable inside a single continuous job.
+
+  Per-epoch time also varies widely *between runs at the same level*: med spans 9.0–10.3 h/epoch
+  on clean runs, and recent per-epoch gaps across med runs range from 2.8h to 20h once node speed,
+  contention and early-stopping variation are included. Any claim that a configuration change
+  made runs faster needs many runs, not one.
 
   Amarel's walltime maximum is 72h, so a TIMEOUT at 3-00:00 is the *expected* end-state for these
   runs, not a failure — `fm_med_dir00` and `fm_med_epi_var` both hit it at 7/19 and 8/19 with

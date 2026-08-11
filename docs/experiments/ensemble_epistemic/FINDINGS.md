@@ -316,8 +316,8 @@ wrong, so no score can select correctly.
 
 **Consequence:** "BALD is worse than non-adaptive at high" is true *as measured on this
 classifier*, and is **not** evidence about BALD as a method. The flow-matching arms are the fair
-test — and they have now run it. §4 reports [FM] high null across six passes on a floor pooled
-over 13 epochs, and §4b reports [FM] xhigh null where this classifier breaks worst. The
+test — and they have now run it. §4 reports [FM] high null across seven passes on a floor pooled
+over 15 epochs, and §4b reports [FM] xhigh null where this classifier breaks worst. The
 miscalibration hypothesis in this section is therefore not just an explanation offered after the
 fact: it predicted that a calibrated predictor would show no such harm, and that prediction held.
 

@@ -10,9 +10,10 @@ chronological record including superseded claims and their corrections.
 
 **Headline — the constant across every FM level is that the SCORE does not matter.** The [FM]
 sweep is complete: five noise levels, and at every one the four arms are numerically
-interchangeable. The sign of the adaptive-vs-uniform effect varies with noise (null at
-high/xhigh, no verdict at med, marginally helpful at low, field-dependent at det), but the
-*ordering* never carries information.
+interchangeable. Nothing survives at any level: null at high/xhigh, no verdict at med or low,
+field-dependent at det. Where a persistent offset does appear (low, high), all four arms sit on
+the same side of the control and track each other to within 5e-05 — a property of `dir00`
+(`d2_ratio=0`, structurally unlike every arm), not of the scores.
 
 **The negative control is never separable from the real arms, and twice it ranks first.** At
 [FM] det on AUC, `aleat` is the only arm clearing the floor with a stable sign while `epi_var`
@@ -28,9 +29,10 @@ the effect sizes never left −0.9× to −1.6×. Pass-to-pass promotions are no
 they are a threshold being crossed by noise. Quote effect sizes and floor depth, never a bare
 "DISTINGUISHABLE".
 
-*Corrected 2026-08-10: an earlier version of this header read "[FM] is null at every level scored
-so far, including low." That was true of the 5-epoch-floor pass; with 6 shared floor epochs
-`epi_var` and `total` cross the threshold at low. See §4c.*
+*Correction history for [FM] low, kept because the churn is itself the finding: the header read
+"null at every level including low" (5-epoch floor) → "epi_var and total cross the threshold"
+(6-epoch) → "the negative control ranks first" (7-epoch) → back to no verdict (9-epoch, current).
+Five passes, four different headline claims, and the effect sizes never moved. See §4c.*
 
 *Corrected 2026-08-10: the header previously read "**det harmful** (+2.3x to +26.5x, shallow
 floor)". At a 9-epoch floor the det arms are mostly *helpful* and only one survives the stability

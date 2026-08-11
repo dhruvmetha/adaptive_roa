@@ -499,28 +499,45 @@ the four arms again move together: every one roughly doubles in magnitude betwee
 window are tracking the epoch, not the acquisition score. `dir00_s43` at 5 is the binding
 constraint on the floor.
 
-### [FM] det: preliminary, and the sign has now flipped once
+### [FM] det: the metric decides which arm wins — do not quote any ordering
 
-Latest pass (label metric, 9 shared floor epochs, 2026-08-10) — this is a **different and much
-larger floor** than the 4-epoch pass quoted on 2026-08-09, and it reverses the direction:
+Scored three times. Six of the seven det runs are complete at 19/19; only `dir00` lags (11/19),
+which caps the floor at 10 shared epochs. Rescored 2026-08-11 on **all three available label
+fields at the same depth**, and they do not agree with each other:
 
 ```
-fm det (brier, label metric): pooled 2*SD = 0.02615 over 9 epochs
-   epi_bald   ep8: +0.10120 (+3.9x)  ep9: -0.06345 (-2.4x)   -> not stable
-   epi_var    ep8: -0.03225 (-1.2x)  ep9: -0.08468 (-3.2x)   -> DISTINGUISHABLE [!] sign flips
-   total      ep8: -0.02370 (-0.9x)  ep9: -0.07649 (-2.9x)   -> not stable
-   aleat      ep8: -0.00041 (-0.0x)  ep9: -0.04360 (-1.7x)   -> not stable
+fm det, 10 shared floor epochs, window ep9-10 (2026-08-11)
+
+  brier      floor 0.02567     auc        floor 0.00709     log_score  floor 0.06381
+  epi_bald   -2.5x/-1.7x  [!]  epi_bald   -1.5x/-0.0x  ns   epi_bald   -2.3x/-1.7x  [!]
+  epi_var    -3.3x/-2.2x  [!]  epi_var    +0.5x/+0.7x null  epi_var    -3.6x/-2.4x  [!]
+  total      -3.0x/-1.8x  [!]  total      -0.8x/-0.1x null  total      -3.0x/-1.6x  [!]
+  aleat      -1.7x/-0.5x  ns   aleat      -3.7x/-3.4x  OK   aleat      -0.9x/+0.5x null
+
+  [!] = DISTINGUISHABLE but sign flips across the 10 epochs;  ns = not stable;
+  OK = DISTINGUISHABLE, sign stable 10/10
 ```
 
-**Still do not quote [FM] det.** The 2026-08-09 pass read "all four DISTINGUISHABLE and harmful,
-sign stable 4/4" at +2.3x to +26.5x; one pass later the same arms are mostly *helpful* and only
-one survives the stability flag. `epi_bald` alone swings +3.9x → −2.4x between adjacent epochs.
-The floor here (0.02615) is **26× larger** than any stochastic-level floor, because det is scored
-on the label metric rather than post-recal — so effect sizes on this level are not comparable to
-the four stochastic levels above.
+**The ordering inverts with the metric.** On Brier and log score the three "real" arms lead and
+`aleat` trails. On AUC the picture reverses: `aleat` is the *only* arm that clears the floor with
+a stable sign (−3.4×), while `epi_var` carries the **wrong sign** (+0.7×, i.e. worse than the
+control). AUC is rank-based and monotone-invariant; Brier and log score additionally charge for
+calibration. So the arms differ from each other in *calibration*, while on pure ranking quality
+the useless control comes out ahead.
 
-This is §5's "single-epoch reads lie" caution landing on a live claim, and it is the reason the
-2026-08-09 numbers were fenced rather than written up.
+**Do not quote [FM] det — not the sign, not the ordering, not the magnitude.** Three passes have
+now given three different stories: 2026-08-09 read "all four DISTINGUISHABLE and harmful, sign
+stable 4/4" at +2.3× to +26.5×; 2026-08-10 read mostly *helpful* with one survivor; 2026-08-11
+gives an ordering that depends on which label field is chosen. Every arm that clears the floor on
+Brier or log score also fails the sign-stability check on the same data.
+
+Two structural reasons this level is hard, both worth keeping: the floor (0.02567) is **~27×
+larger** than any stochastic-level floor because det is scored on the label metric rather than
+post-recal, so effect sizes here are not comparable to the four stochastic levels; and `dir00` at
+11/19 against arms at 19/19 means the comparison window cannot reach the depth where the other
+levels settled.
+
+This is §5's "single-epoch reads lie" caution generalised: on this level, *metric* reads lie too.
 
 ### Still open
 

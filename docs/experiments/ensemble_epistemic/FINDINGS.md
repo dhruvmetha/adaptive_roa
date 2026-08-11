@@ -195,6 +195,38 @@ shared by all five arms.)*
 
 ---
 
+## 1b. One number for the whole campaign: does the score matter more than the seed?
+
+Every pairwise verdict above asks "does arm X beat the control by more than 2×SD of three seeds?"
+That framing hides a simpler question: **is the spread among the four acquisition arms even as
+large as the spread among three seeds of one config?** If not, choosing an acquisition score
+matters less than re-running with a different random seed.
+
+Computed on `recal` (UNC−RES), per epoch, as `SD(epi_bald, epi_var, total, aleat) / SD(dir00,
+dir00_s43, dir00_s44)`, then median over all shared epochs with epoch 0 excluded:
+
+| predictor | low | med | high | xhigh |
+|---|---|---|---|---|
+| **[FM]** | 0.72 | 1.85 | 0.68 | 1.31 |
+| **[CLF]** | 0.63 | 0.51 | **6.89** | **84.61** |
+
+**Acquisition genuinely changes the outcome in exactly two cells of eight** — the classifier at
+high and xhigh, at 6.9× and 84.6× the seed spread. Those are the same two cells where §1 finds
+`total` and `aleat` harmful and §3 diagnoses miscalibration as the cause. **Everywhere else — all
+five [FM] levels and [CLF] at low/med — the ratio sits between 0.5 and 1.9**, i.e. swapping the
+acquisition score perturbs the result about as much as, or less than, changing the seed.
+
+This is the campaign's headline in one statistic, and it is stronger than the pairwise verdicts
+because it needs no threshold convention: it compares two measured spreads directly.
+
+**Two caveats on individual cells.** `[FM] med`'s 1.85 rests on the campaign's shallowest floor
+(3–4 shared epochs, §4c) and should not be read as evidence that acquisition matters there. And
+`[CLF] low`'s per-epoch ratios contain a single 2700× outlier at ep10, from `total`'s +896×
+blowup (§1); the median is used precisely because it is robust to that, but the mean would be
+meaningless.
+
+---
+
 ## 2. Mechanism (measured, not inferred)
 
 Each epoch records the pool indices it acquired, so the **true** success probability of every

@@ -225,6 +225,31 @@ because it needs no threshold convention: it compares two measured spreads direc
 blowup (§1); the median is used precisely because it is robust to that, but the mean would be
 meaningless.
 
+### The ratio is not an artefact of the metric
+
+Recomputed on five metrics spanning rank-based, calibration-charging, and decomposition-based
+families (2026-08-11):
+
+| metric | fm/low | fm/med | fm/high | fm/xhigh | clf/low | clf/med | clf/high | clf/xhigh |
+|---|---|---|---|---|---|---|---|---|
+| recal (UNC−RES) | 0.72 | 1.85 | 0.68 | 1.31 | 0.63 | 0.51 | **6.89** | **84.61** |
+| sAUROC | 0.45 | 0.96 | 1.08 | 2.31 | 0.78 | 0.46 | **8.41** | **61.11** |
+| brier_debiased | 0.39 | 0.81 | 0.47 | 0.74 | 1.35 | 2.97 | **21.43** | **35.43** |
+| log_score | 0.36 | 1.14 | 0.66 | 1.69 | 1.42 | 2.39 | **18.45** | **43.92** |
+| skill_score | 0.39 | 0.81 | 0.47 | 0.74 | 1.35 | 2.97 | **21.43** | **35.43** |
+
+**The two conclusions that matter are metric-independent.** Every one of the 20 [FM] cells lands
+between 0.36 and 2.31 — no metric makes the acquisition score matter for flow matching. And
+[CLF] high/xhigh are 6.9×–85× on *every* metric — no metric makes the classifier damage go away.
+`recal`, the metric the verdicts use, is neither the most nor the least favourable choice.
+
+**Where it IS metric-dependent: [CLF] low/med.** Those two cells read 0.46–0.78 on the rank-based
+and decomposition metrics but 1.35–2.97 on Brier, log score and skill score. Brier and log score
+charge for calibration, which is exactly the axis §3 identifies as the classifier's weak point,
+so the arms separate more there. The honest statement for [CLF] low/med is therefore "comparable
+to seed noise on rank-based metrics, up to ~3× it on calibration-charging ones" — not the flat
+"below 1" that `recal` alone suggests.
+
 ---
 
 ## 2. Mechanism (measured, not inferred)

@@ -6,7 +6,7 @@ chronological record including superseded claims and their corrections.
 | half | state |
 |---|---|
 | **[CLF]** | det complete 19/19; **high complete 19/19 on all five arms** (rescored, §1); low/med/xhigh from truncated curves (walltime, see §6) |
-| **[FM]** | **all five levels now scored.** high null (7 passes, floor −52%) · xhigh null (4 passes, floor −39%) · med **null** (3 passes, floor −28%, verdict stable) · low **no verdict** (5 passes; the set of "distinguishable" arms churns none→two→three→none) · det **the metric decides the winner** — quote nothing from it |
+| **[FM]** | **all five levels now scored.** high null (7 passes, floor −52%) · xhigh null (5 passes, floor −45%, verdict stable) · med **null** (3 passes, floor −28%, verdict stable) · low **no verdict** (5 passes; the set of "distinguishable" arms churns none→two→three→none) · det **the metric decides the winner** — quote nothing from it |
 
 **Headline — the constant across every FM level is that the SCORE does not matter.** The [FM]
 sweep is complete: five noise levels, and at every one the four arms are numerically
@@ -379,20 +379,27 @@ fully within-cluster FM floor.
 
 ### 4b. [FM] xhigh: also null — and this is the level where [CLF] broke
 
-Floor from `dir00` / `dir00_s43` / `dir00_s44`. **Scored four times; the floor deepened from 2
-shared epochs to 8 and the window walked from ep7-8 to ep11-12 without moving the verdict:**
+Floor from `dir00` / `dir00_s43` / `dir00_s44`. **Scored five times; the floor deepened from 2
+shared epochs to 11 and the window walked from ep7-8 to ep11-12 without moving the verdict:**
 
 ```
-FINAL (8 shared floor epochs, 2026-08-10):
-fm xhigh: pooled 2*SD = 0.00085 over 8 epochs
+PASS 5 (11 shared floor epochs, 2026-08-11) -- current:
+fm xhigh: pooled 2*SD = 0.00076 over 11 epochs
    epi_bald   ep11: +0.00011 (+0.1x)  ep12: -0.00048 (-0.6x)   -> within noise (null)
    epi_var    ep11: -0.00013 (-0.2x)  ep12: -0.00039 (-0.5x)   -> within noise (null)
-   total      ep11: +0.00103 (+1.2x)  ep12: -0.00050 (-0.6x)   -> not stable
+   total      ep11: +0.00103 (+1.4x)  ep12: -0.00050 (-0.7x)   -> not stable
    aleat      ep11: -0.00007 (-0.1x)  ep12: -0.00040 (-0.5x)   -> within noise (null)
+
+PASS 4 (8 shared epochs, floor 0.00085, same ep11-12 window): identical verdict.
+PASS 1 (2 shared epochs, floor 0.00139, window ep7-8): four nulls.
 ```
 
 `total` is the only arm that ever leaves the band, and it does so in *opposite directions* on
-adjacent epochs (+1.2x then −0.6x) — oscillation, not an effect.
+adjacent epochs (+1.4x then −0.7x) — oscillation, not an effect.
+
+**Like med (§4d), and unlike low (§4c), this verdict survives a deeper floor.** Passes 4 and 5
+score the same window against floors differing by 11% and return the same three-null-plus-one-
+oscillating result. `dir00` is complete at 19/19, so the floor is anchored by a full-depth seed.
 
 **This is a predictor dissociation, and it is the campaign's most informative comparison.**
 xhigh is the ONLY level where anything ever cleared a floor by a wide margin: on [CLF], `total`

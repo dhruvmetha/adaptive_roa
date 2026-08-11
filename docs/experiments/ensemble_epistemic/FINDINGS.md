@@ -589,11 +589,17 @@ This is §5's "single-epoch reads lie" caution generalised: on this level, *metr
 
   | run | epochs in 72h | h/epoch | 19 epochs needs | 72h jobs |
   |---|---|---|---|---|
+  | `fm_low_epi_var` | 15 | 4.80 | 91 h | 2 |
   | `fm_low_total` | 14 | 5.14 | 98 h | 2 |
   | `fm_low_dir00_s44` | 14 | 5.14 | 98 h | 2 |
+  | `fm_low_aleat` | 14 | 5.14 | 98 h | 2 |
   | `fm_med_epi_var` | 8 | 9.00 | 171 h | 3 |
   | `fm_med_dir00` | 7 | 10.29 | 196 h | 3 |
   | `fm_med_dir00_s44` | 7 | 10.29 | 196 h | 3 |
+
+  Seven clean 72h windows now: **low 4.80–5.14 h/epoch across four runs, med 9.00–10.29 across
+  three.** The two levels do not overlap, so the ~2× med/low gap is a property of the level, not
+  of node assignment.
 
   det (~6.3) and xhigh (~9.9) are estimates only — every run at those levels was resumed, so no
   clean 72h window exists to measure them from.

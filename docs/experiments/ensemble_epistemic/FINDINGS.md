@@ -323,7 +323,29 @@ fact: it predicted that a calibrated predictor would show no such harm, and that
 
 ---
 
-## 4. Flow matching — [FM] high is the campaign's best-powered null
+## 4. Flow matching — three stable nulls, one churning level, one metric-dependent level
+
+Every FM level has been rescored repeatedly as its floor deepened. **Whether a verdict held while
+the floor tightened is the single most useful thing to know about it**, so it is tabulated first:
+
+| level | passes | floor tightened | verdict across passes | trust |
+|---|---|---|---|---|
+| high (§4a) | 7 | −52% (0.00198 → 0.00095) | null throughout | highest |
+| xhigh (§4b) | 5 | −45% (0.00139 → 0.00076) | null throughout | high |
+| med (§4d) | 3 | −28% (0.00100 → 0.00072) | null throughout | good |
+| **low (§4c)** | 5 | −16% (0.00061 → 0.00051) | **churned** none→2→2→3→none | **low** |
+| det (§4d) | 3 | n/a (label metric) | ordering depends on the metric field | none |
+
+**Read the campaign's conclusion off the top three rows, not the bottom two.** high, xhigh and med
+each returned the same null as their floors tightened by 28–52%, across 15 scoring passes in
+total. That is the trustworthy pattern: more data, same answer.
+
+low and det are the levels where a verdict was available at some point and then stopped being
+available. At low the effect sizes never left −0.9× to −1.6× while the set of arms clearing the
+threshold changed at nearly every pass — a threshold recrossed by noise, not an effect resolving.
+At det, three different label fields give three different arm orderings at the same depth.
+**Neither supports a claim in either direction**, and in particular neither supports "adaptive
+helps at low", which this document asserted for three passes before pass 5 withdrew it.
 
 ### 4a. [FM] high noise: no arm is distinguishable from the non-adaptive control (7 passes, floor halved)
 

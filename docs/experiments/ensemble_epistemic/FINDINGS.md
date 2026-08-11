@@ -6,7 +6,7 @@ chronological record including superseded claims and their corrections.
 | half | state |
 |---|---|
 | **[CLF]** | det complete 19/19; **high complete 19/19 on all five arms** (rescored, §1); low/med/xhigh from truncated curves (walltime, see §6) |
-| **[FM]** | **all five levels now scored.** high null (7 passes, floor −52%) · xhigh null (4 passes, floor −39%) · med no verdict (2 passes, shallow) · low **no verdict** (5 passes; the set of "distinguishable" arms churns none→two→three→none) · det **the metric decides the winner** — quote nothing from it |
+| **[FM]** | **all five levels now scored.** high null (7 passes, floor −52%) · xhigh null (4 passes, floor −39%) · med **null** (3 passes, floor −28%, verdict stable) · low **no verdict** (5 passes; the set of "distinguishable" arms churns none→two→three→none) · det **the metric decides the winner** — quote nothing from it |
 
 **Headline — the constant across every FM level is that the SCORE does not matter.** The [FM]
 sweep is complete: five noise levels, and at every one the four arms are numerically
@@ -483,30 +483,36 @@ at the floor, not a null.*
 
 ## 4d. Weakly established or still open
 
-### [FM] med: two passes, no verdict either way (shallowest floor in the campaign)
+### [FM] med: null, and the verdict survives a near-doubling of floor depth
 
-Scored twice. Pass 1 (2026-08-10) read four clean nulls at a 3-epoch floor; pass 2 deepened the
-floor to 4 epochs and moved every arm to "not stable" — no verdict either way:
+Scored three times, with the floor depth nearly doubling. **The verdict has not moved: nothing
+clears, at any depth.**
 
 ```
-PASS 2 (4 shared floor epochs, window ep5-6, 2026-08-11) -- current:
-fm med: pooled 2*SD = 0.00089 over 4 epochs
-   epi_bald   ep5: -0.00045 (-0.5x)  ep6: -0.00104 (-1.2x)   -> not stable
-   epi_var    ep5: -0.00047 (-0.5x)  ep6: -0.00094 (-1.1x)   -> not stable
-   total      ep5: -0.00057 (-0.6x)  ep6: -0.00114 (-1.3x)   -> not stable
-   aleat      ep5: +0.00075 (+0.8x)  ep6: -0.00111 (-1.2x)   -> not stable
-
-PASS 1 (3 shared floor epochs, window ep4-5): four nulls, all inside ±0.7x.
+PASS 3 (7 shared floor epochs, window ep7-8, 2026-08-11) -- current:
+fm med: pooled 2*SD = 0.00072 over 7 epochs
+   epi_bald   ep7: -0.00051 (-0.7x)  ep8: -0.00070 (-1.0x)   -> within noise (null)
+   epi_var    ep7: -0.00041 (-0.6x)  ep8: -0.00066 (-0.9x)   -> within noise (null)
+   total      ep7: -0.00059 (-0.8x)  ep8: -0.00067 (-0.9x)   -> within noise (null)
+   aleat      ep7: -0.00058 (-0.8x)  ep8: -0.00047 (-0.7x)   -> within noise (null)
 ```
 
-**This completes the [FM] sweep: every one of the five noise levels has now been scored, and only
-`low` produces anything that clears its floor.**
+| pass | floor | shared epochs | window | effect sizes | result |
+|---|---|---|---|---|---|
+| 1 | 0.00100 | 3 | ep4-5 | −0.2× to −0.7× | 4 null |
+| 2 | 0.00089 | 4 | ep5-6 | −0.5× to −1.3× | 4 not stable |
+| **3** | **0.00072** | **7** | **ep7-8** | **−0.6× to −1.0×** | **4 null** |
 
-**Scope — still provisional.** 4 shared floor epochs is the shallowest read in the campaign, and
-the four arms again move together: every one roughly doubles in magnitude between ep5 and ep6
-(−0.5× → −1.2×, −0.5× → −1.1×, −0.6× → −1.3×, +0.8× → −1.2×). Arms that move in lockstep across a
-window are tracking the epoch, not the acquisition score. `dir00_s43` at 5 is the binding
-constraint on the floor.
+**This is the opposite of what happened at [FM] low, and the contrast is informative.** Both
+levels show the same uniform small negative offset against the control, and at both the four arms
+track each other tightly (med spans −0.00047 to −0.00070 at ep8, a 2.3e-04 range). But at low the
+*verdict* churned none → two → two → three → none across five passes, while med has returned the
+same "nothing clears" at 3, 4 and 7 shared epochs, with the floor tightening 28% along the way.
+A verdict that survives a near-doubling of floor depth is worth more than one that flips with it.
+
+**Scope.** 7 shared floor epochs, arms at 9–13, `dir00_s43` and `dir00_s44` at 8 are the binding
+constraint. Per §6 med runs at 9.0–10.3 h/epoch against a 72h walltime cap, so it needs three
+sequential jobs to finish and its floor will keep advancing slowly.
 
 ### [FM] det: the metric decides which arm wins — do not quote any ordering
 

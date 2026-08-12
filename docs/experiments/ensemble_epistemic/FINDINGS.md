@@ -155,6 +155,24 @@ look safely "within noise".
 and manufactures false nulls; a collapsed epoch in an arm manufactures a false catastrophe, which
 is exactly what happened above.
 
+**Every collapse is on the classifier. Flow matching has none.**
+
+| predictor | epochs scored | collapsed | rate |
+|---|---|---|---|
+| clf | 421 | 5 | 1.19% |
+| **fm** | **366** | **0** | **0.00%** |
+
+If flow matching collapsed at the classifier's rate, 4.3 collapses would be expected in 366
+epochs; observing zero has probability 0.013 under that rate. So this is a real robustness
+difference, not a sampling accident — **the ensemble classifier intermittently trains to chance
+and the flow matcher does not.**
+
+**This adds a second failure mode to §3's account of the classifier half.** §3 already argues the
+[CLF] results are about a *miscalibrated* predictor rather than about entropy acquisition in
+general. Training instability compounds it: roughly one classifier epoch in eighty is not a model
+at all. Neither failure mode appears on the flow-matching side, which is one more reason the
+[FM] nulls — not the [CLF] effects — are the campaign's load-bearing results.
+
 ### [CLF] high noise: `total` is harmful; the other three do not survive full depth
 
 **Rescored 2026-08-08 with all five arms complete at 19/19 epochs.** This supersedes every

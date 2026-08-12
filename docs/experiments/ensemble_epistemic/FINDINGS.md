@@ -123,10 +123,37 @@ but `aleat` at −1.7× sits between `epi_bald` (−1.4×) and `epi_var` (−1.8
 no information about which score to use. At low (floor 0.00025 over 10 epochs) `aleat` is the
 **largest** helpful arm at −3.0×, ahead of `epi_var` (−2.6×) and `epi_bald` (−2.4×).
 
-`total` at low is the one arm that breaks the pattern, and it breaks it catastrophically:
-−0.00070 (−2.8×) at ep9 becomes **+0.22484 (+896×)** at ep10 — a three-order-of-magnitude blowup
-in one epoch, flagged "not stable". This is the same total-entropy failure that dominates [CLF]
-high and xhigh (§1), arriving abruptly rather than gradually.
+**Retracted 2026-08-12 — `total` at low is a training collapse, not an acquisition effect.**
+This document previously reported that `clf_low_total` goes from −0.00070 (−2.8×) at ep9 to
+**+0.22484 (+896×)** at ep10 and called it "the same total-entropy failure that dominates [CLF]
+high and xhigh, arriving abruptly rather than gradually". That attribution was wrong. At ep10
+that run has **sAUROC 0.5002 and RES 0.00001** — the model has no discriminative ability at all,
+i.e. chance. A collapsed model is a training failure; it says nothing about what total-entropy
+acquisition does. The ep10 point should be excluded, not interpreted.
+
+### Collapsed epochs exist and must be screened for
+
+A campaign-wide scan (2026-08-12) for `sAUROC ≤ 0.6` — at or near chance — found **5 collapsed
+epochs out of 787 scored**, all on the classifier:
+
+| predictor/level | run | epoch | sAUROC | RES | role |
+|---|---|---|---|---|---|
+| clf high | `dir00_s44` | 14 | 0.5038 | 0.00062 | floor seed |
+| clf low | `total` | 10 | 0.5002 | 0.00001 | arm |
+| clf med | `dir00_s43` | 14 | 0.4966 | 0.00026 | floor seed |
+| clf xhigh | `dir00_s43` | 13 | 0.4988 | 0.00012 | floor seed |
+| clf xhigh | `dir00_s44` | 13 | 0.4991 | 0.00010 | floor seed |
+
+**No floor is currently contaminated** — every collapsed floor-seed epoch falls outside its
+level's 3-seed shared range, in each case by exactly one epoch. That is luck, not design: had
+`clf_high_dir00_s43` reached epoch 15 instead of 11, its sibling's collapse at ep14 would have
+entered the pool and inflated that floor by ~400×, which would have made every arm at that level
+look safely "within noise".
+
+**Screen for this before every scoring pass.** The signature is unmistakable and cheap to test:
+`sAUROC ≈ 0.5` together with `RES ≈ 0`. A collapsed epoch inside a floor pool inflates the floor
+and manufactures false nulls; a collapsed epoch in an arm manufactures a false catastrophe, which
+is exactly what happened above.
 
 ### [CLF] high noise: `total` is harmful; the other three do not survive full depth
 

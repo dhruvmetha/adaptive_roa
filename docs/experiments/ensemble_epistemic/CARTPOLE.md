@@ -43,10 +43,10 @@ Per-epoch `2×SD` across the three seeds:
 | Brier | 0.01739 | 0.06628 | 0.01616 | 0.00269 | 0.00071 | 0.00141 | 0.00110 | 0.00190 | 0.00212 | 0.00093 |
 | mean Brier | 0.1580 | 0.1307 | 0.1090 | 0.0958 | 0.0914 | 0.0909 | 0.0907 | 0.0907 | 0.0900 | 0.0899 |
 
-Epochs 1–2 are a **convergence transient**: the seeds have not yet settled, the mean Brier is
-still falling steeply (0.131 → 0.109 → 0.096), and the between-seed spread is 10–90× larger than
-it becomes later. From epoch 3 the mean Brier is flat to within 1% per epoch and the spread
-drops to 0.0007–0.0027.
+Epochs 1–4 are a **convergence transient**: the seeds have not yet settled, the mean Brier is
+still falling steeply (0.131 → 0.109 → 0.096 → 0.091), and the between-seed spread is 10–90×
+larger than it becomes later. From epoch 5 the mean Brier is flat to within 1% per epoch and the
+spread settles at 0.0009–0.0021.
 
 **Consequence for the pooled floor.** The campaign's rule is `2·sqrt(mean(var_e))` over all
 shared epochs with epoch 0 excluded. Epoch 1's variance is roughly 9000× epoch 4's, so it
@@ -66,7 +66,7 @@ all shared epochs, epoch 0 excluded — so cartpole is scored the same way as ev
 and no goalpost moves. Epoch 0 is excluded for the existing structural reason: all seeds share
 identical pre-acquisition data, so its spread is structurally zero, not small.
 
-**The converged-regime floor (epoch ≥ 3) will be reported alongside it as a declared
+**The converged-regime floor (epoch ≥ 5) will be reported alongside it as a declared
 sensitivity**, with the regime boundary fixed here, in advance, by an objective criterion:
 
 > the first epoch from which the seed-mean Brier changes by less than 1% per epoch, and every
@@ -114,7 +114,7 @@ convention before any arm result exists is the same lesson applied one step earl
 
 ## 5. Known weakness: the λ/δ half is unreliable here
 
-Threshold-free metrics are healthy and converge by epoch 3 (AUC plateaus at 0.956–0.957). The
+Threshold-free metrics are healthy and converge by epoch 5 (AUC plateaus at 0.956–0.957). The
 λ/δ decision metrics are not:
 
 | epoch | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |

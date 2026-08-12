@@ -6,7 +6,7 @@ chronological record including superseded claims and their corrections.
 | half | state |
 |---|---|
 | **[CLF]** | det complete 19/19; **high complete 19/19 on all five arms** (rescored, §1); low/med/xhigh from truncated curves (walltime, see §6) |
-| **[FM]** | **all five levels now scored.** high null (7 passes, floor −52%) · xhigh null (5 passes, floor −45%, verdict stable) · med **null** (3 passes, floor −28%, verdict stable) · low **no verdict** (6 passes; the "distinguishable" set churns none→2→2→3→none→1 while effect sizes sit in a 5e-05 band) · det **the metric decides the winner** — quote nothing from it |
+| **[FM]** | **all five levels now scored.** high null (7 passes, floor −52%) · xhigh null (5 passes, floor −45%, verdict stable) · med **null** (4 passes, floor −36%, no arm ever clears) · low **no verdict** (6 passes; the "distinguishable" set churns none→2→2→3→none→1 while effect sizes sit in a 5e-05 band) · det **the metric decides the winner** — quote nothing from it |
 
 **Headline — the constant across every FM level is that the SCORE does not matter.** The [FM]
 sweep is complete: five noise levels, and at every one the four arms are numerically
@@ -411,7 +411,7 @@ the floor tightened is the single most useful thing to know about it**, so it is
 |---|---|---|---|---|
 | high (§4a) | 7 | −52% (0.00198 → 0.00095) | null throughout | highest |
 | xhigh (§4b) | 5 | −45% (0.00139 → 0.00076) | null throughout | high |
-| med (§4d) | 3 | −28% (0.00100 → 0.00072) | null throughout | good |
+| med (§4d) | 4 | −36% (0.00100 → 0.00064) | null throughout | good |
 | **low (§4c)** | 6 | −23% (0.00061 → 0.00047) | **churned** none→2→2→3→none→1 | **low** |
 | det (§4d) | 3 | n/a (label metric) | ordering depends on the metric field | none |
 
@@ -608,23 +608,29 @@ at the floor, not a null.*
 
 ### [FM] med: null, and the verdict survives a near-doubling of floor depth
 
-Scored three times, with the floor depth nearly doubling. **The verdict has not moved: nothing
-clears, at any depth.**
+Scored four times, with the floor depth tripling. **The verdict has not moved: nothing clears,
+at any depth.**
 
 ```
-PASS 3 (7 shared floor epochs, window ep7-8, 2026-08-11) -- current:
-fm med: pooled 2*SD = 0.00072 over 7 epochs
-   epi_bald   ep7: -0.00051 (-0.7x)  ep8: -0.00070 (-1.0x)   -> within noise (null)
-   epi_var    ep7: -0.00041 (-0.6x)  ep8: -0.00066 (-0.9x)   -> within noise (null)
-   total      ep7: -0.00059 (-0.8x)  ep8: -0.00067 (-0.9x)   -> within noise (null)
-   aleat      ep7: -0.00058 (-0.8x)  ep8: -0.00047 (-0.7x)   -> within noise (null)
+PASS 4 (9 shared floor epochs, window ep7-8, 2026-08-12) -- current:
+fm med: pooled 2*SD = 0.00064 over 9 epochs
+   epi_bald   ep7: -0.00051 (-0.8x)  ep8: -0.00070 (-1.1x)   -> not stable
+   epi_var    ep7: -0.00041 (-0.6x)  ep8: -0.00066 (-1.0x)   -> not stable
+   total      ep7: -0.00059 (-0.9x)  ep8: -0.00067 (-1.0x)   -> not stable
+   aleat      ep7: -0.00058 (-0.9x)  ep8: -0.00047 (-0.7x)   -> within noise (null)
 ```
 
 | pass | floor | shared epochs | window | effect sizes | result |
 |---|---|---|---|---|---|
 | 1 | 0.00100 | 3 | ep4-5 | −0.2× to −0.7× | 4 null |
 | 2 | 0.00089 | 4 | ep5-6 | −0.5× to −1.3× | 4 not stable |
-| **3** | **0.00072** | **7** | **ep7-8** | **−0.6× to −1.0×** | **4 null** |
+| 3 | 0.00072 | 7 | ep7-8 | −0.6× to −1.0× | 4 null |
+| **4** | **0.00064** | **9** | **ep7-8** | **−0.6× to −1.1×** | **3 not stable, 1 null** |
+
+**Four passes, the floor tightened 36%, and not one arm has cleared at any depth.** The labels
+move between "null" and "not stable" as the floor shifts under fixed effect sizes — the same
+bookkeeping churn as §4c — but unlike low, no arm has ever crossed to DISTINGUISHABLE. That makes
+med a genuine null rather than an undecided level.
 
 **This is the opposite of what happened at [FM] low, and the contrast is informative.** Both
 levels show the same uniform small negative offset against the control, and at both the four arms

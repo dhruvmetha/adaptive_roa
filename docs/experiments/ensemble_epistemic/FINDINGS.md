@@ -31,8 +31,9 @@ they are a threshold being crossed by noise. Quote effect sizes and floor depth,
 
 *Correction history for [FM] low, kept because the churn is itself the finding: the header read
 "null at every level including low" (5-epoch floor) → "epi_var and total cross the threshold"
-(6-epoch) → "the negative control ranks first" (7-epoch) → back to no verdict (9-epoch, current).
-Five passes, four different headline claims, and the effect sizes never moved. See §4c.*
+(6-epoch) → "the negative control ranks first" (7-epoch) → back to no verdict (9-epoch) → one
+arm clears while the control is larger (11-epoch, current). Six passes, four different headline
+claims, and the effect sizes never moved. See §4c.*
 
 *Corrected 2026-08-10: the header previously read "**det harmful** (+2.3x to +26.5x, shallow
 floor)". At a 9-epoch floor the det arms are mostly *helpful* and only one survives the stability
@@ -474,7 +475,7 @@ general fact about entropy acquisition.
 was on 2026-08-07. Four consistent passes against a floor that tightened from 0.00139 to 0.00085
 (−39%). This is the campaign's second-best-powered null after [FM] high.
 
-### 4c. [FM] low: no verdict — five passes, and the arms never separate from the floor
+### 4c. [FM] low: no verdict — six passes, and the arms never separate from the floor
 
 **This is the level the FM extension was launched to test.** [CLF] low is the only place in the
 whole campaign where adaptive sampling genuinely beat uniform (−1.1× to −3.3×, sign stable for 3
@@ -583,8 +584,8 @@ fm med: pooled 2*SD = 0.00072 over 7 epochs
 **This is the opposite of what happened at [FM] low, and the contrast is informative.** Both
 levels show the same uniform small negative offset against the control, and at both the four arms
 track each other tightly (med spans −0.00047 to −0.00070 at ep8, a 2.3e-04 range). But at low the
-*verdict* churned none → two → two → three → none across five passes, while med has returned the
-same "nothing clears" at 3, 4 and 7 shared epochs, with the floor tightening 28% along the way.
+*verdict* churned none → two → two → three → none → one across six passes, while med has returned
+the same "nothing clears" at 3, 4 and 7 shared epochs, with the floor tightening 28% along the way.
 A verdict that survives a near-doubling of floor depth is worth more than one that flips with it.
 
 **Scope.** 7 shared floor epochs, arms at 9–13, `dir00_s43` and `dir00_s44` at 8 are the binding

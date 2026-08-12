@@ -6,7 +6,7 @@ chronological record including superseded claims and their corrections.
 | half | state |
 |---|---|
 | **[CLF]** | det complete 19/19; **high complete 19/19 on all five arms** (rescored, §1); low/med/xhigh from truncated curves (walltime, see §6) |
-| **[FM]** | **all five levels now scored.** high null (7 passes, floor −52%) · xhigh null (5 passes, floor −45%, verdict stable) · med **null** (3 passes, floor −28%, verdict stable) · low **no verdict** (5 passes; the set of "distinguishable" arms churns none→two→three→none) · det **the metric decides the winner** — quote nothing from it |
+| **[FM]** | **all five levels now scored.** high null (7 passes, floor −52%) · xhigh null (5 passes, floor −45%, verdict stable) · med **null** (3 passes, floor −28%, verdict stable) · low **no verdict** (6 passes; the "distinguishable" set churns none→2→2→3→none→1 while effect sizes sit in a 5e-05 band) · det **the metric decides the winner** — quote nothing from it |
 
 **Headline — the constant across every FM level is that the SCORE does not matter.** The [FM]
 sweep is complete: five noise levels, and at every one the four arms are numerically
@@ -366,7 +366,7 @@ the floor tightened is the single most useful thing to know about it**, so it is
 | high (§4a) | 7 | −52% (0.00198 → 0.00095) | null throughout | highest |
 | xhigh (§4b) | 5 | −45% (0.00139 → 0.00076) | null throughout | high |
 | med (§4d) | 3 | −28% (0.00100 → 0.00072) | null throughout | good |
-| **low (§4c)** | 5 | −16% (0.00061 → 0.00051) | **churned** none→2→2→3→none | **low** |
+| **low (§4c)** | 6 | −23% (0.00061 → 0.00047) | **churned** none→2→2→3→none→1 | **low** |
 | det (§4d) | 3 | n/a (label metric) | ordering depends on the metric field | none |
 
 **Read the campaign's conclusion off the top three rows, not the bottom two.** high, xhigh and med
@@ -480,11 +480,26 @@ was on 2026-08-07. Four consistent passes against a floor that tightened from 0.
 whole campaign where adaptive sampling genuinely beat uniform (−1.1× to −3.3×, sign stable for 3
 of 4 arms, §1). The question was whether flow matching shows the same benefit there.
 
-Scored five times as the floor deepened. **Pass 5 withdraws the verdict: at the deepest floor,
-no arm clears the test.**
+Scored six times as the floor deepened. **The set of arms clearing the test has taken four
+different values while the effect sizes never moved. Pass 6 is the cleanest demonstration:**
 
 ```
-PASS 5 (9 shared floor epochs, window ep12-13, 2026-08-11) -- current:
+PASS 6 (11 shared floor epochs, window ep12-13, 2026-08-12) -- current:
+fm low: pooled 2*SD = 0.00047 over 11 epochs
+   epi_bald   ep12: -0.00062 (-1.3x)  ep13: -0.00044 (-0.9x)   -> not stable
+   epi_var    ep12: -0.00058 (-1.2x)  ep13: -0.00046 (-1.0x)   -> not stable
+   total      ep12: -0.00061 (-1.3x)  ep13: -0.00049 (-1.0x)   -> DISTINGUISHABLE (sign stable 13/13)
+   aleat      ep12: -0.00063 (-1.3x)  ep13: -0.00045 (-1.0x)   -> not stable
+```
+
+**At pass 6 the four arms span 5e-05 at ep12 — and `aleat`, at −0.00063, is the LARGEST of them.**
+The single arm flagged DISTINGUISHABLE (`total`, −0.00061) is neither the largest nor meaningfully
+different from the three that were not. What separates them is the sign-stability bookkeeping
+alone. If the label carried information about acquisition quality, the arm designed not to work
+would not keep outranking the ones designed to.
+
+```
+PASS 5 (9 shared floor epochs, window ep12-13, 2026-08-11):
 fm low: pooled 2*SD = 0.00051 over 9 epochs
    epi_bald   ep12: -0.00062 (-1.2x)  ep13: -0.00044 (-0.9x)   -> not stable
    epi_var    ep12: -0.00058 (-1.1x)  ep13: -0.00046 (-0.9x)   -> not stable
@@ -498,8 +513,8 @@ PASS 2 (window ep9-10): same two arms distinguishable, at -1.0x.
 PASS 1 (5 shared floor epochs, window ep8-9): all four "not stable" or null.
 ```
 
-**Five passes, and the set of "distinguishable" arms went none → two → two → three → none.**
-Across all five the effect sizes never left −0.9× to −1.6×. The floor tightened monotonically
+**Six passes, and the set of "distinguishable" arms went none → two → two → three → none → one.**
+Across all six the effect sizes never left −0.9× to −1.6×. The floor tightened monotonically
 (0.00061 → 0.00057 → 0.00051) and the arms did *not* separate from it; they moved with it. This
 is the diagnosis written up at pass 4, now confirmed by the pass that followed: **what changes
 between passes is which arms happen to sit on the far side of a threshold, not what the arms do.**

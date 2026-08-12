@@ -1,6 +1,6 @@
 # Cartpole (stochastic, sigma_020.0) — pre-registration and floor characterisation
 
-**Written 2026-08-11, before any acquisition arm exists.** Only the three floor seeds
+**Sections 2-5 written 2026-08-11, before any acquisition arm existed.** Only the three floor seeds
 (`fm_cpstoch_s020_dir00`, `_s43`, `_s44`) have been run. Nothing in this file was chosen after
 seeing an arm result, because there are no arm results. That is the point of writing it now.
 
@@ -14,11 +14,35 @@ Three seeds of the non-adaptive control (`acquisition=direct acquisition.d2_rati
 jobs 205995/205996/205997, `gpu:a4500:2`, 100G, 19 epochs, seeds 42/43/44. All three on the
 same node, which is the condition under which a broken-seeding bug would be detectable.
 
-The four acquisition arms (`epi_bald`, `epi_var`, `total`, `aleat`) are **not yet launched** —
-they are waiting on iLab quota. They will run on iLab too: the floor is all-iLab, and putting
-arms on another cluster would fold cross-cluster nondeterminism into the arm-vs-control gap
-without it appearing in the floor, which is an anti-conservative test. `FINDINGS.md` §4a carries
-that caveat for [FM] high; cartpole starts clean.
+**Arms launched 2026-08-12** — jobs 207080/207081/207082, `gpu:a4500:1`, 100G, 19 epochs,
+seed 42. Queued behind the floor and start when it releases its a4500s.
+
+They run on iLab a4500, the same type as the floor. Direct-box GPUs were free at submission time
+and were deliberately not used: the floor is all-iLab-a4500, so arms on other hardware would fold
+a hardware term into the arm-vs-control gap that the floor cannot capture — anti-conservative.
+`FINDINGS.md` §4a carries that caveat for [FM] high; cartpole stays clean.
+
+**Three arms, not four: `aleat` was dropped at the user's direction, and one seed only.**
+
+| arm | status |
+|---|---|
+| `epi_bald` | launched (207080) |
+| `epi_var` | launched (207081) |
+| `total` | launched (207082) |
+| `aleat` | **not run** |
+
+**What dropping `aleat` costs, stated plainly.** On the pendulum side `aleat` is the negative
+control — it acquires on the component that by construction cannot be reduced by more data — and
+it is what turned the campaign's conclusion from soft to sharp: at [FM] low it ranked *first*
+among the four arms, and at [FM] det it was the only arm clearing the floor with a stable sign
+(`FINDINGS.md` §4c, §4d). Without it, cartpole can still answer *"does the epistemic split beat
+plain total entropy?"* by comparing `epi_bald`/`epi_var` against `total`, and *"does adaptive beat
+uniform?"* against the `dir00` floor. It **cannot** answer *"is any apparent ordering better than
+an acquisition rule known to be useless?"* — the question that repeatedly exposed pendulum
+orderings as noise. Any cartpole ranking must therefore be reported without that check.
+
+With one seed per arm, arm-vs-arm differences are also uncontrolled for run-to-run variation; only
+arm-vs-`dir00` comparisons are backed by the 3-seed floor.
 
 ## 2. The seeds are genuinely distinct
 

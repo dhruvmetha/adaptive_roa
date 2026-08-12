@@ -272,6 +272,39 @@ are compressed into mean_p 0.008–0.079 — too narrow a band to discriminate. 
 dose-response *between* noise levels, and explains nothing about differences *between arms* at
 high.
 
+### [CLF] xhigh: the epistemic arms cost only calibration; `total`/`aleat` also destroy resolution
+
+Measured 2026-08-11 by splitting the Murphy decomposition instead of reading Brier whole.
+`REL` is miscalibration (lower better), `RES` is resolution/discrimination (higher better), and
+**`post-recal` = `UNC − RES` removes the `REL` term entirely** — so an arm can only appear harmful
+post-recal if it lost *resolution*.
+
+[CLF] xhigh, epoch 9 — the same epoch range where §1's verdict was established:
+
+| arm | REL (calibration) | RES (resolution) | sAUROC |
+|---|---|---|---|
+| control (3-seed mean) | 0.0721 | 0.1324 | 0.8977 |
+| `epi_bald` | 0.0866 (+20%) | 0.1331 (−0%) | 0.8988 |
+| `epi_var` | 0.1216 (+69%) | 0.1329 (−0%) | 0.8984 |
+| `total` | 0.1479 (+105%) | 0.1147 (**−13%**) | 0.8786 |
+| `aleat` | 0.1588 (+120%) | 0.1116 (**−16%**) | 0.8706 |
+
+**All four arms damage calibration. Only `total` and `aleat` also damage resolution.** The
+epistemic arms hold `RES` and `sAUROC` to within 0.1% of the control while their `REL` doubles.
+
+**This is the mechanism behind §1's headline, and it explains why the split works.** Because
+post-recal cancels `REL`, the metric §1 scores on is blind to the calibration damage all four
+arms cause and sensitive only to the resolution damage that just two of them cause. That is why
+`total` and `aleat` come out at +29× to +45× the floor there while `epi_bald` and `epi_var` come
+out clean — not because the epistemic arms are harmless, but because their harm is confined to
+the component a perfect recalibrator would remove.
+
+**Scope.** Established at xhigh, where the verdict epoch and the decomposition epoch coincide.
+The same split at [CLF] high is available only up to epoch 10 in the current scoring, while that
+level's verdict rests on epochs 17–18, so the high mechanism is **not** claimed here. At epoch 10
+high shows all four arms losing calibration (REL 3–5× the control) with `RES` within 4% — but the
+harmful-`total` result appears later than that, so this snapshot cannot speak to it.
+
 ### [CLF] Why total entropy fails at xhigh
 | arm | fraction of acquired points genuinely ambiguous |
 |---|---|

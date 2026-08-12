@@ -55,7 +55,7 @@ supplies ~99% of the pooled mean and the pooled floor decays only as 1/sqrt(n):
 | pooling | AUC floor | Brier floor |
 |---|---|---|
 | all shared epochs, ep0 excluded (campaign rule) | 0.00474 | 0.02279 |
-| converged regime only (ep ≥ 3) | 0.00082 | 0.00169 |
+| converged regime only (ep ≥ 5, see correction below) | 0.00082 | 0.00169 |
 
 A 13× difference in the Brier floor, purely from whether the transient is included.
 
@@ -72,8 +72,34 @@ sensitivity**, with the regime boundary fixed here, in advance, by an objective 
 > the first epoch from which the seed-mean Brier changes by less than 1% per epoch, and every
 > epoch after it.
 
-On the floor seeds that criterion selects **epoch 3** (0.0958 → 0.0914 is 4.6%; 0.0914 → 0.0909
-is 0.5%). Recording the number now means it cannot be tuned later to move a verdict.
+On the floor seeds that criterion selects **epoch 5** (0.0958 → 0.0914 is 4.6% — still above the
+threshold; 0.0914 → 0.0909 is 0.5% — the first transition under it). Recording the number now
+means it cannot be tuned later to move a verdict.
+
+> **Correction, 2026-08-12 — read this before using the number.** The first version of this
+> section stated the criterion selects **epoch 3**, while the worked example in the same sentence
+> computed epoch 5. The criterion text was never ambiguous and has not changed; the stated answer
+> was simply wrong. Re-evaluated on 13 epochs of floor data (three more than were available when
+> it was written), the criterion still selects **epoch 5**, so this is a labelling error, not an
+> unstable criterion.
+>
+> **The correction moves in the permissive direction and that must be stated plainly.** Starting
+> the converged regime at epoch 5 rather than 3 drops epoch 3's `2×SD` of 0.00269 — the largest
+> remaining per-epoch spread — from the pool, so the sensitivity floor gets *tighter*, which makes
+> effects *easier* to declare. That is the self-serving direction, which is precisely why the
+> correction is recorded here in the open rather than silently edited.
+>
+> **The primary verdict is unaffected.** It pools over all shared epochs with only epoch 0
+> excluded, so it does not depend on where the converged regime is judged to begin. Only the
+> secondary, explicitly-labelled sensitivity number changes.
+
+Per-epoch change in seed-mean Brier, all 13 epochs available at the time of the correction:
+
+| ep | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| % change | 17.3 | 16.6 | 12.2 | 4.5 | **0.5** | 0.3 | 0.0 | 0.7 | 0.1 | 0.8 | 0.8 | 0.8 |
+
+Every epoch from 5 onward stays under 1%, so the boundary is not sitting on a knife edge.
 
 **Direction of the error.** Including the transient makes the floor *larger*, so the primary
 verdict is conservative: it will under-report effects, not over-report them. If an arm clears

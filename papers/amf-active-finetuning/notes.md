@@ -8,5 +8,6 @@ tags: []
 verdict:
 read: false
 projects: "olympics-classifier"
+slug: "amf-active-finetuning"
 ---
 

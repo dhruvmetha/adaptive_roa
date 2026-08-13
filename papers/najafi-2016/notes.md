@@ -7,5 +7,6 @@ tags: []
 verdict:
 read: false
 projects: "olympics-classifier"
+slug: "najafi-2016"
 ---
 

@@ -7,5 +7,6 @@ tags: []
 verdict:
 read: false
 projects: "olympics-classifier"
+slug: "wimmer-2023"
 ---
 

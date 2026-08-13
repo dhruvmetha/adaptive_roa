@@ -7,5 +7,6 @@ tags: []
 verdict:
 read: false
 projects: "olympics-classifier"
+slug: "skill-chaining-2009"
 ---
 

@@ -6,5 +6,6 @@ tags: []
 verdict:
 read: false
 projects: "olympics-classifier"
+slug: "vfd-save"
 ---
 

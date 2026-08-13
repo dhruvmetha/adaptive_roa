@@ -7,5 +7,6 @@ tags: []
 verdict:
 read: false
 projects: "olympics-classifier"
+slug: "lqr-trees-2009"
 ---
 

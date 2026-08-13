@@ -1,0 +1,8 @@
+---
+title: "[2006.06444] Learning compositional models of robot skills for task and motion planning"
+arxiv: "2006.06444"
+tags: []
+verdict:
+read: false
+---
+

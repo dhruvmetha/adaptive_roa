@@ -29,8 +29,8 @@ Rankings alone are not evidence here: the arms sit close together, so a gap must
 | predictor | level | non-adaptive (d2=0) | entropy d2=0.5 | entropy d2=1.0 | entropy+modesep d2=0.5 | entropy+modesep d2=1.0 |
 |---|---|---|---|---|---|---|
 | fm | low | 9 | 16 | 13 | 10 | 13 |
-| fm | med | 13 | 15 | 13 | 10 | 13 |
-| fm | high | 13 | 9 | 9 | 10 | 13 |
+| fm | med | 18 | 15 | 18 | 10 | 13 |
+| fm | high | 18 | 9 | 18 | 10 | 13 |
 | fm | xhigh | 14 | 9 | 10 | 10 | 16 |
 | clf | low | 18 | 18 | 18 | - | - |
 | clf | med | 18 | 18 | 18 | - | - |
@@ -59,8 +59,8 @@ Treat these SDs as rough: they come from only 4-5 runs, and the flow-matching es
 | level | epoch | FM Brier_deb | CLF Brier_deb | FM SS | CLF SS | FM sAUROC | CLF sAUROC | winner |
 |---|---|---|---|---|---|---|---|---|
 | low | 9 | +0.00124 | +0.01249 | 0.9946 | 0.9453 | 0.9991 | 0.9992 | **FM** (10.1× lower) |
-| med | 13 | +0.00173 | +0.01309 | 0.9921 | 0.9405 | 0.9970 | 0.9972 | **FM** (7.6× lower) |
-| high | 13 | +0.00093 | +0.05746 | 0.9952 | 0.7004 | 0.9808 | 0.9810 | **FM** (61.9× lower) |
+| med | 18 | +0.00318 | +0.01394 | 0.9855 | 0.9366 | 0.9969 | 0.9975 | **FM** (4.4× lower) |
+| high | 18 | +0.00106 | +0.05387 | 0.9945 | 0.7191 | 0.9805 | 0.9811 | **FM** (50.8× lower) |
 | xhigh | 14 | +0.00193 | +0.06948 | 0.9856 | 0.4814 | 0.8964 | 0.8981 | **FM** (36.1× lower) |
 
 ## Dose-response: does more acquisition make it worse (or better)?
@@ -73,13 +73,13 @@ Grouped by the fraction of each epoch's budget chosen by the acquisition rule. A
 | fm | low | 0.5 | ent05,tb05 | +0.00036 | -0.00023 |
 | fm | low | 1.0 | ent10,tb10 | +0.00036 | -0.00007 |
 | | | | _ordering not asserted_ | smallest step is 1% of the span; span 0.00059 < noise floor 0.00164 | epochs 7–9 |
-| fm | med | 0.0 | dir00 | +0.00173 | -0.00021 |
+| fm | med | 0.0 | dir00 | +0.00173 | -0.00012 |
 | fm | med | 0.5 | ent05,tb05 | +0.00027 | -0.00026 |
-| fm | med | 1.0 | ent10,tb10 | +0.00026 | -0.00016 |
+| fm | med | 1.0 | ent10,tb10 | +0.00026 | -0.00013 |
 | | | | _ordering not asserted_ | smallest step is 0% of the span; span 0.00147 < noise floor 0.00305 | epochs 8–10 |
-| fm | high | 0.0 | dir00 | +0.00158 | -0.00005 |
+| fm | high | 0.0 | dir00 | +0.00158 | -0.00004 |
 | fm | high | 0.5 | ent05,tb05 | +0.00049 | -0.00007 |
-| fm | high | 1.0 | ent10,tb10 | +0.00047 | -0.00036 |
+| fm | high | 1.0 | ent10,tb10 | +0.00047 | -0.00013 |
 | | | | _ordering not asserted_ | smallest step is 3% of the span; span 0.00111 < noise floor 0.02043 | epochs 7–9 |
 | fm | xhigh | 0.0 | dir00 | +0.00241 | -0.00193 |
 | fm | xhigh | 0.5 | ent05,tb05 | +0.00201 | -0.00023 |
@@ -176,8 +176,8 @@ Pairwise deepest comparison (each row at its own deepest shared epoch):
 
 | arm | epoch | Δ debiased Brier | SE | z | beats run-to-run floor? |
 |---|---|---|---|---|---|
-| entropy d2=0.5 | 13 | -0.001392 ** | 0.000070 | -19.91 | no (|Δ| < 0.00305) |
-| entropy d2=1.0 | 13 | -0.001371 ** | 0.000071 | -19.36 | no (|Δ| < 0.00305) |
+| entropy d2=0.5 | 15 | -0.000669 ** | 0.000033 | -20.38 | no (|Δ| < 0.00305) |
+| entropy d2=1.0 | 18 | -0.002885 ** | 0.000102 | -28.18 | no (|Δ| < 0.00305) |
 | entropy+modesep d2=0.5 | 10 | -0.001476 ** | 0.000072 | -20.38 | no (|Δ| < 0.00305) |
 | entropy+modesep d2=1.0 | 13 | -0.001356 ** | 0.000072 | -18.75 | no (|Δ| < 0.00305) |
 
@@ -216,7 +216,7 @@ Pairwise deepest comparison (each row at its own deepest shared epoch):
 | arm | epoch | Δ debiased Brier | SE | z | beats run-to-run floor? |
 |---|---|---|---|---|---|
 | entropy d2=0.5 | 9 | -0.001515 ** | 0.000053 | -28.82 | no (|Δ| < 0.02043) |
-| entropy d2=1.0 | 9 | -0.001743 ** | 0.000057 | -30.60 | no (|Δ| < 0.02043) |
+| entropy d2=1.0 | 18 | -0.000732 ** | 0.000031 | -23.89 | no (|Δ| < 0.02043) |
 | entropy+modesep d2=0.5 | 10 | -0.000999 ** | 0.000040 | -24.74 | no (|Δ| < 0.02043) |
 | entropy+modesep d2=1.0 | 13 | -0.000579 ** | 0.000029 | -19.93 | no (|Δ| < 0.02043) |
 

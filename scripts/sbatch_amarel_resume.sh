@@ -12,7 +12,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=40G
-#SBATCH --time=1-00:00:00
+#SBATCH --time=3-00:00:00
 #SBATCH --output=/home/st1122/Projects/adaptive_roa/slurm_logs/%x_%j.out
 #SBATCH --error=/home/st1122/Projects/adaptive_roa/slurm_logs/%x_%j.err
 set -euo pipefail

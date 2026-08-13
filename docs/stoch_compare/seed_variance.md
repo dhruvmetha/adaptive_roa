@@ -2,14 +2,14 @@
 
 A difference between arms only means something if it is larger than the spread you get by rerunning the same arm with a different seed. `dir00` replicates change training stochasticity only (its data order is fixed), so their spread is the training-noise floor.
 
-## med — Flow matching — epoch 13
+## med — Flow matching — epoch 18
 
 | arm | seeds | debiased Brier per seed | mean | SD |
 |---|---|---|---|---|
-| dir00 | 3 | 0.00173, 0.00079, 0.00094 | 0.00115 | 0.00051 |
-| ent10 | 3 | 0.00036, 0.00029, 0.00027 | 0.00031 | 0.00004 |
+| dir00 | 3 | 0.00318, 0.00098, 0.00057 | 0.00158 | 0.00140 |
+| ent10 | 3 | 0.00030, 0.00049, 0.00029 | 0.00036 | 0.00011 |
 
-Gap (ent10 − dir00) = **-0.00084**; pooled seed SD = 0.00036 (2 SD = 0.00072). The gap is larger than 2 seed SDs, so it is distinguishable from run-to-run noise.
+Gap (ent10 − dir00) = **-0.00122**; pooled seed SD = 0.00100 (2 SD = 0.00199). The gap is smaller than 2 seed SDs, so it is **not** distinguishable from run-to-run noise.
 
 Stability across the last usable epochs:
 
@@ -17,10 +17,10 @@ The 2xSD test uses a pooled standard deviation, which one outlier seed can infla
 
 | epoch | gap | 2×seed SD | significant? | ranges disjoint? |
 |---|---|---|---|---|
-| 10 | -0.00099 | 0.00064 | **yes** | **yes** |
-| 11 | -0.00072 | 0.00007 | **yes** | **yes** |
-| 12 | -0.00073 | 0.00024 | **yes** | **yes** |
-| 13 | -0.00084 | 0.00072 | **yes** | **yes** |
+| 15 | -0.00069 | 0.00030 | **yes** | **yes** |
+| 16 | -0.00046 | 0.00011 | **yes** | **yes** |
+| 17 | -0.00041 | 0.00019 | **yes** | **yes** |
+| 18 | -0.00122 | 0.00199 | no | **yes** |
 
 ## med — Classifier — epoch 18
 
@@ -42,14 +42,14 @@ The 2xSD test uses a pooled standard deviation, which one outlier seed can infla
 | 17 | -0.00454 | 0.00087 | **yes** | **yes** |
 | 18 | -0.00238 | 0.00590 | no | no |
 
-## high — Flow matching — epoch 8
+## high — Flow matching — epoch 18
 
 | arm | seeds | debiased Brier per seed | mean | SD |
 |---|---|---|---|---|
-| dir00 | 3 | 0.00136, 0.00132, 0.00162 | 0.00143 | 0.00017 |
-| ent10 | 3 | 0.00056, 0.00036, 0.00061 | 0.00051 | 0.00013 |
+| dir00 | 3 | 0.00106, 0.00103, 0.00096 | 0.00102 | 0.00005 |
+| ent10 | 3 | 0.00033, 0.00022, 0.00056 | 0.00037 | 0.00017 |
 
-Gap (ent10 − dir00) = **-0.00092**; pooled seed SD = 0.00015 (2 SD = 0.00030). The gap is larger than 2 seed SDs, so it is distinguishable from run-to-run noise.
+Gap (ent10 − dir00) = **-0.00065**; pooled seed SD = 0.00013 (2 SD = 0.00025). The gap is larger than 2 seed SDs, so it is distinguishable from run-to-run noise.
 
 Stability across the last usable epochs:
 
@@ -57,10 +57,10 @@ The 2xSD test uses a pooled standard deviation, which one outlier seed can infla
 
 | epoch | gap | 2×seed SD | significant? | ranges disjoint? |
 |---|---|---|---|---|
-| 5 | -0.00069 | 0.00015 | **yes** | **yes** |
-| 6 | -0.00106 | 0.00034 | **yes** | **yes** |
-| 7 | -0.00288 | 0.00457 | no | **yes** |
-| 8 | -0.00092 | 0.00030 | **yes** | **yes** |
+| 15 | -0.00098 | 0.00018 | **yes** | **yes** |
+| 16 | -0.00058 | 0.00069 | no | no |
+| 17 | -0.00035 | 0.00097 | no | no |
+| 18 | -0.00065 | 0.00025 | **yes** | **yes** |
 
 ## high — Classifier — epoch 18
 

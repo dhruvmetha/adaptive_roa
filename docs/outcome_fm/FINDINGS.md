@@ -44,24 +44,44 @@ every epoch 0–18, so the floor exists everywhere and the floor test actually r
 
 ### high, epoch 18 (deepest matched)
 
-| arm | debiased Brier | seed spread | mean bias | skill | sAUROC | mean p_invalid |
+| arm | debiased Brier | seed spread | mean bias | skill | sAUROC | mean p_invalid (see note) |
 |---|---|---|---|---|---|---|
-| endpoint FM (generative × state) | 0.00103 | 0.00010 | −0.0095 | 0.9945 | 0.9805 | **0.5650** |
+| endpoint FM (generative × state) | 0.00103 | 0.00010 | −0.0095 | 0.9945 | 0.9805 | 0.5650 |
 | **outcome FM (generative × binary)** | **0.00093** | 0.00013 | −0.0021 | 0.9951 | 0.9816 | 0.0000 |
 | classifier (discriminative × binary) | 0.05387 | **0.01469** | **+0.1375** | 0.7191 | 0.9811 | 0.0000 |
 
 Noise floor (2×SD across fm seeds) = 0.00010; |outcome − endpointFM| = 0.00010,
 exactly at the floor. sAUROC spread across arms 0.0011.
 
-### Two observations that belong in any write-up
+> **The `p_invalid` column is a scoring artifact, not a model property.** The
+> endpoint-FM reference runs were evaluated before the binary-outcome
+> invalid→failure fold existed (`6a4dc4d`), so they were scored three-way with
+> `p_invalid` as its own class. Stochastic datasets record successes/trials and
+> nothing else, so there is no third ground-truth class and that mass belongs in
+> `p_failure`; under the corrected rule endpoint-FM's `p_invalid` is 0 like the
+> other two arms. **Every other number in this table is unaffected** — Brier,
+> bias, skill and sAUROC are computed from `p_success` alone
+> (`scripts/stoch_prob_metrics.py:score_epoch`), and the fold modifies only
+> `p_failure` and `p_invalid`. The MACHINERY verdict and the ranking prediction
+> stand as recorded.
 
-**Coverage is not equal.** Endpoint-FM abstains on 56.5% of the grid at `high`
-(52.9% at `xhigh`); the outcome arm reaches the same — slightly better — Brier at
-**zero** abstention. Equal calibration at unequal coverage is not an equal result.
+### Observations that belong in any write-up
 
 **The classifier is unstable, not merely biased.** Its seed spread at `high` ep18
 is 0.01469 — larger than the entire outcome-vs-endpointFM gap by two orders of
 magnitude. Neither generative arm shows this.
+
+**Endpoint-FM puts ~56% of its sampled endpoints near no attractor** at `high`
+(~53% at `xhigh`). That is a real property of the model and worth reporting on its
+own. What it is *not* is reduced coverage: an earlier draft of this document
+described it as endpoint-FM "abstaining on 56.5% of the grid" while the outcome
+arm matched its Brier at zero abstention, and concluded that equal calibration at
+unequal coverage is not an equal result. **That conclusion was wrong** — it read a
+pre-fold three-way scoring convention as a model behaviour. Under the correct
+binary-outcome rule those samples are failure predictions, both arms abstain on
+nothing, and the two are directly comparable. The Brier comparison therefore
+stands on its own, which makes the machinery verdict *cleaner* than the retracted
+claim suggested, not weaker.
 
 ## Readout validation
 

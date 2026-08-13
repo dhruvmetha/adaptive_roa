@@ -206,3 +206,55 @@ that exposed pendulum orderings as noise (`FINDINGS.md` §4c).
 Unlike the marginal pendulum effects that churned across passes, an 8–22× effect is far outside
 threshold-crossing noise, so the *direction* is unlikely to reverse — but the magnitudes should be
 re-scored as the arms deepen. The floor itself will not change: `dir00` is complete at 19/19.
+
+
+---
+
+## 7. Pass 2 (arms at 12/19) — verdict holds, and `total` alone compounds
+
+Rescored 2026-08-13 with the arms at 12/19, a 70% depth increase over pass 1. Collapse screen
+gated first: 93 rows, 0 collapsed. Window **ep10–11**.
+
+```
+fm sigma_020.0: pooled 2*SD = 0.00079 over 18 epochs
+   epi_bald   ep10: +0.00729 (+9.2x)   ep11: +0.00768 (+9.7x)    -> DISTINGUISHABLE (sign stable 11/11)
+   epi_var    ep10: +0.01122 (+14.2x)  ep11: +0.01041 (+13.2x)   -> DISTINGUISHABLE (sign stable 11/11)
+   total      ep10: +0.01918 (+24.3x)  ep11: +0.01801 (+22.9x)   -> DISTINGUISHABLE (sign stable 11/11)
+```
+
+| arm | pass 1 (ep5–6, arms at 7) | pass 2 (ep10–11, arms at 12) |
+|---|---|---|
+| `epi_bald` | +7.9× / +13.2× | +9.2× / +9.7× |
+| `epi_var` | +21.7× / +14.7× | +14.2× / +13.2× |
+| `total` | +20.4× / +19.6× | +24.3× / +22.9× |
+
+**The verdict survived a 70% depth increase** with the sign stable across all 11 epochs. That is
+the pattern `FINDINGS.md` §4 identifies as trustworthy (med, xhigh), not the churn pattern that
+made [FM] low unreportable.
+
+### `total`'s harm grows with epochs; the epistemic arms' does not
+
+Linear fit of the arm-minus-control gap against epoch, epochs 1–11:
+
+| arm | slope per epoch | t (9 dof) | reading |
+|---|---|---|---|
+| `epi_bald` | −0.000009 | −0.03 | flat |
+| `epi_var` | +0.000399 | +1.33 | flat |
+| **`total`** | **+0.000923** | **+7.81** | **growing** |
+
+The control's own level is flat over the same range (slope −0.000014, t = −0.61), so the growth
+is not an artifact of `dir00` drifting.
+
+**So the three arms are not harmful in the same way.** `epi_bald` and `epi_var` impose a fixed
+penalty that does not worsen as acquisition continues. `total` degrades progressively — its gap
+roughly doubles from +0.0095 at epoch 1 to +0.018 by epoch 10.
+
+This rhymes with the classifier mechanism in `FINDINGS.md` §2: at [CLF] xhigh, `total` and `aleat`
+were the arms that destroyed *resolution* while the epistemic arms cost only calibration. A
+plausible common story is that total-entropy acquisition progressively distorts the training
+distribution while epistemic acquisition causes a one-off shift — but that is a hypothesis these
+runs cannot test, not a finding.
+
+**Caveat.** One seed per arm, so this is a single run's trajectory. The t-statistic is large and
+the control is flat, which makes a chance trend unlikely, but replication needs more seeds. The
+between-arm ordering remains unbacked by any floor for the reasons in §6.

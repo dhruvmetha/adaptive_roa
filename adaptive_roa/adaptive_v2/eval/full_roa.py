@@ -714,9 +714,11 @@ def evaluate_full_roa_fast(
     # leaves jobs that resolved their config before this key existed untouched.
     effective_binary = (getattr(system, 'binary_outcomes', False)
                         if binary_outcomes is None else bool(binary_outcomes))
-    if effective_binary:
-        p_failure = p_failure + p_invalid
-        p_invalid = np.zeros_like(p_invalid)
+    # NOTE: the invalid->failure fold itself lives immediately after p_success /
+    # p_failure / p_invalid are assigned from mc_labels, NOT here. Only the flag
+    # can be resolved this early; folding here read three locals that do not
+    # exist yet and raised UnboundLocalError on every binary-outcome generative
+    # run. See tests/adaptive_v2/test_binary_outcomes_generative_path.py.
 
     # state_dim disambiguates the file layout: without it a 5-column file is read
     # as "2 start + 2 end + label" even when it is "4 state + p_success", which
@@ -885,6 +887,22 @@ def evaluate_full_roa_fast(
     p_success = (mc_labels == 1).sum(axis=1) / num_mc_samples
     p_failure = (mc_labels == -1).sum(axis=1) / num_mc_samples
     p_invalid = (mc_labels == 0).sum(axis=1) / num_mc_samples
+
+    # Binary outcomes: stochastic datasets record successes/trials and nothing
+    # else, so a sampled endpoint that lands near no attractor has no ground-truth
+    # counterpart and must count as a FAILURE rather than a third class. Folding
+    # here -- before the probabilities are consumed by the predicates below and
+    # before they are written to full_roa_per_point.npz -- keeps every downstream
+    # consumer, including the saved artifact, on one definition. It is also
+    # mass-conserving: p_success + p_failure == 1 afterwards.
+    #
+    # This is far from cosmetic on stochastic data: an fm run on the noisy-torque
+    # pendulum carries ~70% mean p_invalid, so the fold moves most of the
+    # distribution. Runs evaluated before this fold and after it are NOT
+    # comparable and must not share a table.
+    if effective_binary:
+        p_failure = p_failure + p_invalid
+        p_invalid = np.zeros_like(p_invalid)
 
     pred_conformal, conformal_extras = _predict_lambda_delta(
         p_success,

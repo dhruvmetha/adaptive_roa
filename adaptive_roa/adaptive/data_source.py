@@ -139,6 +139,10 @@ class TrajectoryDataSourceConfig:
     # eval_states_file for full ROA evaluation (contains start, end, and labels)
     eval_states_file: Optional[str] = None
 
+    # Optional fail-fast schema check for array-backed datasets. When set, the
+    # dataset metadata must declare this exact coordinate order.
+    expected_state_order: Optional[List[str]] = None
+
     # Label mapping (external format → internal format)
     # External: 0 = failure, 1 = success (from labels files)
     # Internal: -1 = failure, 0 = separatrix, 1 = success

@@ -1,0 +1,63 @@
+# @package _global_
+
+# Static, non-adaptive deterministic CartPole campaign.
+# ``fit_train_size`` is the number of trajectories used for gradient updates;
+# ``initial_train_size`` must equal fit_train_size + fixed_val_size.
+
+defaults:
+  - _base
+  - /model/system_dims: cartpole_pybullet
+  - /prediction_mode: global
+  - _self_
+
+name: cartpole_static_deterministic
+fit_train_size: 1000
+fixed_val_size: 500
+initial_train_size: 1500
+output_dir: ${exp_dir}/${name}/${predictor.name}/train_${fit_train_size}/seed_${seed}
+
+noise_regime: deterministic
+dataset_name: cartpole_pybullet
+dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
+
+# Terminal success in the legacy deterministic dataset is the box
+# |x|<0.01, |theta|<0.05, |x_dot|<0.05, |theta_dot|<0.05 after its dwell.
+# Endpoint prediction can reproduce the terminal-state part of that rule.
+decision_rule: two_sided
+attractor_radius: 0.1
+binary_outcomes: true
+
+threshold:
+  optimize_mode: joint
+
+data_source:
+  trajectories_dir: ${dataset_root}/trajectories
+  shuffled_indices_file: ${dataset_root}/train_test_splits/shuffled_indices_0.txt
+  shuffled_labels_file: ${dataset_root}/train_test_splits/shuffled_labels_0.txt
+  eval_states_file: ${dataset_root}/eval_states.txt
+  cal_set_file: ${dataset_root}/cal_set.txt
+  test_set_file: ${dataset_root}/test_set.txt
+
+n_epochs: 1
+samples_per_epoch: 0
+warm_start: false
+eval_every: 1
+test_ratio: 0
+
+flow_matching:
+  clamp_noise: false
+
+system:
+  _target_: adaptive_roa.systems.cartpole.CartPoleSystem
+  dataset_dir: ${dataset_root}
+  success_tolerance: [0.01, 0.05, 0.05, 0.05]
+
+flow_matcher:
+  _target_: adaptive_roa.flow_matching.cartpole.latent_conditional.flow_matcher.CartPoleLatentConditionalFlowMatcher
+
+flow_matcher_local:
+  _target_: adaptive_roa.flow_matching.cartpole.trajectory.flow_matcher.CartPoleTrajectoryFlowMatcher
+
+adaptive_v2:
+  system_name: cartpole_pybullet
+  filter_confident_pairs: false

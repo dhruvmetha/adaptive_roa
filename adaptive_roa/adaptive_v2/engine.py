@@ -106,6 +106,7 @@ class AdaptiveEngine:
             val_ratio=cfg.get("val_ratio", 0.1),
             test_ratio=cfg.get("test_ratio", 0.1),
             candidate_mode=str(cfg.get("candidate_mode", "start")),
+            fixed_val_size=cfg.get("fixed_val_size", None),
         )
         from hydra.utils import get_class
         self.predictor_type = str(cfg.predictor.type)
@@ -129,9 +130,20 @@ class AdaptiveEngine:
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
+        selected_size = int(self.cfg.get("initial_train_size", 100))
+        declared_fit_size = self.cfg.get("fit_train_size", None)
+        fixed_val_size = self.cfg.get("fixed_val_size", None)
+        if declared_fit_size is not None and fixed_val_size is not None:
+            actual_fit_size = selected_size - int(fixed_val_size)
+            if actual_fit_size != int(declared_fit_size):
+                raise ValueError(
+                    "Static budget mismatch: initial_train_size - fixed_val_size "
+                    f"= {actual_fit_size}, but fit_train_size={declared_fit_size}"
+                )
+
         dataset_kind = "classification" if self.predictor_type == "classifier" else "endpoint"
         dataset_files = self.pool.initialize(
-            int(self.cfg.get("initial_train_size", 100)), dataset_kind=dataset_kind
+            selected_size, dataset_kind=dataset_kind
         )
 
         n_epochs = int(self.cfg.get("n_epochs", 10))
@@ -185,7 +197,7 @@ class AdaptiveEngine:
             print(f"EPOCH {epoch}")
             print("=" * 70)
 
-            train_trajectories_this_epoch = self.pool.train_size
+            train_trajectories_this_epoch = self.pool.fit_train_size
             is_last_epoch = (epoch == n_epochs - 1)
             run_eval = (eval_every > 0 and (epoch % eval_every == 0 or is_last_epoch)) and not self.smoke_mode
             epoch_output_dir = self.output_dir / f"epoch_{epoch:03d}"

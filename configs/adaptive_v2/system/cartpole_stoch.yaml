@@ -1,7 +1,7 @@
 # @package _global_
 
 # Stochastic cartpole (LQR + noisy action).
-# Datasets: ${data_dir}/stochastic/cartpole/noisy_action/lqr/sigma_{000.0,015.0,020.0,030.0,040.0}
+# Datasets: ${data_dir}/stochastic/cartpole/noisy_action/lqr_canonical_v2/sigma_{015.0,020.0,030.0,040.0}
 # npz-backed training pool (train.npz) + probabilistic 5-col eval/cal/test files
 # (x, theta, x_dot, theta_dot, p_success).
 #
@@ -19,9 +19,8 @@
 #   * 131,859 eval points vs pendulum's 49,770.
 #
 # NOISE AXIS DIFFERS FROM PENDULUM. Pendulum uses named levels {low,med,high,xhigh};
-# cartpole uses sigma directories. sigma_000.0 is the zero-noise baseline, so it is
-# the cartpole analogue of `det`, NOT of `low`. Do not map the two systems' levels
-# onto each other by position.
+# cartpole uses sigma directories. The zero-noise baseline comes only from
+# deterministic/cartpole_pybullet; there is deliberately no stochastic sigma_000.0.
 
 defaults:
   - _base
@@ -35,22 +34,24 @@ output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio
 shuffle_variant: 0
 
 noise_regime: stochastic
-# Noise sigma: sigma_000.0 | sigma_015.0 | sigma_020.0 | sigma_030.0 | sigma_040.0
+# Noise sigma: sigma_015.0 | sigma_020.0 | sigma_030.0 | sigma_040.0
 noise_sigma: sigma_020.0
-dataset_name: cartpole/noisy_action/lqr/${noise_sigma}
+dataset_name: cartpole/noisy_action/lqr_canonical_v2/${noise_sigma}
 dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
 
-# Kept from cartpole_pybullet: cartpole's ROA is two-sided and its attractor
-# radius is 0.2, unlike the pendulum's one-sided 0.1. These are system
-# properties, not noise-regime properties, so they carry over unchanged.
+# The collector labels success with an axis-aligned per-channel box: every
+# canonical state coordinate must have absolute value < 0.1. CartPoleSystem
+# reads the geometry from dataset_description.json; this value remains in
+# probability metadata for compatibility with radius-based interfaces.
 decision_rule: two_sided
-attractor_radius: 0.2
+attractor_radius: 0.1
 
 threshold:
   optimize_mode: joint
 
 data_source:
   pool_format: npz
+  expected_state_order: [x, theta, x_dot, theta_dot]
   trajectories_dir: ${dataset_root}/train.npz
   shuffled_indices_file: ${dataset_root}/train_test_splits/shuffled_indices_${shuffle_variant}.txt
   shuffled_labels_file: ${dataset_root}/train_test_splits/shuffled_labels_${shuffle_variant}.txt

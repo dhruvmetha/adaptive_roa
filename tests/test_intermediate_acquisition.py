@@ -31,6 +31,26 @@ def test_start_mode_unchanged(tmp_path):
     assert np.allclose(states[0], ds.get_start_state(ids[0]))
 
 
+def test_start_mode_fixed_validation_prefix_makes_training_budgets_nested(tmp_path):
+    ds = _make_pool(tmp_path, [5] * 12)
+    small = AdaptiveDatasetBuilder(
+        ds, str(tmp_path / "out_small"), candidate_mode="start", fixed_val_size=2
+    )
+    small.get_initial_training_set(6)
+    small_train, small_val = small._start_split_indices()
+
+    large = AdaptiveDatasetBuilder(
+        ds, str(tmp_path / "out_large"), candidate_mode="start", fixed_val_size=2
+    )
+    large.get_initial_training_set(10)
+    large_train, large_val = large._start_split_indices()
+
+    assert small_val == large_val == [0, 1]
+    assert small_train == [2, 3, 4, 5]
+    assert large_train == [2, 3, 4, 5, 6, 7, 8, 9]
+    assert large_train[: len(small_train)] == small_train
+
+
 def test_intermediate_candidate_is_subtrajectory_start(tmp_path):
     ds = _make_pool(tmp_path, [5])  # one trajectory of length 5 → rows 0..4 → candidate rows 0..3 (non-terminal)
     b = AdaptiveDatasetBuilder(ds, str(tmp_path / "out_i"), candidate_mode="intermediate")

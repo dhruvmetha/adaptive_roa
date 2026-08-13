@@ -329,13 +329,28 @@ def _predict_lambda_delta(
     delta: float,
     decision_rule: str,
     invalid_threshold: float | None,
+    binary_outcomes: bool = False,
 ) -> tuple[np.ndarray, dict[str, Any]]:
+    """Lambda/delta decision rule.
+
+    ``binary_outcomes`` collapses this to the two-way space stochastic datasets
+    actually label. Their ground truth is ``successes / trials`` with no third
+    outcome, so prediction label -2 ("invalid") has nothing to be scored against
+    and simply hides real successes: at cartpole sigma_020.0 it buried all but one
+    true positive. Under binary outcomes no point is ever marked invalid.
+    Defaults to False so deterministic systems -- where three outcomes are real --
+    and runs already in flight are unaffected.
+    """
     success_thresh = float(lambda_star + delta)
     failure_thresh = float(lambda_star - delta)
     effective_invalid_threshold = failure_thresh if invalid_threshold is None else float(invalid_threshold)
 
     pred = np.full(len(p_success), -1, dtype=np.int8)
-    invalid_mask = p_invalid >= effective_invalid_threshold
+    # Not `p_invalid >= threshold` short-circuited by folding p_invalid to zero:
+    # the effective threshold can itself be 0 (lambda 0.5, delta 0.5), and
+    # `0 >= 0` would then mark EVERY point invalid -- the inverse of the fix.
+    invalid_mask = (np.zeros(len(p_success), dtype=bool) if binary_outcomes
+                    else p_invalid >= effective_invalid_threshold)
     pred[invalid_mask] = -2
 
     non_invalid = ~invalid_mask
@@ -366,9 +381,21 @@ def _predict_fixed_threshold(
     p_invalid: np.ndarray,
     threshold: float = 0.6,
     invalid_threshold: float = 0.5,
+    binary_outcomes: bool = False,
 ) -> tuple[np.ndarray, dict[str, Any]]:
+    """Fixed-threshold decision rule.
+
+    ``binary_outcomes`` collapses this to the two-way space stochastic datasets
+    actually label. Their ground truth is ``successes / trials`` with no third
+    outcome, so prediction label -2 ("invalid") has nothing to be scored against
+    and simply hides real successes: at cartpole sigma_020.0 it buried all but one
+    true positive. Under binary outcomes no point is ever marked invalid.
+    Defaults to False so deterministic systems -- where three outcomes are real --
+    and runs already in flight are unaffected.
+    """
     pred = np.full(len(p_success), -1, dtype=np.int8)
-    invalid_mask = p_invalid >= invalid_threshold
+    invalid_mask = (np.zeros(len(p_success), dtype=bool) if binary_outcomes
+                    else p_invalid >= invalid_threshold)
     pred[invalid_mask] = -2
 
     non_invalid = ~invalid_mask
@@ -391,10 +418,22 @@ def _predict_lambda_only(
     lambda_star: float,
     decision_rule: str,
     invalid_threshold: float | None,
+    binary_outcomes: bool = False,
 ) -> tuple[np.ndarray, dict[str, Any]]:
+    """Lambda-only decision rule.
+
+    ``binary_outcomes`` collapses this to the two-way space stochastic datasets
+    actually label. Their ground truth is ``successes / trials`` with no third
+    outcome, so prediction label -2 ("invalid") has nothing to be scored against
+    and simply hides real successes: at cartpole sigma_020.0 it buried all but one
+    true positive. Under binary outcomes no point is ever marked invalid.
+    Defaults to False so deterministic systems -- where three outcomes are real --
+    and runs already in flight are unaffected.
+    """
     effective_invalid_threshold = float(lambda_star if invalid_threshold is None else invalid_threshold)
     pred = np.full(len(p_success), -1, dtype=np.int8)
-    invalid_mask = p_invalid >= effective_invalid_threshold
+    invalid_mask = (np.zeros(len(p_success), dtype=bool) if binary_outcomes
+                    else p_invalid >= effective_invalid_threshold)
     pred[invalid_mask] = -2
 
     non_invalid = ~invalid_mask
@@ -638,6 +677,7 @@ def evaluate_full_roa_fast(
     verbose: bool = True,
     invalid_threshold: float | None = None,
     decision_rule: str | None = None,
+    binary_outcomes: bool | None = None,
     refine_invalids: bool = False,
     refine_t_range: tuple[float, float] = (0.7, 0.9),
     refine_num_steps: int = 100,
@@ -661,6 +701,16 @@ def evaluate_full_roa_fast(
 
     hook = resolve_system_hook(system)
     effective_rule = decision_rule or hook.decision_rule
+
+    # Binary outcomes: stochastic datasets label successes/trials only, so the
+    # invalid class has no ground-truth counterpart (see fold_invalid_into_failure).
+    # None -> infer from the system, which keeps deterministic runs ternary and
+    # leaves jobs that resolved their config before this key existed untouched.
+    effective_binary = (getattr(system, 'binary_outcomes', False)
+                        if binary_outcomes is None else bool(binary_outcomes))
+    if effective_binary:
+        p_failure = p_failure + p_invalid
+        p_invalid = np.zeros_like(p_invalid)
 
     # state_dim disambiguates the file layout: without it a 5-column file is read
     # as "2 start + 2 end + label" even when it is "4 state + p_success", which
@@ -833,11 +883,13 @@ def evaluate_full_roa_fast(
         delta=float(delta),
         decision_rule=effective_rule,
         invalid_threshold=invalid_threshold,
+        binary_outcomes=effective_binary,
     )
     metrics_conformal = _classification_metrics_from_predictions(pred_conformal, y_all)
     metrics_conformal.update(conformal_extras)
 
-    pred_fixed, fixed_extras = _predict_fixed_threshold(p_success, p_failure, p_invalid)
+    pred_fixed, fixed_extras = _predict_fixed_threshold(p_success, p_failure, p_invalid,
+                                                             binary_outcomes=effective_binary)
     metrics_fixed = _classification_metrics_from_predictions(pred_fixed, y_all)
     metrics_fixed.update(fixed_extras)
     metrics_fixed["n_pred_success"] = int(np.sum(pred_fixed == 1))
@@ -852,6 +904,7 @@ def evaluate_full_roa_fast(
         lambda_star=float(lambda_star),
         decision_rule=effective_rule,
         invalid_threshold=invalid_threshold,
+        binary_outcomes=effective_binary,
     )
     metrics_lambda_only = _classification_metrics_from_predictions(pred_lambda_only, y_all)
     metrics_lambda_only.update(lambda_only_extras)
@@ -1141,6 +1194,7 @@ def evaluate_full_roa_classifier(
     verbose: bool = True,
     invalid_threshold: float | None = None,
     decision_rule: str | None = None,
+    binary_outcomes: bool | None = None,
 ) -> dict[str, Any]:
     """Full-ROA evaluation for a discriminative classifier (single forward pass).
 
@@ -1156,6 +1210,13 @@ def evaluate_full_roa_classifier(
         hook = resolve_system_hook(system)
         if effective_rule is None:
             effective_rule = hook.decision_rule
+
+    # Same binary-outcome resolution as evaluate_full_roa_fast. The classifier
+    # already reports p_invalid = 0, but the ternary rule can still mark every
+    # point invalid when the effective threshold is 0 (`0 >= 0`), so the flag is
+    # threaded here too rather than relying on the probabilities alone.
+    effective_binary = (getattr(system, "binary_outcomes", False)
+                        if binary_outcomes is None else bool(binary_outcomes))
 
     X_all, _end_states_all, y_all = load_eval_states(
         eval_states_file, state_dim=getattr(system, "state_dim", None)
@@ -1184,17 +1245,20 @@ def evaluate_full_roa_classifier(
     pred_conformal, conformal_extras = _predict_lambda_delta(
         p_success, p_failure, p_invalid, float(lambda_star), float(delta),
         decision_rule=effective_rule, invalid_threshold=invalid_threshold,
+        binary_outcomes=effective_binary,
     )
     metrics_conformal = _classification_metrics_from_predictions(pred_conformal, y_all)
     metrics_conformal.update(conformal_extras)
 
-    pred_fixed, fixed_extras = _predict_fixed_threshold(p_success, p_failure, p_invalid)
+    pred_fixed, fixed_extras = _predict_fixed_threshold(p_success, p_failure, p_invalid,
+                                                             binary_outcomes=effective_binary)
     metrics_fixed = _classification_metrics_from_predictions(pred_fixed, y_all)
     metrics_fixed.update(fixed_extras)
 
     pred_lambda_only, lambda_only_extras = _predict_lambda_only(
         p_success, p_failure, p_invalid, float(lambda_star),
         decision_rule=effective_rule, invalid_threshold=invalid_threshold,
+        binary_outcomes=effective_binary,
     )
     metrics_lambda_only = _classification_metrics_from_predictions(pred_lambda_only, y_all)
     metrics_lambda_only.update(lambda_only_extras)

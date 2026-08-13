@@ -1,6 +1,7 @@
 """
 Base class for dynamical systems with Lie group structure
 """
+from pathlib import Path
 import math
 import torch
 from abc import ABC, abstractmethod
@@ -73,8 +74,34 @@ class DynamicalSystem(ABC):
     def state_dim(self) -> int:
         """Total dimension of raw state"""
         return sum(comp.dim for comp in self._manifold_components)
-    
-    
+
+    @property
+    def binary_outcomes(self) -> bool:
+        """True when the system's ground truth has no 'invalid' outcome.
+
+        Stochastic datasets record ``p_success = successes / trials`` and nothing
+        else -- a rollout either reached the goal or it did not. Their labels have
+        no third class, so a sampled endpoint that lands near no attractor must be
+        counted as a FAILURE rather than becoming an invalid class with nothing to
+        be scored against.
+
+        **Inferred from the data, not declared in config, on purpose.** The
+        presence of ``eval_success_prob.npz`` beside the dataset IS the definition
+        of a binary-outcome dataset: it stores successes/trials and no third
+        count. Deriving it here means a stochastic run cannot be misconfigured
+        into three-way scoring by forgetting a key -- which is how cartpole
+        sigma_020.0 came to score 67.9% of its eval points "invalid" and report
+        F1 = 0.035 with a single true positive.
+
+        Deterministic systems have no such file and keep the three-way space,
+        where "unresolved" is a genuinely distinct outcome.
+        """
+        dataset_dir = getattr(self, "dataset_dir", None)
+        if not dataset_dir:
+            return False
+        return (Path(dataset_dir) / "eval_success_prob.npz").exists()
+
+
     @property
     def state_bounds(self) -> Dict[str, Tuple[float, float]]:
         """Get state bounds"""

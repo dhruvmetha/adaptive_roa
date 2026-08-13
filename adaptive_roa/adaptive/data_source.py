@@ -19,6 +19,7 @@ def load_eval_states(
     filepath: str,
     label_mapping: Optional[Dict[int, int]] = None,
     max_rows: Optional[int] = None,
+    state_dim: Optional[int] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Load eval_states.txt file containing start states, end states, and labels.
@@ -51,14 +52,49 @@ def load_eval_states(
     if label_mapping is None:
         label_mapping = {0: -1, 1: 1}
 
-    # Load data (comma-separated); max_rows=None → numpy loads all rows (default)
-    loadtxt_kwargs: dict = {"delimiter": ","}
+    # Load data (comma-separated); max_rows=None → numpy loads all rows (default).
+    # ndmin=2 because np.loadtxt collapses a single-row file to 1-D, and the very
+    # next line indexes shape[1] — a one-row eval/cal file raised IndexError here
+    # regardless of state_dim. Multi-row files are unaffected.
+    loadtxt_kwargs: dict = {"delimiter": ",", "ndmin": 2}
     if max_rows is not None:
         loadtxt_kwargs["max_rows"] = max_rows
     data = np.loadtxt(filepath, **loadtxt_kwargs)
 
     n_cols = data.shape[1]
 
+    # ---- Disambiguated path: caller told us the state dimension --------------
+    # Column count ALONE cannot identify the format. A 5-column file is
+    # "2 start + 2 end + label" for a deterministic 2-D system and
+    # "4 state + p_success" for a probabilistic 4-D system. Guessing picked the
+    # first reading for stochastic cartpole and silently returned 2-D states for
+    # a 4-D system, which surfaced far away as
+    # `IndexError: index 2 is out of bounds` inside CartPoleSystem.normalize_state.
+    # Pass state_dim whenever it is known; only the legacy branch below guesses.
+    if state_dim is not None:
+        if n_cols == state_dim + 1:
+            start_states = data[:, :state_dim].astype(np.float32)
+            p_success = data[:, state_dim]
+            raw_labels = (p_success >= 0.5).astype(int)
+            labels = np.array([label_mapping.get(l, 0) for l in raw_labels], dtype=np.int64)
+            return start_states, None, labels
+        if n_cols == 2 * state_dim + 1:
+            start_states = data[:, :state_dim].astype(np.float32)
+            end_states = data[:, state_dim:2 * state_dim].astype(np.float32)
+            raw_labels = data[:, -1].astype(int)
+            labels = np.array([label_mapping.get(l, 0) for l in raw_labels], dtype=np.int64)
+            return start_states, end_states, labels
+        raise ValueError(
+            f"{filepath}: {n_cols} columns is neither the probabilistic layout "
+            f"({state_dim} state + p_success = {state_dim + 1}) nor the deterministic "
+            f"layout ({state_dim} start + {state_dim} end + label = {2 * state_dim + 1}) "
+            f"for state_dim={state_dim}."
+        )
+
+    # ---- Legacy path: state_dim unknown, infer from column count ------------
+    # Kept byte-identical so every existing caller behaves exactly as before.
+    # Only correct while probabilistic files are 2-D (pendulum).
+    #
     # Probabilistic format (stochastic pendulum): θ_s, θ̇_s, p_success — no end
     # states (each start has many stochastic rollouts). Labels are binarized at
     # p >= 0.5; end_states is returned as None and callers must guard on it.

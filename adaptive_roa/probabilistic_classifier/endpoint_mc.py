@@ -20,6 +20,31 @@ from adaptive_roa.adaptive_v2.types import OutcomeProbabilities
 BATCH_SIZE = 8192
 
 
+def fold_invalid_into_failure(probs: OutcomeProbabilities) -> OutcomeProbabilities:
+    """Collapse the three-way outcome space to the two-way one the labels use.
+
+    Stochastic datasets record ``p_success = successes / trials`` and nothing
+    else: a rollout either reached the goal or it did not. ``classify_attractor``
+    nevertheless returns three labels, so a sampled endpoint landing near no
+    attractor becomes a third class with no ground-truth counterpart.
+
+    Treating that draw as a FAILURE is what makes the model's outcome space match
+    the labels': in the ground truth every non-success rollout counts as
+    non-success, however it ended.
+
+    ``p_success`` is deliberately untouched. Every threshold-free metric --
+    AUC, AUPRC, Brier, REL, RES and the ``recal`` verdicts -- is computed from it,
+    so folding changes no scored result. Only the decision rule moves, and only
+    because it can no longer emit the invalid label.
+    """
+    p_invalid = np.asarray(probs.p_invalid, dtype=np.float64)
+    return OutcomeProbabilities(
+        p_success=np.asarray(probs.p_success, dtype=np.float64),
+        p_failure=np.asarray(probs.p_failure, dtype=np.float64) + p_invalid,
+        p_invalid=np.zeros_like(p_invalid),
+    )
+
+
 def endpoint_mc_probabilities(
     handle, system, states, attractor_radius: float, num_mc_samples: int,
     batch_size: int = BATCH_SIZE,

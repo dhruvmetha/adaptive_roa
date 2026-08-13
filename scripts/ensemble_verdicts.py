@@ -142,23 +142,30 @@ def contaminated_runs(exp_root: Path) -> dict[str, int]:
     return out
 
 
-def load_det(exp_root: Path, field: str = "brier"):
+def load_det(exp_root: Path, field: str = "brier", predictor: str = "clf"):
     """Deterministic runs, from artifacts_v2.json label metrics.
 
     The probability metrics cannot cover det at all: they score against a
     ground-truth p_success estimated from repeated rollouts, and a deterministic
     system has no such thing (its p is degenerate {0,1}). So det is judged on the
     label metrics the evaluator already writes. Same floor and stability rules.
+
+    `predictor` selects the run prefix (`clf_det_*` / `fm_det_*`). It was hardcoded
+    to clf while only the classifier had det runs; FM det runs launched 2026-08-07
+    were silently invisible to the scorer until this was parameterised, so the
+    caller must pass the predictor explicitly rather than rely on a default that
+    happens to match one family.
     """
     import json
 
+    prefix = f"{predictor}_det_"
     out = collections.defaultdict(dict)
-    for run in sorted(exp_root.glob("clf_det_*")):
-        arm = run.name[len("clf_det_"):]
+    for run in sorted(exp_root.glob(f"{prefix}*")):
+        arm = run.name[len(prefix):]
         for f in sorted(run.glob("epoch_*/artifacts_v2.json")):
             try:
                 v = json.load(open(f))["eval_metrics"]["threshold_free"][field]
-                out[("clf", "det", arm)][int(f.parent.name.split("_")[1])] = v
+                out[(predictor, "det", arm)][int(f.parent.name.split("_")[1])] = v
             except Exception:
                 continue
     return out
@@ -189,16 +196,19 @@ def main() -> None:
             print(f"!!   {name}  ({n} epoch-mtime inversion(s))")
         print()
 
-    # det first: different metric source, same rules.
+    # det first: different metric source, same rules. Every predictor asked for,
+    # not just clf -- FM det runs exist as of 2026-08-07.
     if "det" in a.levels or a.levels == ["low", "med", "high", "xhigh"]:
-        det = load_det(a.exp_root, a.det_field)
-        if det:
-            res, why = verdicts(det, "clf", "det")
+        for pred in a.predictors:
+            det = load_det(a.exp_root, a.det_field, pred)
+            if not det:
+                continue
+            res, why = verdicts(det, pred, "det")
             if res is None:
-                print(f"clf det ({a.det_field}): -- {why}\n")
+                print(f"{pred} det ({a.det_field}): -- {why}\n")
             else:
                 floor, n_ep, rows = res
-                print(f"clf det ({a.det_field}, label metric): pooled 2*SD = {floor:.5f} over {n_ep} epochs")
+                print(f"{pred} det ({a.det_field}, label metric): pooled 2*SD = {floor:.5f} over {n_ep} epochs")
                 for arm, eps, gaps, mult, label in rows:
                     cells = "  ".join(f"ep{e}: {g:+.5f} ({m:+.1f}x)" for e, g, m in zip(eps, gaps, mult))
                     print(f"   {arm:<10} {cells}   -> {label}")

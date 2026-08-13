@@ -1,0 +1,48 @@
+# @package _global_
+#
+# Scalar-outcome flow matching: the generative x binary-target cell of the
+# (target) x (predictive-distribution machinery) factorial. See
+# docs/superpowers/specs/2026-08-10-outcome-fm-ablation-design.md.
+#
+# `type: classifier` names the DATA PATH and EVAL BRANCH, not the machinery.
+# This arm is generative -- it MC-samples a learned 1D flow -- but it consumes
+# classification data (state, binary label) and has no endpoint, so every branch
+# the classifier tag disables (endpoint-error metrics, endpoint refinement at
+# engine.py:311, the eval skip at :209) is disabled CORRECTLY here rather than as
+# a workaround. Reusing the tag also means this arm and the `classifier` arm see
+# byte-identical training data at every adaptive epoch, which is what makes the
+# target x machinery contrast clean by construction.
+defaults:
+  - /probability: outcome_fm
+threshold:
+  decision_rule: one_sided
+calibration:
+  decision_rule: one_sided
+predictor:
+  type: classifier
+  name: fm_outcome          # arm name: keys the export registry
+  trainer_target: adaptive_roa.adaptive_v2.trainers.outcome_fm_trainer.OutcomeFMTrainer
+  batch_size: 1024
+  val_batch_size: 2048
+  outcome_fm:
+    # Mirrors configs/adaptive_v2/predictor/classifier.yaml exactly, so the
+    # contrast against that arm varies ONLY the loss (velocity regression vs
+    # weighted cross-entropy) at matched capacity on identical data. Changing
+    # these without changing the classifier's breaks the ablation.
+    hidden_dims: [256, 512, 256]
+    dropout: 0.0
+    activation: relu
+    lr: 1.0e-3
+    weight_decay: 1.0e-5
+    max_epochs: 200
+    patience: 20
+    num_time_freqs: 4
+    num_ode_steps: 50      # see probability/outcome_fm.yaml for the convergence evidence
+    # THIS is the knob that decides how the pipeline forms p, not
+    # probability.readout: eval and calibration both reach p via `model(x) ->
+    # logits` (full_roa.py:1301). Must match probability.readout, which
+    # bind_model enforces.
+    forward_readout: exact
+  lightning_trainer:
+    gradient_clip_val: 1.0
+    log_every_n_steps: 10

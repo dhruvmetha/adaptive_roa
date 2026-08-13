@@ -1,0 +1,87 @@
+# @package _global_
+
+# Deterministic pendulum (LQR, no dynamics noise) as the ZERO-NOISE ANCHOR of
+# the noisy-torque campaign, replacing tau_0.00.
+#
+# Why this exists rather than `system=pendulum`: the data wiring below is
+# identical to system/pendulum.yaml, but that config's output_dir separates runs
+# by d2_ratio/n_epochs/sampling_mode -- all identical across this campaign -- and
+# then by timestamp. This one is self-describing and stable, matching
+# system/pendulum_noisy_torque.yaml so the anchor and the tau levels aggregate
+# the same way. pendulum.yaml is shared with every other pendulum experiment in
+# the repo, so it is copied rather than edited.
+#
+# Usage: system=pendulum_det_anchor acquisition.d2_ratio=0
+#
+# COMPARABILITY CAVEAT, stated so it is not invisible in a joint table: this is a
+# DIFFERENT dataset family from stochastic/pendulum/noisy_torque, not a tau=0
+# member of it. Same 2D state space and the same 49770-cell eval grid, but:
+#   * eval_states.txt here is 5-col (theta_s, theta_dot_s, theta_e, theta_dot_e,
+#     binary label); the noisy_torque family is 3-col (theta, theta_dot,
+#     p_success) with p_success estimated from 100 rollouts per cell. The ground
+#     truth here is exact rather than MC-estimated, so any debiasing that
+#     subtracts grid noise must use M -> infinity for this row, not M = 100.
+#   * the training pool is 20000 trajectories drawn from a held-out split of the
+#     grid rollouts, not 100k uniform-random starts.
+# Treat it as an anchor, not as another point on the tau axis.
+
+defaults:
+  - _base
+  - /model/system_dims: pendulum
+  - /prediction_mode: global
+  - _self_
+
+controller: lqr
+eval_variant: ${controller}
+
+name: adaptive_pendulum_det_anchor_${controller}
+output_dir: ${exp_dir}/${name}/outputs/${predictor.name}/train_${initial_train_size}_seed_${seed}_d2_${acquisition.d2_ratio}_epochs_${n_epochs}
+
+shuffle_variant: 0
+
+# noise_regime is "deterministic" from _base.yaml; named here so the dataset
+# root is readable in one place rather than inherited silently.
+noise_regime: deterministic
+dataset_name: pendulum/${controller}
+dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
+eval_root: ${data_dir}/${noise_regime}/pendulum/${eval_variant}
+
+decision_rule: one_sided
+attractor_radius: 0.1
+
+threshold:
+  optimize_mode: joint
+
+# Trajectory-directory pool (one file per rollout), NOT the npz pool the
+# noisy_torque family uses: shuffled_indices_0.txt here holds FILENAMES
+# (sequence_*.txt), not row ids into a train.npz.
+data_source:
+  trajectories_dir: ${dataset_root}/trajectories
+  shuffled_indices_file: ${dataset_root}/train_test_splits/shuffled_indices_${shuffle_variant}.txt
+  shuffled_labels_file: ${dataset_root}/train_test_splits/shuffled_labels_${shuffle_variant}.txt
+  eval_states_file: ${dataset_root}/eval_states.txt
+  cal_set_file: ${eval_root}/cal_set.txt
+  test_set_file: ${eval_root}/test_set.txt
+
+# Campaign schedule: one run per pool size, overridden on the CLI. The training
+# pool is 20000 rollouts, so the 6000 ceiling has ample headroom.
+initial_train_size: 1000
+n_epochs: 1
+samples_per_epoch: 0
+
+flow_matching:
+  clamp_noise: true
+  use_log_loss_weights: false
+
+system:
+  _target_: adaptive_roa.systems.pendulum.PendulumSystem
+  dataset_dir: ${dataset_root}
+
+flow_matcher:
+  _target_: adaptive_roa.flow_matching.pendulum.latent_conditional.flow_matcher.PendulumLatentConditionalFlowMatcher
+
+flow_matcher_local:
+  _target_: adaptive_roa.flow_matching.pendulum.trajectory.flow_matcher.PendulumTrajectoryFlowMatcher
+
+adaptive_v2:
+  system_name: pendulum

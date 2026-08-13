@@ -1,0 +1,104 @@
+# @package _global_
+
+# Stochastic pendulum, NOISY-TORQUE family (LQR + additive noise on the
+# commanded torque, pre-saturation).
+# Datasets: ${data_dir}/stochastic/pendulum/noisy_torque/lqr/tau_{0.00,0.10,0.15,0.30,0.50}
+#
+# This is a SEPARATE family from system/pendulum_stoch.yaml, which reads
+# ${data_dir}/noisy/pendulum/lqr/{low,med,high,xhigh} -- control-proportional
+# dynamics noise. Same 158x315 eval grid, same file layout and 3-col
+# (theta, theta_dot, p_success) eval/cal/test format, so only the root path
+# and the noise mechanism differ. Do NOT pool results across the two families.
+#
+# Usage: system=pendulum_noisy_torque tau_dir=tau_0.50 acquisition.d2_ratio=0
+
+defaults:
+  - _base
+  - /model/system_dims: pendulum
+  - /prediction_mode: global
+  - _self_
+
+# The noise level, named by its LITERAL directory: tau_0.00 | tau_0.10 |
+# tau_0.15 | tau_0.30 | tau_0.50.
+#
+# It carries the `tau_` prefix on purpose, so the value can never be read as a
+# number. A bare `tau=0.50` override is parsed by Hydra as a float and renders
+# "0.5", pointing dataset_root at a path that does not exist -- and the job
+# dies inside SLURM, after submission. Quoting (`tau=\"0.50\"`) would fix it
+# only as long as the quotes survive the extra shell layer that `sbatch
+# scripts/sbatch_ilab.sh ...` adds, which is exactly the kind of thing that
+# holds until the one time it does not. A value starting with a letter has no
+# numeric reading to fall back to.
+tau_dir: tau_0.50
+
+name: adaptive_pendulum_noisy_torque_${tau_dir}
+
+# Self-describing and STABLE (no ${now:...} segment), unlike the pendulum_stoch
+# template this was derived from. Two reasons, both load-bearing here:
+#
+#   * The arm and the training-set size are what vary across this campaign, and
+#     neither appears in the pendulum_stoch path -- it separates runs by
+#     d2_ratio/n_epochs/sampling_mode, which are IDENTICAL for every arm here.
+#     Every run would have differed only by its timestamp, which is not
+#     something anyone can read a results table out of.
+#   * The budget axis is realised as one run per pool size (n_epochs=1), so the
+#     size has to be in the path or the five points are indistinguishable.
+#
+# Stable rather than timestamped means a relaunch RESUMES/overwrites its own
+# directory instead of silently creating a twin -- the same property
+# benchmark/launcher.py relies on to be idempotent under preemption. The
+# tradeoff is that two concurrent launches of the same cell would write to one
+# directory, so do not launch the same (arm, tau, size, seed) twice at once.
+output_dir: ${exp_dir}/${name}/outputs/${predictor.name}/train_${initial_train_size}_seed_${seed}_d2_${acquisition.d2_ratio}_epochs_${n_epochs}
+
+shuffle_variant: 0
+
+noise_regime: stochastic
+dataset_name: pendulum/noisy_torque/lqr/${tau_dir}
+dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
+
+decision_rule: one_sided
+attractor_radius: 0.1
+
+threshold:
+  optimize_mode: joint
+
+data_source:
+  pool_format: npz
+  trajectories_dir: ${dataset_root}/train.npz
+  shuffled_indices_file: ${dataset_root}/train_test_splits/shuffled_indices_${shuffle_variant}.txt
+  shuffled_labels_file: ${dataset_root}/train_test_splits/shuffled_labels_${shuffle_variant}.txt
+  eval_states_file: ${dataset_root}/eval_states.txt
+  cal_set_file: ${dataset_root}/cal_set.txt
+  test_set_file: ${dataset_root}/test_set.txt
+
+# Datasets prepared 2026-08-06 (prepare_stochastic_layout.py, shuffle_seed 0):
+# 100k train rollouts from uniform-random unique starts, plain rollout-level
+# shuffle with no block structure. Eval is the full 158x315 grid (49770 cells,
+# resolution 0.04) at 100 rollouts per cell; cal is the first 1000 rows of the
+# shuffled grid and test the remaining 48770. Train and eval starts are
+# disjoint by construction (uniform-random vs a grid), so no start-state leak.
+#
+# NOTE the train pool here is 100k, where the noisy/ v2 family is 300k. The
+# 19-epoch schedule below tops out at 20k rollouts, so it is unaffected -- but
+# any change raising samples_per_epoch must re-check that headroom.
+initial_train_size: 1000
+n_epochs: 19
+samples_per_epoch: 1000
+
+flow_matching:
+  clamp_noise: true
+  use_log_loss_weights: false
+
+system:
+  _target_: adaptive_roa.systems.pendulum.PendulumSystem
+  dataset_dir: ${dataset_root}
+
+flow_matcher:
+  _target_: adaptive_roa.flow_matching.pendulum.latent_conditional.flow_matcher.PendulumLatentConditionalFlowMatcher
+
+flow_matcher_local:
+  _target_: adaptive_roa.flow_matching.pendulum.trajectory.flow_matcher.PendulumTrajectoryFlowMatcher
+
+adaptive_v2:
+  system_name: pendulum

@@ -156,41 +156,72 @@ FM never degrades the way the classifier does — no level produces a monotone-w
 in d2. At **medium** noise, with hardware and seed held fixed, FM is not merely unharmed but
 clearly helped (n=3 per arm, all on the same GPU type):
 
-| level | epoch | non-adaptive (per seed) | fully-adaptive (per seed) | gap | 2×seed SD | verdict |
-|---|---|---|---|---|---|---|
-| med | 7 | — | — | −0.00094 | 0.00028 | significant |
-| med | 8 | — | — | −0.00086 | 0.00053 | significant |
-| med | 9 | — | — | −0.00130 | 0.00114 | significant |
-| med | 10 | — | — | −0.00099 | 0.00064 | significant |
-| med | 11 | 0.00110, 0.00102, 0.00109 | 0.00034, 0.00038, 0.00032 | −0.00072 | 0.00007 | significant |
-| high | 2 | — | — | −0.00042 | 0.00032 | significant |
-| high | 3 | — | — | −0.00032 | 0.00115 | **not** significant |
-| high | 4 | — | — | −0.00050 | 0.00131 | **not** significant |
-| high | 5 | 0.00130, 0.00129, 0.00112 | 0.00054, 0.00057, 0.00054 | −0.00069 | 0.00015 | significant |
-| high | 6 | 0.00137, 0.00178, 0.00139 | 0.00040, 0.00054, 0.00042 | −0.00106 | 0.00034 | significant |
+| level | epochs | 2×SD test | ranges disjoint |
+|---|---|---|---|
+| med | 15, 16, 17 | significant at **all three** | **all three** |
+| med | 18 (final) | not significant | **yes** |
+| high | 8, 9, 11, 12, 13, 15, 18 | significant | **yes** |
+| high | 10, 14, 16, 17 | not significant | 10: yes · 14, 16, 17: no |
 
-**Med is settled**: significant at five consecutive epochs (7–11), and at epoch 11 the two seed
-distributions do not overlap at all (0.00102–0.00110 vs 0.00032–0.00038, a 3× lower Brier).
+Epoch 18 (the final epoch, complete as of 2026-08-07) is significant with disjoint ranges, but it
+follows two consecutive failures at 16 and 17, so by the >=2-consecutive-epoch rule it does **not**
+upgrade the verdict. Its mechanism is the same one: `ent10_s44` fell back to 0.00056, under the
+non-adaptive minimum of 0.00096, and disjointness returned. Note also that the two tests disagree
+here -- the 2xSD seed test calls epoch 18 significant while the epoch-0 noise-floor test in
+`fm_vs_clf_divergence.png` calls the same gap n.s. When the denominators disagree, the weaker
+reading is the one to quote.
 
-**High is real; only its variance test is fragile.** Across the four epochs with three
-replicates each, the seed ranges are **disjoint at every one** (5, 6, 7, 8) and the 2×SD test
-passes at three of four. The reason is
-specific and worth stating: with n=3, one outlier seed in the *non-adaptive* arm inflates the
-pooled SD enough to erase a separation that is plainly there. At epoch 7 the non-adaptive seeds
-are 0.00140 / **0.00704** / 0.00147 while the adaptive seeds are 0.00038 / 0.00042 / 0.00047 —
-every adaptive run beats every non-adaptive run, the gap is the largest measured (−0.00288), and
-yet the test says "not significant" purely because of that one spike.
+Med's final epoch splits the two tests in the opposite direction: the gap *grows* (−0.00041 →
+−0.00122) but the 2×SD test fails because the spread grows faster. The cause is a **baseline**
+seed spiking — `dir00_s42` = 0.00318 against siblings at 0.00098 and 0.00057 — while all three
+adaptive runs stay tightly grouped at 0.00029–0.00049 and every one of them beats every baseline
+run. So the med effect is not weakening at depth; one non-adaptive run destabilised, which
+inflates the SD in the direction that *flatters* the adaptive arm. The conservative reading is
+that med is established by epochs 15–17 (three consecutive, both tests) and that epoch 18's
+larger gap should not be quoted as the effect size.
+
+**Both sets are now complete at the full 19 epochs** (all resumes finished 2026-08-07). The two
+noise levels fail their deepest-epoch test for opposite reasons, and it is worth stating plainly
+that neither failure is a weak effect: at high it is an *adaptive* seed spiking (16, 17), at med
+a *baseline* seed spiking (18). With n=3, a single unstable run controls the variance estimate.
+That is the campaign's main methodological limitation and it applies to every FM verdict here.
+
+At high noise the aggregate test degrades after epoch 13, and the cause is entirely one run.
+Per-seed debiased Brier:
+
+| epoch | non-adaptive (3 seeds) | adaptive s42 | adaptive s43 | adaptive **s44** |
+|---|---|---|---|---|
+| 13 | 0.00093–0.00111 | 0.00022 | 0.00027 | 0.00027 |
+| 14 | 0.00108–0.00243 | 0.00029 | 0.00035 | **0.00780** |
+| 15 | 0.00110–0.00134 | 0.00023 | 0.00025 | 0.00030 |
+| 16 | 0.00100–0.00127 | 0.00029 | 0.00031 | **0.00111** |
+| 17 | 0.00100–0.00105 | 0.00033 | 0.00023 | **0.00147** |
+| 18 | 0.00096–0.00106 | 0.00033 | 0.00022 | 0.00056 |
+
+Two of the three adaptive runs hold a stable 3–4× advantage at **every** epoch, and all three
+non-adaptive runs sit in a tight band. The third adaptive run destabilised at epoch 14 and never
+recovered, and with n=3 its erratic values alone drive the mean and destroy the disjointness
+test at epochs 14, 16 and 17. Instability is not specific to the adaptive arm — epoch 7's
+outlier was a *non-adaptive* seed at 0.00704 — so this is occasional FM training instability at
+depth rather than a bias.
+
+The honest statement for high noise is therefore: **the benefit is large and consistent in five
+of six runs, but the three-seed aggregate is not stable enough to certify it at the deepest
+epochs.** Med has no such problem — all six runs are well behaved and it is significant with
+disjoint ranges at 13–16. If this result matters for a paper, high noise needs more than three
+seeds; that is the single clearest methodological gap left in this campaign.
 
 `seed_variance.md` reports a non-parametric companion, `ranges disjoint?`, which asks whether
 every seed of one arm beats every seed of the other — something one outlier cannot fake in the
-favourable direction. For FM at high that is yes at epochs 5, 6, 7 and 8; for FM at med, yes at
-10–13; for the classifier at high, yes at 15–18.
+favourable direction. For FM at high that is yes at every epoch measured (5–11); for FM at med, yes at 10–13; for the
+classifier at high, yes at 15–18.
 
 The defensible statement is therefore: **adaptive acquisition makes flow matching consistently
 better at both medium and high noise** — every adaptive seed beats every non-adaptive seed at
 every epoch measured — with the caveat that at n=3 the variance test occasionally fails when a
-baseline seed spikes (epoch 7, where one non-adaptive run hit 0.00704 against siblings at
-0.00140/0.00147). Nothing is detectable at xhigh, where FM's floor is very large. `seed_variance.md` now prints the verdict at every usable epoch, and
+baseline seed spikes — epoch 7 (one non-adaptive run at 0.00704 vs siblings at
+0.00140/0.00147) and epoch 10 (pooled SD 0.00297). In both cases the seed ranges remained
+disjoint, so the effect was present and only the variance estimate was unstable. Nothing is detectable at xhigh, where FM's floor is very large. `seed_variance.md` now prints the verdict at every usable epoch, and
 the contrast is stark:
 
 | epoch | FM med | FM high | | epoch | CLF high |

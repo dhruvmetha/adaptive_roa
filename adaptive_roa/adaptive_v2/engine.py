@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import glob
 import json
+import os
 import shutil
+import tempfile
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
@@ -20,6 +22,7 @@ from adaptive_roa.adaptive.endpoint_evaluation import (
     compute_endpoint_prediction_error,
     sample_val_data_for_optimization,
 )
+from adaptive_roa.benchmark.provenance import git_sha
 from adaptive_roa.adaptive_v2.pool.trajectory_pool import TrajectoryPool
 from adaptive_roa.adaptive_v2.filters.confidence_filter import ConfidencePairFilter
 from adaptive_roa.adaptive_v2.types import AcquisitionResult, EpochArtifacts, ThresholdState
@@ -46,6 +49,33 @@ def _convert_numpy(obj: Any) -> Any:
     if isinstance(obj, list):
         return [_convert_numpy(v) for v in obj]
     return obj
+
+
+def _atomic_write_json(path: Path, obj: Any, **kwargs) -> None:
+    """Write JSON atomically so a preempted job never leaves a truncated file.
+
+    A plain `open(path, "w")` truncates the destination before writing a
+    single byte of the new content -- if the process is killed mid-write
+    (silent preemption is routine on this cluster), the artifact is left
+    empty or half-written, and a benchmark launcher that only checks file
+    *presence* would miscount that epoch as done and skip it forever.
+
+    `os.replace` is atomic within a filesystem: it swaps the old file for the
+    fully-written temp file in one step, so any reader always sees either the
+    complete old file or the complete new one, never something in between.
+    """
+    path = Path(path)
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(obj, f, **kwargs)
+        os.replace(tmp_name, path)
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
 
 
 class AdaptiveEngine:
@@ -273,7 +303,9 @@ class AdaptiveEngine:
             cal_file = self.cfg.data_source.get("cal_set_file", None)
             if run_eval and cal_file:
                 X_cal_eval, _, y_cal_eval = load_eval_states(
-                    cal_file, max_rows=self.evaluator.max_eval_rows
+                    cal_file,
+                    max_rows=self.evaluator.max_eval_rows,
+                    state_dim=getattr(self.system, "state_dim", None),
                 )
                 q_hat_eval = self.calibration_backend.calibrate_eval(
                     X_cal_eval, y_cal_eval, threshold_state
@@ -359,12 +391,12 @@ class AdaptiveEngine:
                 conformal_state = _convert_numpy(self.threshold_backend.predictor.get_state())
 
             if self.save_legacy_results_json:
-                with open(epoch_output_dir / "results.json", "w") as f:
-                    json.dump(_convert_numpy(epoch_result), f, indent=2)
+                _atomic_write_json(epoch_output_dir / "results.json",
+                                    _convert_numpy(epoch_result), indent=2)
 
                 if conformal_state is not None:
-                    with open(epoch_output_dir / "conformal_state.json", "w") as f:
-                        json.dump(conformal_state, f, indent=2)
+                    _atomic_write_json(epoch_output_dir / "conformal_state.json",
+                                        conformal_state, indent=2)
 
             epoch_artifacts = EpochArtifacts(
                 epoch=epoch,
@@ -379,10 +411,11 @@ class AdaptiveEngine:
                 extra={
                     "n_cal_eval": n_cal_eval,
                     "optimize_mode": self.threshold_backend.optimize_mode,
+                    "commit": git_sha(),
                 },
             )
-            with open(epoch_output_dir / "artifacts_v2.json", "w") as f:
-                json.dump(_convert_numpy(epoch_artifacts.__dict__), f, indent=2)
+            _atomic_write_json(epoch_output_dir / "artifacts_v2.json",
+                                _convert_numpy(epoch_artifacts.__dict__), indent=2)
 
             hydra_src = self.output_dir / ".hydra"
             if hydra_src.exists():
@@ -401,7 +434,7 @@ class AdaptiveEngine:
                 "system_name": self.system_name,
             },
         }
-        with open(self.output_dir / "final_results.json", "w") as f:
-            json.dump(_convert_numpy(final_payload), f, indent=2)
+        _atomic_write_json(self.output_dir / "final_results.json",
+                            _convert_numpy(final_payload), indent=2)
 
         return final_payload

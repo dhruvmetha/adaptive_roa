@@ -1,0 +1,20 @@
+# @package _global_
+# Scalar-outcome flow matching as a FIXED-DATASET baseline (the ablation arm).
+#
+# d2_ratio must be zeroed HERE, not in configs/adaptive_v2/predictor/fm_outcome.yaml:
+# default.yaml lists `predictor` before `acquisition`, so a later group wins and an
+# acquisition override written in the predictor group is silently discarded. The
+# experiment group is composed last, so it sticks. (Same trap as mlp_det_baseline.)
+#
+# Fixed acquisition is required by the design, not incidental: the ablation varies
+# target x machinery, so the data-selection rule has to be held constant or the two
+# factors are confounded with a third.
+#
+# Usage:
+#   python scripts/run_adaptive.py +experiment=fm_outcome_baseline system=pendulum
+
+defaults:
+  - override /predictor: fm_outcome
+
+acquisition:
+  d2_ratio: 0.0

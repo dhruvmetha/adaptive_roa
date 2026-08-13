@@ -1,0 +1,33 @@
+# @package _global_
+probability:
+  _target_: adaptive_roa.adaptive_v2.probability.outcome_fm.OutcomeFMProbabilityBackend
+  # NOTE: this key does NOT govern the pipeline at d2_ratio=0. With
+  # predictor.type=classifier, full_roa.py:1301 routes evaluation through
+  # evaluate_full_roa_classifier(model_handle) and calibration through
+  # ClassifierProbabilityEstimator -- both call `model(x) -> logits`, so
+  # `predictor.outcome_fm.forward_readout` is what actually decides. This
+  # backend is exercised only when something calls it directly (adaptive
+  # acquisition with d2_ratio>0, or `estimate_both` for post-hoc scoring).
+  #
+  # Keep it EQUAL to predictor.outcome_fm.forward_readout regardless:
+  # OutcomeFMProbabilityBackend.bind_model rejects a mismatch, because a backend
+  # that disagreed with `forward` would make calibration and evaluation optimise
+  # different quantities the moment the backend is wired in.
+  #
+  # `exact` is the default: unquantised, and cheaper than MC (grid + bisect is
+  # ~53 integrations/point vs 100 at num_mc_samples=100).
+  readout: exact
+  num_mc_samples: 100        # matches endpoint_mc.yaml so the MC readouts are comparable
+  # 50 verified sufficient: max|dp| vs a 200-step reference is 3e-5 on an
+  # untrained (deliberately rough) field, i.e. ~1e-5 in Brier -- two orders
+  # below the 1e-4..1e-3 gaps this ablation measures. 20 steps gives 1e-4,
+  # which is NOT safely below the signal, so do not lower this casually.
+  num_ode_steps: 50
+  grid_size: 33              # bracketing grid over x0 in [-5, 5]
+  # Bisection resolution must be well BELOW the effect size, not merely small.
+  # Bracket width 10/2^n in x0, and dp/dx0 <= phi(0) = 0.399, so the worst-case
+  # error in p is ~2*10/2^n. n=14 gives 1.2e-4 -- the same order as the Brier
+  # gaps being measured, which would have been a readout artefact masquerading
+  # as a result. n=20 gives 1.9e-6, and costs only 6 extra integrations of ~53.
+  bisect_iters: 20
+  chunk_size: 4096

@@ -22,6 +22,11 @@ use_log_loss_weights: false
 noise_scale: 1.0
 quat_loss_weight: 1.0
 
+# Whether outcome evaluation is binary. Systems with genuine unresolved or
+# invalid terminal outcomes leave this false; Pendulum overrides it because a
+# rollout that does not succeed is, by definition, a failure.
+binary_outcomes: false
+
 val_ratio: 0.2
 test_ratio: 0
 

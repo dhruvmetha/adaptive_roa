@@ -170,9 +170,16 @@ def sharpness(p_hat: np.ndarray, p: np.ndarray, k: float | None, m: float) -> di
         sharp = float(np.mean(p_hat * (1.0 - p_hat)))
     else:
         sharp = float(k / (k - 1.0) * np.mean(p_hat * (1.0 - p_hat)))
+    if not np.isfinite(m) or m <= 1:
+        # A deterministic evaluation arm has one exact rollout per state rather
+        # than a noisy estimate of a Bernoulli probability. There is no finite-
+        # sample correction to apply, and m/(m-1) would be undefined at m=1.
+        sharp_star = float(np.mean(p * (1.0 - p)))
+    else:
+        sharp_star = float(m / (m - 1.0) * np.mean(p * (1.0 - p)))
     return {
         "SHARP": sharp,
-        "SHARP_star": float(m / (m - 1.0) * np.mean(p * (1.0 - p))),
+        "SHARP_star": sharp_star,
     }
 
 
@@ -315,12 +322,13 @@ def epoch_dirs(run_dir: Path) -> list[Path]:
 
 
 def score_epoch(epoch_dir: Path, gt: tuple, k_override: float | None,
-                n_bins: int | None) -> dict:
+                n_bins: int | None, collapse_invalid_to_failure: bool = False) -> dict:
     gt_starts, gt_p, gt_s, gt_t = gt
     with np.load(epoch_dir / "full_roa_per_point.npz") as z:
         states = z["start_states"]
         p_hat = z["p_success"].astype(np.float64)
-        p_invalid = z["p_invalid"].astype(np.float64)
+        p_invalid_raw = z["p_invalid"].astype(np.float64)
+    p_invalid = np.zeros_like(p_invalid_raw) if collapse_invalid_to_failure else p_invalid_raw
     idx = match_to_truth(states, gt_starts)
     k = k_override
     art = epoch_dir / "artifacts_v2.json"
@@ -331,6 +339,8 @@ def score_epoch(epoch_dir: Path, gt: tuple, k_override: float | None,
             k = None
     out = all_metrics(p_hat, gt_p[idx], gt_s[idx], gt_t[idx], k, n_bins)
     out["mean_p_invalid"] = float(p_invalid.mean())
+    out["mean_p_unresolved_raw"] = float(p_invalid_raw.mean())
+    out["collapse_invalid_to_failure"] = bool(collapse_invalid_to_failure)
     return out
 
 
@@ -412,6 +422,12 @@ def selftest() -> None:
     naive_sharp = float(np.mean(p_hat * (1 - p_hat)))
     assert naive_sharp < target - 1e-4, "undebiased sharpness should underestimate"
 
+    # A deterministic arm can have exactly one rollout per state. Its empirical
+    # probabilities are exact 0/1 outcomes, so the ground-truth sharpness is
+    # finite (zero) rather than an m/(m-1) division by zero.
+    sh_det = sharpness(np.array([0.1, 0.9]), np.array([0.0, 1.0]), None, 1.0)
+    assert sh_det["SHARP_star"] == 0.0, "M=1 deterministic sharpness must be finite"
+
     # thresholded RoA against sklearn
     try:
         from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score
@@ -443,6 +459,8 @@ def main() -> None:
     ap.add_argument("--epochs", default="all", help="'all', 'last', or a comma list of ints")
     ap.add_argument("--n-bins", type=int, default=None,
                     help="quantile bins for the decomposition (default: exact p_hat levels)")
+    ap.add_argument("--collapse-invalid-to-failure", action="store_true",
+                    help="binary outcome semantics: report unresolved endpoint mass as failure")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
 
@@ -467,7 +485,10 @@ def main() -> None:
             eds = [d for d in eds if int(d.name.split("_")[1]) in keep]
         for ed in eds:
             try:
-                row = score_epoch(ed, gt_cache[a.level], None, args.n_bins)
+                row = score_epoch(
+                    ed, gt_cache[a.level], None, args.n_bins,
+                    collapse_invalid_to_failure=args.collapse_invalid_to_failure,
+                )
             except Exception as exc:  # a half-written epoch must not kill the sweep
                 print(f"  !! {a.predictor}/{a.level}/{a.arm}/{ed.name}: {exc}", flush=True)
                 continue

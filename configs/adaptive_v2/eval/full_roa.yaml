@@ -10,6 +10,9 @@ eval:
   # per-system overrides survive: the eval group loads after the system group,
   # so setting it here would clobber a system's override.
   refine_invalids: false
+  # Binary systems count generated endpoints outside the success attractor as
+  # failures. Three-outcome systems retain an explicit invalid category.
+  collapse_invalid_to_failure: ${binary_outcomes}
   refine_t_min: 0.7
   refine_t_max: 0.9
   refine_num_steps: 100

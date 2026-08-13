@@ -81,7 +81,14 @@ python adaptive_roa/partial_trajs/train.py system=pendulum
 pytest
 ```
 - Hydra config groups live in `configs/`; override on the CLI (`system=cartpole device=cuda:0`).
-- SLURM: submit via `scripts/sbatch_run.sh`. This repo runs on iLab, not Amarel.
+- SLURM: `scripts/sbatch_ilab.sh` (iLab, `--partition=unlimited` — the only one open to us) or
+  `scripts/sbatch_amarel.sh` (Amarel, `--account=general`). **Both run this repo**: the ensemble
+  campaign spanned the two, and the stochastic pendulum data was collected on Amarel. Do NOT add
+  `--cpus-per-task` on iLab — it rejects the job outright; Amarel requires it.
+  `scripts/sbatch_run.sh` sets no partition and is not the one to use.
+- **Per-user paths are baked into the SLURM scripts** (`--output`, `--error`, and `R=` in
+  `scripts/ensemble/launch_*.sh` all point at `/common/home/st1122/...`). They resolve on the shared
+  iLab filesystem but are not writable by anyone else, so a job dies at write time, not submit time.
 
 ## How to work here
 - **State the exact question before reading broadly.** Breadth without a question produces

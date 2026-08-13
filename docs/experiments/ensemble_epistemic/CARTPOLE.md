@@ -152,3 +152,57 @@ epoch 0, so the threshold optimiser is not finding a stable operating point on t
 
 **Cartpole verdicts will therefore be threshold-free only** (AUC / AUPRC / Brier / `recal`).
 Any λ/δ number quoted for cartpole must carry this caveat.
+
+
+---
+
+## 6. First verdict (arms at 7/19) — all three arms are HARMFUL
+
+Scored 2026-08-13 with the arms at 7/19 against the completed 19-epoch `dir00` floor. The
+collapse screen ran first as a gate: 80 rows, 0 collapsed.
+
+Window is **ep5–6**, the first two epochs entirely past the convergence transient (§3).
+
+**Primary — campaign rule, floor pooled over all 18 shared epochs, epoch 0 excluded:**
+
+```
+fm sigma_020.0: pooled 2*SD = 0.00079 over 18 epochs
+   epi_bald   ep5: +0.00624 (+7.9x)   ep6: +0.01038 (+13.2x)   -> DISTINGUISHABLE (sign stable 6/6)
+   epi_var    ep5: +0.01711 (+21.7x)  ep6: +0.01158 (+14.7x)   -> DISTINGUISHABLE (sign stable 6/6)
+   total      ep5: +0.01609 (+20.4x)  ep6: +0.01548 (+19.6x)   -> DISTINGUISHABLE (sign stable 6/6)
+```
+
+**Declared sensitivity — converged-regime floor (ep ≥ 5), 14 epochs, floor 0.00036:** the same
+three arms at +17.3× to +47.5×. Larger, because the converged floor is tighter. Per §4 this is
+reported as a sensitivity and is **not** the headline; the primary above is the claim.
+
+**Positive means worse.** Raw `recal` (lower is better):
+
+| ep | dir00 | s43 | s44 | epi_bald | epi_var | total |
+|---|---|---|---|---|---|---|
+| 0 | 0.05312 | 0.05347 | 0.05296 | 0.05303 | 0.05303 | 0.05303 |
+| 5 | 0.04391 | 0.04427 | 0.04394 | 0.05015 | 0.06102 | 0.06001 |
+| 6 | 0.04427 | 0.04417 | 0.04375 | 0.05465 | 0.05585 | 0.05975 |
+
+Epoch 0 is identical across all six runs — the pre-acquisition identity check passing, confirming
+the arms differ only through acquisition. From epoch 1 the three seeds stay clustered near 0.044
+while every arm sits above them, at every shared epoch.
+
+### What this does and does not say
+
+**Says:** at cartpole `sigma_020.0`, acquiring on *any* of these three uncertainty scores is
+substantially worse than uniform sampling — 8× to 22× the run-to-run floor on the primary rule,
+sign-stable across all 6 shared epochs. This is the first level in the campaign where flow
+matching shows a large, consistent acquisition effect at all; every [FM] pendulum level was null
+or unresolved (`FINDINGS.md` §4).
+
+**Does not say** which arm is worse. `epi_bald` reads least harmful and `total`/`epi_var` worst,
+but with **one seed per arm** that ordering has no floor behind it — the 3-seed floor backs
+arm-vs-control comparisons only. And with **`aleat` dropped** there is no negative control, so
+the ordering cannot be checked against a rule known to be useless, which is exactly the check
+that exposed pendulum orderings as noise (`FINDINGS.md` §4c).
+
+**Provisional on depth.** The arms are at 7/19 and the window is the earliest admissible one.
+Unlike the marginal pendulum effects that churned across passes, an 8–22× effect is far outside
+threshold-crossing noise, so the *direction* is unlikely to reverse — but the magnitudes should be
+re-scored as the arms deepen. The floor itself will not change: `dir00` is complete at 19/19.

@@ -258,3 +258,44 @@ runs cannot test, not a finding.
 **Caveat.** One seed per arm, so this is a single run's trajectory. The t-statistic is large and
 the control is flat, which makes a chance trend unlikely, but replication needs more seeds. The
 between-arm ordering remains unbacked by any floor for the reasons in §6.
+
+
+---
+
+## 8. Greedy vs greedy-diverse selection (launched 2026-08-14)
+
+The arms above all used `selection_rule: greedy_diverse`, the default for every
+`decomp_*` config. This arm set re-runs the same three scores with plain
+**`greedy`** — top-N by score, no diversity term — so the selection rule is the
+only thing that differs.
+
+| run | job | score | selection_rule |
+|---|---|---|---|
+| `fm_cpstoch_s020_epi_bald_greedy` | 208565 | epistemic_bald | greedy |
+| `fm_cpstoch_s020_epi_var_greedy` | 208566 | epistemic_var | greedy |
+| `fm_cpstoch_s020_total_greedy` | 208567 | total | greedy |
+
+Identical to the greedy-diverse arms in every other respect — `gpu:a4500:1`, 100G,
+19 epochs, seed 42, `num_workers=1`, same system and sigma — so the comparison is
+paired.
+
+**The existing 19/19 `dir00` floor is reused, not rerun.** The control acquires
+with `direct` at `d2_ratio=0`, so `need_d2_acquisition` is false and the
+selection rule is never invoked: verified directly, all three seeds acquired
+**0** points through it across all 19 epochs. The floor is therefore
+selection-rule-independent, both arm sets score against the *same* floor, and
+~56h of control compute is not repeated.
+
+**Why this is worth running.** §6–7 found all three greedy-diverse arms harmful
+at +9× to +24× the floor, with the models assigning less than half the success
+mass of the control. Selection is a candidate cause: the diversity term spreads
+the 1000 acquired points across state space, which may be buying large numbers of
+low-value points. Plain greedy concentrates them on the highest-scoring states
+instead.
+
+**The risk runs the other way too, and `entropy.yaml` says so explicitly** —
+"batch diversity is a correctness requirement". Uncertainty is spatially smooth,
+so the top-1000 by score can collapse into one small region, making an epoch's
+entire acquisition budget nearly redundant. If greedy is *worse* than
+greedy-diverse, that is the likely reason; if it is better, the diversity term
+was the problem. Either outcome is informative about §6's harm.

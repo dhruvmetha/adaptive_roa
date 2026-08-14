@@ -342,3 +342,30 @@ and no "×floor" multiple can be quoted. What it does buy, at a third of the com
 arm-vs-control gaps land anywhere near the pre-regeneration +9× to +24×, that is a large effect
 against a control on the correct data, and it justifies spending the remaining two seeds. If the
 gaps are small, two more seeds would have been wasted.
+
+
+### Completed to a three-seed floor, 2026-08-14
+
+| run | job | seed | GPU |
+|---|---|---|---|
+| `fm_cpstoch_s020_dir00_v2` | 208674 | 42 | 4500_ada |
+| `fm_cpstoch_s020_dir00_v2_s43` | 208675 | 43 | 4500_ada |
+| `fm_cpstoch_s020_dir00_v2_s44` | 208676 | 44 | a5000 |
+
+All three `acquisition=direct acquisition.d2_ratio=0`, 100G, 19 epochs — identical to the
+pre-regeneration floor except for the dataset underneath. This restores the campaign's standard
+decision rule for cartpole: pooled `2·sqrt(mean(var_e))` over shared epochs with epoch 0 excluded,
+and the pre-registered converged-regime floor (ep ≥ 5) as a labelled sensitivity (§4).
+
+**Two checks owed before any verdict is quoted from this floor.**
+
+1. **Seeds must be genuinely distinct.** The campaign was previously burned by ensemble members
+   seeded from a config key present in no config, so replicates trained bit-identical models and
+   the floor collapsed to ~0 (fixed in `4c7c561`). §2 ran that check on the old floor; it must be
+   re-run here. Two of these three share a GPU type, which is the condition under which the bug
+   is detectable.
+2. **The arms and the floor must sit on the same grid.** That is what failed for §6–8. The
+   scorer's `match_to_truth` enforces it at 1e-3, so a mismatch surfaces as a rejection rather
+   than a wrong number — but check the scorer's stderr, not just its row count. The first
+   post-regeneration pass wrote 18 rows instead of ~75 and the floor was silently absent from the
+   output until the rejection lines were read.

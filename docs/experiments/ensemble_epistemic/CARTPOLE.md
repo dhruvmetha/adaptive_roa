@@ -299,3 +299,46 @@ so the top-1000 by score can collapse into one small region, making an epoch's
 entire acquisition budget nearly redundant. If greedy is *worse* than
 greedy-diverse, that is the likely reason; if it is better, the diversity term
 was the problem. Either outcome is informative about §6's harm.
+
+
+---
+
+## 9. The dataset was regenerated 2026-08-13 — everything above it is on a different grid
+
+**`$DATA_DIR/stochastic/cartpole/noisy_action/lqr/sigma_020.0` was rewritten in full at
+2026-08-13 16:18**, `train.npz` included. The state convention changed with it:
+
+| | col0 | col1 | col2 | order |
+|---|---|---|---|---|
+| before (runs of 08-10 … 08-13) | ±6.0 | **±19.99** | ±6.0 | (x, **ẋ**, θ, θ̇) |
+| after (runs of 08-14 on) | ±5.8 | **±1.15** | ±9.7 | (x, **θ**, ẋ, θ̇) |
+
+Column 1 spans ±20 before and ±1.15 after — a velocity versus a wrapped angle. `eval_states.txt`
+row 0 moved from `[-3, -5, -2.641593, 0]` to `[-3, -2.641593, -5, 0]` to match.
+
+**Consequences.**
+
+* Sections 6–8 (the 19/19 floor, the greedy-diverse arms, and both verdict passes) are all
+  pre-regeneration. They were internally consistent — floor and arms shared one convention — so
+  "+9× to +24×, all three arms harmful" was a valid statement about *that* data. It cannot be
+  reproduced against the dataset now on disk.
+* **Re-evaluation cannot rescue them.** Checkpoints are retained (190 files for `dir00`), but the
+  models learned θ in slot 2 and ẋ in slot 1. Feeding them the current data hands the network a
+  velocity where it expects an angle. Only retraining produces a comparable model.
+* The scorer catches this rather than scoring silently: `match_to_truth` rejects the old
+  per-point files at max distance 2.15 against a 1e-3 tolerance. That check fired on the first
+  post-regeneration scoring attempt.
+
+## 10. Post-regeneration control (launched 2026-08-14)
+
+`fm_cpstoch_s020_dir00_v2`, job 208674, `gpu:4500_ada:1`, 100G, 19 epochs, **seed 42 only**,
+`acquisition=direct acquisition.d2_ratio=0`. Named `_v2` to keep it distinct from the
+pre-regeneration `fm_cpstoch_s020_dir00`, which remains on disk under the old convention.
+
+**One seed is a control, not a floor.** The campaign's decision rule needs 2×SD across three
+genuinely-distinct seeds; with one run there is no run-to-run spread to estimate, so the greedy
+arms can be compared to the control in *magnitude* but no result can be called DISTINGUISHABLE
+and no "×floor" multiple can be quoted. What it does buy, at a third of the compute: if the
+arm-vs-control gaps land anywhere near the pre-regeneration +9× to +24×, that is a large effect
+against a control on the correct data, and it justifies spending the remaining two seeds. If the
+gaps are small, two more seeds would have been wasted.

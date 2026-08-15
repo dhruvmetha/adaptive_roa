@@ -165,6 +165,19 @@ def columns_for(pred: str, has_members: bool, has_acq: bool) -> list[str]:
     return cols
 
 
+def _caption(gt_note: str, missing_note: str) -> str:
+    return (
+        "Axes: theta in [-pi, pi] horizontal, theta-dot in [-2pi, 2pi] vertical. "
+        "Every colour scale is FIXED across all arms, epochs and levels — p in [0,1], "
+        "H in [0, ln 2] nats, Var in [0, 0.25] — so any two panels anywhere in this "
+        "campaign are directly comparable. The epistemic columns are the only fitted "
+        "scales (they are ~30x smaller than the total); their ceiling is on the colorbar. "
+        f"Ground truth: {gt_note}. "
+        "White inside a model panel = grid cell with no evaluation point."
+        + (f"  {missing_note}" if missing_note else "")
+    )
+
+
 def build_page(pdf, pred, level, epoch, arms, member_root, acq_root, ceilings,
                states, shape, flat, extent, gt, gt_note, cols, missing_note):
     h_epi_max, var_epi_max = ceilings
@@ -174,7 +187,15 @@ def build_page(pdf, pred, level, epoch, arms, member_root, acq_root, ceilings,
                "var_epistemic_debiased": var_epi_max}
 
     nr, nc = len(arms), len(cols)
-    fig = plt.figure(figsize=(1.72 * nc, 1.95 * nr + 0.75))
+    # The caption wraps to however many lines the page width allows, so a narrow
+    # page (a cell with few available columns) needs a taller reserved band or
+    # the text lands on top of the colorbars.
+    fig_w = 1.72 * nc
+    caption = _caption(gt_note, missing_note)
+    cap_lines = max(2, int(np.ceil(len(caption) / (fig_w * 19.0))))
+    band_in = 0.16 * cap_lines + 0.42
+    fig_h = 1.95 * nr + band_in + 0.62
+    fig = plt.figure(figsize=(fig_w, fig_h))
     gs = fig.add_gridspec(nr + 1, nc, height_ratios=[1] * nr + [0.10],
                           hspace=0.13, wspace=0.06)
     axes = [[fig.add_subplot(gs[r, c]) for c in range(nc)] for r in range(nr)]
@@ -220,7 +241,17 @@ def build_page(pdf, pred, level, epoch, arms, member_root, acq_root, ceilings,
                 for sp in ax.spines.values():
                     sp.set_visible(False)
             elif key in ("p", "p_invalid"):
-                src = marg["p_success"] if key == "p" else marg["p_invalid"]
+                # Where members exist, show THEIR marginal, not the stored one:
+                # every uncertainty column on this page is derived from p_m, so
+                # showing a different p would leave H(p) on screen inconsistent
+                # with the p on screen. For the classifier the two are
+                # bit-identical (drift 0.0000); for flow matching the recompute
+                # is the same quantity from 5x more samples, and the two agree
+                # to sampling noise with no systematic offset.
+                if key == "p":
+                    src = dec["p_bar"] if dec is not None else marg["p_success"]
+                else:
+                    src = marg["p_invalid"]
                 panel(ax, to_grid(src, shape, flat), extent, COL_CMAP[key], 0, 1,
                       COL_TITLE[key] if r == 0 else "")
             else:
@@ -285,22 +316,16 @@ def build_page(pdf, pred, level, epoch, arms, member_root, acq_root, ceilings,
     except Exception:
         pass
 
+    top_in = 0.62
     fig.suptitle(
         f"{'flow matching' if pred == 'fm' else 'classifier'}  ·  noise = {level}  ·  "
         f"adaptive epoch {epoch}"
         + (f"  ·  {n_train} training trajectories" if n_train else ""),
-        fontsize=12, color=INK, y=0.985)
-    fig.text(0.5, 0.012,
-             r"Axes: $\theta \in [-\pi,\pi]$ horizontal, $\dot\theta \in [-2\pi,2\pi]$ vertical. "
-             "Every colour scale is FIXED across all arms, epochs and levels — p in [0,1], "
-             "H in [0, ln 2] nats, Var in [0, 0.25] — so any two panels anywhere in this "
-             "campaign are directly comparable. The two epistemic columns are the only fitted "
-             "scales (they are ~30x smaller than the total); their ceiling is on the colorbar. "
-             f"Ground truth: {gt_note}, drawn on the full rollout grid. "
-             "White inside a model panel = grid cell with no evaluation point."
-             + (f"  {missing_note}" if missing_note else ""),
-             ha="center", fontsize=7, color=MUTED, wrap=True)
-    fig.subplots_adjust(left=0.035, right=0.995, top=0.925, bottom=0.055)
+        fontsize=12, color=INK, y=1.0 - 0.35 * top_in / fig_h)
+    fig.text(0.5, 0.30 * band_in / fig_h, caption,
+             ha="center", va="center", fontsize=7, color=MUTED, wrap=True)
+    fig.subplots_adjust(left=0.035 * 9.0 / max(fig_w, 6.0) + 0.012, right=0.995,
+                        top=1.0 - top_in / fig_h, bottom=band_in / fig_h)
     pdf.savefig(fig, dpi=140)
     plt.close(fig)
 

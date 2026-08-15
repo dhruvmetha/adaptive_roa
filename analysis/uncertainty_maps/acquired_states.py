@@ -30,14 +30,53 @@ from analysis.uncertainty_maps.common import ARMS, EXP, epochs_with_eval  # noqa
 from analysis.uncertainty_maps.compute_members import load_cfg  # noqa: E402
 
 
+NOISY_ROOT = ("/common/users/shared/pracsys/genMoPlan/data_trajectories/"
+              "noisy/pendulum/lqr")
+
+
+def _synthesised_data_source_cfg(level: str):
+    """Rebuild the pool config for a run whose `.hydra` did not survive.
+
+    The det/low/med runs were executed on Amarel and westeros and their config
+    snapshots were never rsynced back, so `load_cfg` has nothing to read. For
+    the NOISY levels the layout is fully determined by the level name -- the
+    dataset root is `<root>/<level>`, and `train_test_splits/` contains exactly
+    one shuffle variant (0), which is also the value every surviving config
+    records -- so the reconstruction is forced rather than guessed.
+
+    `det` is deliberately NOT reconstructed: it draws from a different regime
+    with a different on-disk layout and no surviving record of which pool it
+    used, and plotting the wrong pool's states would be a silent error.
+    """
+    if level == "det":
+        raise FileNotFoundError(
+            "det: no surviving config and no unambiguous pool layout to "
+            "reconstruct; refusing to guess the index space.")
+    root = Path(NOISY_ROOT) / level
+    if not (root / "train.npz").exists():
+        raise FileNotFoundError(f"no train.npz under {root}")
+    return OmegaConf.create({
+        "pool_format": "npz",
+        "trajectories_dir": str(root / "train.npz"),
+        "shuffled_indices_file": str(root / "train_test_splits" / "shuffled_indices_0.txt"),
+        "shuffled_labels_file": str(root / "train_test_splits" / "shuffled_labels_0.txt"),
+        "eval_states_file": str(root / "eval_states.txt"),
+    })
+
+
 def data_source_for(run: str):
     """The run's own pool data source, built from its saved config."""
     from adaptive_roa.adaptive.data_source import TrajectoryDataSourceConfig
     from adaptive_roa.adaptive.npz_data_source import NpzTrajectoryDataSource
     from adaptive_roa.adaptive.data_source import TrajectoryDataSource
 
-    cfg = load_cfg(run)
-    ds = cfg.data_source
+    _, level, _ = run.split("_", 2)
+    try:
+        ds = load_cfg(run).data_source
+    except FileNotFoundError:
+        ds = _synthesised_data_source_cfg(level)
+        print(f"  {run}: config did not survive; pool reconstructed from the "
+              f"{level} dataset layout")
     dsc = TrajectoryDataSourceConfig(
         trajectories_dir=ds.trajectories_dir,
         shuffled_indices_file=ds.shuffled_indices_file,
@@ -60,6 +99,9 @@ def acquired_for_run(run: str) -> dict:
         if not idx:
             continue
         states = np.asarray(src.get_start_states(idx), dtype=np.float32)
+        if not np.isfinite(states).all():
+            raise ValueError(f"{run} epoch {ep}: non-finite acquired start states, "
+                             "which means the index space is wrong")
         try:
             labels = np.asarray(src.get_labels(idx), dtype=np.int64)
         except Exception:

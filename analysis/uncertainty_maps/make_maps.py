@@ -46,8 +46,8 @@ from matplotlib.lines import Line2D
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from analysis.uncertainty_maps.common import (  # noqa: E402
-    ARMS, ARM_LABEL, EXP, LEVELS, decompose, epochs_with_eval, load_marginal,
-    oracle_full_image, rasteriser, to_grid,
+    ARMS, ARM_LABEL, EXP, LEVELS, binary_entropy, decompose, epochs_with_eval,
+    load_marginal, oracle_full_image, rasteriser, to_grid,
 )
 
 LN2 = float(np.log(2.0))
@@ -126,6 +126,7 @@ COL_TITLE = {
     "var_total": "Var total  $\\bar p(1-\\bar p)$",
     "var_aleatoric": "Var aleatoric  $E_m[p_m(1{-}p_m)]$",
     "var_epistemic": "Var epistemic  $\\mathrm{Var}_m(p_m)$",
+    "var_epistemic_debiased": "Var epistemic, MC-debiased\n(the score epi_var ranked on)",
 }
 COL_CMAP = {
     "gt": "coolwarm", "p": "coolwarm", "p_invalid": "Purples",
@@ -134,17 +135,43 @@ COL_CMAP = {
 }
 
 
+def columns_for(pred: str, has_members: bool, has_acq: bool) -> list[str]:
+    """Column set for a whole predictor x level cell.
+
+    A column is dropped only when it is unavailable for EVERY arm and epoch in
+    the cell -- never per page, so pages within one PDF stay aligned and
+    comparable. What was dropped is stated in the caption instead of leaving a
+    grid of placeholder tiles that crowds out the panels that do have data.
+    """
+    cols = ["gt"]
+    if has_acq:
+        cols.append("acq")
+    cols.append("p")
+    if pred == "fm":
+        cols.append("p_invalid")
+    if has_members:
+        cols += ["h_total", "h_aleatoric", "h_epistemic",
+                 "var_total", "var_aleatoric", "var_epistemic"]
+        if pred == "fm":
+            # Flow-matching p_m is a K-sample estimate, so raw between-member
+            # variance is inflated by mean_m[p_m(1-p_m)]/(K-1). The debiased
+            # version is what the epi_var arm actually ranked on; it is signed,
+            # so it gets its own diverging scale.
+            cols.append("var_epistemic_debiased")
+    else:
+        # Totals are exact functions of the stored marginal, so they survive
+        # even where the members do not.
+        cols += ["h_total", "var_total"]
+    return cols
+
+
 def build_page(pdf, pred, level, epoch, arms, member_root, acq_root, ceilings,
-               states, shape, flat, extent, gt, gt_note):
-    is_fm = pred == "fm"
-    cols = ["gt", "acq", "p", "h_total", "h_aleatoric", "h_epistemic",
-            "var_total", "var_aleatoric", "var_epistemic"]
-    if is_fm:
-        cols.insert(3, "p_invalid")
+               states, shape, flat, extent, gt, gt_note, cols, missing_note):
     h_epi_max, var_epi_max = ceilings
     vmax_of = {"gt": 1.0, "p": 1.0, "p_invalid": 1.0,
                "h_total": LN2, "h_aleatoric": LN2, "h_epistemic": h_epi_max,
-               "var_total": 0.25, "var_aleatoric": 0.25, "var_epistemic": var_epi_max}
+               "var_total": 0.25, "var_aleatoric": 0.25, "var_epistemic": var_epi_max,
+               "var_epistemic_debiased": var_epi_max}
 
     nr, nc = len(arms), len(cols)
     fig = plt.figure(figsize=(1.72 * nc, 1.95 * nr + 0.75))
@@ -197,12 +224,26 @@ def build_page(pdf, pred, level, epoch, arms, member_root, acq_root, ceilings,
                 panel(ax, to_grid(src, shape, flat), extent, COL_CMAP[key], 0, 1,
                       COL_TITLE[key] if r == 0 else "")
             else:
-                if dec is None:
+                if dec is None and key in ("h_total", "var_total"):
+                    # Both totals are exact functions of the stored marginal, so
+                    # they do not need the members at all.
+                    pb = np.clip(marg["p_success"], 0.0, 1.0)
+                    vals = binary_entropy(pb) if key == "h_total" else pb * (1.0 - pb)
+                    panel(ax, to_grid(vals, shape, flat), extent, COL_CMAP[key],
+                          0, vmax_of[key], COL_TITLE[key] if r == 0 else "")
+                    continue
+                if dec is None or key not in dec:
                     ax.axis("off")
                     if r == 0:
                         ax.set_title(COL_TITLE[key], color=MUTED, fontsize=7.5, pad=2)
                     ax.text(.5, .5, "not recoverable\n(no checkpoints)", ha="center",
                             va="center", transform=ax.transAxes, color=MUTED, fontsize=6)
+                    continue
+                if key == "var_epistemic_debiased":
+                    panel(ax, to_grid(dec[key], shape, flat), extent, "PRGn", None, None,
+                          COL_TITLE[key] if r == 0 else "",
+                          norm=TwoSlopeNorm(vcenter=0.0, vmin=-vmax_of[key],
+                                            vmax=vmax_of[key]))
                     continue
                 panel(ax, to_grid(dec[key], shape, flat), extent, COL_CMAP[key],
                       0, vmax_of[key], COL_TITLE[key] if r == 0 else "")
@@ -219,11 +260,14 @@ def build_page(pdf, pred, level, epoch, arms, member_root, acq_root, ceilings,
                 cax.legend(handles=handles, loc="center", ncol=1, fontsize=6.5,
                            handletextpad=0.3, labelspacing=0.25)
             continue
-        sm = plt.cm.ScalarMappable(cmap=COL_CMAP[key],
-                                   norm=plt.Normalize(0, vmax_of[key]))
+        signed = key == "var_epistemic_debiased"
+        lo = -vmax_of[key] if signed else 0.0
+        sm = plt.cm.ScalarMappable(cmap="PRGn" if signed else COL_CMAP[key],
+                                   norm=plt.Normalize(lo, vmax_of[key]))
         cb = fig.colorbar(sm, cax=cax, orientation="horizontal")
-        cb.set_ticks([0, vmax_of[key]])
-        cb.ax.set_xticklabels(["0", f"{vmax_of[key]:.3g}"], fontsize=6.5, color=MUTED)
+        cb.set_ticks([lo, vmax_of[key]])
+        cb.ax.set_xticklabels([f"{lo:.3g}", f"{vmax_of[key]:.3g}"],
+                              fontsize=6.5, color=MUTED)
         # Pull the end labels inside the bar: adjacent columns are only 6% of a
         # panel apart, so centred end ticks from neighbouring colorbars collide
         # and read as one garbled number.
@@ -253,7 +297,8 @@ def build_page(pdf, pred, level, epoch, arms, member_root, acq_root, ceilings,
              "campaign are directly comparable. The two epistemic columns are the only fitted "
              "scales (they are ~30x smaller than the total); their ceiling is on the colorbar. "
              f"Ground truth: {gt_note}, drawn on the full rollout grid. "
-             "White inside a model panel = grid cell with no evaluation point.",
+             "White inside a model panel = grid cell with no evaluation point."
+             + (f"  {missing_note}" if missing_note else ""),
              ha="center", fontsize=7, color=MUTED, wrap=True)
     fig.subplots_adjust(left=0.035, right=0.995, top=0.925, bottom=0.055)
     pdf.savefig(fig, dpi=140)
@@ -298,11 +343,23 @@ def main() -> None:
 
     member_root, acq_root = Path(a.members), Path(a.acquired)
     ceilings = epistemic_ceilings(pred, level, member_root, eps, arms)
-    if ceilings[0] is None:
+    has_members = ceilings[0] is not None
+    if not has_members:
         ceilings = (LN2, 0.25)
-        print(f"{pred}_{level}: no per-member data -- decomposition columns will be blank")
-    else:
-        print(f"{pred}_{level}: epistemic ceilings H={ceilings[0]:.4f} Var={ceilings[1]:.5f}")
+    has_acq = any((acq_root / f"{pred}_{level}_{arm}_acquired.npz").exists() for arm in arms)
+
+    missing = []
+    if not has_members:
+        missing.append("the aleatoric/epistemic split (per-epoch member checkpoints "
+                       "were deleted for this cell, so it is unrecoverable)")
+    if not has_acq:
+        missing.append("the acquired-states column (this run's config did not survive, "
+                       "so the pool index space cannot be reconstructed)")
+    missing_note = ("OMITTED HERE: " + "; ".join(missing) + ".") if missing else ""
+
+    cols = columns_for(pred, has_members, has_acq)
+    print(f"{pred}_{level}: members={has_members} acquired={has_acq} "
+          + (f"ceilings H={ceilings[0]:.4f} Var={ceilings[1]:.5f}" if has_members else ""))
 
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
     pdf_path = out / f"uncertainty_maps_{pred}_{level}.pdf"
@@ -310,14 +367,14 @@ def main() -> None:
     with PdfPages(pdf_path) as pdf:
         for ep in eps:
             build_page(pdf, pred, level, ep, arms, member_root, acq_root, ceilings,
-                       states, shape, flat, extent, gt, gt_note)
+                       states, shape, flat, extent, gt, gt_note, cols, missing_note)
             print(f"  page epoch {ep}", flush=True)
     print(f"wrote {pdf_path} ({len(eps)} pages)")
 
     for ep in sorted(png_eps):
         sink = _PngSink(out / f"uncertainty_maps_{pred}_{level}_epoch{ep:03d}.png")
         build_page(sink, pred, level, ep, arms, member_root, acq_root, ceilings,
-                   states, shape, flat, extent, gt, gt_note)
+                   states, shape, flat, extent, gt, gt_note, cols, missing_note)
         print(f"wrote {sink.path}")
 
 

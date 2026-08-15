@@ -369,3 +369,61 @@ and the pre-registered converged-regime floor (ep ≥ 5) as a labelled sensitivi
    than a wrong number — but check the scorer's stderr, not just its row count. The first
    post-regeneration pass wrote 18 rows instead of ~75 and the floor was silently absent from the
    output until the rejection lines were read.
+
+
+---
+
+## 11. Greedy selection does NOT rescue the arms — the harm reproduces (2026-08-15)
+
+First floor-backed verdict on the post-regeneration data. Both owed checks passed first: the v2
+seeds are genuinely distinct (AUC spreads 7.5e-05 to 2.6e-03, not identical), and the scorer
+reported **zero grid rejections** with all six runs present — the failure mode that silently
+dropped the floor in §9.
+
+```
+fm sigma_020.0: pooled 2*SD = 0.00124 over 6 shared epochs, window ep5-6
+   epi_bald   ep5: +0.01142 (+9.2x)   ep6: +0.00848 (+6.9x)    -> DISTINGUISHABLE (sign stable 6/6)
+   epi_var    ep5: +0.01525 (+12.3x)  ep6: +0.01317 (+10.6x)   -> DISTINGUISHABLE (sign stable 6/6)
+   total      ep5: +0.01870 (+15.1x)  ep6: +0.01026 (+8.3x)    -> DISTINGUISHABLE (sign stable 6/6)
+```
+
+Raw `recal` (lower is better) separates cleanly — no arm overlaps any seed:
+
+| ep | dir00 | s43 | s44 | epi_bald | epi_var | total |
+|---|---|---|---|---|---|---|
+| 5 | 0.00714 | 0.00648 | 0.00652 | 0.01856 | 0.02239 | 0.02584 |
+| 6 | 0.00635 | 0.00621 | 0.00582 | 0.01484 | 0.01953 | 0.01661 |
+
+### What this settles
+
+The greedy arms were launched to test whether **selection** caused the harm in §6–7 — whether
+`greedy_diverse` was buying large numbers of low-value points. It is not the cause. Plain greedy
+produces the same result: every arm distinguishably worse than the non-adaptive control, sign
+stable across all shared epochs.
+
+**The harm survives four independent changes at once**, which is what makes this more than a
+repeat measurement:
+
+1. a **different selection rule** (greedy, not greedy_diverse);
+2. a **regenerated dataset** with a different state convention (§9);
+3. the **binary-outcome fix** applied — `p_invalid` is 0.0000 on every arm here, versus 0.39–0.43
+   on the old-grid arms, so the invalid class cannot be inflating anything;
+4. a **fresh three-seed floor** built on the current data.
+
+So the §6–7 finding was not an artefact of the invalid-class bug, nor of the old grid, nor of the
+diversity term. Adaptive acquisition on this system genuinely degrades the model relative to
+uniform sampling.
+
+### Scope
+
+**Magnitudes are not comparable across the regeneration.** §6–7 report +9× to +24× on the old
+grid; this reports +6.9× to +15.1× on the new one. Those are different datasets with different
+floors — the agreement in *direction and rough scale* is the finding, not the specific multiples.
+
+**The arm ordering remains unbacked.** One seed per arm means arm-vs-arm gaps carry no floor, and
+the §8 head-to-head already showed the ranking flips with the metric (`total` best on Brier,
+`epi_bald` best on RES and sAUROC). Only arm-vs-control is floor-backed here.
+
+**Six shared epochs.** The floor started ~8h behind the arms and is still climbing, so this window
+will deepen. Per §7, a verdict that survives a ~50% depth increase is worth more than one that
+does not — recheck at shared depth ~10.

@@ -427,3 +427,53 @@ the §8 head-to-head already showed the ranking flips with the metric (`total` b
 **Six shared epochs.** The floor started ~8h behind the arms and is still climbing, so this window
 will deepen. Per §7, a verdict that survives a ~50% depth increase is worth more than one that
 does not — recheck at shared depth ~10.
+
+
+---
+
+## 12. Pass 2 (shared depth 10) — verdict holds; `total` alone is shrinking
+
+Rescored at shared depth 10, a 43% increase over pass 1, window **ep8-9**, floor tightened to
+0.00110 over 9 shared epochs. Gate clean: 65 rows, 0 collapsed, 0 grid rejections.
+
+```
+   epi_bald   ep8: +0.00956 (+8.7x)   ep9: +0.01213 (+11.0x)   -> DISTINGUISHABLE (sign stable 9/9)
+   epi_var    ep8: +0.01131 (+10.3x)  ep9: +0.01217 (+11.1x)   -> DISTINGUISHABLE (sign stable 9/9)
+   total      ep8: +0.00549 (+5.0x)   ep9: +0.00428 (+3.9x)    -> DISTINGUISHABLE (sign stable 9/9)
+```
+
+| arm | pass 1 (ep5-6, shared 7) | pass 2 (ep8-9, shared 10) |
+|---|---|---|
+| `epi_bald` | +9.2× / +6.9× | +8.7× / +11.0× |
+| `epi_var` | +12.3× / +10.6× | +10.3× / +11.1× |
+| `total` | +15.1× / +8.3× | **+5.0× / +3.9×** |
+
+**Every arm is still distinguishably worse than uniform sampling, sign stable across all nine
+shared epochs.** That is the trustworthy pattern from `FINDINGS.md` §4 — the verdict survived a
+substantial depth increase rather than churning.
+
+### `total`'s harm shrinks; the epistemic arms' does not
+
+Linear fit of the arm-minus-control gap against epoch:
+
+| fit window | epi_bald | epi_var | total |
+|---|---|---|---|
+| all ep1–9 | flat (t=+1.04) | flat (t=−0.38) | flat (t=−0.80) |
+| ep4 excluded | flat (t=+1.68) | flat (t=−0.10) | **shrinking (t=−2.67)** |
+| post-transient ep5–9 | flat (t=+0.29) | flat (t=−2.29) | **shrinking (t=−4.10)** |
+
+The all-epochs fit reads flat only because epoch 4 spikes `total` to +0.0855 and dominates the
+regression. That epoch was flagged as anomalous on RES grounds (`total` RES 0.046, `epi_var`
+0.085) **before** this analysis, not excluded for convenience. On the post-transient window the
+raw gap falls monotonically: 0.0191 → 0.0105 → 0.0079 → 0.0053 → 0.0046.
+
+**This inverts the old-grid result.** Under greedy-diverse on the pre-regeneration data (§7),
+`total` was the *worst* arm and its harm **grew** (slope +0.00092/epoch, t=+7.81) while the
+epistemic arms were flat. Here `total` is the *least* harmful and shrinking, with the epistemic
+arms again flat.
+
+**Hold that loosely.** Different dataset, different selection rule, and one seed per arm — the
+arm ordering has no floor behind it, and §8 already showed the ranking flips with the metric.
+What is solid is the campaign-level claim, now confirmed twice on the current data: **every
+acquisition arm is distinguishably worse than the non-adaptive control**, and neither the
+selection rule nor the invalid-class bug explains it.

@@ -127,7 +127,13 @@ def main() -> None:
         if not (EXP / run).exists():
             print(f"{run}: absent, skip")
             continue
-        got = acquired_for_run(run)
+        try:
+            got = acquired_for_run(run)
+        except FileNotFoundError as exc:
+            # One unreconstructable level must not abort the remaining ones, and
+            # the reason belongs in the output rather than in a traceback.
+            print(f"{run}: SKIPPED -- {exc}")
+            continue
         if not got:
             print(f"{run}: no acquisition records")
             continue

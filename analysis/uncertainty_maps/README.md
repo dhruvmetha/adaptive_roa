@@ -59,6 +59,42 @@ Per-epoch member checkpoints survived for **`clf_high`, `fm_high` and
 The split columns render an explicit "not recoverable" tile in those cells
 rather than being dropped, so the gap is visible rather than silent.
 
+## The epoch-sweep view
+
+`make_sweep.py` renders one quantity for every arm across the epoch ladder on a
+single fixed scale — the spatial replacement for the campaign's original line
+figure, which plotted pool means on per-panel y-axes and stopped each curve
+wherever preemption landed.
+
+```bash
+python analysis/uncertainty_maps/make_sweep.py --pred fm --level high \
+    --quantity h_epistemic --every 2 --out .../figures
+```
+
+Arms that never reached an epoch get an explicit empty tile; the ladder is never
+renumbered to hide a short run.
+
+## Verification
+
+Checked on real outputs, not asserted by construction:
+
+- Both identities hold to float precision — max deviation `8.3e-17` on the
+  variance decomposition, exactly `0` on entropy — and BALD is nonnegative at
+  every evaluated cell.
+- The classifier recompute reproduces the stored `p_success` to `0.0000`.
+- The flow-matching recompute matches the stored eval marginal with mean
+  difference `-8e-5` and median `|diff| / expected_sd` of 0.55–0.79 against the
+  0.674 a normal predicts: pure sampling noise, no definitional drift.
+- The reconstructed `med` pool reproduces the base rate where it must —
+  `dir00` draws true-p mean 0.386 against the pool's 0.390 — while `total`
+  draws 0.694, so the index space is right and the arms genuinely differ.
+
+One number worth carrying forward: at K=100 the MC debias still removes **more
+than half** the raw between-member variance at `fm_high` (6.7e-4 → 2.9e-4).
+Acquisition ran at K=20, where that inflation is ~5x larger — so the `epi_var`
+arm was ranking largely on sampling noise, which is the mechanism behind the
+campaign's null.
+
 ## Reproducing
 
 ```bash

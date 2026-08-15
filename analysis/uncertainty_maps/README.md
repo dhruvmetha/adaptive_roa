@@ -89,11 +89,28 @@ Checked on real outputs, not asserted by construction:
   `dir00` draws true-p mean 0.386 against the pool's 0.390 — while `total`
   draws 0.694, so the index space is right and the arms genuinely differ.
 
-One number worth carrying forward: at K=100 the MC debias still removes **more
-than half** the raw between-member variance at `fm_high` (6.7e-4 → 2.9e-4).
-Acquisition ran at K=20, where that inflation is ~5x larger — so the `epi_var`
-arm was ranking largely on sampling noise, which is the mechanism behind the
-campaign's null.
+### How much of the epistemic variance is sampling noise
+
+Compare like with like: both terms at `ddof=1`, so only the MC correction
+`mean_m[p_m(1−p_m)]/(K−1)` differs. On `fm_high`, epochs 0–3:
+
+| K | correction as a fraction of the observed between-member variance |
+|---|---|
+| 100 (these maps) | 0.11 – 0.65 |
+| **20 (what acquisition actually used)** | **0.55 – 3.40** |
+
+At K=20 the sampling-noise term is comparable to, and at some epochs **several
+times larger than**, the entire measured between-member variance — so the
+`epi_var` arm was ranking largely, at points entirely, on Monte-Carlo noise.
+That is the mechanism behind the campaign's null, now visible per state rather
+than as a pool average.
+
+**Do not read the two variance-epistemic columns as before/after correction.**
+`Var epistemic` uses `ddof=0` so the law-of-total-variance identity holds
+exactly against the panels beside it; the debiased column uses `ddof=1` minus
+the correction because that is precisely the acquisition score. With M=5 the
+`ddof` change alone scales by 5/4, so at K=100 the debiased column is sometimes
+the *larger* of the two. They answer different questions.
 
 ## Reproducing
 

@@ -85,10 +85,17 @@ def load_acquired(root: Path, run: str):
 def epistemic_ceilings(pred, level, member_root, epochs, arms):
     """One shared ceiling per epistemic column, fitted over the WHOLE cell.
 
-    Fitted rather than theoretical because epistemic mass is ~30x smaller than
-    total; fitted ONCE over every arm and epoch rather than per panel, so panels
-    stay comparable. The 99.5th percentile clips the handful of extreme cells
-    that would otherwise flatten everything else.
+    Fitted rather than theoretical because epistemic mass is 2-9% of the total;
+    on the [0, ln 2] scale of the neighbouring panels it would be invisible.
+    Fitted ONCE over every arm and epoch, so panels stay comparable.
+
+    The ceiling is the MEDIAN over (arm, epoch) of each panel's 99.5th
+    percentile, not the max. Per-epoch spread is wildly uneven -- on
+    fm_high_total the per-epoch p99.5 ranges 0.019 to 0.252, a 13x swing driven
+    by a few early epochs where the members had not yet converged -- and a
+    max-based ceiling lets one such epoch flatten every other page to blank.
+    The median keeps the scale fixed and comparable while leaving structure
+    visible; the outlier epochs saturate, which the caption states.
     """
     h, v = [], []
     for arm in arms:
@@ -101,7 +108,7 @@ def epistemic_ceilings(pred, level, member_root, epochs, arms):
             v.append(np.percentile(d["var_epistemic"], 99.5))
     if not h:
         return None, None
-    return float(max(h)), float(max(v))
+    return float(np.median(h)), float(np.median(v))
 
 
 def panel(ax, img, extent, cmap, vmin, vmax, title, norm=None):
@@ -171,7 +178,10 @@ def _caption(gt_note: str, missing_note: str) -> str:
         "Every colour scale is FIXED across all arms, epochs and levels — p in [0,1], "
         "H in [0, ln 2] nats, Var in [0, 0.25] — so any two panels anywhere in this "
         "campaign are directly comparable. The epistemic columns are the only fitted "
-        "scales (they are ~30x smaller than the total); their ceiling is on the colorbar. "
+        "scales: epistemic mass is 2-9% of the total, so on the neighbouring [0, ln 2] "
+        "scale it would be invisible. Their ceiling (on the colorbar) is the median "
+        "over arms and epochs of each panel's 99.5th percentile, so a few early "
+        "unconverged epochs saturate rather than flattening every other page. "
         f"Ground truth: {gt_note}. "
         "White inside a model panel = grid cell with no evaluation point."
         + (f"  {missing_note}" if missing_note else "")
@@ -341,10 +351,21 @@ def main() -> None:
     ap.add_argument("--out", required=True)
     ap.add_argument("--epochs", default="all")
     ap.add_argument("--png-epochs", default="", help="also write these epochs as PNG")
+    ap.add_argument("--arms", default="all",
+                    help="comma list, to render a subset (e.g. while an arm is still computing)")
+    ap.add_argument("--require-members", action="store_true",
+                    help="keep only epochs where EVERY selected arm has per-member data, "
+                         "so a still-running arm never renders as an empty tile that looks "
+                         "identical to an arm with no checkpoints at all")
+    ap.add_argument("--note", default="", help="extra sentence appended to the caption")
+    ap.add_argument("--suffix", default="",
+                    help="appended to the output filename, so a partial render never "
+                         "overwrites the complete one")
     a = ap.parse_args()
 
     pred, level = a.pred, a.level
-    arms = [arm for arm in ARMS if (EXP / f"{pred}_{level}_{arm}").exists()]
+    want = ARMS if a.arms == "all" else tuple(x.strip() for x in a.arms.split(","))
+    arms = [arm for arm in want if (EXP / f"{pred}_{level}_{arm}").exists()]
     if not arms:
         raise SystemExit(f"no runs for {pred}_{level}")
 
@@ -367,7 +388,23 @@ def main() -> None:
         raise RuntimeError(f"oracle grid {gt_extent} != eval grid {extent}")
 
     member_root, acq_root = Path(a.members), Path(a.acquired)
-    ceilings = epistemic_ceilings(pred, level, member_root, eps, arms)
+    if a.require_members:
+        keep = [e for e in eps
+                if all(members_path(member_root, f"{pred}_{level}_{arm}", e).exists()
+                       for arm in arms)]
+        dropped = [e for e in eps if e not in keep]
+        if dropped:
+            print(f"{pred}_{level}: dropping epochs {dropped} -- not every selected arm "
+                  "has per-member data for them yet")
+        eps = keep
+        if not eps:
+            raise SystemExit(f"{pred}_{level}: no epoch has member data for all of {arms}")
+
+    # Fit the ceiling over EVERY available epoch, not just the ones being
+    # rendered. The scale is a property of the cell; deriving it from the render
+    # subset would give a cell split across two files two different scales, and
+    # the whole point of the layout is that any two panels are comparable.
+    ceilings = epistemic_ceilings(pred, level, member_root, all_eps, arms)
     has_members = ceilings[0] is not None
     if not has_members:
         ceilings = (LN2, 0.25)
@@ -381,13 +418,15 @@ def main() -> None:
         missing.append("the acquired-states column (this run's config did not survive, "
                        "so the pool index space cannot be reconstructed)")
     missing_note = ("OMITTED HERE: " + "; ".join(missing) + ".") if missing else ""
+    if a.note:
+        missing_note = (missing_note + "  " + a.note).strip()
 
     cols = columns_for(pred, has_members, has_acq)
     print(f"{pred}_{level}: members={has_members} acquired={has_acq} "
           + (f"ceilings H={ceilings[0]:.4f} Var={ceilings[1]:.5f}" if has_members else ""))
 
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
-    pdf_path = out / f"uncertainty_maps_{pred}_{level}.pdf"
+    pdf_path = out / f"uncertainty_maps_{pred}_{level}{a.suffix}.pdf"
     png_eps = {int(x) for x in a.png_epochs.split(",") if x.strip()}
     with PdfPages(pdf_path) as pdf:
         for ep in eps:
@@ -397,7 +436,7 @@ def main() -> None:
     print(f"wrote {pdf_path} ({len(eps)} pages)")
 
     for ep in sorted(png_eps):
-        sink = _PngSink(out / f"uncertainty_maps_{pred}_{level}_epoch{ep:03d}.png")
+        sink = _PngSink(out / f"uncertainty_maps_{pred}_{level}{a.suffix}_epoch{ep:03d}.png")
         build_page(sink, pred, level, ep, arms, member_root, acq_root, ceilings,
                    states, shape, flat, extent, gt, gt_note, cols, missing_note)
         print(f"wrote {sink.path}")

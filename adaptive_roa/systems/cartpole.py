@@ -47,12 +47,60 @@ class CartPoleSystem(DynamicalSystem):
 
         super().__init__()
 
+    @staticmethod
+    def _bounds_from_schema(dataset_info: dict) -> dict:
+        """Normalise either dataset_description schema into achieved_bounds form.
+
+        Two schemas ship in the wild and they disagree about more than layout:
+
+        OLD (``stochastic/cartpole/noisy_action``, ``deterministic``) carries an
+        explicit ``achieved_bounds`` block of per-channel {min, max} measured off
+        the collected trajectories -- x +/-6.048, x_dot +/-7.338,
+        theta_dot +/-8.571 on sigma_020.0.
+
+        NEW (``stochastic/cartpole/noisy_torque``) has no ``achieved_bounds``.
+        It declares ``termination_thresholds`` instead, and its own note says
+        why the numbers moved: "The previously shipped stochastic set relaxed
+        x_dot/theta_dot to 20.0; this restores the deterministic 5.0." States at
+        or beyond a threshold were dropped at collection, so the thresholds ARE
+        the achieved bounds and are tighter than the old family's.
+
+        Falling back to the old numbers on new data would inflate the
+        normalisation scales by ~1.5x on x_dot and ~1.7x on theta_dot, which
+        silently rescales every embedding the kNN/MLP length models measure
+        distance in. Hence: read the schema, never assume.
+        """
+        if "achieved_bounds" in dataset_info:
+            return dataset_info["achieved_bounds"]
+
+        thr = dataset_info.get("termination_thresholds") or {}
+        samp = ((dataset_info.get("sampling") or {}).get("train") or {}).get("bounds") or {}
+
+        def limit(key, default=None):
+            for src in (thr, samp):
+                v = src.get(key)
+                if isinstance(v, (int, float)):
+                    return float(v)
+            if default is not None:
+                return float(default)
+            raise KeyError(
+                f"dataset_description.json has neither achieved_bounds nor a numeric "
+                f"bound for {key!r} under termination_thresholds/sampling.train.bounds")
+
+        # theta is "inf (periodic)" in the new schema -- it wraps to +/-pi anyway.
+        return {
+            "x":         {"min": -limit("x"),         "max": limit("x")},
+            "x_dot":     {"min": -limit("x_dot"),     "max": limit("x_dot")},
+            "theta":     {"min": -np.pi,              "max": np.pi},
+            "theta_dot": {"min": -limit("theta_dot"), "max": limit("theta_dot")},
+        }
+
     def _load_bounds_from_json(self, json_path: Path):
         """Load actual data bounds from dataset_description.json"""
         with open(json_path) as f:
             dataset_info = json.load(f)
 
-        bounds = dataset_info['achieved_bounds']
+        bounds = self._bounds_from_schema(dataset_info)
         self.cart_limit = max(abs(bounds['x']['min']), abs(bounds['x']['max']))
         self.velocity_limit = max(abs(bounds['x_dot']['min']), abs(bounds['x_dot']['max']))
         # For angle, we'll wrap to [-π, π] in preprocessing, so use π as limit

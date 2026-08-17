@@ -1,0 +1,53 @@
+# @package _global_
+#
+# Non-adaptive cartpole campaign: everything that is constant across the whole
+# study, in one place. Composes on top of EITHER system (cartpole_stoch for the
+# sigma levels, cartpole_pybullet for the deterministic anchor), so the two
+# families cannot drift apart in the settings that define the comparison.
+#
+# Usage:
+#   +experiment=cartpole_nonadapt system=cartpole_stoch noise_sigma=sigma_040.0 \
+#       predictor=generative initial_train_size=4000
+#   +experiment=cartpole_nonadapt system=cartpole_pybullet \
+#       predictor=classifier initial_train_size=4000
+#
+# Arms are selected with `predictor=` (generative | fm_outcome | classifier)
+# rather than the per-arm *_baseline experiments: those exist only to zero
+# d2_ratio, which this file already does, and Hydra takes a single value for the
+# experiment group so they cannot be stacked.
+
+defaults:
+  - override /eval: full_roa
+
+# Self-describing and STABLE. Both system configs' own templates separate runs by
+# d2_ratio / n_epochs / sampling_mode -- identical for every run here -- and then
+# by timestamp, leaving nothing readable to key a results table on. ${name} is
+# already unique per level (adaptive_cartpole_stoch_${noise_sigma} /
+# adaptive_cartpole_pybullet), so this stays correct for both families. The
+# `_nonadapt` suffix keeps these clear of any existing adaptive runs.
+#
+# Stable rather than timestamped means a relaunch resumes/overwrites its own
+# directory instead of silently creating a twin. Do not run the same
+# (level, arm, size, seed) concurrently.
+output_dir: ${exp_dir}/${name}_nonadapt/outputs/${predictor.name}/train_${initial_train_size}_seed_${seed}_d2_${acquisition.d2_ratio}_epochs_${n_epochs}
+
+# Non-adaptive: no second-stage acquisition. The budget axis is realised as one
+# run per pool size (below), not as a growing pool within a run.
+acquisition:
+  d2_ratio: 0.0
+
+# One training run per pool size. Legal because warm_start is false, so each
+# epoch trains from scratch, and the initial set is a prefix of the shuffle --
+# so the five sizes NEST. samples_per_epoch=0 skips the pointless end-of-epoch
+# acquisition draw for an epoch that is never followed by another.
+n_epochs: 1
+samples_per_epoch: 0
+
+eval:
+  # FORCED, not inferred. The study scores success-region-vs-everything-else at
+  # every level. The sigma levels would infer true anyway (they ship
+  # eval_success_prob.npz), but the deterministic anchor has no such file and
+  # would otherwise be scored three-way -- putting it in a different outcome
+  # space from the rest of its own table. Setting it here makes the rule a
+  # property of the campaign rather than an accident of which files exist.
+  binary_outcomes: true

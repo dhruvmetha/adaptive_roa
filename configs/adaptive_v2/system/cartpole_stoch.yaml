@@ -14,7 +14,12 @@
 # Successes are the LONG rollouts here, so the yield weight steers toward the
 # RARE class. Data labels success as an L2 ball of radius 0.05 over the full 4-D
 # state (entry-cut); attractor_radius is deliberately left at 0.2 (decision
-# 2026-08-17).
+# 2026-08-17).  That is NOT cosmetic: attractor_radius labels the K sampled
+# endpoints in endpoint_mc_probabilities, so it defines the model's predicted
+# p_success and feeds straight into sAUROC / KL / recal.  A 4-D ball of r=0.2
+# against the labelling rule's r=0.05 is (0.2/0.05)^4 = 256x the volume, so
+# predicted p_success is heavily inflated here.  Shared by every arm, so the
+# ranking should survive; the magnitudes are not comparable to r=0.05.
 #
 # Usage: system=cartpole_stoch noise_level=med acquisition.d2_ratio=0
 #

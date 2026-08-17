@@ -115,3 +115,60 @@ def test_non_binary_system_keeps_the_invalid_class(tmp_path):
 
     d = np.load(str(out / "full_roa_per_point.npz"))
     assert d["p_invalid"].max() > 0.0, "ternary scoring lost its invalid class"
+
+
+# --- forcing the outcome space from config -----------------------------------
+# binary_outcomes is normally INFERRED from eval_success_prob.npz sitting beside
+# the dataset. That is right when the flag is a property of the data, but wrong
+# when it is a study decision: a campaign scoring "success region vs everything
+# else" needs a deterministic dataset -- which has no such file -- to be scored
+# two-way so it can share a table with stochastic levels. These cover the
+# override path end to end, including that the default stays inference.
+
+class _FakeCfg(dict):
+    """Stands in for the eval config node; supports both attr and .get access."""
+    def __getattr__(self, k):
+        try:
+            return self[k]
+        except KeyError as e:
+            raise AttributeError(k) from e
+
+
+def _evaluator_cfg(**over):
+    base = dict(predictor_type="generative", alpha_eval=0.1, attractor_radius=0.2,
+                num_mc_samples_eval=20, decision_rule="one_sided",
+                refine_invalids=False, refine_t_min=0.7, refine_t_max=0.9,
+                refine_num_steps=100, refine_max_attempts=5, max_eval_rows=None,
+                verbose=False)
+    base.update(over)
+    return _FakeCfg(base)
+
+
+def test_evaluator_defaults_to_inference():
+    from adaptive_roa.adaptive_v2.eval.full_roa import FullROAEvaluator
+    ev = FullROAEvaluator(_evaluator_cfg(), system=None, device="cpu")
+    assert ev.binary_outcomes is None, "absent key must mean infer, not False"
+
+
+@pytest.mark.parametrize("forced", [True, False])
+def test_evaluator_honours_forced_flag(forced):
+    from adaptive_roa.adaptive_v2.eval.full_roa import FullROAEvaluator
+    ev = FullROAEvaluator(_evaluator_cfg(binary_outcomes=forced), system=None, device="cpu")
+    assert ev.binary_outcomes is forced
+
+
+def test_forcing_true_folds_a_system_that_would_infer_ternary(tmp_path):
+    """A non-binary system forced two-way must still fold -- the deterministic case."""
+    f, rows = _eval_file(tmp_path)
+    cache = _cache_with_invalid_mass(rows)
+    out = tmp_path / "forced"
+
+    evaluate_full_roa_fast(
+        flow_matcher=None, system=None, eval_states_file=str(f),
+        num_mc_samples=20, lambda_star=0.5, delta=0.1,
+        decision_rule="one_sided", device="cpu", output_dir=str(out),
+        verbose=False, mc_cache=cache, binary_outcomes=True,
+    )
+    d = np.load(str(out / "full_roa_per_point.npz"))
+    assert np.allclose(d["p_invalid"], 0.0)
+    assert np.allclose(d["p_success"] + d["p_failure"], 1.0, atol=1e-6)

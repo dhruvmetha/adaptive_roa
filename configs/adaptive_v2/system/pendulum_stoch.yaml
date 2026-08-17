@@ -19,8 +19,17 @@
 #
 # The data labels success as a PER-CHANNEL BOX (|theta|<0.05 and |theta_dot|
 # <0.05, hold 1, entry-cut).  attractor_radius below is deliberately left at
-# 0.1 -- endpoint classification is intentionally NOT re-matched to the
-# labelling rule (decision 2026-08-17); do not "fix" it without saying so.
+# 0.1 (decision 2026-08-17) -- do not "fix" it without saying so.
+#
+# Be clear about what that costs, because it is NOT cosmetic: attractor_radius
+# is what endpoint_mc_probabilities uses to label each of the K sampled
+# endpoints, so it DEFINES the model's predicted p_success and therefore feeds
+# straight into sAUROC / KL / recal.  is_in_attractor is a distance BALL, not a
+# box, so a ball of r=0.1 covers area 0.0314 against the labelling box's 0.0100
+# -- 3.1x more permissive.  Predicted p_success is systematically inflated and
+# there is a floor under achievable KL.  Every arm shares the bias, so the
+# ranking should survive, but the magnitudes are not comparable to a run scored
+# at r=0.05.
 # Datasets: ${data_dir}/stochastic/pendulum/gaussian_signal/lqr/{low,med,high} — npz-backed
 # training pool (train.npz) + probabilistic 3-col eval/cal/test files
 # (θ_s, θ̇_s, p_success). See scripts/prepare_stochastic_pendulum.py.

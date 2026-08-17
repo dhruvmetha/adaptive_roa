@@ -9,6 +9,14 @@ eval:
   # max_eval_rows default lives in system/_base.yaml (eval.max_eval_rows) so that
   # per-system overrides survive: the eval group loads after the system group,
   # so setting it here would clobber a system's override.
+  # null = infer from the system (eval_success_prob.npz beside the dataset means
+  # the ground truth is successes/trials with no third outcome). Set true/false to
+  # FORCE the outcome space when the scoring rule is a study decision rather than a
+  # property of the data -- e.g. a deterministic dataset that must be scored
+  # success-vs-everything-else to sit in the same table as stochastic levels.
+  # Leave null unless you mean it: forcing true on a dataset that genuinely has a
+  # third outcome silently reclassifies it as failure.
+  binary_outcomes: null
   refine_invalids: false
   refine_t_min: 0.7
   refine_t_max: 0.9

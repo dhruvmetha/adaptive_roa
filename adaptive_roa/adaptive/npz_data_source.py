@@ -19,6 +19,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import re
+
 import numpy as np
 
 from adaptive_roa.adaptive.data_source import (
@@ -63,9 +65,49 @@ class NpzTrajectoryDataSource(TrajectoryDataSource):
             n_failure = np.sum(self.labels == -1)
             print(f"  Labels: {n_success} success, {n_failure} failure")
 
+    @staticmethod
+    def _parse_rollout_ids(filepath: str) -> np.ndarray:
+        """Row ids from a shuffled-indices file, in either shipped format.
+
+        Most families write bare integers. ``stochastic/cartpole/noisy_torque``
+        writes the collector's per-rollout filenames instead::
+
+            sequence_115038.txt
+            sequence_61759.txt
+
+        ``np.loadtxt(dtype=int64)`` dies on those with
+        "could not convert string 'sequence_115038.txt' to int64", which killed
+        two launched runs 8s in.
+
+        The embedded number IS the npz row: parsing it yields an exact
+        permutation of 0..n-1 and satisfies the dataset's own consistency
+        identity, ``shuffled_labels[i] == labels[perm[i]]``, at 1.000000
+        (direct indexing without the permutation scores 0.821 on the same file,
+        so the mapping is load-bearing and not an accident of ordering).
+        """
+        ids = []
+        with open(filepath) as fh:
+            for line in fh:
+                tok = line.strip()
+                if not tok:
+                    continue
+                try:
+                    ids.append(int(tok))
+                except ValueError:
+                    m = re.search(r"(\d+)", tok)
+                    if m is None:
+                        raise ValueError(
+                            f"{filepath}: cannot read a rollout id from {tok!r}; expected "
+                            f"an integer or a name like 'sequence_<id>.txt'")
+                    ids.append(int(m.group(1)))
+        if not ids:
+            raise ValueError(f"{filepath}: no rollout ids found")
+        return np.asarray(ids, dtype=np.int64)
+
     def _load_shuffled_indices(self, filepath: str):
-        """Shuffled-indices file holds integer rollout row ids, not filenames."""
-        self.rollout_ids = np.loadtxt(filepath, dtype=np.int64, ndmin=1)
+        """Shuffled-indices file holds integer rollout row ids, or filenames
+        carrying them (see _parse_rollout_ids)."""
+        self.rollout_ids = self._parse_rollout_ids(filepath)
         n_rollouts = len(self._offsets) - 1
         if self.rollout_ids.max() >= n_rollouts or self.rollout_ids.min() < 0:
             raise ValueError(

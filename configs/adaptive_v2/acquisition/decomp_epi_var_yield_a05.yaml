@@ -1,0 +1,18 @@
+# @package _global_
+# Yield-aware epistemic acquisition at alpha=0.5 (see decomp_epi_var_yield).
+#
+# score'(x) = score(x) * E[L(x)] ** alpha. alpha=0 reduces EXACTLY to
+# decomp_epi_var (which LOSES to uniform by 3.3 floor units on KL); alpha=1
+# WINS by 1.87. This arm fills in the curve so the win can be read as a
+# mechanism with a dose-response rather than a single lucky setting.
+sampling_mode: decomp_epi_var_yield_a05
+acquisition:
+  _target_: adaptive_roa.adaptive_v2.strategy.yield_aware.YieldAwareDecompositionAcquisitionStrategy
+  score: epistemic_var
+  d2_ratio: 1.0
+  n_candidates: 50000
+  alpha: 0.5
+  prior_len_success: 150.0
+  prior_len_failure: 1000.0
+  min_per_class: 5
+  verbose: true

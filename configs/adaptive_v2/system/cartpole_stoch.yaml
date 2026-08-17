@@ -5,7 +5,18 @@
 # npz-backed training pool (train.npz) + probabilistic 5-col eval/cal/test files
 # (x, theta, x_dot, theta_dot, p_success).
 #
-# Usage: system=cartpole_stoch noise_sigma=sigma_020.0 acquisition.d2_ratio=0
+# REPOINTED 2026-08-17 from noisy_action/sigma_* to noisy_torque/lqr/{low,med,high}.
+# Measured coupling (116,242 traj) -- the length coupling INVERTS vs pendulum:
+#   level  traj_succ  L_succ  L_fail  ratio  PAIR_succ
+#   low      0.141      617      60   0.10     0.633
+#   med      0.099      640     102   0.16     0.410
+#   high     0.039      652     154   0.24     0.148
+# Successes are the LONG rollouts here, so the yield weight steers toward the
+# RARE class. Data labels success as an L2 ball of radius 0.05 over the full 4-D
+# state (entry-cut); attractor_radius is deliberately left at 0.2 (decision
+# 2026-08-17).
+#
+# Usage: system=cartpole_stoch noise_level=med acquisition.d2_ratio=0
 #
 # This is the cartpole analogue of pendulum_stoch. Verified 2026-08-10 against the
 # pendulum reference before launch:
@@ -29,15 +40,16 @@ defaults:
   - /prediction_mode: global
   - _self_
 
-name: adaptive_cartpole_stoch_${noise_sigma}
+name: adaptive_cartpole_stoch_${noise_level}
 output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${acquisition.d2_ratio}_warm_start_${warm_start}_adapt_iter_${n_epochs}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
 
 shuffle_variant: 0
 
 noise_regime: stochastic
 # Noise sigma: sigma_000.0 | sigma_015.0 | sigma_020.0 | sigma_030.0 | sigma_040.0
-noise_sigma: sigma_020.0
-dataset_name: cartpole/noisy_action/lqr/${noise_sigma}
+# Noise level: low | med | high
+noise_level: med
+dataset_name: cartpole/noisy_torque/lqr/${noise_level}
 dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
 
 # Kept from cartpole_pybullet: cartpole's ROA is two-sided and its attractor

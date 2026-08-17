@@ -1,0 +1,37 @@
+# @package _global_
+# Yield-aware epistemic acquisition (pendulum i100 sweep, 2026-08-15).
+#
+# Same score as decomp_epi_var (MC-debiased between-member variance) and the
+# same greedy top-N selection, but each candidate is ranked by
+#   score * E[L] ** alpha,   E[L] = p_bar * L_success + (1 - p_bar) * L_failure
+# i.e. by informativeness PER TRAJECTORY PURCHASED rather than per point.
+#
+# The measured failure it targets: the budget is trajectories (100/epoch) but
+# the model trains on pairs, and on noisy/pendulum/lqr/high success rollouts end
+# at the goal (mean 136.5 steps) while failures run to the 1001-step cap. The
+# pool is 40.3% success by trajectory but only 8.4% by pair. Every uncertainty
+# score bought the model's uncertain band -- on this system the true-success
+# region, mean true p of acquired points 0.90-0.99 -- hence the SHORT rollouts.
+# epi_var finished 20 epochs with 358k training pairs against the control's 652k
+# at epoch 9. Scored at matched PAIR count the arms beat uniform on KL by
+# 1.6-2.6x; at matched TRAJECTORY count they lose. Selection is not the problem;
+# yield per selection is.
+#
+# L_success / L_failure are estimated online from trajectories ALREADY acquired,
+# never from the candidate (whose length is unknown before rollout), so the
+# strategy uses only p_bar plus statistics of data already paid for. Reading the
+# coupling from data also makes this transfer to cartpole, where it inverts
+# (successes there are the LONG rollouts, ~600 vs pool mean 195).
+#
+# alpha: 0 reduces EXACTLY to decomp_epi_var, so this is a single-knob change.
+sampling_mode: decomp_epi_var_yield
+acquisition:
+  _target_: adaptive_roa.adaptive_v2.strategy.yield_aware.YieldAwareDecompositionAcquisitionStrategy
+  score: epistemic_var
+  d2_ratio: 1.0
+  n_candidates: 50000
+  alpha: 1.0
+  prior_len_success: 150.0
+  prior_len_failure: 1000.0
+  min_per_class: 5
+  verbose: true

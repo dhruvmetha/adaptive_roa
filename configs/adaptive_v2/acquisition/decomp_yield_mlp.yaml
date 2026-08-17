@@ -1,0 +1,40 @@
+# @package _global_
+# Yield-aware acquisition with an MLP length model (pendulum i100, 2026-08-17).
+#
+# Same objective as decomp_yield_knn -- score(x) * L_hat(x)**alpha, with L_hat
+# learned from the TRUE lengths of trajectories already acquired -- but the
+# estimator is a small MLP refit each epoch instead of a kNN.
+#
+# Measured on 20k held-out pool trajectories, R^2 for predicting length from the
+# start state (3 restarts, mean +- sd):
+#   n_train   kNN k=15       MLP 64-64      MLP 128-128-64   RF-200
+#     100     0.681+-0.011   0.757+-0.001   0.736+-0.012     0.501+-0.034
+#     600     0.799+-0.001   0.809+-0.005   0.807+-0.005     0.764+-0.001
+#    2000     0.814+-0.004   0.820+-0.007   0.823+-0.002     0.792+-0.003
+# The MLP's edge is largest at n=100 (+0.076) and nearly gone by n=2000
+# (+0.006), which is the right shape: the weight is broken early. 64-64 beats
+# 128-128-64 at n=100, so capacity is kept small. RF is worse than both.
+#
+# BUT the arm does not trust that benchmark blindly. A unit test found that on
+# 40 points in two clean clusters the MLP inverted the length ordering (430 vs
+# 224 for true 130 vs 1001) while the kNN was exact -- sklearn's early_stopping
+# carves 10% off an already tiny set. So every epoch runs a held-out bake-off on
+# the acquired data and uses whichever estimator actually wins; the choice and
+# both MSEs are logged. That bounds this arm below by yield_knn.
+#
+# alpha=0 still reduces EXACTLY to decomp_epi_var.
+sampling_mode: decomp_yield_mlp
+acquisition:
+  _target_: adaptive_roa.adaptive_v2.strategy.yield_mlp.YieldMLPAcquisitionStrategy
+  score: epistemic_var
+  d2_ratio: 1.0
+  n_candidates: 50000
+  alpha: 1.0
+  hidden: [64, 64]
+  knn_k: 15
+  min_labeled: 20
+  mlp_seed: 0
+  prior_len_success: 150.0
+  prior_len_failure: 1000.0
+  min_per_class: 5
+  verbose: true

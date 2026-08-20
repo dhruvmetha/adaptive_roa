@@ -64,7 +64,14 @@ class Quadrotor3DSystem(DynamicalSystem):
         with open(json_path) as f:
             dataset_info = json.load(f)
 
-        achieved = dataset_info['achieved_bounds']
+        from adaptive_roa.systems.quadrotor2d import (
+            _REQUIRED_BOUNDS_3D,
+            _resolve_achieved_bounds,
+        )
+
+        achieved = _resolve_achieved_bounds(
+            dataset_info, json_path, "quadrotor3D_lqr", _REQUIRED_BOUNDS_3D
+        )
 
         # Position bounds (x, y, z)
         self.x_limit = max(abs(achieved['x']['min']), abs(achieved['x']['max']))

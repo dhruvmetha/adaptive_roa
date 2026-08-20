@@ -11,6 +11,55 @@ from adaptive_roa.systems.base import DynamicalSystem, ManifoldComponent
 from adaptive_roa.utils.env_config import get_data_dir, get_noise_regime
 from typing import List, Dict, Tuple
 
+_REQUIRED_BOUNDS_2D = ('x', 'z', 'theta', 'x_dot', 'z_dot', 'theta_dot')
+_REQUIRED_BOUNDS_3D = ('x', 'y', 'z', 'x_dot', 'y_dot', 'z_dot', 'p', 'q', 'r')
+
+
+def _resolve_achieved_bounds(dataset_info, json_path, det_dataset_name, required):
+    """Return normalization bounds, falling back to the deterministic sibling.
+
+    The `stochastic/` quadrotor datasets ship a different `dataset_description.json`
+    schema from the `deterministic/` ones the system classes were written against:
+    they document the noise mechanism, horizon and success criteria, but carry no
+    `achieved_bounds` block. Their own descriptions state that
+    `termination_thresholds` was taken from the deterministic dataset, i.e. they
+    are the same plant over the same state space.
+
+    So when `achieved_bounds` is missing we borrow the deterministic set's, rather
+    than deriving bounds from the local `train.npz`. That choice is deliberate and
+    load-bearing: bounds set the input normalization, so per-level bounds would
+    give every noise level a DIFFERENT input scaling and silently destroy
+    comparability across levels and against the deterministic baseline -- the
+    comparison these datasets exist to support.
+
+    Behaviour is unchanged for any dataset that already carries the key.
+    """
+    if 'achieved_bounds' in dataset_info:
+        return dataset_info['achieved_bounds']
+
+    fallback = Path(get_data_dir()) / "deterministic" / det_dataset_name / "dataset_description.json"
+    if not fallback.exists():
+        raise KeyError(
+            f"{json_path} has no 'achieved_bounds' and the deterministic fallback "
+            f"{fallback} does not exist. Normalization bounds are required."
+        )
+    with open(fallback) as f:
+        det_info = json.load(f)
+    if 'achieved_bounds' not in det_info:
+        raise KeyError(f"Deterministic fallback {fallback} also lacks 'achieved_bounds'.")
+    bounds = det_info['achieved_bounds']
+
+    missing = [k for k in required if k not in bounds]
+    if missing:
+        raise KeyError(f"Deterministic fallback {fallback} is missing bounds for {missing}.")
+
+    print(
+        f"NOTE: {json_path} carries no 'achieved_bounds' (stochastic-tree schema); "
+        f"borrowing normalization bounds from {fallback} so that every noise level "
+        f"shares one input scaling."
+    )
+    return bounds
+
 
 class Quadrotor2DSystem(DynamicalSystem):
     """
@@ -60,7 +109,9 @@ class Quadrotor2DSystem(DynamicalSystem):
         with open(json_path) as f:
             dataset_info = json.load(f)
 
-        bounds = dataset_info['achieved_bounds']
+        bounds = _resolve_achieved_bounds(
+            dataset_info, json_path, "quadrotor2D_rl", _REQUIRED_BOUNDS_2D
+        )
 
         # Position bounds
         self.x_limit = max(abs(bounds['x']['min']), abs(bounds['x']['max']))

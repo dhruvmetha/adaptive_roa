@@ -52,6 +52,12 @@ ARMS = [
 ]
 BAND_C, BAND_A, MEAN_C, MEAN_LW = "0.55", 0.35, "0.15", 3.0
 
+# --clean: the four-arm read for slides and the paper. One representative per
+# predictor family plus its own non-adaptive control, so the figure answers
+# "does acquisition help, in each family" without eleven overlapping lines.
+# The FM non-adaptive control is the 3-seed band, not an entry here.
+CLEAN = ["epi_bald", "partx", "clf_dir00", "clf_epi_bald"]
+
 METRICS = [("KL",             "KL",             "KL divergence  (log, lower better)",  True),
            ("brier_debiased", "debiased Brier", "debiased Brier  (log, lower better)", True),
            ("sAUROC",         "sAUROC",         "sAUROC  (higher better)",             False)]
@@ -90,10 +96,10 @@ CAMPAIGNS = {
 }
 
 
-def load(csv_path, level):
+def load(csv_path, level, keep=None):
     m = defaultdict(dict)
     for r in csv.DictReader(open(csv_path)):
-        if r["level"] != level:
+        if r["level"] != level or (keep is not None and r["arm"] not in keep):
             continue
         m[r["arm"]][int(str(r["epoch"]).split("_")[-1])] = r
     return m
@@ -116,7 +122,11 @@ def main():
                     help=f"one or more of: {' '.join(CAMPAIGNS)} (default: all)")
     ap.add_argument("--allow-partial", action="store_true",
                     help="plot ragged depths anyway; panels get a per-arm depth stamp")
+    ap.add_argument("--clean", action="store_true",
+                    help=f"draw only {' '.join(CLEAN)} plus the FM 3-seed control; "
+                         "writes alongside the full figure with a _clean suffix")
     a = ap.parse_args()
+    keep = set(CLEAN + SEEDS) if a.clean else None
 
     for name in (a.campaigns or list(CAMPAIGNS)):
         c = CAMPAIGNS[name]
@@ -126,7 +136,7 @@ def main():
 
         loaded, ragged = [], {}
         for lv, lab in c["panels"]:
-            m = load(src, lv)
+            m = load(src, lv, keep)
             if not m:
                 print(f"  SKIP {name}/{lv}: no rows"); m = None
             else:
@@ -188,16 +198,20 @@ def main():
                     ax.legend(fontsize=7.6, loc="lower left", framealpha=0.93, ncol=2)
 
         narms = len({a_ for _, _, m in loaded for a_ in m})
-        fig.suptitle(f"{c['title']} — all acquisition methods vs non-adaptive   "
+        scope = ("one arm per predictor family vs non-adaptive"
+                 if a.clean else "all acquisition methods vs non-adaptive")
+        fig.suptitle(f"{c['title']} — {scope}   "
                      "(solid = flow matching · dotted = classifier · dash-dot = Part-X GP)\n"
                      f"{narms} arms   ·   shaded band = 3-seed FM non-adaptive range   ·   "
                      "gaps under the printed 2·SD floor are not claimable",
                      fontsize=13, y=0.988)
         fig.tight_layout(rect=[0, 0, 1, 0.955 if nrow > 1 else 0.90])
         out = ROOT / c["out"]
+        if a.clean:
+            out = out.with_name(out.stem + "_clean" + out.suffix)
         out.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(out, dpi=145); plt.close(fig)
-        print(f"  wrote {c['out']}  ({nrow} level(s), {narms} arms)")
+        print(f"  wrote {out.relative_to(ROOT)}  ({nrow} level(s), {narms} arms)")
 
 
 if __name__ == "__main__":

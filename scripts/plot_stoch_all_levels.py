@@ -121,12 +121,12 @@ def xs(m, arm):
 def budget_short(m, frac=0.9):
     """Arms that RAN TO FULL DEPTH yet hold materially less data than the leader.
 
-    On this axis a short line has two possible causes and they mean opposite
-    things: the arm is still running (says nothing), or the arm finished every
-    epoch and still acquired less (a result -- its acquisition rule declined to
-    spend the budget). Only the second is stamped, so the caller must not read a
-    short in-flight line as a finding. Depth is the discriminator: an arm at the
-    campaign's deepest epoch has no epochs left to spend.
+    Printed to the console, not drawn on the figure: on a training-trajectory
+    axis an under-spent arm already stops visibly short, so a box saying so is
+    redundant. It stays in the console because the distinction it encodes is not
+    visible -- a short line means either "still running" or "finished and spent
+    less", which are opposite readings, and only an arm at the campaign's
+    deepest epoch can be the second.
     """
     deep = max(max(v) for v in m.values())
     fin = {a_: int(m[a_][max(m[a_])]["train_trajectories"]) for a_ in m}
@@ -186,6 +186,17 @@ def main():
                 print(f"    {lab}: full depth {mx}; short -> {short}")
             continue
 
+        for lv, lab, m in loaded:
+            shortb, topb = budget_short(m)
+            if shortb:
+                print(f"    NOTE {lab}: full budget {topb:,} traj; under-spent -> "
+                      + ", ".join(f"{k}={v:,}" for k, v in shortb.items()))
+            if lab in ragged:
+                mx = max(ragged[lab].values())
+                sh = {k: v for k, v in sorted(ragged[lab].items()) if v != mx}
+                print(f"    NOTE {lab}: full depth {mx}; still short -> "
+                      + ", ".join(f"{k}={v}" for k, v in sh.items()))
+
         nrow, ncol = len(loaded), len(METRICS)
         fig, axes = plt.subplots(nrow, ncol, figsize=(6.7*ncol, 4.7*nrow), squeeze=False)
         for ri, (lv, lab, m) in enumerate(loaded):
@@ -225,21 +236,6 @@ def main():
                         else f"NO FM floor ({nseed}/3 seeds)")
                 ax.set_title(f"{lab} — {nm}   ·   {ftxt}", fontsize=10.5)
                 ax.grid(alpha=0.25, which="both", lw=0.5)
-                shortb, topb = budget_short(m)
-                if shortb:
-                    ax.text(.99, .98, "BUDGET NOT SPENT — full %s traj; %s" % (
-                                f"{topb:,}",
-                                ", ".join(f"{k}={v:,}" for k, v in shortb.items())),
-                            transform=ax.transAxes, ha="right", va="top", fontsize=6.5,
-                            color="#7a4b00",
-                            bbox=dict(fc="#fff8e6", ec="#7a4b00", alpha=.95, pad=2))
-                if lab in ragged:
-                    mx = max(ragged[lab].values())
-                    sh = {k: v for k, v in sorted(ragged[lab].items()) if v != mx}
-                    ax.text(.99, .02, "PARTIAL — full depth %d; short: %s" % (
-                                mx, ", ".join(f"{k}={v}" for k, v in sh.items())),
-                            transform=ax.transAxes, ha="right", va="bottom", fontsize=6.5,
-                            color="#b00", bbox=dict(fc="#fff0f0", ec="#b00", alpha=.9, pad=2))
                 if ri == 0 and ci == 0:
                     ax.legend(fontsize=7.6, loc="lower left", framealpha=0.93, ncol=2)
 

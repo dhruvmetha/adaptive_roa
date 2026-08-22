@@ -340,8 +340,15 @@ FM arms vs the 3-seed uniform mean, all at ep23:
 
 **All five FM adaptive arms clear the final floor on all three metrics** against a completed
 uniform baseline. Adaptive acquisition roughly halves KL at matched epoch, with margins 2.0–2.4×
-the floor. **Part-X is a confirmed null**: it is the only arm that fails to separate from uniform,
-inside the floor on every metric.
+the floor.
+
+**Part-X is inside the floor on every metric — but it is not a matched-budget comparison.** Its
+`train_trajectories` ends at **6,746 against every other arm's 13,500**: it ran all 24 epochs
+while acquiring half the data, in irregular steps (0, 1, 2, 8, 13, 19, 132, 161, 211, 215, 484,
+500) rather than a flat 500. So "Part-X does not beat uniform" is true, and "Part-X is a null
+acquisition rule at equal budget" is **not established** — the arm declined to spend, which is a
+different failure. The figure's trajectory axis shows this directly: the Part-X line stops half
+way across.
 
 **The ep15 ordering did not survive to ep23.** At ep15 the ranking was `epi_bald` ≈ `epi_var` <
 `epi_var_anch`, and the earlier readout of this section concluded that anchoring "lands
@@ -390,10 +397,11 @@ agree closely on this family, which makes sAUROC decidable here where it is not 
 | `epi_var_anch` | 19 | 0.0251 | 0.0060 | 0.9818 | −0.0373 | −0.0099 | +0.0194 | beats floor ×3 |
 | `partx` | 23 | 0.1065 | 0.0299 | 0.9348 | **+0.0451** | **+0.0145** | **−0.0275** | **worse than uniform ×3** |
 
-**Part-X does not merely fail to help on `cs` — it hurts.** It is 11× the floor on the wrong side
-of KL and 8.9× the floor on the wrong side of sAUROC, and it is the worst arm at this level by a
-wide margin. On `nd` it was a null; here the same acquisition rule is actively harmful, which is
-the sharpest family-dependence the campaign has produced.
+**Part-X ends worse than uniform on `cs`** — 11× the floor on the wrong side of KL and 8.9× on
+the wrong side of sAUROC, the worst arm at this level by a wide margin. Read it with the same
+budget caveat as `nd`: it spent **7,139 of 13,500** trajectories. Being beaten by a full-budget
+control while holding half the data is weaker evidence of harm than the raw gap suggests, and an
+earlier revision of this section called it "actively harmful" without that qualifier.
 
 **The families invert between noise models.** On `nd` the classifier family is the strongest
 (`clf_yield` 0.0167 vs best FM 0.0210). On `cs` it is the weakest: `clf_dir00` sits at KL 0.0938

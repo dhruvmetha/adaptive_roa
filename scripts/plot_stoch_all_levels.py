@@ -34,6 +34,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 ROOT = Path(__file__).resolve().parent.parent
+DATA = Path("/common/users/shared/pracsys/genMoPlan/data_trajectories/stochastic")
 SEEDS = ["dir00_s42", "dir00_s43", "dir00_s44"]
 
 # (arm, label, colour, linestyle, marker) -- THE canonical table.
@@ -81,18 +82,25 @@ CAMPAIGNS = {
     title="Quadrotor2D stochastic noisy_dynamics",
     csv="docs/experiments/stochastic/quadrotor2d/quad2d_noisy_dynamics_all_levels.csv",
     out="docs/experiments/stochastic/quadrotor2d/quad2d_noisy_dynamics_all_levels.png",
-    panels=[("noisy_dynamics_f_0.150","Quadrotor2D noisy_dynamics — f_0.150")]),
+    panels=[("noisy_dynamics_f_0.150","Quadrotor2D noisy_dynamics — f_0.150")],
+    dsroot=DATA / "quadrotor2D",
+    dslevel={"noisy_dynamics_f_0.150": "noisy_dynamics/rl/f_0.150"}),
   "quad2d_cs": dict(
     title="Quadrotor2D stochastic corridor_sine_ambient",
     csv="docs/experiments/stochastic/quadrotor2d/quad2d_corridor_sine_ambient_all_levels.csv",
     out="docs/experiments/stochastic/quadrotor2d/quad2d_corridor_sine_ambient_all_levels.png",
-    panels=[("corridor_sine_ambient_smooth","Quadrotor2D corridor_sine_ambient — smooth")]),
+    panels=[("corridor_sine_ambient_smooth","Quadrotor2D corridor_sine_ambient — smooth")],
+    dsroot=DATA / "quadrotor2D",
+    dslevel={"corridor_sine_ambient_smooth": "corridor_sine_ambient/rl/smooth"}),
   "quad3d_nd": dict(
     title="Quadrotor3D stochastic noisy_dynamics",
     csv="docs/experiments/stochastic/quadrotor3d/quad3d_noisy_dynamics_all_levels.csv",
     out="docs/experiments/stochastic/quadrotor3d/quad3d_noisy_dynamics_all_levels.png",
     panels=[("noisy_dynamics_f_0.048","Quadrotor3D noisy_dynamics — f_0.048"),
-            ("noisy_dynamics_f_0.060","Quadrotor3D noisy_dynamics — f_0.060")]),
+            ("noisy_dynamics_f_0.060","Quadrotor3D noisy_dynamics — f_0.060")],
+    dsroot=DATA / "quadrotor3D",
+    dslevel={"noisy_dynamics_f_0.048": "noisy_dynamics/lqr/f_0.048",
+             "noisy_dynamics_f_0.060": "noisy_dynamics/lqr/f_0.060"}),
 }
 
 
@@ -103,6 +111,38 @@ def load(csv_path, level, keep=None):
             continue
         m[r["arm"]][int(str(r["epoch"]).split("_")[-1])] = r
     return m
+
+
+def regime(c, lv):
+    """One line naming the noise regime, read from the level's own dataset description.
+
+    A family name alone is ambiguous: `noisy_dynamics` spans five force levels and
+    `corridor_sine_ambient` three profiles, and a reader comparing two quadrotor
+    figures has no way to tell which one a panel is unless the level's magnitude is
+    on the panel. Derived rather than hardcoded so it cannot drift from the data.
+    """
+    frag = (c.get("dslevel") or {}).get(lv)
+    if not frag or "dsroot" not in c:
+        return None
+    d = c["dsroot"] / frag / "dataset_description.json"
+    try:
+        mech = json.loads(d.read_text())["mechanism"]
+    except Exception:
+        return None
+    wt = (mech.get("reference_scale") or {}).get("level_as_fraction_of_weight")
+    pct = f"{100 * wt:.0f}% body weight" if wt else None
+    if mech.get("distribution") == "uniform":
+        lo, hi = mech.get("low"), mech.get("high")
+        what = f"F ~ U({lo:+.3f}, {hi:+.3f}) N, white"
+    else:
+        what = "coherent sine + ambient"
+    sibs = sorted(x.name for x in (c["dsroot"] / frag).parent.iterdir() if x.is_dir())
+    here = frag.rsplit("/", 1)[-1]
+    rank = f"level {sibs.index(here) + 1}/{len(sibs)}" if here in sibs else None
+    # Kept deliberately short. The full mechanism -- hold, frame, torque, the
+    # per-rollout vs per-step distinction -- belongs in the README; on the panel
+    # it overflowed the axes and collided with the neighbouring column.
+    return "  ·  ".join(x for x in (what, pct, rank) if x)
 
 
 def xs(m, arm):
@@ -246,8 +286,16 @@ def main():
                     matplotlib.ticker.FuncFormatter(lambda v, _: f"{int(v):,}"))
                 ftxt = (f"FM 2·SD floor = {f:.4f}" if f is not None
                         else f"NO FM floor ({nseed}/3 seeds)")
-                # two lines: one long title ran into the neighbouring column
-                ax.set_title(f"{lab}\n{nm}   ·   {ftxt}", fontsize=10)
+                # multi-line: one long title ran into the neighbouring column.
+                # The regime goes in as a separate text object rather than a
+                # third title line -- it wants a smaller, quieter face, and a
+                # second set_title at the same loc replaces rather than adds.
+                rg = regime(c, lv)
+                ax.set_title(f"{lab}\n{nm}   ·   {ftxt}", fontsize=10,
+                             pad=20 if rg else 6)
+                if rg:
+                    ax.text(0.5, 1.008, rg, transform=ax.transAxes, ha="center",
+                            va="bottom", fontsize=7.2, color="#555")
                 ax.grid(alpha=0.25, which="both", lw=0.5)
 
         # Count the acquisition arms drawn as lines separately from the uniform

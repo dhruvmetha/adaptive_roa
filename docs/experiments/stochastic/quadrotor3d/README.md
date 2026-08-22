@@ -274,9 +274,23 @@ First: **the epoch-0 models agree to 4 decimal places across every seed-42 arm**
 `dir00_s43`/`s44` at 0.2932/0.2910. That is the expected signature of a correct pre-acquisition
 epoch and is a clean end-to-end check that the start-state fix did not perturb training.
 
-Second: **Part-X gets worse with more data on quad3D** — best at epoch 0 (KL 0.1601) and degraded
-by epoch 17 (0.2039), with sAUROC falling 0.8843 → 0.8508. The same arm was a null on quad2D `nd`
-and harmful on quad2D `cs`. Three families, three levels, and it has yet to help on any of them.
+Second: **Part-X acquired nothing at all.** `train_trajectories` reads 10,000 at every one of its
+18 epochs — it never added a single trajectory. An earlier revision of this section read its KL
+drift as "gets worse with more data"; that is the opposite of what happened and the sentence has
+been struck rather than softened.
+
+What the series actually measures is **refit variance on a fixed 10,000-trajectory set**. The
+model is re-fit each epoch on identical data and wanders non-monotonically over a 0.068 KL range:
+
+```
+ep0 .1601  .1680 .1813 .1707 .1735 .1681 .1660 .1890 .2280(worst)
+     .2043 .1668 .2152 .1977 .1712 .1997 .2216 .1878 .2039(ep17)
+```
+
+Best at epoch 0, worst at epoch 8, no trend. That number is useful as a noise scale the other
+arms can be read against — a quad3D gap smaller than ~0.068 KL between two epochs of the same arm
+is not evidence of anything. It also means Part-X on quad3D is not a measurement of acquisition
+at all: nothing was acquired.
 
 `q3d_nd060` has no scored epochs yet; its 14 arms are queued.
 

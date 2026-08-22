@@ -105,6 +105,36 @@ def load(csv_path, level, keep=None):
     return m
 
 
+def xs(m, arm):
+    """x values for an arm: cumulative training trajectories, epoch order preserved.
+
+    The x axis is training-set size, not epoch index. Epoch is only a proxy for
+    budget, and it stops being a fair one as soon as an arm fails to spend its
+    allowance: Part-X acquires far fewer than samples_per_epoch on quad2D and
+    nothing at all on quad3D, so on an epoch axis its line runs the full width
+    while carrying half the data. On this axis it stops where its data stops.
+    """
+    e = sorted(m[arm])
+    return [int(m[arm][x]["train_trajectories"]) for x in e], e
+
+
+def budget_short(m, frac=0.9):
+    """Arms that RAN TO FULL DEPTH yet hold materially less data than the leader.
+
+    On this axis a short line has two possible causes and they mean opposite
+    things: the arm is still running (says nothing), or the arm finished every
+    epoch and still acquired less (a result -- its acquisition rule declined to
+    spend the budget). Only the second is stamped, so the caller must not read a
+    short in-flight line as a finding. Depth is the discriminator: an arm at the
+    campaign's deepest epoch has no epochs left to spend.
+    """
+    deep = max(max(v) for v in m.values())
+    fin = {a_: int(m[a_][max(m[a_])]["train_trajectories"]) for a_ in m}
+    top = max(fin.values())
+    return ({a_: v for a_, v in sorted(fin.items())
+             if max(m[a_]) == deep and v < frac * top}, top)
+
+
 def floor(m, col):
     have = [s for s in SEEDS if s in m]
     if len(have) < 3:
@@ -166,27 +196,43 @@ def main():
                 if len(have) == 3:
                     eps = sorted(set.intersection(*[set(m[s]) for s in have]))
                     vals = [[float(m[s][e][col]) for s in have] for e in eps]
-                    ax.fill_between(eps, [min(v) for v in vals], [max(v) for v in vals],
+                    # the three seeds share one budget schedule, so any of them
+                    # gives the band's x; assert rather than assume
+                    bx = [int(m[have[0]][e]["train_trajectories"]) for e in eps]
+                    for sd in have[1:]:
+                        assert [int(m[sd][e]["train_trajectories"]) for e in eps] == bx, \
+                            "uniform seeds disagree on training-set size"
+                    ax.fill_between(bx, [min(v) for v in vals], [max(v) for v in vals],
                                     color=BAND_C, alpha=BAND_A, zorder=1,
                                     label="FM non-adaptive (3-seed range)")
-                    ax.plot(eps, [st.mean(v) for v in vals], color=MEAN_C, lw=MEAN_LW,
+                    ax.plot(bx, [st.mean(v) for v in vals], color=MEAN_C, lw=MEAN_LW,
                             zorder=2, label="FM non-adaptive (mean)")
                 for arm, label, colour, style, mk in ARMS:
                     if arm not in m:
                         continue
-                    e = sorted(m[arm])
-                    ax.plot(e, [float(m[arm][x][col]) for x in e], style, color=colour,
+                    x, e = xs(m, arm)
+                    ax.plot(x, [float(m[arm][k][col]) for k in e], style, color=colour,
                             lw=1.9, marker=mk, ms=3.8, zorder=3, label=label)
                 if logy:
                     ax.set_yscale("log")
                 else:
                     vv = [float(m[x][e][col]) for x in m for e in m[x] if e > 0]
                     if vv: ax.set_ylim(min(vv)-0.004, max(vv)+0.004)
-                ax.set_ylabel(ylab); ax.set_xlabel("epoch (adaptive round)")
+                ax.set_ylabel(ylab); ax.set_xlabel("training trajectories")
+                ax.xaxis.set_major_formatter(
+                    matplotlib.ticker.FuncFormatter(lambda v, _: f"{int(v):,}"))
                 ftxt = (f"FM 2·SD floor = {f:.4f}   ·   depth {depth}" if f is not None
                         else f"NO FM floor ({nseed}/3 seeds)")
                 ax.set_title(f"{lab} — {nm}   ·   {ftxt}", fontsize=10.5)
                 ax.grid(alpha=0.25, which="both", lw=0.5)
+                shortb, topb = budget_short(m)
+                if shortb:
+                    ax.text(.99, .98, "BUDGET NOT SPENT — full %s traj; %s" % (
+                                f"{topb:,}",
+                                ", ".join(f"{k}={v:,}" for k, v in shortb.items())),
+                            transform=ax.transAxes, ha="right", va="top", fontsize=6.5,
+                            color="#7a4b00",
+                            bbox=dict(fc="#fff8e6", ec="#7a4b00", alpha=.95, pad=2))
                 if lab in ragged:
                     mx = max(ragged[lab].values())
                     sh = {k: v for k, v in sorted(ragged[lab].items()) if v != mx}

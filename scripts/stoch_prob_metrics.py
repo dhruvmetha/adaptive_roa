@@ -324,13 +324,25 @@ def score_epoch(epoch_dir: Path, gt: tuple, k_override: float | None,
     idx = match_to_truth(states, gt_starts)
     k = k_override
     art = epoch_dir / "artifacts_v2.json"
-    if k is None and art.exists():
+    meta = {}
+    if art.exists():
         try:
-            k = float(json.loads(art.read_text())["eval_metrics"]["num_mc_samples"])
+            meta = json.loads(art.read_text())
+        except ValueError:
+            meta = {}
+    if k is None:
+        try:
+            k = float(meta["eval_metrics"]["num_mc_samples"])
         except (KeyError, ValueError, TypeError):
             k = None
     out = all_metrics(p_hat, gt_p[idx], gt_s[idx], gt_t[idx], k, n_bins)
     out["mean_p_invalid"] = float(p_invalid.mean())
+    # Training-set size the epoch's model was fit on. Recorded per row because it
+    # is the honest x axis for a budget comparison: epoch index is only a proxy,
+    # and it stops being a fair one the moment two campaigns use different
+    # samples_per_epoch (quad2D 500 vs quad3D 5000).
+    tt = meta.get("train_trajectories")
+    out["train_trajectories"] = int(tt) if tt is not None else ""
     return out
 
 

@@ -198,7 +198,19 @@ def main():
                       + ", ".join(f"{k}={v}" for k, v in sh.items()))
 
         nrow, ncol = len(loaded), len(METRICS)
-        fig, axes = plt.subplots(nrow, ncol, figsize=(6.7*ncol, 4.7*nrow), squeeze=False)
+        # legend entries = one per drawn arm, plus band and mean. The three
+        # uniform seeds contribute those TWO entries between them, not three,
+        # so counting raw arm names over-widens the legend and leaves the last
+        # row stranded.
+        _tbl = {x[0] for x in ARMS}
+        _present = {a_ for _, _, m in loaded for a_ in m}
+        nlab = len(_present & _tbl) + (2 if len(_present & set(SEEDS)) == 3 else 0)
+        legcol = min(6, max(3, (nlab + 1) // 2))
+        LEG_IN = 0.42 + 0.26 * ((nlab + legcol - 1) // legcol)   # legend strip, inches
+        TOP_IN = 0.78                                            # suptitle strip, inches
+        PANEL_IN = 4.7
+        fig_h = PANEL_IN * nrow + LEG_IN + TOP_IN
+        fig, axes = plt.subplots(nrow, ncol, figsize=(6.7*ncol, fig_h), squeeze=False)
         for ri, (lv, lab, m) in enumerate(loaded):
             for ci, (col, nm, ylab, logy) in enumerate(METRICS):
                 ax = axes[ri][ci]
@@ -232,12 +244,11 @@ def main():
                 ax.set_ylabel(ylab); ax.set_xlabel("training trajectories")
                 ax.xaxis.set_major_formatter(
                     matplotlib.ticker.FuncFormatter(lambda v, _: f"{int(v):,}"))
-                ftxt = (f"FM 2·SD floor = {f:.4f}   ·   depth {depth}" if f is not None
+                ftxt = (f"FM 2·SD floor = {f:.4f}" if f is not None
                         else f"NO FM floor ({nseed}/3 seeds)")
-                ax.set_title(f"{lab} — {nm}   ·   {ftxt}", fontsize=10.5)
+                # two lines: one long title ran into the neighbouring column
+                ax.set_title(f"{lab}\n{nm}   ·   {ftxt}", fontsize=10)
                 ax.grid(alpha=0.25, which="both", lw=0.5)
-                if ri == 0 and ci == 0:
-                    ax.legend(fontsize=7.6, loc="lower left", framealpha=0.93, ncol=2)
 
         # Count the acquisition arms drawn as lines separately from the uniform
         # seeds, which are drawn once as the band. Pooling them reads as extra
@@ -253,8 +264,15 @@ def main():
                      f"{narms} acquisition arms vs a {nseed}-seed FM non-adaptive control "
                      "(shaded band)   ·   "
                      "gaps under the printed 2·SD floor are not claimable",
-                     fontsize=13, y=0.988)
-        fig.tight_layout(rect=[0, 0, 1, 0.955 if nrow > 1 else 0.90])
+                     fontsize=13, y=1 - 0.13 / fig_h)
+        # One figure-level legend along the bottom rather than an inset on the
+        # first panel: the inset covered data in the lower-left of that panel,
+        # and repeating the key per panel is redundant when every panel draws
+        # the same arms.
+        handles, labels = axes[0][0].get_legend_handles_labels()
+        fig.legend(handles, labels, loc="lower center", ncol=legcol, fontsize=8.6,
+                   frameon=False, bbox_to_anchor=(0.5, 0.004))
+        fig.tight_layout(rect=[0, LEG_IN / fig_h, 1, 1 - TOP_IN / fig_h])
         out = ROOT / c["out"]
         if a.clean:
             out = out.with_name(out.stem + "_clean" + out.suffix)

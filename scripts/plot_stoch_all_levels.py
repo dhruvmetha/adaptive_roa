@@ -79,18 +79,18 @@ CAMPAIGNS = {
             ("high","Pendulum gaussian_signal — high")]),
   "quad2d_nd": dict(
     title="Quadrotor2D stochastic noisy_dynamics",
-    csv="docs/experiments/stochastic/quadrotor/quad2d_noisy_dynamics_all_levels.csv",
-    out="docs/experiments/stochastic/quadrotor/quad2d_noisy_dynamics_all_levels.png",
+    csv="docs/experiments/stochastic/quadrotor2d/quad2d_noisy_dynamics_all_levels.csv",
+    out="docs/experiments/stochastic/quadrotor2d/quad2d_noisy_dynamics_all_levels.png",
     panels=[("noisy_dynamics_f_0.150","Quadrotor2D noisy_dynamics — f_0.150")]),
   "quad2d_cs": dict(
     title="Quadrotor2D stochastic corridor_sine_ambient",
-    csv="docs/experiments/stochastic/quadrotor/quad2d_corridor_sine_ambient_all_levels.csv",
-    out="docs/experiments/stochastic/quadrotor/quad2d_corridor_sine_ambient_all_levels.png",
+    csv="docs/experiments/stochastic/quadrotor2d/quad2d_corridor_sine_ambient_all_levels.csv",
+    out="docs/experiments/stochastic/quadrotor2d/quad2d_corridor_sine_ambient_all_levels.png",
     panels=[("corridor_sine_ambient_smooth","Quadrotor2D corridor_sine_ambient — smooth")]),
   "quad3d_nd": dict(
     title="Quadrotor3D stochastic noisy_dynamics",
-    csv="docs/experiments/stochastic/quadrotor/quad3d_noisy_dynamics_all_levels.csv",
-    out="docs/experiments/stochastic/quadrotor/quad3d_noisy_dynamics_all_levels.png",
+    csv="docs/experiments/stochastic/quadrotor3d/quad3d_noisy_dynamics_all_levels.csv",
+    out="docs/experiments/stochastic/quadrotor3d/quad3d_noisy_dynamics_all_levels.png",
     panels=[("noisy_dynamics_f_0.048","Quadrotor3D noisy_dynamics — f_0.048"),
             ("noisy_dynamics_f_0.060","Quadrotor3D noisy_dynamics — f_0.060")]),
 }

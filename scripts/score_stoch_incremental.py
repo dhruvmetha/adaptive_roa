@@ -24,7 +24,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 EXP = Path("/common/users/shared/pracsys/adaptive_roa_experiments/quadrotor_stoch")
 DATA = Path("/common/users/shared/pracsys/genMoPlan/data_trajectories/stochastic")
-DOCS = ROOT / "docs/experiments/stochastic/quadrotor"
+D2D = ROOT / "docs/experiments/stochastic/quadrotor2d"
+D3D = ROOT / "docs/experiments/stochastic/quadrotor3d"
 PY = str(ROOT / "env/bin/python")
 
 ARMS = ["dir00_s42", "dir00_s43", "dir00_s44", "epi_var", "epi_var_anch", "epi_bald",
@@ -36,19 +37,19 @@ CAMPAIGNS = {
     "q2d_nd":    dict(prefix="q2d_nd",    root=DATA / "quadrotor2D",
                       level="noisy_dynamics/rl/f_0.150",
                       key="noisy_dynamics_f_0.150",
-                      csv=DOCS / "quad2d_noisy_dynamics_all_levels.csv"),
+                      csv=D2D / "quad2d_noisy_dynamics_all_levels.csv"),
     "q2d_cs":    dict(prefix="q2d_cs",    root=DATA / "quadrotor2D",
                       level="corridor_sine_ambient/rl/smooth",
                       key="corridor_sine_ambient_smooth",
-                      csv=DOCS / "quad2d_corridor_sine_ambient_all_levels.csv"),
+                      csv=D2D / "quad2d_corridor_sine_ambient_all_levels.csv"),
     "q3d_nd048": dict(prefix="q3d_nd048", root=DATA / "quadrotor3D",
                       level="noisy_dynamics/lqr/f_0.048",
                       key="noisy_dynamics_f_0.048",
-                      csv=DOCS / "quad3d_noisy_dynamics_all_levels.csv"),
+                      csv=D3D / "quad3d_noisy_dynamics_all_levels.csv"),
     "q3d_nd060": dict(prefix="q3d_nd060", root=DATA / "quadrotor3D",
                       level="noisy_dynamics/lqr/f_0.060",
                       key="noisy_dynamics_f_0.060",
-                      csv=DOCS / "quad3d_noisy_dynamics_all_levels.csv"),
+                      csv=D3D / "quad3d_noisy_dynamics_all_levels.csv"),
 }
 
 

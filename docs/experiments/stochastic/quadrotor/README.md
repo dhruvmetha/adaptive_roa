@@ -1,13 +1,87 @@
 # Stochastic quadrotors — adaptive acquisition campaign
 
 Written 2026-08-20. **Scope: experiments run on the `stochastic/` dataset tree only.**
-**Status: IN FLIGHT.** quad2D launched 2026-08-20 10:2x (28 jobs, 214675–214702); quad3D not yet
-launched.
+**Status: IN FLIGHT.** Header last refreshed **2026-08-22 14:32**.
+
+**quad2D** launched 2026-08-20 10:2x (28 jobs, 214675-214702), `initial_train_size=2000`,
+`samples_per_epoch=500`, 24 epochs. **`noisy_dynamics f_0.150` is COMPLETE** - all 14 arms at
+24/24. **`corridor_sine_ambient smooth` is 321/336 with 11/14 arms done**; the three uniform
+floor seeds `dir00_s42/s43/s44` have ALL reached 24/24, so the `cs` family now has a real
+3-seed floor and the FM-vs-classifier gap on it is testable rather than merely observed.
+Outstanding on `cs`: `yield_mlp` 23, `epi_var_anch` 19, `yield_a1` 15.
+
+**quad3D RELAUNCHED 2026-08-22 10:21** - `noisy_dynamics` f_0.048 and f_0.060, 14 arms each,
+**jobs 226514-226541**, `--mem=8G`. The 2026-08-21 fleet (jobs 218355 + 218378-218458) is DEAD
+and its 28 output directories were deleted (~19 GB); its rows were removed from `runs.jsonl`.
+Two things were wrong with it: 20 of 28 arms crashed at first acquisition (see the start-state
+section below), and it inherited quad2D's budget, which is wrong for this system.
+
+**New quad3D budget: `initial_train_size=10000`, `samples_per_epoch=5000`, `n_epochs=18`
+= 100,000 trajectories**, 12.5% of the 800k pool, with `acquisition.n_candidates=250000`
+(top-2% selectivity; the inherited 50,000 would have been top-10% at this step size) and
+`K_acq=20` unchanged. **Note the epoch count: quad3D caps at 14 x 18 = 252 per level, NOT 336.**
+
+Measured per-epoch time on rlab7: epoch 0 2h11m, epoch 1 1h55m, so ~35 h for an 18-epoch arm.
+rlab4 runs the full-ROA eval at 7.6 it/s against rlab7's 12.7, so arms placed there are closer
+to 45-50 h. Throughput on a given node varies by more than 2x with contention; do not project
+arm duration from a single eval sample.
+
+**Memory: use `--mem=8G`.** The inherited 40G is ~10x measured need (MaxRSS 2.7-4.0 GB quad2D,
+3.7-4.4 GB quad3D) and cannot be placed on the iLab nodes that actually have free GPUs
+(ilab1/2/3 had 6/9/12 GB free RAM against 10 idle cards), which left three `cs` arms PENDING for
+20 h with `scontrol` projecting a 2026-08-27 start. Requeued at 8G they ran within two minutes.
+
+Campaign total as of 14:32: **659/1176 epochs** (quad2D 2x336 + quad3D 2x252).
+
+Partial results are in [§7](#7-provisional-standings-partial-do-not-cite) and are **not yet
+claimable**; the figure and CSV state their own depth. **Scoring is PAUSED** pending an
+eval-dataset update, so §7 has not been recomputed since 08-21.
 
 - **Data root** — `${data_dir}/stochastic/quadrotor{2D,3D}/<family>/<controller>/<level>`
 - **Experiment dir** — `/common/users/shared/pracsys/adaptive_roa_experiments/quadrotor_stoch/`
 - **Configs** — `configs/adaptive_v2/system/quadrotor{2d,3d}_stoch.yaml` (new, 2026-08-20)
-- **Run log** — 28 records in `docs/experiments/ensemble_epistemic/runs.jsonl`, `q2d_{nd,cs}_<arm>`
+- **Run logs** — **one per system, split out of the shared log on 2026-08-22.** Both live beside
+  this README:
+    - `docs/experiments/stochastic/quadrotor/runs_quad2d.jsonl` — 48 records
+    - `docs/experiments/stochastic/quadrotor/runs_quad3d.jsonl` — 28 records
+  Append-only source of truth: one record per launch, never edited in place (a resume is a NEW
+  record, not a status update on the old one). `docs/experiments/ensemble_epistemic/runs.jsonl`
+  now holds pendulum and cartpole only — no quadrotor rows.
+  Append with `scripts/exp_log.py append --log <the right jsonl> …`; `--log` is required and has
+  no default, so there is nothing to get wrong by omission.
+  Each jsonl has a sibling CSV of the same stem; regenerate all three with
+  `python scripts/runs_to_csv.py` and never hand-edit them.
+  **Why split:** quad2D and quad3D are different state spaces, different pools, and since
+  2026-08-22 different budgets (24 epochs vs 18). A shared log invites reading rows side by side
+  that are not comparable, and makes "how deep is this level" a filtering problem rather than a
+  `wc -l`.
+
+**Reading the run log.** It is append-only: a relocation or resume is a NEW record, never an
+edit to the old one. So arms that moved hosts appear **more than once** — once per launch — and
+the superseded record still reads `status: launched`, because it was, right up until it was
+cancelled. **Counting rows is not counting runs.** Tell them apart with `cluster` +
+`launched_at` (newest wins) and the `dir_state` column:
+
+| `dir_state` | meaning |
+|---|---|
+| `local` | counted on this host; `epochs_on_disk` is real |
+| `remote` | `output_dir` is on Amarel `/scratch`, unmeasurable from iLab — **not** zero progress |
+| `missing` | local path absent: the run never wrote anything, e.g. cancelled before it started |
+
+So a relocated arm reads `remote` on its live record and `missing` on the superseded one.
+
+`epochs_on_disk` counts `artifacts_v2.json`, never `epoch_*` directories — a directory is created
+before its epoch finishes, so counting directories overstates depth.
+
+**Nothing runs on Amarel.** An earlier plan put 8 `cs` arms there; the clone turned out to be 308
+commits behind and the arms were relaunched on iLab/westeros instead. Verified 2026-08-20 15:4x:
+zero `q2d_*` jobs and zero `q2d_*` directories under `/scratch` on Amarel. Every arm writes to the
+shared `/common` filesystem, so no rsync step stands between the runs and scoring. The campaign
+runs on **iLab** (SLURM, 12-GPU quota) and **westeros** (tmux, one session per arm); an arm's live
+host is in its newest run-log record.
+
+
+**Methods:** see [`../METHODS.md`](../METHODS.md) for what each arm, score and predictor actually does, the d1/d2 split, the metric definitions, and the standard of evidence. This file reports results and assumes those definitions.
 
 ---
 
@@ -43,7 +117,13 @@ maximum, so even within one family the two systems are not on a common scale.
 
 ---
 
-## 2. Measured pool structure (2026-08-20, from the shipped `train.npz`)
+## 2. Measured pool structure (from the shipped `train.npz`)
+
+**quad3D rows re-measured 2026-08-21** after dm1487 rewrote the corridor `train.npz` (08-20 00:02)
+and both corridor `eval_success_prob.npz` (08-20 16:10). The corridor `frac_mid` values moved:
+f_0.25 0.108 → **0.124**, f_0.30 0.130 → **0.149**. Trajectory-level stats are unchanged, so the
+rewrite altered the eval grid, not the pool. quad2D rows and quad3D `noisy_dynamics` rows are
+unchanged from the 2026-08-20 measurement (those files have not been touched since 08-15).
 
 The length–outcome coupling runs the **cartpole** way — long == success — not the pendulum way:
 
@@ -59,8 +139,8 @@ The length–outcome coupling runs the **cartpole** way — long == success — 
 | 3D noisy_dynamics f_0.048 | 0.051 | 661.8 | 33.2 | 0.519 | **0.230** |
 | 3D noisy_dynamics f_0.060 | 0.034 | 691.4 | 50.4 | 0.324 | **0.230** |
 | 3D noisy_dynamics f_0.072 | 0.020 | 705.6 | 63.2 | 0.187 | 0.225 |
-| 3D corridor f_0.25 | 0.052 | 563.0 | 16.9 | 0.647 | 0.108 |
-| 3D corridor f_0.30 | 0.043 | 562.9 | 17.8 | 0.586 | 0.130 |
+| 3D corridor f_0.25 | 0.052 | 563.0 | 16.9 | 0.647 | 0.124 |
+| 3D corridor f_0.30 | 0.043 | 562.9 | 17.8 | 0.586 | 0.149 |
 
 `frac_mid` = fraction of eval cells with `p` in (0.05, 0.95) — the separating power available to
 KL/sAUROC. **Pendulum's is 0.286.** quad2D is THIN (max 0.103), so expect smaller gaps there and
@@ -189,6 +269,27 @@ Against `attractor_radius=0.3` that is (0.3/0.05)¹² ≈ **2.2×10⁹** times t
 beyond quad2D's 11.4×. **Verify on a quad3D pilot that predicted `p_success` is not saturated
 before launching that fleet.**
 
+**Do NOT run quadrotor work on the existing Amarel clone.** Attempted 2026-08-20 to escape iLab's
+12-GPU quota; A100s there admit a job in ~20 seconds (`sbatch --test-only` claimed a 21-hour wait
+and was wrong by three orders of magnitude — always probe with a real job). But
+`/home/st1122/Projects/adaptive_roa` on Amarel is **308 commits and 295 files behind origin, and
+29 of those files are also locally modified** by someone else, so it cannot be brought current
+safely. Three separate failures followed, each looking like the last one:
+
+1. `ValueError: could not convert 'sequence_40536.txt' to int64` — its `npz_data_source.py`
+   predates `4d71a63`, which taught the loader to parse filename-style indices.
+2. `Could not find 'acquisition/decomp_yield_mlp'` — the entire yield-aware config and strategy
+   family postdates that clone.
+3. `IndexError: index 3 is out of bounds ... size 3` at `quadrotor2d.py:313` — a 3-column state
+   reaching the 6-D `normalize_state`, from within the 29 locally-modified files. Not fixable
+   without overwriting someone else's work.
+
+All 12 Amarel attempts wrote **0 artifacts**, so nothing was lost, but ~45 minutes were.
+**The diagnostic that would have prevented all of it is one command:**
+`git log --oneline HEAD..origin/<branch> | wc -l`, run BEFORE launching. Patching file-by-file
+treats each symptom as the last one; measure the gap first. If Amarel is wanted for quad3D, make a
+**fresh clone** at the target branch and symlink the existing venv — do not repair this one.
+
 **The three predictor config traps** (each killed a cartpole job in 8–80 s):
 
 ```
@@ -214,3 +315,243 @@ that had actually died — the `.0` step read `FAILED 1:0`. Always check the ste
   intact; originals backed up.
 - 28 run records appended to `runs.jsonl` as `q2d_{nd,cs}_<arm>`.
 - Companions: `../pendulum/`, `../cartpole/`.
+
+---
+
+## 7. Standings
+
+Scored 2026-08-22 16:41 by `scripts/score_stoch_incremental.py`, which re-projects the
+`p_success` already written by each epoch's evaluation onto the continuous
+`eval_success_prob.npz` ground truth. It is incremental: every monitoring cycle it diffs the
+epochs on disk against the committed CSV and scores only the difference, so these tables track
+the campaign rather than lagging it. No model inference is involved and no run is re-trained.
+
+Data and figures, one pair per family:
+
+| family | CSV | figure |
+|---|---|---|
+| quad2D `noisy_dynamics f_0.150` | `quad2d_noisy_dynamics_all_levels.csv` | `quad2d_noisy_dynamics_all_levels.png` |
+| quad2D `corridor_sine_ambient smooth` | `quad2d_corridor_sine_ambient_all_levels.csv` | `quad2d_corridor_sine_ambient_all_levels.png` |
+| quad3D `noisy_dynamics` | `quad3d_noisy_dynamics_all_levels.csv` | `quad3d_noisy_dynamics_all_levels.png` |
+
+**Three predictor families, three baselines.** The 2·SD floor is the **FM** floor (3 uniform
+seeds, ep0 excluded) and it licenses **FM-vs-FM** statements only. `clf_*` arms are a different
+model class and are read against `clf_dir00`, their own uniform run — of which there is **one
+seed**, so no classifier gap is claimable at any size and the classifier tables below are
+descriptive. Part-X is a third class again, and is reported against the FM control only because
+it shares that control's training pool.
+
+Metrics are KL, debiased Brier, and sAUROC. The artifact `auc`/`brier` fields are never used:
+they score against a 0.5-dichotomised label field rather than the continuous truth.
+
+### quad2D `noisy_dynamics f_0.150` — COMPLETE (14/14 arms × 24 epochs)
+
+| metric | 2·SD floor (ep1–23) | 3-seed uniform control at ep23 |
+|---|---|---|
+| KL | **0.0184** | 0.0647 |
+| debiased Brier | **0.0012** | 0.0127 |
+| sAUROC | **0.0398** | 0.9220 |
+
+FM arms vs the 3-seed uniform mean, all at ep23:
+
+| arm | KL | Brier_deb | sAUROC | ΔKL | ΔBrier | ΔsAUROC | verdict |
+|---|---|---|---|---|---|---|---|
+| `epi_var_anch` | 0.0210 | 0.0043 | 0.9691 | −0.0437 | −0.0084 | +0.0471 | beats floor ×3 |
+| `yield_a1` | 0.0229 | 0.0052 | 0.9695 | −0.0418 | −0.0076 | +0.0475 | beats floor ×3 |
+| `yield_mlp` | 0.0244 | 0.0053 | 0.9671 | −0.0403 | −0.0074 | +0.0451 | beats floor ×3 |
+| `epi_bald` | 0.0262 | 0.0059 | 0.9664 | −0.0384 | −0.0068 | +0.0444 | beats floor ×3 |
+| `epi_var` | 0.0288 | 0.0063 | 0.9633 | −0.0359 | −0.0064 | +0.0413 | beats floor ×3 |
+| `partx` | 0.0480 | 0.0123 | 0.9468 | −0.0167 | −0.0005 | +0.0248 | inside floor ×3 — **null** |
+
+**All five FM adaptive arms clear the final floor on all three metrics** against a completed
+uniform baseline. Adaptive acquisition roughly halves KL at matched epoch, with margins 2.0–2.4×
+the floor. **Part-X is a confirmed null**: it is the only arm that fails to separate from uniform,
+inside the floor on every metric.
+
+**The ep15 ordering did not survive to ep23.** At ep15 the ranking was `epi_bald` ≈ `epi_var` <
+`epi_var_anch`, and the earlier readout of this section concluded that anchoring "lands
+consistently worse". At full depth the order is inverted: `epi_var_anch` is the **best** FM arm
+(0.0210) and `epi_var` the worst (0.0288). The whole FM spread is 0.0078, well inside the 0.0184
+floor, so no FM arm is distinguishable from another — but the mid-run ordering was an artifact of
+depth, not a result, and should not be cited.
+
+Classifier arms vs `clf_dir00` at ep23 (single-seed baseline, **no floor, descriptive only**):
+
+| arm | KL | Brier_deb | sAUROC | Δ vs `clf_dir00` (KL / Brier / sAUROC) |
+|---|---|---|---|---|
+| `clf_yield` | 0.0167 | 0.0039 | 0.9782 | −0.0152 / −0.0036 / +0.0090 |
+| `clf_epi_var` | 0.0182 | 0.0044 | 0.9769 | −0.0137 / −0.0031 / +0.0077 |
+| `clf_epi_bald` | 0.0183 | 0.0045 | 0.9768 | −0.0136 / −0.0031 / +0.0075 |
+| `clf_epi_var_anch` | 0.0219 | 0.0051 | 0.9755 | −0.0100 / −0.0025 / +0.0062 |
+| `clf_dir00` (control) | 0.0319 | 0.0076 | 0.9693 | — |
+
+Every adaptive classifier arm beats its own control, in the same direction as the FM family. Two
+things about this family are worth stating plainly and are **not** claims about acquisition:
+`clf_yield` at 0.0167 is the best number anywhere in this level, and **non-adaptive `clf_dir00`
+at 0.0319 beats every adaptive FM arm**. On `nd`, the predictor class matters more than the
+acquisition rule.
+
+### quad2D `corridor_sine_ambient smooth` — 11/14 arms at depth
+
+`epi_var_anch` (20), `yield_mlp` (23) and `yield_a1` (16) are still running; their rows are at
+their own deepest epoch, so their gaps are read against a shallower control and flatter early.
+The figure carries a PARTIAL stamp naming them.
+
+| metric | 2·SD floor (ep1–23) | 3-seed uniform control at ep23 |
+|---|---|---|
+| KL | **0.0040** | 0.0614 |
+| debiased Brier | **0.0009** | 0.0154 |
+| sAUROC | **0.0031** | 0.9623 |
+
+The `cs` floor is 4.6× tighter than `nd` on KL and 13× tighter on sAUROC: the three uniform seeds
+agree closely on this family, which makes sAUROC decidable here where it is not on `nd`.
+
+| arm | ep | KL | Brier_deb | sAUROC | ΔKL | ΔBrier | ΔsAUROC | verdict |
+|---|---|---|---|---|---|---|---|---|
+| `yield_mlp` | 22 | 0.0215 | 0.0052 | 0.9848 | −0.0394 | −0.0103 | +0.0212 | beats floor ×3 |
+| `epi_bald` | 23 | 0.0221 | 0.0055 | 0.9853 | −0.0394 | −0.0099 | +0.0229 | beats floor ×3 |
+| `yield_a1` | 15 | 0.0236 | 0.0055 | 0.9825 | −0.0502 | −0.0129 | +0.0277 | beats floor ×3 |
+| `epi_var` | 23 | 0.0241 | 0.0060 | 0.9840 | −0.0373 | −0.0094 | +0.0216 | beats floor ×3 |
+| `epi_var_anch` | 19 | 0.0251 | 0.0060 | 0.9818 | −0.0373 | −0.0099 | +0.0194 | beats floor ×3 |
+| `partx` | 23 | 0.1065 | 0.0299 | 0.9348 | **+0.0451** | **+0.0145** | **−0.0275** | **worse than uniform ×3** |
+
+**Part-X does not merely fail to help on `cs` — it hurts.** It is 11× the floor on the wrong side
+of KL and 8.9× the floor on the wrong side of sAUROC, and it is the worst arm at this level by a
+wide margin. On `nd` it was a null; here the same acquisition rule is actively harmful, which is
+the sharpest family-dependence the campaign has produced.
+
+**The families invert between noise models.** On `nd` the classifier family is the strongest
+(`clf_yield` 0.0167 vs best FM 0.0210). On `cs` it is the weakest: `clf_dir00` sits at KL 0.0938
+against the FM control's 0.0614, and the best classifier arm (`clf_epi_var` 0.0629) barely reaches
+the FM *control*, while every FM adaptive arm is at 0.0215–0.0251. Adaptive still beats
+non-adaptive **within** the classifier family (−0.0295 to −0.0309 KL vs `clf_dir00`), so the
+inversion is about model class, not about acquisition.
+
+Note the one metric where the classifier family stays ahead on `cs`: sAUROC, where `clf_*` arms
+reach 0.9834–0.9849 against `clf_dir00` 0.9791. A model can rank states well while being badly
+calibrated, and on this family the classifier does exactly that.
+
+### quad3D `noisy_dynamics f_0.048` — 9/14 arms, 1–18 epochs (too shallow to rank)
+
+Relaunched 2026-08-22 with the 10k/5k/18 budget after the start-state fix. Only `partx` has full
+depth; the FM arms are at 1–3 epochs, so **no floor exists yet and nothing here is a result**.
+Recorded because the numbers already say two useful things.
+
+| arm | ep | KL | Brier_deb | sAUROC |
+|---|---|---|---|---|
+| `dir00_s42` | 0 → 2 | 0.2986 → 0.1606 | 0.0606 → 0.0324 | 0.8760 → 0.9274 |
+| `partx` | 0 | 0.1601 | 0.0456 | 0.8843 |
+| `partx` | 17 | 0.2039 | 0.0601 | 0.8508 |
+
+First: **the epoch-0 models agree to 4 decimal places across every seed-42 arm** (0.2986 KL for
+`epi_var`, `epi_var_anch`, `epi_bald`, `yield_a1`, `yield_mlp` and `dir00_s42` alike), with
+`dir00_s43`/`s44` at 0.2932/0.2910. That is the expected signature of a correct pre-acquisition
+epoch and is a clean end-to-end check that the start-state fix did not perturb training.
+
+Second: **Part-X gets worse with more data on quad3D** — best at epoch 0 (KL 0.1601) and degraded
+by epoch 17 (0.2039), with sAUROC falling 0.8843 → 0.8508. The same arm was a null on quad2D `nd`
+and harmful on quad2D `cs`. Three families, three levels, and it has yet to help on any of them.
+
+`q3d_nd060` has no scored epochs yet; its 14 arms are queued.
+
+
+## quad3D: scored acquisition was blocked by a start-state mismatch (RESOLVED 2026-08-22)
+
+**Confirmed 2026-08-21 across all three predictor backends.** Every quad3D arm that scores
+candidates dies at its first acquisition with
+
+```
+File "adaptive_roa/adaptive_v2/probability/ensemble_prob.py", line 62, in estimate_members
+    embedded = self.system.embed_state_for_model(self.system.normalize_state(x))
+File "adaptive_roa/systems/quadrotor3d.py", line 348, in normalize_state
+    ang_vel[:, 2] / self.r_limit,
+IndexError: index 2 is out of bounds for dimension 1 with size 2
+```
+
+It was seen first on the FM ensemble, then Part-X (GP), then the classifier ensemble, all through
+the same `estimate_members` frame. The predictor is not the cause.
+
+### The two "start states" are not the same state
+
+`train.npz` holds two arrays the code both treats as start states:
+
+| array | shape | what it is |
+|---|---|---|
+| `starts` | 800,000 x **12** | position, **Euler ZYX**, linear velocity, angular velocity |
+| `states[offsets[r]]` | **13** | position, **quaternion (qw,qx,qy,qz)**, linear velocity, body rates |
+
+Training pairs are built from `states` (`load_trajectory` -> `states[offsets[r]:offsets[r+1]]`),
+so the model is trained on the 13-D row. `get_start_states` returns the 12-D `starts` array, and
+that is the only thing the scored acquisition path ever feeds the model.
+
+Measured over 5,000 rollouts of `noisy_dynamics/f_0.048`:
+
+| block | agreement |
+|---|---|
+| position | max abs diff 1.19e-07 — identical |
+| linear velocity | max abs diff 1.19e-07 — identical |
+| orientation | Euler ZYX -> quaternion matches to 2.8e-03 on 99.7% of rollouts — convertible |
+| **angular velocity** | **raw correlation -0.006**; after a Euler-rate -> body-rate transform, 0.337 |
+
+The angular-velocity block is genuinely different data, not a different parameterisation of the
+same numbers. `starts` is clipped to the +/-24 sampling bound; `states` row 0 reaches +/-37.7,
+consistent with the dataset description's note that achieved rates reach 39.1 against a stated 24.
+`starts` is the sampled initial condition; `states` row 0 is what the simulator recorded after the
+first control step and external-force draw.
+
+**So the crash is protective.** Padding the 12-D vector into 13-D — even converting Euler to
+quaternion correctly — would hand the ensemble a state whose angular velocity is uncorrelated with
+anything it saw in training, and every epistemic score would be computed on garbage silently. An
+earlier revision of this section proposed exactly that (a 12-D branch in `normalize_state`); that
+is wrong and would have produced a fleet of plausible, meaningless numbers.
+
+**The fix is in the data source, not the system.** `NpzTrajectoryDataSource.start_states` should
+read `states[offsets[rollout_ids]]` rather than `starts[rollout_ids]`, so acquisition scores the
+same representation training uses. `normalize_state` is correct as written.
+
+### Blast radius
+
+10 of 14 arms per level, 20 of 28 across `f_0.048` + `f_0.060`.
+
+| survives | dies |
+|---|---|
+| `dir00_s42`, `dir00_s43`, `dir00_s44`, `clf_dir00` | `epi_var`, `epi_var_anch`, `epi_bald`, `yield_a1`, `yield_mlp`, `partx`, `clf_yield`, `clf_epi_var`, `clf_epi_bald`, `clf_epi_var_anch` |
+
+Uniform sampling never calls `estimate_members` — it passes only indices, and pairs are rebuilt
+from `states` — which is exactly why the four `dir00`/`clf_dir00` arms are unaffected.
+
+### quad2D is not affected
+
+On `quadrotor2D/noisy_dynamics/rl/f_0.150`, `starts` and `states` are both 6-D and
+`starts[r] == states[offsets[r]]` to 2.4e-07 across all columns. The mismatch is specific to
+quad3D, where the collector stored the sampling representation (Euler) alongside the simulation
+representation (quaternion). No quad2D result needs revisiting.
+
+### Fix applied 2026-08-22
+
+`adaptive_roa/adaptive/npz_data_source.py` now derives start states from `states`:
+
+```python
+self.start_states = self._states[self._offsets[self.rollout_ids]]
+self._warn_if_starts_disagree()
+```
+
+`_starts` fed exactly one line, so this is the whole change. `_warn_if_starts_disagree` logs a
+NOTE when the npz's `starts` array is not `states[offsets[r]]` — by width or by value — so a
+dataset carrying this split announces itself on line one instead of being found by a crash.
+`Quadrotor3DSystem.normalize_state` was NOT touched; it was correct as written.
+
+Verified:
+
+| check | result |
+|---|---|
+| quad3D `start_states` width | 12 -> **13** |
+| equals `states[offsets[rollout_ids]]` | max abs diff **0.0** |
+| `normalize_state` on 2000 candidates | OK, (2000, 13), all finite — this is the frame that raised |
+| `embed_state_for_model` | OK, (2000, 13), matches `model_dims.condition_dim: 13` |
+| **quad2D regression** | max abs diff vs pre-fix behaviour **0.0** — no-op |
+| warning fires on quad3D | `NOTE: npz 'starts' is 12-D but 'states' is 13-D` |
+
+The 28 quad3D run directories from the 08-21 launch were deleted (~19 GB); they carried the wrong
+budget as well as this defect. Relaunch is at 10,000 / 5,000 / 18 epochs = 100,000 trajectories,
+`n_candidates` 250,000, K 20, `--mem=8G`.

@@ -1,0 +1,204 @@
+#!/usr/bin/env python
+"""ONE generator for every stochastic all-levels figure: KL / debiased Brier / sAUROC.
+
+Replaces the per-system scratchpad scripts (plot_cp_all.py, plot_gauss.py) that
+produced cartpole/ and pendulum/ gaussian_all_levels.png. Those were duplicates and
+drifted; this file is the single source of truth for the arm table, the floor
+formula, and the panel/figure furniture, so a method looks the same in every figure.
+
+STYLE CONTRACT -- do not vary per system. Colour identifies the (predictor, arm)
+pair; line style identifies the predictor family, because the families are NOT
+interchangeable and an arm must never be read against the wrong baseline:
+
+    solid    = flow-matching ensemble   -> judged against the 3-seed FM uniform band
+    dotted   = deep-ensemble classifier -> judged against clf_dir00, its own uniform run
+    dash-dot = Part-X GP                -> a different model class again
+
+FLOOR. 2*sqrt(mean over shared epochs of the 3-seed variance), epoch 0 excluded.
+Epoch 0 is the pre-acquisition model, so its spread reflects initialisation rather
+than acquisition and including it inflates the floor. Only the FM floor is drawn:
+the classifier arms have a single seed each, so they have no floor.
+
+COMPLETENESS GUARD. The script refuses to plot a level whose arms sit at ragged
+depths, because a figure of half-length lines reads as "this method stopped
+improving" when it actually means "this run has not finished". Pass --allow-partial
+to override; each affected panel is then stamped with the per-arm depth so the
+raggedness is visible on the figure itself rather than only in the caller's head.
+"""
+from __future__ import annotations
+import argparse, csv, json, statistics as st
+from collections import defaultdict
+from pathlib import Path
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+ROOT = Path(__file__).resolve().parent.parent
+SEEDS = ["dir00_s42", "dir00_s43", "dir00_s44"]
+
+# (arm, label, colour, linestyle, marker) -- THE canonical table.
+ARMS = [
+    ("epi_var",          "FM  epistemic var",        "#1f77b4", "-",  "v"),
+    ("epi_var_anch",     "FM  epi var anch (d2=.5)", "#17becf", "-",  "*"),
+    ("epi_bald",         "FM  epistemic BALD",       "#2ca02c", "-",  "^"),
+    ("yield_a1",         "FM  yield α=1",            "#d62728", "-",  "o"),
+    ("yield_mlp",        "FM  yield (MLP len)",      "#ff7f0e", "-",  "s"),
+    ("partx",            "Part-X  (GP)",             "#9467bd", "-.", "D"),
+    ("clf_dir00",        "CLF  non-adaptive",        "#8c564b", ":",  "X"),
+    ("clf_yield",        "CLF  yield",               "#e377c2", ":",  "P"),
+    ("clf_epi_var",      "CLF  epistemic var",       "#7f7f7f", ":",  "v"),
+    ("clf_epi_bald",     "CLF  epistemic BALD",      "#bcbd22", ":",  "^"),
+    ("clf_epi_var_anch", "CLF  epi var anch",        "#aec7e8", ":",  "*"),
+]
+BAND_C, BAND_A, MEAN_C, MEAN_LW = "0.55", 0.35, "0.15", 3.0
+
+METRICS = [("KL",             "KL",             "KL divergence  (log, lower better)",  True),
+           ("brier_debiased", "debiased Brier", "debiased Brier  (log, lower better)", True),
+           ("sAUROC",         "sAUROC",         "sAUROC  (higher better)",             False)]
+
+CAMPAIGNS = {
+  "cartpole": dict(
+    title="CartPole stochastic gaussian_signal",
+    csv="docs/experiments/stochastic/cartpole/gaussian_all_levels.csv",
+    out="docs/experiments/stochastic/cartpole/gaussian_all_levels.png",
+    panels=[("low","CartPole gaussian_signal — low"),
+            ("med","CartPole gaussian_signal — med"),
+            ("high","CartPole gaussian_signal — high")]),
+  "pendulum": dict(
+    title="Pendulum stochastic gaussian_signal",
+    csv="docs/experiments/stochastic/pendulum/gaussian_all_levels.csv",
+    out="docs/experiments/stochastic/pendulum/gaussian_all_levels.png",
+    panels=[("low","Pendulum gaussian_signal — low"),
+            ("med","Pendulum gaussian_signal — med"),
+            ("high","Pendulum gaussian_signal — high")]),
+  "quad2d_nd": dict(
+    title="Quadrotor2D stochastic noisy_dynamics",
+    csv="docs/experiments/stochastic/quadrotor/quad2d_noisy_dynamics_all_levels.csv",
+    out="docs/experiments/stochastic/quadrotor/quad2d_noisy_dynamics_all_levels.png",
+    panels=[("noisy_dynamics_f_0.150","Quadrotor2D noisy_dynamics — f_0.150")]),
+  "quad2d_cs": dict(
+    title="Quadrotor2D stochastic corridor_sine_ambient",
+    csv="docs/experiments/stochastic/quadrotor/quad2d_corridor_sine_ambient_all_levels.csv",
+    out="docs/experiments/stochastic/quadrotor/quad2d_corridor_sine_ambient_all_levels.png",
+    panels=[("corridor_sine_ambient_smooth","Quadrotor2D corridor_sine_ambient — smooth")]),
+  "quad3d_nd": dict(
+    title="Quadrotor3D stochastic noisy_dynamics",
+    csv="docs/experiments/stochastic/quadrotor/quad3d_noisy_dynamics_all_levels.csv",
+    out="docs/experiments/stochastic/quadrotor/quad3d_noisy_dynamics_all_levels.png",
+    panels=[("noisy_dynamics_f_0.048","Quadrotor3D noisy_dynamics — f_0.048"),
+            ("noisy_dynamics_f_0.060","Quadrotor3D noisy_dynamics — f_0.060")]),
+}
+
+
+def load(csv_path, level):
+    m = defaultdict(dict)
+    for r in csv.DictReader(open(csv_path)):
+        if r["level"] != level:
+            continue
+        m[r["arm"]][int(str(r["epoch"]).split("_")[-1])] = r
+    return m
+
+
+def floor(m, col):
+    have = [s for s in SEEDS if s in m]
+    if len(have) < 3:
+        return None, None, len(have)
+    shared = sorted(set.intersection(*[set(m[s]) for s in have]) - {0})
+    if not shared:
+        return None, None, 3
+    var = [st.variance([float(m[s][e][col]) for s in have]) for e in shared]
+    return 2 * (sum(var) / len(var)) ** 0.5, shared[-1], 3
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("campaigns", nargs="*", default=list(CAMPAIGNS),
+                    help=f"one or more of: {' '.join(CAMPAIGNS)} (default: all)")
+    ap.add_argument("--allow-partial", action="store_true",
+                    help="plot ragged depths anyway; panels get a per-arm depth stamp")
+    a = ap.parse_args()
+
+    for name in (a.campaigns or list(CAMPAIGNS)):
+        c = CAMPAIGNS[name]
+        src = ROOT / c["csv"]
+        if not src.exists():
+            print(f"  SKIP {name}: {c['csv']} absent"); continue
+
+        loaded, ragged = [], {}
+        for lv, lab in c["panels"]:
+            m = load(src, lv)
+            if not m:
+                print(f"  SKIP {name}/{lv}: no rows"); m = None
+            else:
+                depths = {arm: len(v) for arm, v in m.items()}
+                if len(set(depths.values())) > 1:
+                    ragged[lab] = depths
+            loaded.append((lv, lab, m))
+        loaded = [t for t in loaded if t[2]]
+        if not loaded:
+            continue
+
+        if ragged and not a.allow_partial:
+            print(f"  REFUSING to plot {name}: ragged depths (pass --allow-partial to override)")
+            for lab, d in ragged.items():
+                mx = max(d.values())
+                short = {k: v for k, v in sorted(d.items()) if v != mx}
+                print(f"    {lab}: full depth {mx}; short -> {short}")
+            continue
+
+        nrow, ncol = len(loaded), len(METRICS)
+        fig, axes = plt.subplots(nrow, ncol, figsize=(6.7*ncol, 4.7*nrow), squeeze=False)
+        for ri, (lv, lab, m) in enumerate(loaded):
+            for ci, (col, nm, ylab, logy) in enumerate(METRICS):
+                ax = axes[ri][ci]
+                f, depth, nseed = floor(m, col)
+                have = [s for s in SEEDS if s in m]
+                if len(have) == 3:
+                    eps = sorted(set.intersection(*[set(m[s]) for s in have]))
+                    vals = [[float(m[s][e][col]) for s in have] for e in eps]
+                    ax.fill_between(eps, [min(v) for v in vals], [max(v) for v in vals],
+                                    color=BAND_C, alpha=BAND_A, zorder=1,
+                                    label="FM non-adaptive (3-seed range)")
+                    ax.plot(eps, [st.mean(v) for v in vals], color=MEAN_C, lw=MEAN_LW,
+                            zorder=2, label="FM non-adaptive (mean)")
+                for arm, label, colour, style, mk in ARMS:
+                    if arm not in m:
+                        continue
+                    e = sorted(m[arm])
+                    ax.plot(e, [float(m[arm][x][col]) for x in e], style, color=colour,
+                            lw=1.9, marker=mk, ms=3.8, zorder=3, label=label)
+                if logy:
+                    ax.set_yscale("log")
+                else:
+                    vv = [float(m[x][e][col]) for x in m for e in m[x] if e > 0]
+                    if vv: ax.set_ylim(min(vv)-0.004, max(vv)+0.004)
+                ax.set_ylabel(ylab); ax.set_xlabel("epoch (adaptive round)")
+                ftxt = (f"FM 2·SD floor = {f:.4f}   ·   depth {depth}" if f is not None
+                        else f"NO FM floor ({nseed}/3 seeds)")
+                ax.set_title(f"{lab} — {nm}   ·   {ftxt}", fontsize=10.5)
+                ax.grid(alpha=0.25, which="both", lw=0.5)
+                if lab in ragged:
+                    mx = max(ragged[lab].values())
+                    sh = {k: v for k, v in sorted(ragged[lab].items()) if v != mx}
+                    ax.text(.99, .02, "PARTIAL — full depth %d; short: %s" % (
+                                mx, ", ".join(f"{k}={v}" for k, v in sh.items())),
+                            transform=ax.transAxes, ha="right", va="bottom", fontsize=6.5,
+                            color="#b00", bbox=dict(fc="#fff0f0", ec="#b00", alpha=.9, pad=2))
+                if ri == 0 and ci == 0:
+                    ax.legend(fontsize=7.6, loc="lower left", framealpha=0.93, ncol=2)
+
+        narms = len({a_ for _, _, m in loaded for a_ in m})
+        fig.suptitle(f"{c['title']} — all acquisition methods vs non-adaptive   "
+                     "(solid = flow matching · dotted = classifier · dash-dot = Part-X GP)\n"
+                     f"{narms} arms   ·   shaded band = 3-seed FM non-adaptive range   ·   "
+                     "gaps under the printed 2·SD floor are not claimable",
+                     fontsize=13, y=0.988)
+        fig.tight_layout(rect=[0, 0, 1, 0.955 if nrow > 1 else 0.90])
+        out = ROOT / c["out"]
+        out.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(out, dpi=145); plt.close(fig)
+        print(f"  wrote {c['out']}  ({nrow} level(s), {narms} arms)")
+
+
+if __name__ == "__main__":
+    main()

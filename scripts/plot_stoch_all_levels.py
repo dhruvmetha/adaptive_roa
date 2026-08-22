@@ -197,12 +197,19 @@ def main():
                 if ri == 0 and ci == 0:
                     ax.legend(fontsize=7.6, loc="lower left", framealpha=0.93, ncol=2)
 
-        narms = len({a_ for _, _, m in loaded for a_ in m})
+        # Count the acquisition arms drawn as lines separately from the uniform
+        # seeds, which are drawn once as the band. Pooling them reads as extra
+        # methods -- the 4-arm clean figure would announce itself as 7 arms.
+        table = {x[0] for x in ARMS}
+        present = {a_ for _, _, m in loaded for a_ in m}
+        narms = len(present & table)
+        nseed = len(present & set(SEEDS))
         scope = ("one arm per predictor family vs non-adaptive"
                  if a.clean else "all acquisition methods vs non-adaptive")
         fig.suptitle(f"{c['title']} — {scope}   "
                      "(solid = flow matching · dotted = classifier · dash-dot = Part-X GP)\n"
-                     f"{narms} arms   ·   shaded band = 3-seed FM non-adaptive range   ·   "
+                     f"{narms} acquisition arms vs a {nseed}-seed FM non-adaptive control "
+                     "(shaded band)   ·   "
                      "gaps under the printed 2·SD floor are not claimable",
                      fontsize=13, y=0.988)
         fig.tight_layout(rect=[0, 0, 1, 0.955 if nrow > 1 else 0.90])
@@ -211,7 +218,8 @@ def main():
             out = out.with_name(out.stem + "_clean" + out.suffix)
         out.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(out, dpi=145); plt.close(fig)
-        print(f"  wrote {out.relative_to(ROOT)}  ({nrow} level(s), {narms} arms)")
+        print(f"  wrote {out.relative_to(ROOT)}  ({nrow} level(s), "
+              f"{narms} arms + {nseed}-seed control)")
 
 
 if __name__ == "__main__":

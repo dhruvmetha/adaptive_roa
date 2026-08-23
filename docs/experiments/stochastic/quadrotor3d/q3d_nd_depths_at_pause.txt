@@ -1,0 +1,15 @@
+q3d_nd048_clf_dir00 18
+q3d_nd048_clf_epi_bald 6
+q3d_nd048_clf_epi_var 11
+q3d_nd048_clf_epi_var_anch 4
+q3d_nd048_clf_yield 9
+q3d_nd048_dir00_s42 8
+q3d_nd048_dir00_s43 6
+q3d_nd048_dir00_s44 6
+q3d_nd048_epi_bald 5
+q3d_nd048_epi_var 5
+q3d_nd048_epi_var_anch 6
+q3d_nd048_partx 18
+q3d_nd048_yield_a1 4
+q3d_nd048_yield_mlp 3
+q3d_nd060_dir00_s42 0

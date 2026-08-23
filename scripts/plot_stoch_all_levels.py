@@ -101,6 +101,13 @@ CAMPAIGNS = {
     dsroot=DATA / "quadrotor3D",
     dslevel={"noisy_dynamics_f_0.048": "noisy_dynamics/lqr/f_0.048",
              "noisy_dynamics_f_0.060": "noisy_dynamics/lqr/f_0.060"}),
+  "quad3d_cs": dict(
+    title="Quadrotor3D stochastic corridor_sine_ambient",
+    csv="docs/experiments/stochastic/quadrotor3d/quad3d_corridor_sine_ambient_all_levels.csv",
+    out="docs/experiments/stochastic/quadrotor3d/quad3d_corridor_sine_ambient_all_levels.png",
+    panels=[("corridor_sine_ambient_f_0.30","Quadrotor3D corridor_sine_ambient — f_0.30")],
+    dsroot=DATA / "quadrotor3D",
+    dslevel={"corridor_sine_ambient_f_0.30": "corridor_sine_ambient/lqr/f_0.30"}),
 }
 
 

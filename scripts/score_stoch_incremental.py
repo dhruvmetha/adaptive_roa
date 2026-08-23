@@ -50,6 +50,12 @@ CAMPAIGNS = {
                       level="noisy_dynamics/lqr/f_0.060",
                       key="noisy_dynamics_f_0.060",
                       csv=D3D / "quad3d_noisy_dynamics_all_levels.csv"),
+    # corridor_sine_ambient is a SEPARATE family from noisy_dynamics: ~1x body
+    # weight vs the nd sweep's 0.12-0.27, so it gets its own csv. Never pool.
+    "q3d_cs030": dict(prefix="q3d_cs030", root=DATA / "quadrotor3D",
+                      level="corridor_sine_ambient/lqr/f_0.30",
+                      key="corridor_sine_ambient_f_0.30",
+                      csv=D3D / "quad3d_corridor_sine_ambient_all_levels.csv"),
 }
 
 

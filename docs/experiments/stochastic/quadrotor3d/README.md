@@ -460,9 +460,9 @@ budget as well as this defect. Relaunch is at 10,000 / 5,000 / 18 epochs = 100,0
 _No rows yet._
 
 
-### quad3D `corridor_sine_ambient f_0.30` — 24/252 epochs, 0/14 arms complete
+### quad3D `corridor_sine_ambient f_0.30` — 26/252 epochs, 0/14 arms complete
 
-_Only 0/3 uniform floor seeds have rows (none), so no 2·SD floor is computable yet. Per-arm depth: `clf_dir00` 3, `clf_epi_bald` 3, `clf_epi_var` 2, `clf_epi_var_anch` 3, `clf_yield` 2, `partx` 11._
+_Only 0/3 uniform floor seeds have rows (none), so no 2·SD floor is computable yet. Per-arm depth: `clf_dir00` 4, `clf_epi_bald` 3, `clf_epi_var` 3, `clf_epi_var_anch` 3, `clf_yield` 2, `partx` 11._
 
 <!-- STANDINGS:END -->
 

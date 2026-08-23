@@ -15,8 +15,7 @@ Launched 2026-08-20 10:2x (28 jobs, 214675-214702), `initial_train_size=2000`,
   FM-vs-classifier gap on it is testable rather than merely observed.
 
 **Both quad2D levels are therefore done: 672/672 epochs, nothing running on this system.**
-The §7 `cs` standings table below was computed at 323/336 and has NOT been recomputed against
-the finished level — see the caveat there.
+§7 standings were recomputed against the complete 336-row CSVs on 2026-08-23.
 
 **Scoring is live and incremental.** `scripts/score_stoch_incremental.py` runs every monitoring
 cycle: it diffs the epochs on disk against the committed CSV and scores only the difference, so
@@ -299,7 +298,8 @@ that had actually died — the `.0` step read `FAILED 1:0`. Always check the ste
 
 ## 7. Standings
 
-Scored 2026-08-22 16:41 by `scripts/score_stoch_incremental.py`, which re-projects the
+Scored 2026-08-23 16:0x by `scripts/score_stoch_incremental.py` (both levels complete, 672/672
+epochs), which re-projects the
 `p_success` already written by each epoch's evaluation onto the continuous
 `eval_success_prob.npz` ground truth. It is incremental: every monitoring cycle it diffs the
 epochs on disk against the committed CSV and scores only the difference, so these tables track
@@ -328,104 +328,60 @@ they score against a 0.5-dichotomised label field rather than the continuous tru
 | metric | 2·SD floor (ep1–23) | 3-seed uniform control at ep23 |
 |---|---|---|
 | KL | **0.0184** | 0.0647 |
-| debiased Brier | **0.0012** | 0.0127 |
+| Brier (debiased) | **0.0012** | 0.0127 |
 | sAUROC | **0.0398** | 0.9220 |
 
-FM arms vs the 3-seed uniform mean, all at ep23:
-
-| arm | KL | Brier_deb | sAUROC | ΔKL | ΔBrier | ΔsAUROC | verdict |
-|---|---|---|---|---|---|---|---|
-| `epi_var_anch` | 0.0210 | 0.0043 | 0.9691 | −0.0437 | −0.0084 | +0.0471 | beats floor ×3 |
-| `yield_a1` | 0.0229 | 0.0052 | 0.9695 | −0.0418 | −0.0076 | +0.0475 | beats floor ×3 |
-| `yield_mlp` | 0.0244 | 0.0053 | 0.9671 | −0.0403 | −0.0074 | +0.0451 | beats floor ×3 |
-| `epi_bald` | 0.0262 | 0.0059 | 0.9664 | −0.0384 | −0.0068 | +0.0444 | beats floor ×3 |
-| `epi_var` | 0.0288 | 0.0063 | 0.9633 | −0.0359 | −0.0064 | +0.0413 | beats floor ×3 |
-| `partx` | 0.0480 | 0.0123 | 0.9468 | −0.0167 | −0.0005 | +0.0248 | inside floor ×3 — **null** |
-
-**All five FM adaptive arms clear the final floor on all three metrics** against a completed
-uniform baseline. Adaptive acquisition roughly halves KL at matched epoch, with margins 2.0–2.4×
-the floor.
-
-**Part-X is inside the floor on every metric — but it is not a matched-budget comparison.** Its
-`train_trajectories` ends at **6,746 against every other arm's 13,500**: it ran all 24 epochs
-while acquiring half the data, in irregular steps (0, 1, 2, 8, 13, 19, 132, 161, 211, 215, 484,
-500) rather than a flat 500. So "Part-X does not beat uniform" is true, and "Part-X is a null
-acquisition rule at equal budget" is **not established** — the arm declined to spend, which is a
-different failure. The figure's trajectory axis shows this directly: the Part-X line stops half
-way across.
-
-**The ep15 ordering did not survive to ep23.** At ep15 the ranking was `epi_bald` ≈ `epi_var` <
-`epi_var_anch`, and the earlier readout of this section concluded that anchoring "lands
-consistently worse". At full depth the order is inverted: `epi_var_anch` is the **best** FM arm
-(0.0210) and `epi_var` the worst (0.0288). The whole FM spread is 0.0078, well inside the 0.0184
-floor, so no FM arm is distinguishable from another — but the mid-run ordering was an artifact of
-depth, not a result, and should not be cited.
-
-Classifier arms vs `clf_dir00` at ep23 (single-seed baseline, **no floor, descriptive only**):
-
-| arm | KL | Brier_deb | sAUROC | Δ vs `clf_dir00` (KL / Brier / sAUROC) |
-|---|---|---|---|---|
-| `clf_yield` | 0.0167 | 0.0039 | 0.9782 | −0.0152 / −0.0036 / +0.0090 |
-| `clf_epi_var` | 0.0182 | 0.0044 | 0.9769 | −0.0137 / −0.0031 / +0.0077 |
-| `clf_epi_bald` | 0.0183 | 0.0045 | 0.9768 | −0.0136 / −0.0031 / +0.0075 |
-| `clf_epi_var_anch` | 0.0219 | 0.0051 | 0.9755 | −0.0100 / −0.0025 / +0.0062 |
-| `clf_dir00` (control) | 0.0319 | 0.0076 | 0.9693 | — |
-
-Every adaptive classifier arm beats its own control, in the same direction as the FM family. Two
-things about this family are worth stating plainly and are **not** claims about acquisition:
-`clf_yield` at 0.0167 is the best number anywhere in this level, and **non-adaptive `clf_dir00`
-at 0.0319 beats every adaptive FM arm**. On `nd`, the predictor class matters more than the
-acquisition rule.
+| arm | ep | KL | Brier_deb | sAUROC | ΔKL | ΔBrier | ΔsAUROC | verdict |
+|---|---|---|---|---|---|---|---|---|
+| `clf_yield` | 23 | 0.0167 | 0.0039 | 0.9782 | -0.0480 | -0.0088 | +0.0562 | beats floor ×3 |
+| `clf_epi_var` | 23 | 0.0182 | 0.0044 | 0.9769 | -0.0465 | -0.0083 | +0.0550 | beats floor ×3 |
+| `clf_epi_bald` | 23 | 0.0183 | 0.0045 | 0.9768 | -0.0464 | -0.0083 | +0.0548 | beats floor ×3 |
+| `epi_var_anch` | 23 | 0.0210 | 0.0043 | 0.9691 | -0.0437 | -0.0084 | +0.0471 | beats floor ×3 |
+| `clf_epi_var_anch` | 23 | 0.0219 | 0.0051 | 0.9755 | -0.0428 | -0.0077 | +0.0535 | beats floor ×3 |
+| `yield_a1` | 23 | 0.0229 | 0.0052 | 0.9695 | -0.0418 | -0.0076 | +0.0475 | beats floor ×3 |
+| `yield_mlp` | 23 | 0.0244 | 0.0053 | 0.9671 | -0.0403 | -0.0074 | +0.0451 | beats floor ×3 |
+| `epi_bald` | 23 | 0.0262 | 0.0059 | 0.9664 | -0.0384 | -0.0068 | +0.0444 | beats floor ×3 |
+| `epi_var` | 23 | 0.0288 | 0.0063 | 0.9633 | -0.0359 | -0.0064 | +0.0413 | beats floor ×3 |
+| `clf_dir00` | 23 | 0.0319 | 0.0076 | 0.9693 | -0.0328 | -0.0052 | +0.0473 | beats floor ×3 |
+| `partx` | 23 | 0.0480 | 0.0123 | 0.9468 | -0.0167 | -0.0005 | +0.0248 | inside floor |
 
 ### quad2D `corridor_sine_ambient smooth` — COMPLETE (14/14 arms × 24 epochs)
-
-> **STALE TABLE — the numbers below predate the level finishing.** They were computed on
-> 2026-08-22 at 323/336, when `epi_var_anch`, `yield_mlp` and `yield_a1` were still running.
-> The level completed 2026-08-23 12:13 and every arm now has all 24 epochs, so three rows read
-> at epochs the arms have long passed: `yield_a1` is tabulated at **ep15 but now has ep23**,
-> `epi_var_anch` at ep19 → 23, `yield_mlp` at ep22 → 23. Their gaps were also read against a
-> shallower control. `yield_a1`'s eight-epoch shortfall is the one most likely to move.
-> The ordering below should not be quoted until it is recomputed. Recomputation is deliberately
-> deferred: scoring is paused pending the eval-dataset update (see the companion task list), and
-> the figures — which ARE current, regenerated from the complete 336-row CSV without
-> `--allow-partial` — are the reliable artefact in the meantime.
 
 | metric | 2·SD floor (ep1–23) | 3-seed uniform control at ep23 |
 |---|---|---|
 | KL | **0.0040** | 0.0614 |
-| debiased Brier | **0.0009** | 0.0154 |
+| Brier (debiased) | **0.0009** | 0.0154 |
 | sAUROC | **0.0031** | 0.9623 |
-
-The `cs` floor is 4.6× tighter than `nd` on KL and 13× tighter on sAUROC: the three uniform seeds
-agree closely on this family, which makes sAUROC decidable here where it is not on `nd`.
 
 | arm | ep | KL | Brier_deb | sAUROC | ΔKL | ΔBrier | ΔsAUROC | verdict |
 |---|---|---|---|---|---|---|---|---|
-| `yield_mlp` | 22 | 0.0215 | 0.0052 | 0.9848 | −0.0394 | −0.0103 | +0.0212 | beats floor ×3 |
-| `epi_bald` | 23 | 0.0221 | 0.0055 | 0.9853 | −0.0394 | −0.0099 | +0.0229 | beats floor ×3 |
-| `yield_a1` | 15 | 0.0236 | 0.0055 | 0.9825 | −0.0502 | −0.0129 | +0.0277 | beats floor ×3 |
-| `epi_var` | 23 | 0.0241 | 0.0060 | 0.9840 | −0.0373 | −0.0094 | +0.0216 | beats floor ×3 |
-| `epi_var_anch` | 19 | 0.0251 | 0.0060 | 0.9818 | −0.0373 | −0.0099 | +0.0194 | beats floor ×3 |
-| `partx` | 23 | 0.1065 | 0.0299 | 0.9348 | **+0.0451** | **+0.0145** | **−0.0275** | **worse than uniform ×3** |
+| `yield_mlp` | 23 | 0.0214 | 0.0052 | 0.9851 | -0.0400 | -0.0102 | +0.0228 | beats floor ×3 |
+| `epi_bald` | 23 | 0.0221 | 0.0055 | 0.9853 | -0.0394 | -0.0099 | +0.0229 | beats floor ×3 |
+| `yield_a1` | 23 | 0.0224 | 0.0055 | 0.9843 | -0.0390 | -0.0099 | +0.0219 | beats floor ×3 |
+| `epi_var` | 23 | 0.0241 | 0.0060 | 0.9840 | -0.0373 | -0.0094 | +0.0216 | beats floor ×3 |
+| `epi_var_anch` | 23 | 0.0246 | 0.0059 | 0.9820 | -0.0368 | -0.0095 | +0.0197 | beats floor ×3 |
+| `clf_epi_var` | 23 | 0.0629 | 0.0178 | 0.9846 | +0.0015 | +0.0024 | +0.0223 | **mixed — better ×1, worse ×1** |
+| `clf_epi_bald` | 23 | 0.0635 | 0.0177 | 0.9846 | +0.0021 | +0.0023 | +0.0222 | **mixed — better ×1, worse ×1** |
+| `clf_yield` | 23 | 0.0644 | 0.0181 | 0.9849 | +0.0029 | +0.0027 | +0.0226 | **mixed — better ×1, worse ×1** |
+| `clf_epi_var_anch` | 23 | 0.0815 | 0.0216 | 0.9834 | +0.0200 | +0.0062 | +0.0210 | **mixed — better ×1, worse ×2** |
+| `clf_dir00` | 23 | 0.0938 | 0.0249 | 0.9791 | +0.0324 | +0.0095 | +0.0168 | **mixed — better ×1, worse ×2** |
+| `partx` | 23 | 0.1065 | 0.0299 | 0.9348 | +0.0451 | +0.0145 | -0.0275 | **worse than uniform ×3** |
 
-**Part-X ends worse than uniform on `cs`** — 11× the floor on the wrong side of KL and 8.9× on
-the wrong side of sAUROC, the worst arm at this level by a wide margin. Read it with the same
-budget caveat as `nd`: it spent **7,139 of 13,500** trajectories. Being beaten by a full-budget
-control while holding half the data is weaker evidence of harm than the raw gap suggests, and an
-earlier revision of this section called it "actively harmful" without that qualifier.
 
-**The families invert between noise models.** On `nd` the classifier family is the strongest
-(`clf_yield` 0.0167 vs best FM 0.0210). On `cs` it is the weakest: `clf_dir00` sits at KL 0.0938
-against the FM control's 0.0614, and the best classifier arm (`clf_epi_var` 0.0629) barely reaches
-the FM *control*, while every FM adaptive arm is at 0.0215–0.0251. Adaptive still beats
-non-adaptive **within** the classifier family (−0.0295 to −0.0309 KL vs `clf_dir00`), so the
-inversion is about model class, not about acquisition.
+**Reading the two levels together.** On `nd` every acquisition arm and every classifier arm
+beats the 3-seed floor on all three metrics; only `partx` fails to separate from uniform. On
+`cs` the picture splits by predictor family: the five FM acquisition arms beat the floor ×3,
+while all five classifier arms land **mixed** — better than uniform on sAUROC by 5–7× the floor,
+but *worse* on debiased Brier, and for `clf_epi_var_anch` and `clf_dir00` worse on KL as well.
+That is a ranking-versus-calibration split: on `cs` the classifiers order states well and
+calibrate poorly. It does not appear on `nd`, where the classifier arms take the top three slots
+outright. Any cross-level claim about "classifiers beat FM" is therefore false as stated — it
+holds on `nd` and inverts on `cs` for the calibration metrics.
 
-Note the one metric where the classifier family stays ahead on `cs`: sAUROC, where `clf_*` arms
-reach 0.9834–0.9849 against `clf_dir00` 0.9791. A model can rank states well while being badly
-calibrated, and on this family the classifier does exactly that.
-
----
+**`partx` is the one consistent negative.** Inside the floor on `nd` (no evidence it helps or
+hurts) and worse than uniform on all three metrics on `cs`. Both readings still carry the budget
+caveat below: `partx` does not spend its trajectory allowance, ending `nd` at 6,746 of 13,500 and
+`cs` at 7,139, so these are not matched-budget comparisons.
 
 ## Companion documents
 

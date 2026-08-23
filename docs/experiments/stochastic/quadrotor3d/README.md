@@ -460,7 +460,7 @@ budget as well as this defect. Relaunch is at 10,000 / 5,000 / 18 epochs = 100,0
 _No rows yet._
 
 
-### quad3D `corridor_sine_ambient f_0.30` — 48/252 epochs, 0/14 arms complete
+### quad3D `corridor_sine_ambient f_0.30` — 49/252 epochs, 0/14 arms complete
 
 _Floor seeds share no epoch beyond ep0 yet._
 

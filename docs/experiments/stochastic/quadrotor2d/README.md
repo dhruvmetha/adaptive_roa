@@ -3,7 +3,9 @@
 Written 2026-08-20, split out of the shared quadrotor README 2026-08-22.
 **Scope: quad2D experiments on the `stochastic/` dataset tree only.** quad3D lives in
 [`../quadrotor3d/`](../quadrotor3d/) and shares none of this file's numbers.
-**Status: IN FLIGHT.** Header last refreshed **2026-08-22 16:5x**.
+**Status: COMPLETE.** Both levels finished — `noisy_dynamics f_0.150` and
+`corridor_sine_ambient smooth`, 14 arms × 24 epochs each, 672/672 epochs, all scored.
+Nothing is running on quad2D. Header last refreshed **2026-08-23 16:1x**.
 
 Launched 2026-08-20 10:2x (28 jobs, 214675-214702), `initial_train_size=2000`,
 `samples_per_epoch=500`, 24 epochs.
@@ -311,7 +313,6 @@ Data and figures, one pair per family:
 |---|---|---|
 | quad2D `noisy_dynamics f_0.150` | `quad2d_noisy_dynamics_all_levels.csv` | `quad2d_noisy_dynamics_all_levels.png` |
 | quad2D `corridor_sine_ambient smooth` | `quad2d_corridor_sine_ambient_all_levels.csv` | `quad2d_corridor_sine_ambient_all_levels.png` |
-| quad3D `noisy_dynamics` | `quad3d_noisy_dynamics_all_levels.csv` | `quad3d_noisy_dynamics_all_levels.png` |
 
 **Three predictor families, three baselines.** The 2·SD floor is the **FM** floor (3 uniform
 seeds, ep0 excluded) and it licenses **FM-vs-FM** statements only. `clf_*` arms are a different

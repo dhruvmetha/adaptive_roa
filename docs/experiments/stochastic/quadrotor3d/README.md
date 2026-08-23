@@ -283,42 +283,43 @@ is one seed — so no classifier gap is claimable at any size. Part-X is a third
 
 Data: `quad3d_noisy_dynamics_all_levels.csv`, figure `quad3d_noisy_dynamics_all_levels.png`.
 
-### `noisy_dynamics f_0.048` — 9/14 arms, 1–18 epochs (too shallow to rank)
+### Two findings that survive independently of the tables
 
-Relaunched 2026-08-22 with the 10k/5k/18 budget after the start-state fix. Only `partx` has full
-depth; the FM arms are at 1–3 epochs, so **no floor exists yet and nothing here is a result**.
-Recorded because the numbers already say two useful things.
+The per-level standings are generated below from the CSVs and change every cycle. These two
+observations are about the data-generating process rather than the ranking, so they are recorded
+here by hand.
 
-| arm | ep | KL | Brier_deb | sAUROC |
-|---|---|---|---|---|
-| `dir00_s42` | 0 → 2 | 0.2986 → 0.1606 | 0.0606 → 0.0324 | 0.8760 → 0.9274 |
-| `partx` | 0 | 0.1601 | 0.0456 | 0.8843 |
-| `partx` | 17 | 0.2039 | 0.0601 | 0.8508 |
-
-First: **the epoch-0 models agree to 4 decimal places across every seed-42 arm** (0.2986 KL for
-`epi_var`, `epi_var_anch`, `epi_bald`, `yield_a1`, `yield_mlp` and `dir00_s42` alike), with
+**The epoch-0 models agree to 4 decimal places across every seed-42 arm** on `f_0.048` — 0.2986
+KL for `epi_var`, `epi_var_anch`, `epi_bald`, `yield_a1`, `yield_mlp` and `dir00_s42` alike, with
 `dir00_s43`/`s44` at 0.2932/0.2910. That is the expected signature of a correct pre-acquisition
-epoch and is a clean end-to-end check that the start-state fix did not perturb training.
+epoch and a clean end-to-end check that the start-state fix did not perturb training.
 
-Second: **Part-X acquired nothing at all.** `train_trajectories` reads 10,000 at every one of its
-18 epochs — it never added a single trajectory. An earlier revision of this section read its KL
-drift as "gets worse with more data"; that is the opposite of what happened and the sentence has
-been struck rather than softened.
+**Part-X acquired nothing on `noisy_dynamics f_0.048`, and this is level-specific.**
+`train_trajectories` reads 10,000 at every one of its 18 epochs there — not a single trajectory
+added. On `corridor_sine_ambient f_0.30` the same arm behaves differently, going
+10,000 → 15,000 → 20,000 → 25,000 → 30,000 over 11 epochs (**+20,000**), after a flat opening of
+five epochs. So "Part-X does not spend its budget" is **false as a general statement** and true
+only of `nd f_0.048`. An earlier revision of this section read the `nd` KL drift as "gets worse
+with more data"; that is the opposite of what happened, since no data was added, and the sentence
+has been struck rather than softened.
 
-What the series actually measures is **refit variance on a fixed 10,000-trajectory set**. The
-model is re-fit each epoch on identical data and wanders non-monotonically over a 0.068 KL range:
+What the `nd f_0.048` series actually measures is **refit variance on a fixed 10,000-trajectory
+set**. The model is re-fit each epoch on identical data and wanders non-monotonically over a
+0.068 KL range:
 
 ```
 ep0 .1601  .1680 .1813 .1707 .1735 .1681 .1660 .1890 .2280(worst)
      .2043 .1668 .2152 .1977 .1712 .1997 .2216 .1878 .2039(ep17)
 ```
 
-Best at epoch 0, worst at epoch 8, no trend. That number is useful as a noise scale the other
-arms can be read against — a quad3D gap smaller than ~0.068 KL between two epochs of the same arm
-is not evidence of anything. It also means Part-X on quad3D is not a measurement of acquisition
-at all: nothing was acquired.
+Best at epoch 0, worst at epoch 8, no trend. That is a useful noise scale for the other arms: a
+quad3D gap smaller than ~0.068 KL between two epochs of the same arm is not evidence of anything.
+It also means Part-X on `nd f_0.048` is not a measurement of acquisition at all — nothing was
+acquired. The corridor run, which does acquire, is the one to read for that question.
 
-`q3d_nd060` has no scored epochs yet; its 14 arms are queued.
+**`noisy_dynamics` is PAUSED** (2026-08-23 15:10, 26 jobs cancelled). Per-arm depths at the moment
+of pause are in [`q3d_nd_depths_at_pause.txt`](q3d_nd_depths_at_pause.txt); `f_0.060` never
+produced an artifact. Resume with `scripts/resume_adaptive.py --run-dir <dir>`.
 
 ---
 

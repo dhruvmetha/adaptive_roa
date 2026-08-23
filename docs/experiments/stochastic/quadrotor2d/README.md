@@ -9,10 +9,14 @@ Launched 2026-08-20 10:2x (28 jobs, 214675-214702), `initial_train_size=2000`,
 `samples_per_epoch=500`, 24 epochs.
 
 - **`noisy_dynamics f_0.150` is COMPLETE** — all 14 arms at 24/24, 336/336 epochs, all scored.
-- **`corridor_sine_ambient smooth` is 323/336 with 11/14 arms done.** All three uniform floor
-  seeds `dir00_s42/s43/s44` reached 24/24, so this family has a real 3-seed floor and the
-  FM-vs-classifier gap on it is testable rather than merely observed. Outstanding: `yield_mlp` 23,
-  `epi_var_anch` 20, `yield_a1` 16.
+- **`corridor_sine_ambient smooth` is COMPLETE** — all 14 arms at 24/24, 336/336 epochs, all
+  scored (finished 2026-08-23 12:13, last epoch `yield_a1` 23). All three uniform floor seeds
+  `dir00_s42/s43/s44` reached 24/24, so this family has a real 3-seed floor and the
+  FM-vs-classifier gap on it is testable rather than merely observed.
+
+**Both quad2D levels are therefore done: 672/672 epochs, nothing running on this system.**
+The §7 `cs` standings table below was computed at 323/336 and has NOT been recomputed against
+the finished level — see the caveat there.
 
 **Scoring is live and incremental.** `scripts/score_stoch_incremental.py` runs every monitoring
 cycle: it diffs the epochs on disk against the committed CSV and scores only the difference, so
@@ -123,7 +127,7 @@ ground-truth probability mass at all. They are the deterministic references for 
 
 ---
 
-## 3. Campaign design (quad2D, in flight)
+## 3. Campaign design (quad2D, complete)
 
 14 arms per level, identical to the cartpole v2 design so the campaigns are directly comparable:
 
@@ -373,11 +377,18 @@ things about this family are worth stating plainly and are **not** claims about 
 at 0.0319 beats every adaptive FM arm**. On `nd`, the predictor class matters more than the
 acquisition rule.
 
-### quad2D `corridor_sine_ambient smooth` — 11/14 arms at depth
+### quad2D `corridor_sine_ambient smooth` — COMPLETE (14/14 arms × 24 epochs)
 
-`epi_var_anch` (20), `yield_mlp` (23) and `yield_a1` (16) are still running; their rows are at
-their own deepest epoch, so their gaps are read against a shallower control and flatter early.
-The figure carries a PARTIAL stamp naming them.
+> **STALE TABLE — the numbers below predate the level finishing.** They were computed on
+> 2026-08-22 at 323/336, when `epi_var_anch`, `yield_mlp` and `yield_a1` were still running.
+> The level completed 2026-08-23 12:13 and every arm now has all 24 epochs, so three rows read
+> at epochs the arms have long passed: `yield_a1` is tabulated at **ep15 but now has ep23**,
+> `epi_var_anch` at ep19 → 23, `yield_mlp` at ep22 → 23. Their gaps were also read against a
+> shallower control. `yield_a1`'s eight-epoch shortfall is the one most likely to move.
+> The ordering below should not be quoted until it is recomputed. Recomputation is deliberately
+> deferred: scoring is paused pending the eval-dataset update (see the companion task list), and
+> the figures — which ARE current, regenerated from the complete 336-row CSV without
+> `--allow-partial` — are the reliable artefact in the meantime.
 
 | metric | 2·SD floor (ep1–23) | 3-seed uniform control at ep23 |
 |---|---|---|

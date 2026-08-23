@@ -3,9 +3,35 @@
 Written 2026-08-20, split out of the shared quadrotor README 2026-08-22.
 **Scope: quad3D experiments on the `stochastic/` dataset tree only.** quad2D lives in
 [`../quadrotor2d/`](../quadrotor2d/) and shares none of this file's numbers.
-**Status: IN FLIGHT.** Header last refreshed **2026-08-22 16:5x**.
+**Status: `noisy_dynamics` PAUSED, `corridor_sine_ambient f_0.30` IN FLIGHT.**
+Header last refreshed **2026-08-23 15:5x**.
 
-**RELAUNCHED 2026-08-22 10:21** — `noisy_dynamics` f_0.048 and f_0.060, 14 arms each,
+**PAUSED 2026-08-23 15:10 — `noisy_dynamics`.** All 26 `q3d_nd` jobs were cancelled on user
+instruction to free the quota for the corridor family. Cancel is a pause, not a loss: every run
+dir survives and `scripts/resume_adaptive.py` restarts each arm from its last completed epoch.
+**109 f_0.048 artifacts are intact**; per-arm depths at the moment of pause are recorded in
+[`q3d_nd_depths_at_pause.txt`](q3d_nd_depths_at_pause.txt) (`partx` and `clf_dir00` had already
+finished 18/18). f_0.060 had reached 0 artifacts — its one running arm was 8% into the first eval.
+
+**LAUNCHED 2026-08-23 15:10 — `corridor_sine_ambient f_0.30`**, 14 arms, jobs 239289-239306.
+**One level at a time**, per user direction; f_0.30 was chosen over f_0.25 on `frac_mid`
+(0.149 vs 0.124 — see the re-measured pool table below). The f_0.25 fleet was submitted and then
+cancelled within ten minutes; its 14 run dirs are kept, and `q3d_cs025_partx` holds 4 real
+artifacts from that window.
+
+**Memory is split by evidence on this family, not the blanket 8G:** `epi_var_anch`, `epi_bald`,
+`yield_a1` and `yield_mlp` each hit a host-RAM OOM at 8G on f_0.048 (pair count outgrows
+trajectory count because acquisition selects long trajectories — `epi_bald` held 4,204,245 pairs
+against `dir00_s42`'s 1,526,054 at the same 30,000 trajectories), so those four run at 64G on
+corridor and the other ten at 8G.
+
+**`partx` needs an explicit large-VRAM GPU.** On corridor it died at epoch 11 with a **CUDA** OOM
+(not host RAM — MaxRSS was 6.2 GB against 8G, so `--mem` is the wrong dial). Generic
+`--gres=gpu:1` gave it a 16 GB A4000; the f_0.048 run drew a 20 GB A4500 and survived all 18
+epochs. The GP's variational backward grows with the training set, so the difference is card luck.
+Resumed on `--gres=gpu:a100:1` with `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`.
+
+**Superseded launch (2026-08-22 10:21)** — `noisy_dynamics` f_0.048 and f_0.060, 14 arms each,
 **jobs 226514-226541**, `--mem=8G`. The 2026-08-21 fleet (jobs 218355 + 218378-218458) is DEAD and
 its 28 output directories were deleted (~19 GB). Two things were wrong with it: 20 of 28 arms
 crashed at first acquisition (see the start-state section below), and it inherited quad2D's

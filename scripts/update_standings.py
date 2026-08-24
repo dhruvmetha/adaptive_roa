@@ -18,8 +18,8 @@ that ranks well but calibrates badly must not read as a win.
 import argparse, collections, csv, math, pathlib, statistics as st
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-D2D = ROOT / "docs/experiments/stochastic/quadrotor2d"
-D3D = ROOT / "docs/experiments/stochastic/quadrotor3d"
+D2D = pathlib.Path("/common/users/shared/pracsys/genMoPlan/docs/stochastic/quadrotor2d")
+D3D = pathlib.Path("/common/users/shared/pracsys/genMoPlan/docs/stochastic/quadrotor3d")
 
 SEEDS = ["dir00_s42", "dir00_s43", "dir00_s44"]
 COLS = [("KL", "KL"), ("brier_debiased", "Brier_deb"), ("sAUROC", "sAUROC")]

@@ -24,8 +24,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 EXP = Path("/common/users/shared/pracsys/adaptive_roa_experiments/quadrotor_stoch")
 DATA = Path("/common/users/shared/pracsys/genMoPlan/data_trajectories/stochastic")
-D2D = ROOT / "docs/experiments/stochastic/quadrotor2d"
-D3D = ROOT / "docs/experiments/stochastic/quadrotor3d"
+D2D = Path("/common/users/shared/pracsys/genMoPlan/docs/stochastic/quadrotor2d")
+D3D = Path("/common/users/shared/pracsys/genMoPlan/docs/stochastic/quadrotor3d")
 PY = str(ROOT / "env/bin/python")
 
 ARMS = ["dir00_s42", "dir00_s43", "dir00_s44", "epi_var", "epi_var_anch", "epi_bald",

@@ -35,6 +35,7 @@ import matplotlib.pyplot as plt
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = Path("/common/users/shared/pracsys/genMoPlan/data_trajectories/stochastic")
+DOCS = Path("/common/users/shared/pracsys/genMoPlan/docs/stochastic")
 SEEDS = ["dir00_s42", "dir00_s43", "dir00_s44"]
 
 # (arm, label, colour, linestyle, marker) -- THE canonical table.
@@ -66,36 +67,36 @@ METRICS = [("KL",             "KL",             "KL divergence  (log, lower bett
 CAMPAIGNS = {
   "cartpole": dict(
     title="CartPole stochastic gaussian_signal",
-    csv="docs/experiments/stochastic/cartpole/gaussian_all_levels.csv",
-    out="docs/experiments/stochastic/cartpole/gaussian_all_levels.png",
+    csv="cartpole/gaussian_all_levels.csv",
+    out="cartpole/gaussian_all_levels.png",
     panels=[("low","CartPole gaussian_signal — low"),
             ("med","CartPole gaussian_signal — med"),
             ("high","CartPole gaussian_signal — high")]),
   "pendulum": dict(
     title="Pendulum stochastic gaussian_signal",
-    csv="docs/experiments/stochastic/pendulum/gaussian_all_levels.csv",
-    out="docs/experiments/stochastic/pendulum/gaussian_all_levels.png",
+    csv="pendulum/gaussian_all_levels.csv",
+    out="pendulum/gaussian_all_levels.png",
     panels=[("low","Pendulum gaussian_signal — low"),
             ("med","Pendulum gaussian_signal — med"),
             ("high","Pendulum gaussian_signal — high")]),
   "quad2d_nd": dict(
     title="Quadrotor2D stochastic noisy_dynamics",
-    csv="docs/experiments/stochastic/quadrotor2d/quad2d_noisy_dynamics_all_levels.csv",
-    out="docs/experiments/stochastic/quadrotor2d/quad2d_noisy_dynamics_all_levels.png",
+    csv="quadrotor2d/quad2d_noisy_dynamics_all_levels.csv",
+    out="quadrotor2d/quad2d_noisy_dynamics_all_levels.png",
     panels=[("noisy_dynamics_f_0.150","Quadrotor2D noisy_dynamics — f_0.150")],
     dsroot=DATA / "quadrotor2D",
     dslevel={"noisy_dynamics_f_0.150": "noisy_dynamics/rl/f_0.150"}),
   "quad2d_cs": dict(
     title="Quadrotor2D stochastic corridor_sine_ambient",
-    csv="docs/experiments/stochastic/quadrotor2d/quad2d_corridor_sine_ambient_all_levels.csv",
-    out="docs/experiments/stochastic/quadrotor2d/quad2d_corridor_sine_ambient_all_levels.png",
+    csv="quadrotor2d/quad2d_corridor_sine_ambient_all_levels.csv",
+    out="quadrotor2d/quad2d_corridor_sine_ambient_all_levels.png",
     panels=[("corridor_sine_ambient_smooth","Quadrotor2D corridor_sine_ambient — smooth")],
     dsroot=DATA / "quadrotor2D",
     dslevel={"corridor_sine_ambient_smooth": "corridor_sine_ambient/rl/smooth"}),
   "quad3d_nd": dict(
     title="Quadrotor3D stochastic noisy_dynamics",
-    csv="docs/experiments/stochastic/quadrotor3d/quad3d_noisy_dynamics_all_levels.csv",
-    out="docs/experiments/stochastic/quadrotor3d/quad3d_noisy_dynamics_all_levels.png",
+    csv="quadrotor3d/quad3d_noisy_dynamics_all_levels.csv",
+    out="quadrotor3d/quad3d_noisy_dynamics_all_levels.png",
     panels=[("noisy_dynamics_f_0.048","Quadrotor3D noisy_dynamics — f_0.048"),
             ("noisy_dynamics_f_0.060","Quadrotor3D noisy_dynamics — f_0.060")],
     dsroot=DATA / "quadrotor3D",
@@ -103,8 +104,8 @@ CAMPAIGNS = {
              "noisy_dynamics_f_0.060": "noisy_dynamics/lqr/f_0.060"}),
   "quad3d_cs": dict(
     title="Quadrotor3D stochastic corridor_sine_ambient",
-    csv="docs/experiments/stochastic/quadrotor3d/quad3d_corridor_sine_ambient_all_levels.csv",
-    out="docs/experiments/stochastic/quadrotor3d/quad3d_corridor_sine_ambient_all_levels.png",
+    csv="quadrotor3d/quad3d_corridor_sine_ambient_all_levels.csv",
+    out="quadrotor3d/quad3d_corridor_sine_ambient_all_levels.png",
     panels=[("corridor_sine_ambient_f_0.30","Quadrotor3D corridor_sine_ambient — f_0.30")],
     dsroot=DATA / "quadrotor3D",
     dslevel={"corridor_sine_ambient_f_0.30": "corridor_sine_ambient/lqr/f_0.30"}),
@@ -207,7 +208,7 @@ def main():
 
     for name in (a.campaigns or list(CAMPAIGNS)):
         c = CAMPAIGNS[name]
-        src = ROOT / c["csv"]
+        src = DOCS / c["csv"]
         if not src.exists():
             print(f"  SKIP {name}: {c['csv']} absent"); continue
 
@@ -328,12 +329,12 @@ def main():
         fig.legend(handles, labels, loc="lower center", ncol=legcol, fontsize=8.6,
                    frameon=False, bbox_to_anchor=(0.5, 0.004))
         fig.tight_layout(rect=[0, LEG_IN / fig_h, 1, 1 - TOP_IN / fig_h])
-        out = ROOT / c["out"]
+        out = DOCS / c["out"]
         if a.clean:
             out = out.with_name(out.stem + "_clean" + out.suffix)
         out.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(out, dpi=145); plt.close(fig)
-        print(f"  wrote {out.relative_to(ROOT)}  ({nrow} level(s), "
+        print(f"  wrote {out.relative_to(DOCS)}  ({nrow} level(s), "
               f"{narms} arms + {nseed}-seed control)")
 
 

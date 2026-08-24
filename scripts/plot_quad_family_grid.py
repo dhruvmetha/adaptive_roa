@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """One figure per noise family: rows = levels, columns = KL / debiased Brier / sAUROC.
 
-Follows the convention already documented in docs/experiments/stochastic/{pendulum,
+Follows the convention already documented in /common/users/shared/pracsys/genMoPlan/docs/stochastic/{pendulum,
 cartpole}/README.md and used by their `*_all_levels.png`:
 
     solid   = flow matching        dotted = classifier      dash-dot = Part-X GP

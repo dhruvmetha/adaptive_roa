@@ -39,8 +39,8 @@ ROOT = Path(__file__).resolve().parent.parent
 # rather than a wc -l. Each jsonl gets a sibling CSV of the same stem.
 LOGS = [
     ROOT / "docs/experiments/ensemble_epistemic/runs.jsonl",
-    ROOT / "docs/experiments/stochastic/quadrotor2d/runs_quad2d.jsonl",
-    ROOT / "docs/experiments/stochastic/quadrotor3d/runs_quad3d.jsonl",
+    Path("/common/users/shared/pracsys/genMoPlan/docs/stochastic/quadrotor2d/runs_quad2d.jsonl"),
+    Path("/common/users/shared/pracsys/genMoPlan/docs/stochastic/quadrotor3d/runs_quad3d.jsonl"),
 ]
 
 FIELDS = [

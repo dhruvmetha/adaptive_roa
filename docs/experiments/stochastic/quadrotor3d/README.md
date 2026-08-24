@@ -460,7 +460,7 @@ budget as well as this defect. Relaunch is at 10,000 / 5,000 / 18 epochs = 100,0
 _No rows yet._
 
 
-### quad3D `corridor_sine_ambient f_0.30` — 84/252 epochs, 0/14 arms complete
+### quad3D `corridor_sine_ambient f_0.30` — 85/252 epochs, 0/14 arms complete
 
 | metric | 2·SD floor (ep1–2) | 3-seed uniform control at ep2 |
 |---|---|---|
@@ -479,7 +479,7 @@ _No rows yet._
 | `partx` | 2 | 0.1828 | 0.0522 | 0.8855 | -0.0446 | +0.0045 | -0.0164 | **mixed — better ×1, worse ×1** |
 | `epi_var_anch` | 2 | 0.2187 | 0.0456 | 0.9029 | -0.0087 | -0.0021 | +0.0011 | inside floor |
 | `epi_bald` | 2 | 0.2374 | 0.0521 | 0.9031 | +0.0099 | +0.0044 | +0.0012 | inside floor |
-| `epi_var` | 1 | 0.3456 | 0.0716 | 0.8639 | +0.1182 | +0.0239 | -0.0380 | **worse than uniform ×3** |
+| `epi_var` | 2 | 0.2570 | 0.0533 | 0.8901 | +0.0296 | +0.0056 | -0.0117 | **worse than uniform ×3** |
 
 > Compared at ep2, the control's deepest shared epoch. These arms are deeper than that and are read at ep2 rather than their own deepest: `clf_dir00`, `clf_epi_bald`, `clf_epi_var`, `clf_epi_var_anch`, `clf_yield`, `partx`.
 

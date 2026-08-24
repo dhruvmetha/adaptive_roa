@@ -460,7 +460,7 @@ budget as well as this defect. Relaunch is at 10,000 / 5,000 / 18 epochs = 100,0
 _No rows yet._
 
 
-### quad3D `corridor_sine_ambient f_0.30` — 78/252 epochs, 0/14 arms complete
+### quad3D `corridor_sine_ambient f_0.30` — 79/252 epochs, 0/14 arms complete
 
 | metric | 2·SD floor (ep1–1) | 3-seed uniform control at ep1 |
 |---|---|---|

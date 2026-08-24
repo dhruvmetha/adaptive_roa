@@ -460,7 +460,7 @@ budget as well as this defect. Relaunch is at 10,000 / 5,000 / 18 epochs = 100,0
 _No rows yet._
 
 
-### quad3D `corridor_sine_ambient f_0.30` — 129/252 epochs, 1/14 arms complete
+### quad3D `corridor_sine_ambient f_0.30` — 130/252 epochs, 1/14 arms complete
 
 | metric | 2·SD floor (ep1–5) | 3-seed uniform control at ep5 |
 |---|---|---|
@@ -473,12 +473,12 @@ _No rows yet._
 | `epi_bald` | 4 | 0.1158 | 0.0299 | 0.9534 | -0.0173 | -0.0026 | +0.0115 | beats floor ×1 |
 | `yield_a1` | 4 | 0.1188 | 0.0303 | 0.9555 | -0.0143 | -0.0022 | +0.0136 | beats floor ×1 |
 | `epi_var_anch` | 5 | 0.1203 | 0.0314 | 0.9540 | -0.0128 | -0.0010 | +0.0121 | beats floor ×1 |
+| `epi_var` | 5 | 0.1219 | 0.0310 | 0.9493 | -0.0112 | -0.0015 | +0.0073 | beats floor ×1 |
 | `clf_dir00` | 5 | 0.1304 | 0.0361 | 0.9348 | -0.0028 | +0.0037 | -0.0071 | **worse ×1** |
 | `clf_epi_var` | 5 | 0.1329 | 0.0360 | 0.9440 | -0.0002 | +0.0036 | +0.0021 | inside floor |
 | `clf_epi_var_anch` | 5 | 0.1422 | 0.0384 | 0.9411 | +0.0091 | +0.0059 | -0.0009 | **worse ×1** |
 | `clf_epi_bald` | 5 | 0.1423 | 0.0393 | 0.9412 | +0.0092 | +0.0068 | -0.0007 | **worse ×1** |
 | `clf_yield` | 5 | 0.1493 | 0.0392 | 0.9471 | +0.0162 | +0.0068 | +0.0052 | **mixed — better ×1, worse ×1** |
-| `epi_var` | 4 | 0.1507 | 0.0353 | 0.9331 | +0.0176 | +0.0029 | -0.0088 | **worse ×1** |
 | `partx` | 5 | 0.1667 | 0.0464 | 0.8975 | +0.0336 | +0.0140 | -0.0444 | **worse than uniform ×3** |
 | `yield_mlp` | 0 | 0.3679 | 0.0742 | 0.8502 | +0.2348 | +0.0418 | -0.0917 | **worse than uniform ×3** |
 

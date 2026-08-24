@@ -460,30 +460,30 @@ budget as well as this defect. Relaunch is at 10,000 / 5,000 / 18 epochs = 100,0
 _No rows yet._
 
 
-### quad3D `corridor_sine_ambient f_0.30` — 88/252 epochs, 0/14 arms complete
+### quad3D `corridor_sine_ambient f_0.30` — 100/252 epochs, 1/14 arms complete
 
-| metric | 2·SD floor (ep1–2) | 3-seed uniform control at ep2 |
+| metric | 2·SD floor (ep1–3) | 3-seed uniform control at ep3 |
 |---|---|---|
-| KL | **0.0253** | 0.2274 |
-| Brier_deb | **0.0054** | 0.0477 |
-| sAUROC | **0.0062** | 0.9019 |
+| KL | **0.0225** | 0.1746 |
+| Brier_deb | **0.0049** | 0.0397 |
+| sAUROC | **0.0055** | 0.9235 |
 
 | arm | ep | KL | Brier_deb | sAUROC | ΔKL | ΔBrier | ΔsAUROC | verdict |
 |---|---|---|---|---|---|---|---|---|
-| `yield_a1` | 2 | 0.1342 | 0.0321 | 0.9427 | -0.0932 | -0.0156 | +0.0409 | beats floor ×3 |
-| `clf_epi_var` | 2 | 0.1512 | 0.0407 | 0.9293 | -0.0762 | -0.0070 | +0.0275 | beats floor ×3 |
-| `clf_epi_var_anch` | 2 | 0.1523 | 0.0405 | 0.9261 | -0.0752 | -0.0072 | +0.0242 | beats floor ×3 |
-| `clf_dir00` | 2 | 0.1550 | 0.0423 | 0.9189 | -0.0725 | -0.0054 | +0.0171 | beats floor ×2 |
-| `clf_epi_bald` | 2 | 0.1593 | 0.0422 | 0.9262 | -0.0682 | -0.0055 | +0.0244 | beats floor ×3 |
-| `clf_yield` | 2 | 0.1776 | 0.0444 | 0.9318 | -0.0498 | -0.0033 | +0.0300 | beats floor ×2 |
-| `partx` | 2 | 0.1828 | 0.0522 | 0.8855 | -0.0446 | +0.0045 | -0.0164 | **mixed — better ×1, worse ×1** |
-| `epi_var_anch` | 2 | 0.2187 | 0.0456 | 0.9029 | -0.0087 | -0.0021 | +0.0011 | inside floor |
-| `epi_bald` | 2 | 0.2374 | 0.0521 | 0.9031 | +0.0099 | +0.0044 | +0.0012 | inside floor |
-| `epi_var` | 2 | 0.2570 | 0.0533 | 0.8901 | +0.0296 | +0.0056 | -0.0117 | **worse than uniform ×3** |
+| `yield_a1` | 2 | 0.1342 | 0.0321 | 0.9427 | -0.0404 | -0.0075 | +0.0192 | beats floor ×3 |
+| `clf_epi_bald` | 3 | 0.1407 | 0.0365 | 0.9387 | -0.0339 | -0.0032 | +0.0152 | beats floor ×2 |
+| `clf_epi_var_anch` | 3 | 0.1417 | 0.0379 | 0.9358 | -0.0328 | -0.0018 | +0.0123 | beats floor ×2 |
+| `clf_dir00` | 3 | 0.1445 | 0.0400 | 0.9252 | -0.0301 | +0.0003 | +0.0017 | beats floor ×1 |
+| `clf_epi_var` | 3 | 0.1469 | 0.0389 | 0.9382 | -0.0277 | -0.0008 | +0.0146 | beats floor ×2 |
+| `epi_bald` | 3 | 0.1525 | 0.0359 | 0.9347 | -0.0220 | -0.0038 | +0.0112 | beats floor ×1 |
+| `clf_yield` | 3 | 0.1672 | 0.0412 | 0.9390 | -0.0074 | +0.0015 | +0.0155 | beats floor ×1 |
+| `epi_var_anch` | 3 | 0.1782 | 0.0404 | 0.9255 | +0.0036 | +0.0007 | +0.0020 | inside floor |
+| `partx` | 3 | 0.1830 | 0.0523 | 0.8850 | +0.0084 | +0.0126 | -0.0385 | **worse ×2** |
+| `epi_var` | 2 | 0.2570 | 0.0533 | 0.8901 | +0.0824 | +0.0136 | -0.0334 | **worse than uniform ×3** |
 
-> Compared at ep2, the control's deepest shared epoch. These arms are deeper than that and are read at ep2 rather than their own deepest: `clf_dir00`, `clf_epi_bald`, `clf_epi_var`, `clf_epi_var_anch`, `clf_yield`, `partx`.
+> Compared at ep3, the control's deepest shared epoch. These arms are deeper than that and are read at ep3 rather than their own deepest: `clf_dir00`, `clf_epi_bald`, `clf_epi_var`, `clf_epi_var_anch`, `clf_yield`, `partx`.
 
-> Level incomplete (0/14 arms at 18 epochs). Ordering can still move; treat as provisional.
+> Level incomplete (1/14 arms at 18 epochs). Ordering can still move; treat as provisional.
 
 <!-- STANDINGS:END -->
 

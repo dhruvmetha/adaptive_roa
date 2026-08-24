@@ -460,7 +460,7 @@ budget as well as this defect. Relaunch is at 10,000 / 5,000 / 18 epochs = 100,0
 _No rows yet._
 
 
-### quad3D `corridor_sine_ambient f_0.30` — 104/252 epochs, 1/14 arms complete
+### quad3D `corridor_sine_ambient f_0.30` — 106/252 epochs, 1/14 arms complete
 
 | metric | 2·SD floor (ep1–3) | 3-seed uniform control at ep3 |
 |---|---|---|
@@ -470,7 +470,7 @@ _No rows yet._
 
 | arm | ep | KL | Brier_deb | sAUROC | ΔKL | ΔBrier | ΔsAUROC | verdict |
 |---|---|---|---|---|---|---|---|---|
-| `yield_a1` | 2 | 0.1342 | 0.0321 | 0.9427 | -0.0404 | -0.0075 | +0.0192 | beats floor ×3 |
+| `yield_a1` | 3 | 0.1219 | 0.0307 | 0.9518 | -0.0527 | -0.0090 | +0.0283 | beats floor ×3 |
 | `clf_epi_bald` | 3 | 0.1407 | 0.0365 | 0.9387 | -0.0339 | -0.0032 | +0.0152 | beats floor ×2 |
 | `clf_epi_var_anch` | 3 | 0.1417 | 0.0379 | 0.9358 | -0.0328 | -0.0018 | +0.0123 | beats floor ×2 |
 | `clf_dir00` | 3 | 0.1445 | 0.0400 | 0.9252 | -0.0301 | +0.0003 | +0.0017 | beats floor ×1 |

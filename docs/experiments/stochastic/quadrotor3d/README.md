@@ -460,7 +460,7 @@ budget as well as this defect. Relaunch is at 10,000 / 5,000 / 18 epochs = 100,0
 _No rows yet._
 
 
-### quad3D `corridor_sine_ambient f_0.30` — 118/252 epochs, 1/14 arms complete
+### quad3D `corridor_sine_ambient f_0.30` — 120/252 epochs, 1/14 arms complete
 
 | metric | 2·SD floor (ep1–4) | 3-seed uniform control at ep4 |
 |---|---|---|
@@ -481,7 +481,7 @@ _No rows yet._
 | `clf_yield` | 4 | 0.1609 | 0.0407 | 0.9448 | +0.0008 | +0.0040 | +0.0147 | beats floor ×1 |
 | `partx` | 4 | 0.1860 | 0.0529 | 0.8819 | +0.0260 | +0.0162 | -0.0481 | **worse than uniform ×3** |
 
-> Compared at ep4, the control's deepest shared epoch. These arms are deeper than that and are read at ep4 rather than their own deepest: `clf_dir00`, `clf_epi_bald`, `clf_epi_var`, `clf_epi_var_anch`, `clf_yield`, `partx`.
+> Compared at ep4, the control's deepest shared epoch. These arms are deeper than that and are read at ep4 rather than their own deepest: `clf_dir00`, `clf_epi_bald`, `clf_epi_var`, `clf_epi_var_anch`, `clf_yield`, `epi_var_anch`, `partx`.
 
 > Level incomplete (1/14 arms at 18 epochs). Ordering can still move; treat as provisional.
 

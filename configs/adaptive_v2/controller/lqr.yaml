@@ -1,0 +1,8 @@
+# @package _global_
+# LQR cartpole: stabilises at the ORIGIN. These are the historical values --
+# selecting this group must leave every pre-existing lqr result reproducible.
+controller: lqr
+attractor_radius: 0.2
+system:
+  goal: [0.0, 0.0, 0.0, 0.0]
+  angle_limit: null        # null -> pi, the full wrapped range

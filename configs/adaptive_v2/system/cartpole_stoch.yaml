@@ -43,9 +43,12 @@ defaults:
   - _base
   - /model/system_dims: cartpole_pybullet
   - /prediction_mode: global
+  # Selects the data branch AND the goal / angle_limit / attractor_radius that go
+  # with that controller. Override as `controller=safe_explorer_ppo`.
+  - /controller: lqr
   - _self_
 
-name: adaptive_cartpole_stoch_${noise_level}
+name: adaptive_cartpole_stoch_${controller}_${noise_level}
 output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${acquisition.d2_ratio}_warm_start_${warm_start}_adapt_iter_${n_epochs}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
 
 shuffle_variant: 0
@@ -54,14 +57,24 @@ noise_regime: stochastic
 # Noise sigma: sigma_000.0 | sigma_015.0 | sigma_020.0 | sigma_030.0 | sigma_040.0
 # Noise level: low | med | high
 noise_level: med
-dataset_name: cartpole/noisy_torque/lqr/${noise_level}
+# REPOINTED 2026-08-18 from noisy_torque to gaussian_signal — the gaussian_signal
+# datasets are complete with train.npz + eval_success_prob.npz + shuffled_indices.
+# Controller that generated the trajectories. The data tree is
+# <system>/<noise_family>/<controller>/<level>, so this selects the branch.
+#   lqr               : levels low | med | high
+#   safe_explorer_ppo : levels baseline | low | med | high  (baseline = ZERO noise)
+# Levels are NOT shared across controllers -- safe_explorer_ppo adds `baseline`,
+# which lqr has no counterpart for. Never compare an lqr level to an RL level by
+# position; they are different controllers on different data.
+dataset_name: cartpole/gaussian_signal/${controller}/${noise_level}
 dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
 
 # Kept from cartpole_pybullet: cartpole's ROA is two-sided and its attractor
 # radius is 0.2, unlike the pendulum's one-sided 0.1. These are system
 # properties, not noise-regime properties, so they carry over unchanged.
 decision_rule: two_sided
-attractor_radius: 0.2
+# attractor_radius comes from the /controller group (lqr 0.2, safe_explorer_ppo
+# 0.15) -- do NOT set it here, _self_ is last in the defaults list and would win.
 
 threshold:
   optimize_mode: joint
@@ -85,6 +98,7 @@ flow_matching:
 system:
   _target_: adaptive_roa.systems.cartpole.CartPoleSystem
   dataset_dir: ${dataset_root}
+  # goal / angle_limit are supplied by the /controller group.
 
 flow_matcher:
   _target_: adaptive_roa.flow_matching.cartpole.latent_conditional.flow_matcher.CartPoleLatentConditionalFlowMatcher

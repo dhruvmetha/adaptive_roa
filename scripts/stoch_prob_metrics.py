@@ -170,9 +170,21 @@ def sharpness(p_hat: np.ndarray, p: np.ndarray, k: float | None, m: float) -> di
         sharp = float(np.mean(p_hat * (1.0 - p_hat)))
     else:
         sharp = float(k / (k - 1.0) * np.mean(p_hat * (1.0 - p_hat)))
+    # Same guard as the k branch above. m is the GT trials per eval cell, and a
+    # DETERMINISTIC level ships m = 1 (one rollout is enough with no noise), which
+    # made m/(m-1) a ZeroDivisionError that killed every epoch of the level rather
+    # than just this one metric. With a single draw there is no within-cell
+    # sampling variance to remove, so the raw spread IS the debiased spread --
+    # and for a deterministic field it is legitimately 0, since p is 0 or 1
+    # everywhere. Exposed by cartpole safe_explorer_ppo/baseline (trials = 1);
+    # also applies to any f_0.000-style level.
+    if not np.isfinite(m) or m <= 1:
+        sharp_star = float(np.mean(p * (1.0 - p)))
+    else:
+        sharp_star = float(m / (m - 1.0) * np.mean(p * (1.0 - p)))
     return {
         "SHARP": sharp,
-        "SHARP_star": float(m / (m - 1.0) * np.mean(p * (1.0 - p))),
+        "SHARP_star": sharp_star,
     }
 
 

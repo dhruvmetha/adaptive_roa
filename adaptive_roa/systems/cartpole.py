@@ -22,19 +22,36 @@ class CartPoleSystem(DynamicalSystem):
     """
 
     def __init__(self,
-                 dataset_dir: str = None):
+                 dataset_dir: str = None,
+                 goal: List[float] | None = None,
+                 angle_limit: float | None = None):
         """
         Initialize CartPole system
 
         Args:
             dataset_dir: Path to dataset directory containing dataset_description.json.
                         If None, uses default path from environment.
+            goal: Target state [x, theta, x_dot, theta_dot]. Defaults to the origin,
+                  which is the LQR set's stabilisation point. The safe_explorer_ppo
+                  policy parks the cart at x = 0.7 (cartpole_stab.yaml sets
+                  stabilization_goal [0.7, 0]), so that controller MUST pass
+                  [0.7, 0, 0, 0]. Leaving it at the origin is not a small error: RL
+                  successes sit at ||state|| ~ 0.72, so every predicted endpoint is
+                  scored a failure, p_hat collapses to ~0 and sAUROC pins at 0.500.
+            angle_limit: |theta| normalisation bound. Defaults to pi (the wrapped
+                  range). The RL policy terminates at |theta| >= 0.48, so passing pi
+                  there would compress the entire usable angular range into +-0.153
+                  of the normalised space.
         """
         if dataset_dir is None:
             dataset_dir = f"{get_data_dir()}/{get_noise_regime()}/cartpole_pybullet"
 
         dataset_dir = Path(dataset_dir)
         self.dataset_dir = str(dataset_dir)
+        self.goal = [0.0, 0.0, 0.0, 0.0] if goal is None else [float(g) for g in goal]
+        if len(self.goal) != 4:
+            raise ValueError(f"cartpole goal must be 4-D [x, theta, x_dot, theta_dot], got {self.goal}")
+        self._angle_limit_override = None if angle_limit is None else float(angle_limit)
         json_path = dataset_dir / "dataset_description.json"
 
         # Load bounds from JSON - no fallback, error if not found
@@ -104,7 +121,11 @@ class CartPoleSystem(DynamicalSystem):
         self.cart_limit = max(abs(bounds['x']['min']), abs(bounds['x']['max']))
         self.velocity_limit = max(abs(bounds['x_dot']['min']), abs(bounds['x_dot']['max']))
         # For angle, we'll wrap to [-π, π] in preprocessing, so use π as limit
-        self.angle_limit = np.pi  # Always [-π, π] after wrapping
+        # Wrapping still maps theta into [-pi, pi]; the LIMIT is how much of that
+        # range the normaliser spends. A policy that terminates well inside pi wants
+        # its own bound (safe_explorer_ppo: 0.48) or it throws away resolution.
+        self.angle_limit = np.pi if self._angle_limit_override is None \
+            else self._angle_limit_override
         self.angular_velocity_limit = max(abs(bounds['theta_dot']['min']), abs(bounds['theta_dot']['max']))
 
         # Store the full dataset info for reference
@@ -163,9 +184,7 @@ class CartPoleSystem(DynamicalSystem):
         Returns:
             List of [x, θ, ẋ, θ̇] attractor positions
         """
-        return [
-            [0.0, 0.0, 0.0, 0.0],      # Cart centered, pole upright (0° only)
-        ]
+        return [list(self.goal)]
     
     def is_in_attractor(self, state, radius: float = 1.0):
         """
@@ -188,13 +207,13 @@ class CartPoleSystem(DynamicalSystem):
         if state.dim() == 1:
             state = state.unsqueeze(0)
 
-        # Goal state is [0, 0, 0, 0]
-        # Euclidean components: x, ẋ, θ̇ (indices 0, 2, 3)
-        euclidean_diff = state[:, [0, 2, 3]]  # Goal is 0 for all
+        # Distances are measured from self.goal, NOT the origin.
+        g = torch.as_tensor(self.goal, dtype=state.dtype, device=state.device)
+        euclidean_diff = state[:, [0, 2, 3]] - g[[0, 2, 3]]
 
-        # Circular component: θ (index 1) - wrap difference to [-π, π]
-        # Goal θ = 0, so angle_diff = θ - 0 = θ
-        angle_diff = torch.atan2(torch.sin(state[:, 1]), torch.cos(state[:, 1]))
+        # Circular component: θ (index 1) - wrap the DIFFERENCE to [-π, π]
+        dth = state[:, 1] - g[1]
+        angle_diff = torch.atan2(torch.sin(dth), torch.cos(dth))
 
         # Combined distance: sqrt(sum of squared Euclidean diffs + squared angle diff)
         dist = torch.sqrt(torch.sum(euclidean_diff**2, dim=1) + angle_diff**2)
@@ -239,12 +258,13 @@ class CartPoleSystem(DynamicalSystem):
 
         x, theta, x_dot, theta_dot = state[:, 0], state[:, 1], state[:, 2], state[:, 3]
 
-        # SUCCESS: Distance from goal [0,0,0,0] < radius (with circular handling for θ)
-        # Euclidean components: x, ẋ, θ̇ (indices 0, 2, 3)
-        euclidean_diff = state[:, [0, 2, 3]]  # Goal is 0 for all
+        # SUCCESS: distance from self.goal < radius (circular handling for θ)
+        g = torch.as_tensor(self.goal, dtype=state.dtype, device=state.device)
+        euclidean_diff = state[:, [0, 2, 3]] - g[[0, 2, 3]]
 
-        # Circular component: θ (index 1) - wrap difference to [-π, π]
-        angle_diff = torch.atan2(torch.sin(theta), torch.cos(theta))
+        # Circular component: θ (index 1) - wrap the DIFFERENCE to [-π, π]
+        dth = theta - g[1]
+        angle_diff = torch.atan2(torch.sin(dth), torch.cos(dth))
 
         # Combined distance
         dist = torch.sqrt(torch.sum(euclidean_diff**2, dim=1) + angle_diff**2)
@@ -254,9 +274,15 @@ class CartPoleSystem(DynamicalSystem):
 
         # FAILURE: Check if exceeded termination thresholds
         # From dataset_description.json termination thresholds
-        x_failed = torch.abs(x) > 5.9           # Cart hit boundary
-        x_dot_failed = torch.abs(x_dot) > 4.9  # Cart velocity too high
-        theta_dot_failed = torch.abs(theta_dot) > 4.9  # Angular velocity too high
+        # Derived from the LOADED bounds, not hardcoded. The old literals (5.9,
+        # 4.9, 4.9) were the LQR set's +-6/+-5/+-5 minus a margin; against the
+        # safe_explorer_ppo set, which terminates at +-3 on all three channels,
+        # they could never fire. Both datasets store only states strictly inside
+        # their box, so testing at the limit is inert on stored data and correct
+        # for predicted states that fall outside it.
+        x_failed = torch.abs(x) >= self.cart_limit
+        x_dot_failed = torch.abs(x_dot) >= self.velocity_limit
+        theta_dot_failed = torch.abs(theta_dot) >= self.angular_velocity_limit
         # Note: theta has no termination threshold (inf)
 
         exceeded_thresholds = x_failed | x_dot_failed | theta_dot_failed

@@ -76,7 +76,7 @@ defaults:
   - /prediction_mode: global
   - _self_
 
-name: adaptive_quadrotor3d_stoch_${noise_family}_${noise_level}
+name: adaptive_quadrotor3d_stoch_${noise_family}_${controller}_${noise_level}
 output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${acquisition.d2_ratio}_warm_start_${warm_start}_adapt_iter_${n_epochs}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
 
 shuffle_variant: 0
@@ -87,7 +87,10 @@ noise_family: noisy_dynamics
 # noisy_dynamics: f_0.000 f_0.032 f_0.048 f_0.060 f_0.072
 # corridor_sine_ambient: f_0.25 f_0.30
 noise_level: f_0.060
-dataset_name: quadrotor3D/${noise_family}/lqr/${noise_level}
+# Controller branch of the data tree. Only `lqr` exists for quadrotor3D as of
+# 2026-08-31 -- there is no RL dataset for this system yet.
+controller: lqr
+dataset_name: quadrotor3D/${noise_family}/${controller}/${noise_level}
 dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
 
 decision_rule: two_sided
@@ -104,9 +107,29 @@ data_source:
   cal_set_file: ${dataset_root}/cal_set.txt
   test_set_file: ${dataset_root}/test_set.txt
 
-initial_train_size: 2000
-samples_per_epoch: 500
-n_epochs: 24
+# ACQUISITION BUDGET (set 2026-08-21). 10000 + 18*5000 = 100,000 trajectories.
+#
+# Do NOT copy quad2D's 2000/500/24 here again. That budget was carried over by
+# mistake on the 08-21 launch and is wrong for this system twice over: 14,000
+# trajectories is 1.75% of the 800,000-rollout pool, and a 2000-sample seed in
+# 12-D is far sparser than the same number in quad2D's 6-D. At this family's
+# success rates it also buys almost no minority class -- 2000 gives ~102
+# successes at f_0.048 and ~68 at f_0.060, against ~510 and ~340 at 10000.
+#
+# 10000/1000 is the setting quad3D actually converged on historically (the
+# 2026-07-08 newcrit runs at 15 epochs = 25,000, and the 2026-07-30 runs at
+# 20 epochs = 30,000). This raises the step to 5000 to reach 100,000.
+#
+# Wall-clock barely moves with init size: the 2026-07-08 run at init=10000
+# logged 72/73/76 min epochs, the same 1.2-2.0 h envelope as the init=2000
+# runs, because the 990,000 x K=100 full-ROA eval dominates the epoch, not
+# training. Budget ~2 h/epoch here once 250k-candidate scoring is added.
+#
+# 100,000 is 12.5% of the pool, so there is no exhaustion risk.
+# val_ratio (0.2, from _base) then holds 20,000 out; FM trains on 80,000.
+initial_train_size: 10000
+samples_per_epoch: 5000
+n_epochs: 18
 
 threshold:
   optimize_mode: joint

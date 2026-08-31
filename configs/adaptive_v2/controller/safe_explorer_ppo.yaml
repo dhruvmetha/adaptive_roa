@@ -1,0 +1,26 @@
+# @package _global_
+# safe_explorer_ppo cartpole. cartpole_stab.yaml sets stabilization_goal [0.7, 0],
+# so the cart target is x = 0.7 and the policy parks at 0.696 -- NOT the origin.
+#
+# Getting this wrong is not a small bias. Measured on the pool, successful
+# rollouts end at ||state|| ~ 0.72, so against an origin-centred ball 0% of them
+# score as success, p_hat collapses to ~0 everywhere, and sAUROC pins at exactly
+# 0.500. That is what the withdrawn 2026-08-31 fleet did for 28 runs.
+#
+# angle_limit 0.48 is this policy's termination threshold. Normalising by pi
+# instead would squeeze the entire usable angular range into +-0.153 of the
+# normalised space. Out-of-bounds on the other channels (|x|, |x_dot|,
+# |theta_dot| >= 3) already comes from the dataset json.
+#
+# RADIUS MISMATCH, stated so it is not invisible: the DATA labels success as
+# first entry into a 0.05-radius ball over the full 4-D state (velocities charge
+# against the same budget, entry ends the flight). attractor_radius below is the
+# MODEL side -- it labels the K sampled endpoints in endpoint_mc_probabilities --
+# and is deliberately held at 0.15, which in 4-D is (0.15/0.05)^4 = 81x the
+# volume. Shared by every arm, so rankings survive; absolute p_success is inflated
+# and is not comparable to the lqr set's magnitudes.
+controller: safe_explorer_ppo
+attractor_radius: 0.15
+system:
+  goal: [0.7, 0.0, 0.0, 0.0]
+  angle_limit: 0.48

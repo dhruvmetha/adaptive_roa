@@ -50,7 +50,9 @@ shuffle_variant: 0
 noise_regime: stochastic
 # Noise level: low | med | high
 noise_level: med
-dataset_name: pendulum/gaussian_signal/lqr/${noise_level}
+# Controller branch of the data tree. pendulum/gaussian_signal ships only `lqr`.
+controller: lqr
+dataset_name: pendulum/gaussian_signal/${controller}/${noise_level}
 dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
 
 decision_rule: one_sided

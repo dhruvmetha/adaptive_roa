@@ -71,7 +71,7 @@ defaults:
   - /prediction_mode: global
   - _self_
 
-name: adaptive_quadrotor2d_stoch_${noise_family}_${noise_level}
+name: adaptive_quadrotor2d_stoch_${noise_family}_${controller}_${noise_level}
 output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${acquisition.d2_ratio}_warm_start_${warm_start}_adapt_iter_${n_epochs}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
 
 shuffle_variant: 0
@@ -82,7 +82,9 @@ noise_family: noisy_dynamics
 # noisy_dynamics: f_0.000 f_0.070 f_0.100 f_0.150 f_0.200
 # corridor_sine_ambient: baseline smooth sharp
 noise_level: f_0.150
-dataset_name: quadrotor2D/${noise_family}/rl/${noise_level}
+# Controller branch of the data tree. quadrotor2D ships only `rl`.
+controller: rl
+dataset_name: quadrotor2D/${noise_family}/${controller}/${noise_level}
 dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
 
 decision_rule: two_sided

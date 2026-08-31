@@ -45,12 +45,49 @@ ARMS = [
     ("epi_bald",         "FM  epistemic BALD",       "#2ca02c", "-",  "^"),
     ("yield_a1",         "FM  yield α=1",            "#d62728", "-",  "o"),
     ("yield_mlp",        "FM  yield (MLP len)",      "#ff7f0e", "-",  "s"),
-    ("partx",            "Part-X  (GP)",             "#9467bd", "-.", "D"),
+    # Only the FIXED Part-X arm is plotted. The pre-fix `partx` rows stay in the
+    # CSVs as a record, but they were produced with a partition root built from
+    # component-collapsed bounds, so 91% of the quadrotor2D state space and 43%
+    # of quadrotor3D's was unreachable by acquisition and those arms ran at
+    # 40-45% of their budget. Drawing them as "Part-X" misrepresents the method.
+    # Consequence, stated so it is not a surprise: the two noisy_dynamics levels
+    # have NO Part-X line at all, because their datasets were deleted on
+    # 2026-08-26 and a corrected arm can never be produced for them.
+    # Part-X keeps its long-standing dash-dot style and purple; it is the only
+    # Part-X line now, so there is nothing to distinguish it FROM.
+    ("partx_fix",        "Part-X  (GP)",             "#9467bd", "-.", "D"),
     ("clf_dir00",        "CLF  non-adaptive",        "#8c564b", ":",  "X"),
     ("clf_yield",        "CLF  yield",               "#e377c2", ":",  "P"),
     ("clf_epi_var",      "CLF  epistemic var",       "#7f7f7f", ":",  "v"),
     ("clf_epi_bald",     "CLF  epistemic BALD",      "#bcbd22", ":",  "^"),
     ("clf_epi_var_anch", "CLF  epi var anch",        "#aec7e8", ":",  "*"),
+    # Bayesian NN arms. The first three are UNIFORM sampling: the shipped bnn
+    # configs bind classifier_prob, which exposes no estimate_members(), so the
+    # decomposition acquisitions cannot run against them. They differ only in
+    # posterior approximation -- same architecture, same prior, same 64 marginal
+    # samples -- so a gap between those three lines is a posterior effect, not an
+    # acquisition effect.
+    #
+    # bnn_mfvi_bald is the one ADAPTIVE Bayesian arm: same mean-field posterior as
+    # bnn_mfvi, acquiring by BALD (Depeweg et al. 2018 Eq. 3/5) over 64 draws from
+    # the weight posterior, via sampled_posterior_classifier_prob. It shares
+    # bnn_mfvi's colour on purpose -- bnn_mfvi is its matched non-adaptive control
+    # at identical budget, so the pair is meant to be read together.
+    #
+    # MFVI and not Laplace: the paper's BNN puts a Gaussian over ALL weights and
+    # samples it. A last-layer Laplace makes only the final layer stochastic, every
+    # draw shares one deterministic body, and the measured epistemic term collapsed
+    # to ~1e-5 (epi/ale 0.0004-0.006 vs a deep ensemble's 0.034-0.221) -- so BALD
+    # had almost no epistemic signal to rank on. That arm was withdrawn.
+    #
+    # Deliberately NOT run on the deep ensemble: bnn_ensemble and clf_ensemble are
+    # the same trainer with the same posterior and hyperparameters, differing only
+    # in probability backend, so a "BNN ensemble + BALD" arm would reproduce
+    # clf_epi_bald rather than add a data point.
+    ("bnn_ens",          "BNN  deep ensemble",       "#393b79", "--", "o"),
+    ("bnn_lap",          "BNN  Laplace",             "#843c39", "--", "s"),
+    ("bnn_mfvi",         "BNN  mean-field VI",       "#7b4173", "--", "D"),
+    ("bnn_mfvi_bald",    "BNN  MFVI + BALD",         "#7b4173", "-",  "^"),
 ]
 BAND_C, BAND_A, MEAN_C, MEAN_LW = "0.55", 0.35, "0.15", 3.0
 
@@ -58,7 +95,7 @@ BAND_C, BAND_A, MEAN_C, MEAN_LW = "0.55", 0.35, "0.15", 3.0
 # predictor family plus its own non-adaptive control, so the figure answers
 # "does acquisition help, in each family" without eleven overlapping lines.
 # The FM non-adaptive control is the 3-seed band, not an entry here.
-CLEAN = ["epi_bald", "partx", "clf_dir00", "clf_epi_bald"]
+CLEAN = ["epi_bald", "partx_fix", "clf_dir00", "clf_epi_bald", "bnn_mfvi", "bnn_mfvi_bald"]
 
 METRICS = [("KL",             "KL",             "KL divergence  (log, lower better)",  True),
            ("brier_debiased", "debiased Brier", "debiased Brier  (log, lower better)", True),
@@ -67,36 +104,44 @@ METRICS = [("KL",             "KL",             "KL divergence  (log, lower bett
 CAMPAIGNS = {
   "cartpole": dict(
     title="CartPole stochastic gaussian_signal",
-    csv="cartpole/gaussian_all_levels.csv",
-    out="cartpole/gaussian_all_levels.png",
+    csv="cartpole/lqr/gaussian_all_levels.csv",
+    out="cartpole/lqr/gaussian_all_levels.png",
     panels=[("low","CartPole gaussian_signal — low"),
             ("med","CartPole gaussian_signal — med"),
             ("high","CartPole gaussian_signal — high")]),
   "pendulum": dict(
     title="Pendulum stochastic gaussian_signal",
-    csv="pendulum/gaussian_all_levels.csv",
-    out="pendulum/gaussian_all_levels.png",
+    csv="pendulum/lqr/gaussian_all_levels.csv",
+    out="pendulum/lqr/gaussian_all_levels.png",
     panels=[("low","Pendulum gaussian_signal — low"),
             ("med","Pendulum gaussian_signal — med"),
             ("high","Pendulum gaussian_signal — high")]),
+  "cartpole_rl": dict(
+    title="CartPole stochastic gaussian_signal (safe_explorer_ppo)",
+    csv="cartpole/safe_explorer_ppo/gaussian_all_levels.csv",
+    out="cartpole/safe_explorer_ppo/gaussian_all_levels.png",
+    # `baseline` is ZERO noise -- it has no lqr counterpart, so this panel set is
+    # deliberately not the same shape as the lqr campaign's low/med/high.
+    panels=[("baseline","CartPole RL gaussian_signal — baseline (no noise)"),
+            ("med","CartPole RL gaussian_signal — med")]),
   "quad2d_nd": dict(
     title="Quadrotor2D stochastic noisy_dynamics",
-    csv="quadrotor2d/quad2d_noisy_dynamics_all_levels.csv",
-    out="quadrotor2d/quad2d_noisy_dynamics_all_levels.png",
+    csv="quadrotor2d/rl/quad2d_noisy_dynamics_all_levels.csv",
+    out="quadrotor2d/rl/quad2d_noisy_dynamics_all_levels.png",
     panels=[("noisy_dynamics_f_0.150","Quadrotor2D noisy_dynamics — f_0.150")],
     dsroot=DATA / "quadrotor2D",
     dslevel={"noisy_dynamics_f_0.150": "noisy_dynamics/rl/f_0.150"}),
   "quad2d_cs": dict(
     title="Quadrotor2D stochastic corridor_sine_ambient",
-    csv="quadrotor2d/quad2d_corridor_sine_ambient_all_levels.csv",
-    out="quadrotor2d/quad2d_corridor_sine_ambient_all_levels.png",
+    csv="quadrotor2d/rl/quad2d_corridor_sine_ambient_all_levels.csv",
+    out="quadrotor2d/rl/quad2d_corridor_sine_ambient_all_levels.png",
     panels=[("corridor_sine_ambient_smooth","Quadrotor2D corridor_sine_ambient — smooth")],
     dsroot=DATA / "quadrotor2D",
     dslevel={"corridor_sine_ambient_smooth": "corridor_sine_ambient/rl/smooth"}),
   "quad3d_nd": dict(
     title="Quadrotor3D stochastic noisy_dynamics",
-    csv="quadrotor3d/quad3d_noisy_dynamics_all_levels.csv",
-    out="quadrotor3d/quad3d_noisy_dynamics_all_levels.png",
+    csv="quadrotor3d/lqr/quad3d_noisy_dynamics_all_levels.csv",
+    out="quadrotor3d/lqr/quad3d_noisy_dynamics_all_levels.png",
     panels=[("noisy_dynamics_f_0.048","Quadrotor3D noisy_dynamics — f_0.048"),
             ("noisy_dynamics_f_0.060","Quadrotor3D noisy_dynamics — f_0.060")],
     dsroot=DATA / "quadrotor3D",
@@ -104,8 +149,8 @@ CAMPAIGNS = {
              "noisy_dynamics_f_0.060": "noisy_dynamics/lqr/f_0.060"}),
   "quad3d_cs": dict(
     title="Quadrotor3D stochastic corridor_sine_ambient",
-    csv="quadrotor3d/quad3d_corridor_sine_ambient_all_levels.csv",
-    out="quadrotor3d/quad3d_corridor_sine_ambient_all_levels.png",
+    csv="quadrotor3d/lqr/quad3d_corridor_sine_ambient_all_levels.csv",
+    out="quadrotor3d/lqr/quad3d_corridor_sine_ambient_all_levels.png",
     panels=[("corridor_sine_ambient_f_0.30","Quadrotor3D corridor_sine_ambient — f_0.30")],
     dsroot=DATA / "quadrotor3D",
     dslevel={"corridor_sine_ambient_f_0.30": "corridor_sine_ambient/lqr/f_0.30"}),

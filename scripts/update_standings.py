@@ -18,12 +18,26 @@ that ranks well but calibrates badly must not read as a win.
 import argparse, collections, csv, math, pathlib, statistics as st
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-D2D = pathlib.Path("/common/users/shared/pracsys/genMoPlan/docs/stochastic/quadrotor2d")
-D3D = pathlib.Path("/common/users/shared/pracsys/genMoPlan/docs/stochastic/quadrotor3d")
+D2D = pathlib.Path("/common/users/shared/pracsys/genMoPlan/docs/stochastic/quadrotor2d/rl")
+D3D = pathlib.Path("/common/users/shared/pracsys/genMoPlan/docs/stochastic/quadrotor3d/lqr")
 
 SEEDS = ["dir00_s42", "dir00_s43", "dir00_s44"]
-COLS = [("KL", "KL"), ("brier_debiased", "Brier_deb"), ("sAUROC", "sAUROC")]
-LOWER_IS_BETTER = {"KL": True, "brier_debiased": True, "sAUROC": False}
+
+# Arms whose rows stay in the CSVs as a record but must not appear in a
+# standings table. `partx` is the PRE-FIX Part-X arm: its partition root was
+# built from component-collapsed bounds, so most of the state space was
+# unreachable by acquisition and it ran at 40-45% of its budget. Reporting it
+# beside the corrected `partx_fix` invites a comparison between a method and a
+# bug. The figures already draw only the fixed arm.
+EXCLUDE = ["partx"]
+# log_score is the held-out negative log-likelihood per rollout. Its negation is
+# the test log-likelihood that Depeweg et al. (ICML 2018) Table 1 reports, so
+# carrying it here is what makes our tables comparable in kind to the paper's.
+# It is stored lower-is-better and reported that way; test LL = -log_score.
+COLS = [("KL", "KL"), ("brier_debiased", "Brier_deb"), ("sAUROC", "sAUROC"),
+        ("log_score", "NLL/rollout")]
+LOWER_IS_BETTER = {"KL": True, "brier_debiased": True, "sAUROC": False,
+                   "log_score": True}
 
 # readme -> list of (csv, level key, heading, n_epochs)
 TARGETS = {
@@ -59,7 +73,7 @@ def load(path, level):
 
 def render(path, level, heading, n_epochs):
     d = load(path, level)
-    arms = [a for a in d if a not in SEEDS]
+    arms = [a for a in d if a not in SEEDS and a not in EXCLUDE]
     n_done = sum(1 for a in d if len(d[a]) == n_epochs)
     total = sum(len(v) for v in d.values())
     out = [f"\n### {heading} — {total}/{14 * n_epochs} epochs, {n_done}/14 arms complete\n"]

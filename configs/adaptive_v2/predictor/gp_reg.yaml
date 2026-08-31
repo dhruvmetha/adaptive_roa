@@ -1,0 +1,25 @@
+# @package _global_
+defaults:
+  - /probability: endpoint_mc
+predictor:
+  type: generative          # family tag: endpoint data, endpoint-MC backend, fast eval branch
+  name: gp_reg              # arm name: keys the export registry
+  trainer_target: adaptive_roa.adaptive_v2.trainers.gp_regressor_trainer.GPRegressorTrainer
+  batch_size: 1024
+  val_batch_size: 2048
+  gp:
+    # Inducing-point budget. Under warm_start the set is TOPPED UP each epoch as
+    # the pool grows (GPRegressor._grow_inducing), so capacity is no longer
+    # pinned to epoch 0's dataset size. RESIDUAL RISK, stated so it is not
+    # invisible: the locations themselves only move by `learn_inducing_locations`
+    # gradients, so a region the adaptive sampler newly explores may stay
+    # under-covered for several epochs, and every test in the suite is
+    # single-epoch, so nothing here would catch progressive under-coverage. If
+    # the arm's endpoint_error drifts upward across epochs on a run whose pool is
+    # still growing, raise n_inducing first.
+    n_inducing: 128
+    kernel: matern52
+    n_iters: 300            # fixed budget; the BEST-val_nll state within it is kept
+    eval_every: 10          # validation NLL cadence, in ELBO iterations
+    lr: 0.01
+    batch_size: 1024        # minibatch for the ELBO; the pool reaches 12k-17k rows

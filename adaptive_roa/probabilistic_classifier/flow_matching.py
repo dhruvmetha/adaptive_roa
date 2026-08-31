@@ -60,6 +60,7 @@ def resolve_radius_mc(run_dir, cfg):
 @register_probabilistic_classifier
 class FMProbabilisticClassifier(ProbabilisticClassifier):
     predictor_type = "generative"
+    predictor_name = "fm"
     native_probs = ("p_success", "p_failure", "p_invalid")
 
     def __init__(self, flow_matcher, system, device, attractor_radius, num_mc_samples):

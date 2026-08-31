@@ -1,0 +1,35 @@
+# @package _global_
+# Yield-aware acquisition with a LEARNED length model (pendulum i100, 2026-08-16).
+#
+# yield_aware ranks by score * E[L]**alpha and beats uniform on KL across three
+# seeds, but its E[L] is a two-point mixture routed through the ensemble p_bar --
+# the one quantity that is badly miscalibrated early. Measured: epoch 0 expected
+# 82,002 pairs, bought 11,374 (7.2x over) because p_bar said 0.21 where the true
+# success probability was 0.99. The weight is effectively inert until epoch 6-8
+# in every seed.
+#
+# The lengths were never the problem. On this pool L_failure = 1001.0 with sd 0.0
+# (every failure hits the cap) and L_success = 136.5 with sd 76.5, so 98.7% of
+# Var(L) is explained by the outcome label alone. Predicting length from the
+# start state IS predicting the outcome.
+#
+# So this arm swaps p_bar for a distance-weighted kNN regression on the TRUE
+# lengths of trajectories already acquired -- the estimator family class_quota
+# already uses. Held-out R^2 for predicting L from the start state:
+#   n=100 acquired  0.687   n=600  0.800   n=2000  0.808   (oracle label 0.987)
+# versus a p_bar that was wrong by ~0.8 on the selected set at epoch 0.
+#
+# alpha=0 still reduces EXACTLY to decomp_epi_var.
+sampling_mode: decomp_yield_knn
+acquisition:
+  _target_: adaptive_roa.adaptive_v2.strategy.yield_knn.YieldKNNAcquisitionStrategy
+  score: epistemic_var
+  d2_ratio: 1.0
+  n_candidates: 50000
+  alpha: 1.0
+  knn_k: 15
+  min_labeled: 20
+  prior_len_success: 150.0
+  prior_len_failure: 1000.0
+  min_per_class: 5
+  verbose: true

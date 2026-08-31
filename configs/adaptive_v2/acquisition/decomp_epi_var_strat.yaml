@@ -1,0 +1,26 @@
+# @package _global_
+# Arm B of the cartpole acquisition-harm fix (CARTPOLE.md sections 12-13).
+#
+# Same score as decomp_epi_var (debiased between-member variance, unbiased at any
+# K) but the batch is drawn stratum-by-stratum over the ensemble mean p_bar with
+# budgets proportional to candidate share, so the acquired batch inherits the
+# pool marginal by construction.
+#
+# The diagnosed failure it targets: the flow matcher under-predicts success in
+# the minority basin (base rate 0.236), so its uncertain band sits on states
+# whose TRUE p_success averages 0.79-0.85. Every score therefore bought the
+# success basin -- measured mean true p of acquired points 0.62-0.82, only 1-9%
+# genuinely ambiguous -- tripling basin training mass and starving the failure
+# bulk, which is ~70% of the eval grid. Stratifying removes the score's ability
+# to choose the REGION while keeping its ability to rank within one.
+#
+# n_strata: 1 reduces exactly to plain greedy, so this is a single-knob change
+# against fm_cpstoch_s020_epi_var_greedy.
+sampling_mode: decomp_epi_var_strat
+acquisition:
+  _target_: adaptive_roa.adaptive_v2.strategy.stratified.StratifiedDecompositionAcquisitionStrategy
+  score: epistemic_var
+  d2_ratio: 1.0
+  n_candidates: 50000
+  n_strata: 10
+  verbose: true

@@ -1,0 +1,132 @@
+# @package _global_
+#
+# Stochastic 3D quadrotor (LQR), npz-backed pool.
+# Datasets: ${data_dir}/stochastic/quadrotor3D/${noise_family}/lqr/${noise_level}
+#
+# TWO NOISE FAMILIES, not comparable to each other, to the 2D quadrotor, or to
+# the pendulum/cartpole `gaussian_signal` family. Never pool them.
+#
+#   noisy_dynamics        F ~ U(-f, +f) via applyExternalForce at the COM link,
+#                         world frame, zero-order hold redrawn every control step
+#                         (100 Hz), NO torque. Uniform, not Gaussian. Explicitly
+#                         "matched": false -- independent of drone velocity, no
+#                         moment, white in time. NOT a wind model.
+#                         levels: f_0.000 f_0.032 f_0.048 f_0.060 f_0.072
+#                         as fraction of body weight (0.2646 N):
+#                           f_0.032 -> 0.121   f_0.048 -> 0.181
+#                           f_0.060 -> 0.227   f_0.072 -> 0.272
+#
+#   corridor_sine_ambient twin-curtain corridor, sine + ambient. A and phi drawn
+#                         ONCE per rollout, so the curtain term is COHERENT over
+#                         the episode rather than white.
+#                         levels: f_0.25 (f_max=0.25 ambient=0.008, 0.944*wt)
+#                                 f_0.30 (f_max=0.30 ambient=0.008, 1.133*wt)
+#                         NOTE these are ~1x body weight -- far heavier forcing
+#                         than any 2D level (max 0.755*wt). The two families are
+#                         not on a common scale.
+#
+# MEASURED POOL STRUCTURE (2026-08-20, over the shipped train.npz). Long ==
+# success, the CARTPOLE direction, not the pendulum one:
+#
+#   level                  traj_succ  L_succ  L_fail  PAIR_succ  frac_mid
+#   noisy_dynamics f_0.032    0.067    575.9    17.3     0.706     0.041
+#   noisy_dynamics f_0.048    0.051    661.8    33.2     0.519     0.230
+#   noisy_dynamics f_0.060    0.034    691.4    50.4     0.324     0.230
+#   noisy_dynamics f_0.072    0.020    705.6    63.2     0.187     0.225
+#   corridor f_0.25           0.052    563.0    16.9     0.647     0.108
+#   corridor f_0.30           0.043    562.9    17.8     0.586     0.130
+#
+# `frac_mid` is the fraction of the 1,000,000 eval cells with p in (0.05, 0.95).
+# At f_0.048 and above this reaches 0.23, comparable to the pendulum's 0.286 --
+# so unlike the 2D system, quad3D `noisy_dynamics` has real separating power.
+#
+# EXCLUDE f_0.000 (frac_mid = 0.000, no probability mass; the deterministic
+# reference for this family).
+#
+# HORIZON IS LOAD-BEARING, and more so than anywhere else in the project. 1000
+# steps / 10 s. From the dataset description: given unlimited time, success at
+# f_0.072 is ~0.24 against f_0.000's ~0.25, but at H=1000 it reads 0.058 --
+# about 15% of f_0.072 rollouts would succeed with more time. MOST of the
+# apparent decline across this sweep is the deadline, not loss of stability.
+# `p_success` here is a BOUNDED-TIME reach probability. Never report it as an
+# asymptotic region of attraction.
+#
+# SUCCESS CRITERION MISMATCH -- read before quoting any magnitude. The data
+# labels success as radius 0.05 (entry-cut) computed over the env's 12-D EULER
+# state, NOT the 13-D quaternion state these files store; and that norm sums
+# metres, m/s, radians and rad/s, which is dimensionally incoherent but is
+# inherited from the deterministic set. `attractor_radius` below labels the K
+# sampled endpoints in endpoint_mc_probabilities, so it defines the model's
+# predicted p_success. It is left at the 0.3 inherited from `quadrotor3d.yaml`,
+# which against a labelling radius of 0.05 is (0.3/0.05)^12 = 2.2e9 times the
+# volume in 12-D. That is far beyond the cartpole case (256x in 4-D) and it is
+# NOT obviously survivable: verify on the pilot run that predicted p_success is
+# not saturated at 1 before launching a fleet. If it is, lower it.
+#
+# TERMINATION-THRESHOLD CAVEAT (from the dataset description): the dataset-era
+# collector never set state_space, and achieved bounds show p reaching 39.1
+# against a stated 24, so rates likely did not terminate in the original run.
+# Configurations differ by only 2 labels in 400.
+#
+# Usage: system=quadrotor3d_stoch noise_family=noisy_dynamics noise_level=f_0.060
+
+defaults:
+  - _base
+  - /model/system_dims: quadrotor3d
+  - /prediction_mode: global
+  - _self_
+
+name: adaptive_quadrotor3d_stoch_${noise_family}_${noise_level}
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${acquisition.d2_ratio}_warm_start_${warm_start}_adapt_iter_${n_epochs}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
+
+shuffle_variant: 0
+
+noise_regime: stochastic
+# noisy_dynamics | corridor_sine_ambient
+noise_family: noisy_dynamics
+# noisy_dynamics: f_0.000 f_0.032 f_0.048 f_0.060 f_0.072
+# corridor_sine_ambient: f_0.25 f_0.30
+noise_level: f_0.060
+dataset_name: quadrotor3D/${noise_family}/lqr/${noise_level}
+dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
+
+decision_rule: two_sided
+attractor_radius: 0.3
+
+use_log_loss_weights: true
+
+data_source:
+  pool_format: npz
+  trajectories_dir: ${dataset_root}/train.npz
+  shuffled_indices_file: ${dataset_root}/train_test_splits/shuffled_indices_${shuffle_variant}.txt
+  shuffled_labels_file: ${dataset_root}/train_test_splits/shuffled_labels_${shuffle_variant}.txt
+  eval_states_file: ${dataset_root}/eval_states.txt
+  cal_set_file: ${dataset_root}/cal_set.txt
+  test_set_file: ${dataset_root}/test_set.txt
+
+initial_train_size: 2000
+samples_per_epoch: 500
+n_epochs: 24
+
+threshold:
+  optimize_mode: joint
+
+flow_matching:
+  clamp_noise: false
+  quat_loss_weight: ${quat_loss_weight}
+
+optimizer:
+  lr: 5e-4
+
+system:
+  _target_: adaptive_roa.systems.quadrotor3d.Quadrotor3DSystem
+  dataset_dir: ${dataset_root}
+
+flow_matcher:
+  _target_: adaptive_roa.flow_matching.quadrotor_3d.latent_conditional.flow_matcher.Quadrotor3DLatentConditionalFlowMatcher
+
+flow_matcher_local:
+  _target_: adaptive_roa.flow_matching.quadrotor_3d.trajectory.flow_matcher.Quadrotor3DTrajectoryFlowMatcher
+
+adaptive_v2:
+  system_name: quadrotor3d

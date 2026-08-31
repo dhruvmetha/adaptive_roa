@@ -1,0 +1,37 @@
+# @package _global_
+# Class-quota epistemic acquisition (pendulum i100 sweep, 2026-08-16).
+#
+# Replaces the falsified yield-aware arm. That arm priced yield through the
+# ensemble's own p_bar (E[L] = p_bar*L_s + (1-p_bar)*L_f) and epoch 0 killed
+# it: expected 82k pairs, bought 11.4k -- fewer than plain epi_var -- because
+# p_bar calls true-success states failures (p_bar 0.21 vs true p 0.99). The
+# completed 20-epoch epi_var run shows the p_bar -> true-p gap on acquired
+# batches plateaus at ~0.3 and never closes, so ANY yield model routed through
+# p_bar stays wrong for the whole campaign.
+#
+# This arm buys composition instead of predicting yield. A distance-weighted
+# kNN fit on the TRUE labels of everything already acquired (soft-AUROC 0.956
+# vs continuous ground truth with just the initial 100 trajectories;
+# predicted-failure precision 0.93-0.98 from epoch 0) gates candidates into
+# predicted-failure / predicted-success pots; the budget is split
+# quota_fail/(1-quota_fail) across the pots and each pot is filled by the
+# UNCHANGED epi_var score with the UNCHANGED greedy_diverse rule.
+#
+# quota_fail: "pool" tracks the measured class marginal of acquired data
+# (~0.60 failures here), which reproduces the uniform control's pair accrual
+# by construction (simulated worst case 68-75k pairs/epoch vs control ~65k)
+# while keeping every slot an epistemic pick within its class. Worst case --
+# score useless inside a pot -- degrades to a control-composition batch, not a
+# starved one. Single knob vs decomp_epi_var: the quota.
+sampling_mode: decomp_epi_var_qknn
+acquisition:
+  _target_: adaptive_roa.adaptive_v2.strategy.class_quota.ClassQuotaDecompositionAcquisitionStrategy
+  score: epistemic_var
+  d2_ratio: 1.0
+  n_candidates: 50000
+  selection_rule: greedy_diverse
+  diversity_pool_multiplier: 5
+  quota_fail: pool
+  knn_k: 15
+  min_labeled_per_class: 10
+  verbose: true

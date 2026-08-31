@@ -25,6 +25,13 @@ set -euo pipefail
 REPO=/home/st1122/Projects/adaptive_roa
 cd "$REPO"
 
+# Keep the interpreter on the env's own packages only. On iLab a second numpy in
+# ~/.local shadowed the env's and made every torch.multiprocessing spawn child die
+# with "CPU dispatcher tracer already initlized", hanging the ensemble FM trainer
+# with idle GPUs and empty checkpoint dirs. Set here too so the same user-site
+# drift cannot reappear on Amarel.
+export PYTHONNOUSERSITE=1
+
 echo "Node:  $(hostname)"
 echo "GPU:   $(nvidia-smi --query-gpu=name --format=csv,noheader | paste -sd, -)"
 echo "Start: $(date)"

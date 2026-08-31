@@ -20,6 +20,38 @@ from . import flow_matching as _fm  # noqa: F401
 _DATASET_KIND = {"classifier": "classification", "generative": "endpoint"}
 
 
+def resolve_predictor_family(cfg, run_dir=None) -> str:
+    """Family tag: drives which dataset files a run wrote.
+
+    ``run_dir``, when given, is folded into the error messages so a failure
+    identifies which run's config was unreadable.
+    """
+    loc = f" at {run_dir}" if run_dir is not None else ""
+    predictor = cfg.get("predictor", None)
+    if predictor is None:
+        raise ValueError(
+            f"run config{loc} has no 'predictor' entry; refusing to guess "
+            f"the export type (classifier vs generative)."
+        )
+    if isinstance(predictor, str):
+        return predictor
+    family = predictor.get("type", None)
+    if family is None:
+        raise ValueError(
+            f"run config predictor block{loc} has no 'type'; "
+            f"cannot determine the export type."
+        )
+    return str(family)
+
+
+def resolve_predictor_name(cfg, run_dir=None) -> str:
+    """Arm name, falling back to the family tag for pre-``name`` runs."""
+    predictor = cfg.get("predictor", None)
+    if predictor is None or isinstance(predictor, str):
+        return resolve_predictor_family(cfg, run_dir)
+    return str(predictor.get("name", None) or resolve_predictor_family(cfg, run_dir))
+
+
 def _read_ws(path):
     return pd.read_csv(path, header=None, sep=r"\s+").to_numpy()
 
@@ -108,24 +140,10 @@ def write_split(out_dir, split, query_state, gt_label, probs, native_probs):
 def export_run(run_dir, out_dir, device="cuda", epochs=None):
     device = device if (device == "cpu" or torch.cuda.is_available()) else "cpu"
     cfg = load_cfg(run_dir)
-    predictor = cfg.get("predictor", None)
-    if predictor is None:
-        raise ValueError(
-            f"run config at {run_dir} has no 'predictor' entry; refusing to guess "
-            f"the export type (classifier vs generative)."
-        )
-    if isinstance(predictor, str):
-        predictor_type = predictor
-    else:
-        predictor_type = predictor.get("type", None)
-        if predictor_type is None:
-            raise ValueError(
-                f"run config predictor block at {run_dir} has no 'type'; "
-                f"cannot determine the export type."
-            )
-        predictor_type = str(predictor_type)
+    predictor_family = resolve_predictor_family(cfg, run_dir)
+    predictor_name = resolve_predictor_name(cfg, run_dir)
     system = resolve_system(cfg)
-    pc_class = get_probabilistic_classifier_class(predictor_type)
+    pc_class = get_probabilistic_classifier_class(predictor_name)
     native = pc_class.native_probs
 
     splits = ["train", "val", "cal", "test"]
@@ -134,7 +152,7 @@ def export_run(run_dir, out_dir, device="cuda", epochs=None):
     split_ends = {}
     for split in splits:
         try:
-            states, labels, ends = load_split_states(run_dir, split, predictor_type, system, cfg)
+            states, labels, ends = load_split_states(run_dir, split, predictor_family, system, cfg)
             split_states[split] = states
             split_labels[split] = labels
             split_ends[split] = ends
@@ -146,6 +164,7 @@ def export_run(run_dir, out_dir, device="cuda", epochs=None):
         eds = [d for d in eds if epoch_num(d) in set(epochs)]
 
     counts = {}
+    load_failures = {}
     for ed in eds:
         ep = epoch_num(ed)
         odir = Path(out_dir) / f"epoch_{ep:03d}"
@@ -154,6 +173,7 @@ def export_run(run_dir, out_dir, device="cuda", epochs=None):
         except (FileNotFoundError, RuntimeError, IndexError) as e:
             print(f"[skip epoch {ep:03d}] load failed: {type(e).__name__}: {e}", flush=True)
             counts[ep] = {"error": str(e)}
+            load_failures[ep] = str(e)
             continue
         c = {}
         for split in split_states:
@@ -182,23 +202,41 @@ def export_run(run_dir, out_dir, device="cuda", epochs=None):
 
     meta = {
         "run_dir": str(run_dir),
-        "predictor": predictor_type,
+        "predictor": predictor_name,
         "native_probs": list(native),
         "gt_label_convention": (
             {"1": "success", "-1": "failure",
              "basis": "classifier binary ground truth (radius-independent)"}
-            if predictor_type == "classifier"
+            if predictor_family == "classifier"
             else {"1": "success", "-1": "failure", "0": "invalid/separatrix",
                   "basis": "system.classify_attractor(endpoint, eval radius) for ALL splits "
                            "(train/val/cal/test), matching the MC probability basis"}
         ),
         "prob_definitions": (
             "classifier: p_success = sigmoid(logit)"
-            if predictor_type == "classifier"
+            if predictor_family == "classifier"
             else "FM: p_{success,failure,invalid} = fraction of MC endpoints with mc_label 1 / -1 / 0"
         ),
         "epoch_counts": counts,
     }
     Path(out_dir).mkdir(parents=True, exist_ok=True)
     (Path(out_dir) / "metadata.json").write_text(json.dumps(meta, indent=2))
+
+    # A load failure on ONE epoch can be a legitimate gap (e.g. a checkpoint
+    # not yet written mid-training) and is left as a per-epoch "[skip epoch]"
+    # so a long run keeps exporting the epochs that do load. But a load
+    # failure on EVERY epoch found is never that -- it means the arm's
+    # checkpoint shape doesn't match what `cfg` builds (e.g. a wrong config
+    # path), so nothing for this run was ever going to load. That failure mode
+    # previously looked identical, from the caller's side, to "this run simply
+    # has no checkpoints yet": `export_probabilities.py` would still print
+    # "done. wrote N epochs" and exit 0. Make the total-failure case loud.
+    if eds and len(load_failures) == len(eds):
+        first_ep = next(iter(load_failures))
+        raise RuntimeError(
+            f"export_run: every epoch in {run_dir} failed to load "
+            f"({len(load_failures)}/{len(eds)}); nothing was exported. "
+            f"Per-epoch errors were still written to {out_dir}/metadata.json. "
+            f"First failure (epoch {first_ep:03d}): {load_failures[first_ep]}"
+        )
     return counts

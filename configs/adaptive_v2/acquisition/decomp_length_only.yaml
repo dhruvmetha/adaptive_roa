@@ -1,0 +1,27 @@
+# @package _global_
+# Expected-length-only acquisition -- the control for decomp_epi_var_yield.
+#
+# decomp_epi_var_yield ranks by score * E[L] and beats uniform sampling at the
+# campaign's own (trajectory) budget: +1.17 sAUROC / +1.87 KL / +1.34 recal in
+# units of the 3-seed control floor, pooled ep15-19, against a control-seed
+# spread of only 0.26 floor units.
+#
+# But that arm confounds WHICH states are informative with HOW MANY training
+# pairs each buys. This arm drops the score and keeps only the length term, so
+# if it reproduces the win then the epistemic component contributes nothing and
+# the result is really "buy long trajectories". Reported either way.
+#
+# On pendulum-high L_failure (1001) >> L_success (~136), so ranking by E[L] is
+# monotone decreasing in p_bar: this arm greedily buys the model's predicted
+# FAILURE region -- the opposite pole from every scored arm run so far, which
+# bought the uncertain band (= the true-success region here).
+sampling_mode: decomp_length_only
+acquisition:
+  _target_: adaptive_roa.adaptive_v2.strategy.length_only.LengthOnlyAcquisitionStrategy
+  score: epistemic_var        # diagnostic only; never affects selection
+  d2_ratio: 1.0
+  n_candidates: 50000
+  prior_len_success: 150.0
+  prior_len_failure: 1000.0
+  min_per_class: 5
+  verbose: true

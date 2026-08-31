@@ -9,6 +9,9 @@ threshold:
 calibration:
   decision_rule: one_sided
 predictor:
+  # Export wrapper registered in
+  # adaptive_roa/probabilistic_classifier/gaussian_process.py.
+  name: gp
   type: classifier                      # reuse classification data path + skips
   trainer_target: adaptive_roa.partx.trainer.GPPredictorTrainer
   gp:

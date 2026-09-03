@@ -170,10 +170,15 @@ def sharpness(p_hat: np.ndarray, p: np.ndarray, k: float | None, m: float) -> di
         sharp = float(np.mean(p_hat * (1.0 - p_hat)))
     else:
         sharp = float(k / (k - 1.0) * np.mean(p_hat * (1.0 - p_hat)))
+    # Same guard as the k branch above. m is the GT trials per eval cell, and a
+    # DETERMINISTIC level ships m = 1 (one rollout is enough with no noise), which
+    # made m/(m-1) a ZeroDivisionError that killed every epoch of the level rather
+    # than just this one metric. With a single draw there is no within-cell
+    # sampling variance to remove, so the raw spread IS the debiased spread --
+    # and for a deterministic field it is legitimately 0, since p is 0 or 1
+    # everywhere. Exposed by cartpole safe_explorer_ppo/baseline (trials = 1);
+    # also applies to any f_0.000-style level.
     if not np.isfinite(m) or m <= 1:
-        # A deterministic evaluation arm has one exact rollout per state rather
-        # than a noisy estimate of a Bernoulli probability. There is no finite-
-        # sample correction to apply, and m/(m-1) would be undefined at m=1.
         sharp_star = float(np.mean(p * (1.0 - p)))
     else:
         sharp_star = float(m / (m - 1.0) * np.mean(p * (1.0 - p)))
@@ -332,15 +337,27 @@ def score_epoch(epoch_dir: Path, gt: tuple, k_override: float | None,
     idx = match_to_truth(states, gt_starts)
     k = k_override
     art = epoch_dir / "artifacts_v2.json"
-    if k is None and art.exists():
+    meta = {}
+    if art.exists():
         try:
-            k = float(json.loads(art.read_text())["eval_metrics"]["num_mc_samples"])
+            meta = json.loads(art.read_text())
+        except ValueError:
+            meta = {}
+    if k is None:
+        try:
+            k = float(meta["eval_metrics"]["num_mc_samples"])
         except (KeyError, ValueError, TypeError):
             k = None
     out = all_metrics(p_hat, gt_p[idx], gt_s[idx], gt_t[idx], k, n_bins)
     out["mean_p_invalid"] = float(p_invalid.mean())
     out["mean_p_unresolved_raw"] = float(p_invalid_raw.mean())
     out["collapse_invalid_to_failure"] = bool(collapse_invalid_to_failure)
+    # Training-set size the epoch's model was fit on. Recorded per row because it
+    # is the honest x axis for a budget comparison: epoch index is only a proxy,
+    # and it stops being a fair one the moment two campaigns use different
+    # samples_per_epoch (quad2D 500 vs quad3D 5000).
+    tt = meta.get("train_trajectories")
+    out["train_trajectories"] = int(tt) if tt is not None else ""
     return out
 
 

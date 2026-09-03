@@ -258,3 +258,222 @@ runs cannot test, not a finding.
 **Caveat.** One seed per arm, so this is a single run's trajectory. The t-statistic is large and
 the control is flat, which makes a chance trend unlikely, but replication needs more seeds. The
 between-arm ordering remains unbacked by any floor for the reasons in §6.
+
+
+---
+
+## 8. Greedy vs greedy-diverse selection (launched 2026-08-14)
+
+The arms above all used `selection_rule: greedy_diverse`, the default for every
+`decomp_*` config. This arm set re-runs the same three scores with plain
+**`greedy`** — top-N by score, no diversity term — so the selection rule is the
+only thing that differs.
+
+| run | job | score | selection_rule |
+|---|---|---|---|
+| `fm_cpstoch_s020_epi_bald_greedy` | 208565 | epistemic_bald | greedy |
+| `fm_cpstoch_s020_epi_var_greedy` | 208566 | epistemic_var | greedy |
+| `fm_cpstoch_s020_total_greedy` | 208567 | total | greedy |
+
+Identical to the greedy-diverse arms in every other respect — `gpu:a4500:1`, 100G,
+19 epochs, seed 42, `num_workers=1`, same system and sigma — so the comparison is
+paired.
+
+**The existing 19/19 `dir00` floor is reused, not rerun.** The control acquires
+with `direct` at `d2_ratio=0`, so `need_d2_acquisition` is false and the
+selection rule is never invoked: verified directly, all three seeds acquired
+**0** points through it across all 19 epochs. The floor is therefore
+selection-rule-independent, both arm sets score against the *same* floor, and
+~56h of control compute is not repeated.
+
+**Why this is worth running.** §6–7 found all three greedy-diverse arms harmful
+at +9× to +24× the floor, with the models assigning less than half the success
+mass of the control. Selection is a candidate cause: the diversity term spreads
+the 1000 acquired points across state space, which may be buying large numbers of
+low-value points. Plain greedy concentrates them on the highest-scoring states
+instead.
+
+**The risk runs the other way too, and `entropy.yaml` says so explicitly** —
+"batch diversity is a correctness requirement". Uncertainty is spatially smooth,
+so the top-1000 by score can collapse into one small region, making an epoch's
+entire acquisition budget nearly redundant. If greedy is *worse* than
+greedy-diverse, that is the likely reason; if it is better, the diversity term
+was the problem. Either outcome is informative about §6's harm.
+
+
+---
+
+## 9. The dataset was regenerated 2026-08-13 — everything above it is on a different grid
+
+**`$DATA_DIR/stochastic/cartpole/noisy_action/lqr/sigma_020.0` was rewritten in full at
+2026-08-13 16:18**, `train.npz` included. The state convention changed with it:
+
+| | col0 | col1 | col2 | order |
+|---|---|---|---|---|
+| before (runs of 08-10 … 08-13) | ±6.0 | **±19.99** | ±6.0 | (x, **ẋ**, θ, θ̇) |
+| after (runs of 08-14 on) | ±5.8 | **±1.15** | ±9.7 | (x, **θ**, ẋ, θ̇) |
+
+Column 1 spans ±20 before and ±1.15 after — a velocity versus a wrapped angle. `eval_states.txt`
+row 0 moved from `[-3, -5, -2.641593, 0]` to `[-3, -2.641593, -5, 0]` to match.
+
+**Consequences.**
+
+* Sections 6–8 (the 19/19 floor, the greedy-diverse arms, and both verdict passes) are all
+  pre-regeneration. They were internally consistent — floor and arms shared one convention — so
+  "+9× to +24×, all three arms harmful" was a valid statement about *that* data. It cannot be
+  reproduced against the dataset now on disk.
+* **Re-evaluation cannot rescue them.** Checkpoints are retained (190 files for `dir00`), but the
+  models learned θ in slot 2 and ẋ in slot 1. Feeding them the current data hands the network a
+  velocity where it expects an angle. Only retraining produces a comparable model.
+* The scorer catches this rather than scoring silently: `match_to_truth` rejects the old
+  per-point files at max distance 2.15 against a 1e-3 tolerance. That check fired on the first
+  post-regeneration scoring attempt.
+
+## 10. Post-regeneration control (launched 2026-08-14)
+
+`fm_cpstoch_s020_dir00_v2`, job 208674, `gpu:4500_ada:1`, 100G, 19 epochs, **seed 42 only**,
+`acquisition=direct acquisition.d2_ratio=0`. Named `_v2` to keep it distinct from the
+pre-regeneration `fm_cpstoch_s020_dir00`, which remains on disk under the old convention.
+
+**One seed is a control, not a floor.** The campaign's decision rule needs 2×SD across three
+genuinely-distinct seeds; with one run there is no run-to-run spread to estimate, so the greedy
+arms can be compared to the control in *magnitude* but no result can be called DISTINGUISHABLE
+and no "×floor" multiple can be quoted. What it does buy, at a third of the compute: if the
+arm-vs-control gaps land anywhere near the pre-regeneration +9× to +24×, that is a large effect
+against a control on the correct data, and it justifies spending the remaining two seeds. If the
+gaps are small, two more seeds would have been wasted.
+
+
+### Completed to a three-seed floor, 2026-08-14
+
+| run | job | seed | GPU |
+|---|---|---|---|
+| `fm_cpstoch_s020_dir00_v2` | 208674 | 42 | 4500_ada |
+| `fm_cpstoch_s020_dir00_v2_s43` | 208675 | 43 | 4500_ada |
+| `fm_cpstoch_s020_dir00_v2_s44` | 208676 | 44 | a5000 |
+
+All three `acquisition=direct acquisition.d2_ratio=0`, 100G, 19 epochs — identical to the
+pre-regeneration floor except for the dataset underneath. This restores the campaign's standard
+decision rule for cartpole: pooled `2·sqrt(mean(var_e))` over shared epochs with epoch 0 excluded,
+and the pre-registered converged-regime floor (ep ≥ 5) as a labelled sensitivity (§4).
+
+**Two checks owed before any verdict is quoted from this floor.**
+
+1. **Seeds must be genuinely distinct.** The campaign was previously burned by ensemble members
+   seeded from a config key present in no config, so replicates trained bit-identical models and
+   the floor collapsed to ~0 (fixed in `4c7c561`). §2 ran that check on the old floor; it must be
+   re-run here. Two of these three share a GPU type, which is the condition under which the bug
+   is detectable.
+2. **The arms and the floor must sit on the same grid.** That is what failed for §6–8. The
+   scorer's `match_to_truth` enforces it at 1e-3, so a mismatch surfaces as a rejection rather
+   than a wrong number — but check the scorer's stderr, not just its row count. The first
+   post-regeneration pass wrote 18 rows instead of ~75 and the floor was silently absent from the
+   output until the rejection lines were read.
+
+
+---
+
+## 11. Greedy selection does NOT rescue the arms — the harm reproduces (2026-08-15)
+
+First floor-backed verdict on the post-regeneration data. Both owed checks passed first: the v2
+seeds are genuinely distinct (AUC spreads 7.5e-05 to 2.6e-03, not identical), and the scorer
+reported **zero grid rejections** with all six runs present — the failure mode that silently
+dropped the floor in §9.
+
+```
+fm sigma_020.0: pooled 2*SD = 0.00124 over 6 shared epochs, window ep5-6
+   epi_bald   ep5: +0.01142 (+9.2x)   ep6: +0.00848 (+6.9x)    -> DISTINGUISHABLE (sign stable 6/6)
+   epi_var    ep5: +0.01525 (+12.3x)  ep6: +0.01317 (+10.6x)   -> DISTINGUISHABLE (sign stable 6/6)
+   total      ep5: +0.01870 (+15.1x)  ep6: +0.01026 (+8.3x)    -> DISTINGUISHABLE (sign stable 6/6)
+```
+
+Raw `recal` (lower is better) separates cleanly — no arm overlaps any seed:
+
+| ep | dir00 | s43 | s44 | epi_bald | epi_var | total |
+|---|---|---|---|---|---|---|
+| 5 | 0.00714 | 0.00648 | 0.00652 | 0.01856 | 0.02239 | 0.02584 |
+| 6 | 0.00635 | 0.00621 | 0.00582 | 0.01484 | 0.01953 | 0.01661 |
+
+### What this settles
+
+The greedy arms were launched to test whether **selection** caused the harm in §6–7 — whether
+`greedy_diverse` was buying large numbers of low-value points. It is not the cause. Plain greedy
+produces the same result: every arm distinguishably worse than the non-adaptive control, sign
+stable across all shared epochs.
+
+**The harm survives four independent changes at once**, which is what makes this more than a
+repeat measurement:
+
+1. a **different selection rule** (greedy, not greedy_diverse);
+2. a **regenerated dataset** with a different state convention (§9);
+3. the **binary-outcome fix** applied — `p_invalid` is 0.0000 on every arm here, versus 0.39–0.43
+   on the old-grid arms, so the invalid class cannot be inflating anything;
+4. a **fresh three-seed floor** built on the current data.
+
+So the §6–7 finding was not an artefact of the invalid-class bug, nor of the old grid, nor of the
+diversity term. Adaptive acquisition on this system genuinely degrades the model relative to
+uniform sampling.
+
+### Scope
+
+**Magnitudes are not comparable across the regeneration.** §6–7 report +9× to +24× on the old
+grid; this reports +6.9× to +15.1× on the new one. Those are different datasets with different
+floors — the agreement in *direction and rough scale* is the finding, not the specific multiples.
+
+**The arm ordering remains unbacked.** One seed per arm means arm-vs-arm gaps carry no floor, and
+the §8 head-to-head already showed the ranking flips with the metric (`total` best on Brier,
+`epi_bald` best on RES and sAUROC). Only arm-vs-control is floor-backed here.
+
+**Six shared epochs.** The floor started ~8h behind the arms and is still climbing, so this window
+will deepen. Per §7, a verdict that survives a ~50% depth increase is worth more than one that
+does not — recheck at shared depth ~10.
+
+
+---
+
+## 12. Pass 2 (shared depth 10) — verdict holds; `total` alone is shrinking
+
+Rescored at shared depth 10, a 43% increase over pass 1, window **ep8-9**, floor tightened to
+0.00110 over 9 shared epochs. Gate clean: 65 rows, 0 collapsed, 0 grid rejections.
+
+```
+   epi_bald   ep8: +0.00956 (+8.7x)   ep9: +0.01213 (+11.0x)   -> DISTINGUISHABLE (sign stable 9/9)
+   epi_var    ep8: +0.01131 (+10.3x)  ep9: +0.01217 (+11.1x)   -> DISTINGUISHABLE (sign stable 9/9)
+   total      ep8: +0.00549 (+5.0x)   ep9: +0.00428 (+3.9x)    -> DISTINGUISHABLE (sign stable 9/9)
+```
+
+| arm | pass 1 (ep5-6, shared 7) | pass 2 (ep8-9, shared 10) |
+|---|---|---|
+| `epi_bald` | +9.2× / +6.9× | +8.7× / +11.0× |
+| `epi_var` | +12.3× / +10.6× | +10.3× / +11.1× |
+| `total` | +15.1× / +8.3× | **+5.0× / +3.9×** |
+
+**Every arm is still distinguishably worse than uniform sampling, sign stable across all nine
+shared epochs.** That is the trustworthy pattern from `FINDINGS.md` §4 — the verdict survived a
+substantial depth increase rather than churning.
+
+### `total`'s harm shrinks; the epistemic arms' does not
+
+Linear fit of the arm-minus-control gap against epoch:
+
+| fit window | epi_bald | epi_var | total |
+|---|---|---|---|
+| all ep1–9 | flat (t=+1.04) | flat (t=−0.38) | flat (t=−0.80) |
+| ep4 excluded | flat (t=+1.68) | flat (t=−0.10) | **shrinking (t=−2.67)** |
+| post-transient ep5–9 | flat (t=+0.29) | flat (t=−2.29) | **shrinking (t=−4.10)** |
+
+The all-epochs fit reads flat only because epoch 4 spikes `total` to +0.0855 and dominates the
+regression. That epoch was flagged as anomalous on RES grounds (`total` RES 0.046, `epi_var`
+0.085) **before** this analysis, not excluded for convenience. On the post-transient window the
+raw gap falls monotonically: 0.0191 → 0.0105 → 0.0079 → 0.0053 → 0.0046.
+
+**This inverts the old-grid result.** Under greedy-diverse on the pre-regeneration data (§7),
+`total` was the *worst* arm and its harm **grew** (slope +0.00092/epoch, t=+7.81) while the
+epistemic arms were flat. Here `total` is the *least* harmful and shrinking, with the epistemic
+arms again flat.
+
+**Hold that loosely.** Different dataset, different selection rule, and one seed per arm — the
+arm ordering has no floor behind it, and §8 already showed the ranking flips with the metric.
+What is solid is the campaign-level claim, now confirmed twice on the current data: **every
+acquisition arm is distinguishably worse than the non-adaptive control**, and neither the
+selection rule nor the invalid-class bug explains it.

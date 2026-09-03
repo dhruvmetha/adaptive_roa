@@ -1,0 +1,123 @@
+# @package _global_
+#
+# Stochastic 2D quadrotor (safe_explorer_ppo RL policy), npz-backed pool.
+# Datasets: ${data_dir}/stochastic/quadrotor2D/${noise_family}/rl/${noise_level}
+#
+# TWO NOISE FAMILIES, and they are NOT comparable to each other or to the
+# pendulum/cartpole `gaussian_signal` family. Never pool them.
+#
+#   noisy_dynamics        F ~ U(-f, +f) applied as [Fx, 0, Fz] at the COM link,
+#                         world frame, zero-order hold redrawn every control step
+#                         (100 Hz), NO torque. Uniform, not Gaussian. Explicitly
+#                         "matched": false -- independent of drone velocity, no
+#                         moment, white in time. NOT a wind model.
+#                         levels: f_0.000 f_0.070 f_0.100 f_0.150 f_0.200
+#                         as fraction of body weight (0.26487 N):
+#                           f_0.070 -> 0.264   f_0.100 -> 0.378
+#                           f_0.150 -> 0.566   f_0.200 -> 0.755
+#
+#   corridor_sine_ambient F_x = sigma(z)*(0.5 + 0.5*A*sin(2*pi*t/period + phi))
+#                                + N(0, ambient_std)
+#                         A ~ U(0,1) and phi ~ U(-pi,pi) are drawn ONCE per
+#                         rollout, so the corridor term is COHERENT over the
+#                         episode, not white -- given (A, phi) it is a
+#                         deterministic function of (z, t). One-sided (+x), gated
+#                         by altitude. Only the ambient term is redrawn per step.
+#                         levels: baseline (f_max=0.0, the zero-disturbance
+#                         reference), smooth (f_max=0.05 ambient=0.09, 0.189*wt),
+#                         sharp (f_max=0.08 ambient=0.06, 0.302*wt)
+#
+# MEASURED POOL STRUCTURE (2026-08-20, over the shipped train.npz). The
+# length-outcome coupling runs the CARTPOLE way, not the pendulum way -- long ==
+# success -- so a length-seeking rule buys the rare class here:
+#
+#   level                  traj_succ  L_succ  L_fail  PAIR_succ  frac_mid
+#   noisy_dynamics f_0.070    0.079    424.4     8.9     0.802     0.054
+#   noisy_dynamics f_0.100    0.071    473.5    12.7     0.739     0.085
+#   noisy_dynamics f_0.150    0.048    515.8    23.6     0.522     0.103
+#   noisy_dynamics f_0.200    0.024    480.1    27.2     0.306     0.090
+#   corridor smooth           0.062    490.8    10.6     0.755     0.068
+#   corridor sharp            0.063    470.2    10.0     0.761     0.054
+#
+# `frac_mid` is the fraction of the 489,789 eval cells with p in (0.05, 0.95) --
+# the separating power available to KL/sAUROC. Compare pendulum's 0.286. This
+# system is THIN: even the best level offers ~0.10, so expect smaller gaps than
+# the pendulum or cartpole campaigns and judge everything against the 3-seed
+# floor rather than against nominal size.
+#
+# EXCLUDE f_0.000 and corridor `baseline` from any probabilistic comparison:
+# both measure frac_mid = 0.000, i.e. no ground-truth probability mass at all.
+# They are the deterministic references for their families.
+#
+# HORIZON IS LOAD-BEARING. 1200 steps / 12 s, inherited from the deterministic
+# set. Rollouts start hitting the cap from f=0.020 upward, so `p_success` is a
+# BOUNDED-TIME reach probability and part of the decline across the sweep is the
+# deadline rather than loss of stability. Do not report these as asymptotic.
+#
+# attractor_radius: the data labels success as radius 0.2 (entry-cut) on the 6-D
+# state, and `attractor_radius` is what labels the K sampled endpoints inside
+# endpoint_mc_probabilities -- so it defines the model's predicted p_success and
+# feeds straight into sAUROC / KL / recal. It is left at the 0.3 inherited from
+# `quadrotor2d.yaml`, which is (0.3/0.2)^6 = 11.4x the labelling volume in 6-D.
+# Shared by every arm, so the ranking should survive; magnitudes are NOT
+# comparable to an r=0.2 run. Same class of caveat as cartpole_stoch, but far
+# milder there (256x in 4-D).
+#
+# Usage: system=quadrotor2d_stoch noise_family=noisy_dynamics noise_level=f_0.150
+
+defaults:
+  - _base
+  - /model/system_dims: quadrotor2d
+  - /prediction_mode: global
+  - _self_
+
+name: adaptive_quadrotor2d_stoch_${noise_family}_${controller}_${noise_level}
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${acquisition.d2_ratio}_warm_start_${warm_start}_adapt_iter_${n_epochs}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
+
+shuffle_variant: 0
+
+noise_regime: stochastic
+# noisy_dynamics | corridor_sine_ambient
+noise_family: noisy_dynamics
+# noisy_dynamics: f_0.000 f_0.070 f_0.100 f_0.150 f_0.200
+# corridor_sine_ambient: baseline smooth sharp
+noise_level: f_0.150
+# Controller branch of the data tree. quadrotor2D ships only `rl`.
+controller: rl
+dataset_name: quadrotor2D/${noise_family}/${controller}/${noise_level}
+dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
+
+decision_rule: two_sided
+attractor_radius: 0.3
+
+data_source:
+  pool_format: npz
+  trajectories_dir: ${dataset_root}/train.npz
+  shuffled_indices_file: ${dataset_root}/train_test_splits/shuffled_indices_${shuffle_variant}.txt
+  shuffled_labels_file: ${dataset_root}/train_test_splits/shuffled_labels_${shuffle_variant}.txt
+  eval_states_file: ${dataset_root}/eval_states.txt
+  cal_set_file: ${dataset_root}/cal_set.txt
+  test_set_file: ${dataset_root}/test_set.txt
+
+initial_train_size: 2000
+samples_per_epoch: 500
+n_epochs: 24
+
+threshold:
+  optimize_mode: joint
+
+flow_matching:
+  clamp_noise: false
+
+system:
+  _target_: adaptive_roa.systems.quadrotor2d.Quadrotor2DSystem
+  dataset_dir: ${dataset_root}
+
+flow_matcher:
+  _target_: adaptive_roa.flow_matching.quadrotor_2d.latent_conditional.flow_matcher.Quadrotor2DLatentConditionalFlowMatcher
+
+flow_matcher_local:
+  _target_: adaptive_roa.flow_matching.quadrotor_2d.trajectory.flow_matcher.Quadrotor2DTrajectoryFlowMatcher
+
+adaptive_v2:
+  system_name: quadrotor2d

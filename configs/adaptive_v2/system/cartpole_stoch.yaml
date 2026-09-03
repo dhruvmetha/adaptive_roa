@@ -34,9 +34,12 @@
 #     but those are 2-D plotting metadata and are NOT read by the scorer.
 #   * 131,859 eval points vs pendulum's 49,770.
 #
-# NOISE AXIS DIFFERS FROM PENDULUM. Pendulum uses named levels {low,med,high,xhigh};
-# cartpole uses sigma directories. The zero-noise baseline comes only from
-# deterministic/cartpole_pybullet; there is deliberately no stochastic sigma_000.0.
+# NOISE AXIS, as of the gaussian_signal repoint: cartpole now uses named levels
+# like the pendulum, not sigma directories. lqr has low|med|high and takes its
+# zero-noise anchor from deterministic/cartpole_pybullet; safe_explorer_ppo ships
+# its own `baseline` at zero noise, so a stochastic zero-noise level does exist
+# under that controller. Levels are matched to the pendulum on `mid`, the fraction
+# of eval cells with p in [0.2, 0.8] (see the tree's own README.md).
 
 defaults:
   - _base
@@ -68,10 +71,13 @@ noise_level: med
 dataset_name: cartpole/gaussian_signal/${controller}/${noise_level}
 dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
 
-# The collector labels success with an axis-aligned per-channel box: every
-# canonical state coordinate must have absolute value < 0.1. CartPoleSystem
-# reads the geometry from dataset_description.json; this value remains in
-# probability metadata for compatibility with radius-based interfaces.
+# The collector labels success as FIRST ENTRY into an L2 ball of radius 0.05 over
+# the full 4-D state, no dwell. Not a per-channel box: gaussian_signal's
+# dataset_description.json says the per-channel tolerances the deterministic
+# description advertises were NEVER IMPLEMENTED, and that every shipped success
+# ends with ||state|| in [0.0497, 0.0500]. Read success_criteria there, not this
+# comment. None of the cartpole datasets ship a `success_rule` key, so
+# CartPoleSystem's per_channel_box_entry branch is unreachable on current data.
 decision_rule: two_sided
 # attractor_radius comes from the /controller group (lqr 0.2, safe_explorer_ppo
 # 0.15) -- do NOT set it here, _self_ is last in the defaults list and would win.

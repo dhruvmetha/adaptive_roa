@@ -1,8 +1,12 @@
 #!/bin/bash
 # One static CartPole training/evaluation cell. Submit from repository root.
 # Usage: sbatch ... scripts/cartpole_static_job.sh <regime> <method> <budget> [smoke|production]
-# regime: deterministic | sigma_015.0 | sigma_020.0 | sigma_030.0 | sigma_040.0
+# regime: deterministic | low | med | high | baseline
 # method: fm_endpoint | fm_outcome | mlp
+#
+# Stochastic regimes read stochastic/cartpole/gaussian_signal/<controller>/<regime>.
+# Pick the controller with CARTPOLE_STATIC_CONTROLLER (default lqr). Levels are
+# NOT shared: lqr has low|med|high, safe_explorer_ppo adds baseline (zero noise).
 #SBATCH --partition=unlimited
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
@@ -20,6 +24,7 @@ METHOD="${2:?missing method}"
 BUDGET="${3:?missing fitting budget}"
 MODE="${4:-production}"
 SEED="${CARTPOLE_STATIC_SEED:-42}"
+CONTROLLER="${CARTPOLE_STATIC_CONTROLLER:-lqr}"
 PY="${ADAPTIVE_ROA_PYTHON:-/common/users/dm1487/envs/arcmg/bin/python}"
 DATA_BASE="/common/users/shared/pracsys/genMoPlan/data_trajectories"
 CAMPAIGN_ROOT="${CARTPOLE_STATIC_ROOT:-/common/users/shared/pracsys/adaptive_roa_experiments/dhruv/cartpole_static_v2}"
@@ -38,20 +43,34 @@ else
   FIXED_VAL=500
 fi
 SELECTED=$((BUDGET + FIXED_VAL))
-RUN_DIR="$CAMPAIGN_ROOT/$REGIME/$METHOD/train_${BUDGET}/seed_${SEED}"
-mkdir -p "$RUN_DIR"
 
 case "$REGIME" in
   deterministic)
     SYSTEM="cartpole_det_static"
     DATASET_ROOT="$DATA_BASE/deterministic/cartpole_pybullet"
+    # No controller axis on the deterministic anchor; keep its historical layout.
+    REGIME_TAG="$REGIME"
     ;;
-  sigma_015.0|sigma_020.0|sigma_030.0|sigma_040.0)
+  low|med|high|baseline)
     SYSTEM="cartpole_stoch_static"
-    DATASET_ROOT="$DATA_BASE/stochastic/cartpole/noisy_action/lqr_canonical_v2/$REGIME"
+    DATASET_ROOT="$DATA_BASE/stochastic/cartpole/gaussian_signal/$CONTROLLER/$REGIME"
+    # Both controllers ship a level called low/med/high. Without the controller in
+    # the path, an RL run silently lands on top of the matching LQR run.
+    REGIME_TAG="${CONTROLLER}_${REGIME}"
     ;;
   *) echo "unknown regime: $REGIME" >&2; exit 2 ;;
 esac
+
+# baseline exists only under safe_explorer_ppo, so a wrong pairing resolves to a
+# path that is not there. Fail at submit time instead of part-way through training.
+if [[ ! -d "$DATASET_ROOT" ]]; then
+  echo "dataset root does not exist: $DATASET_ROOT" >&2
+  echo "  regime=$REGIME controller=$CONTROLLER" >&2
+  exit 2
+fi
+
+RUN_DIR="$CAMPAIGN_ROOT/$REGIME_TAG/$METHOD/train_${BUDGET}/seed_${SEED}"
+mkdir -p "$RUN_DIR"
 
 COMMON=(
   "system=$SYSTEM"
@@ -68,7 +87,7 @@ COMMON=(
   "num_workers=0"
 )
 if [[ "$SYSTEM" == "cartpole_stoch_static" ]]; then
-  COMMON+=("noise_sigma=$REGIME")
+  COMMON+=("noise_level=$REGIME" "controller=$CONTROLLER")
 fi
 
 case "$METHOD" in
@@ -108,7 +127,8 @@ trap on_exit EXIT
   echo "git_head=$(git rev-parse HEAD)"
   echo "git_dirty=$(test -n "$(git status --porcelain)" && echo true || echo false)"
   echo "mode=$MODE"
-  echo "regime=$REGIME"
+  echo "regime=$REGIME_TAG"
+  echo "controller=$CONTROLLER"
   echo "method=$METHOD"
   echo "fit_train_size=$BUDGET"
   echo "fixed_val_size=$FIXED_VAL"
@@ -116,10 +136,10 @@ trap on_exit EXIT
   echo "gpu=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)"
 } > "$RUN_DIR/job_metadata.txt"
 
-echo "Starting $REGIME / $METHOD / train=$BUDGET on $(hostname)"
+echo "Starting $REGIME_TAG / $METHOD / train=$BUDGET on $(hostname)"
 "$PY" scripts/run_adaptive.py "${METHOD_ARGS[@]}" "${COMMON[@]}"
 "$PY" scripts/export_cartpole_static_predictions.py \
-  --run-dir "$RUN_DIR" --dataset-root "$DATASET_ROOT" --regime "$REGIME" \
+  --run-dir "$RUN_DIR" --dataset-root "$DATASET_ROOT" --regime "$REGIME_TAG" \
   --method "$METHOD" --budget "$BUDGET" --seed "$SEED"
 
 END_EPOCH="$(date +%s)"

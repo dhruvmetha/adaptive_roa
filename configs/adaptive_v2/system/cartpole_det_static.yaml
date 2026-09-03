@@ -36,7 +36,9 @@ data_source:
   shuffled_labels_file: ${dataset_root}/train_test_splits/shuffled_labels_0.txt
   eval_states_file: ${dataset_root}/eval_states.txt
   cal_set_file: ${dataset_root}/cal_set.txt
-  test_set_file: ${dataset_root}/test_set.txt
+  # Report and persist predictions for the complete evaluation grid.  The
+  # calibration subset remains available separately for calibration fitting.
+  test_set_file: ${dataset_root}/eval_states.txt
 
 n_epochs: 1
 samples_per_epoch: 0

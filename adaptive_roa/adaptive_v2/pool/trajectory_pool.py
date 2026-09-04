@@ -21,7 +21,19 @@ class TrajectoryPool:
         test_ratio: float = 0.1,
         candidate_mode: str = "start",
         fixed_val_size: int | None = None,
+        *,
+        system: Any,
     ):
+        # Keyword-only and REQUIRED. yield_mlp/yield_knn read `pool.system` for
+        # the normalisation scales and circular indices their length models
+        # measure distance in, via `getattr(pool, "system", None)`. The pool did
+        # not carry one, so that returned None on every run and `_geometry` fell
+        # back to unit scales with an empty circular mask -- theta stopped
+        # wrapping, so +pi and -pi became the two most distant points in the
+        # space, and on pendulum theta_dot was under-weighted 12.6x. No error,
+        # no log line. A default here would let the same silence come back, so
+        # a caller that forgets it now fails at construction instead.
+        self.system = system
         cfg = TrajectoryDataSourceConfig(
             trajectories_dir=data_source_cfg.trajectories_dir,
             shuffled_indices_file=data_source_cfg.shuffled_indices_file,

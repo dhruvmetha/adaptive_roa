@@ -107,6 +107,7 @@ class AdaptiveEngine:
             test_ratio=cfg.get("test_ratio", 0.1),
             candidate_mode=str(cfg.get("candidate_mode", "start")),
             fixed_val_size=cfg.get("fixed_val_size", None),
+            system=self.system,
         )
         from hydra.utils import get_class
         self.predictor_type = str(cfg.predictor.type)

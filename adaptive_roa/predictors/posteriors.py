@@ -189,6 +189,20 @@ class LastLayerLaplacePosterior(Posterior):
     ``sigma`` is the observation noise and is REQUIRED for regression. Letting
     it default to 1.0 (the laplace-torch default) silently scales the entire
     posterior covariance by an arbitrary constant unrelated to the data.
+
+    Sampling goes through a Cholesky factor of H, never through one of Sigma.
+    H is positive definite by construction, but Sigma = H^-1 stops being
+    numerically positive definite once cond(H) passes roughly 1/sqrt(eps): the
+    error an explicit inverse makes scales with cond(H), while Sigma's smallest
+    eigenvalue is cond(H) times below its largest, so those eigenvalues turn
+    negative and cholesky(Sigma) raises. That killed two quadrotor arms
+    mid-campaign. The arms that survived were already marginal: the shipped
+    covariances put cond(H) at 1e5 to 2e6 across pendulum, cartpole and the
+    quadrotor epochs that completed, well past the ~3e3 where a float32 inverse
+    stops resolving Sigma's smallest eigenvalues, so those directions were
+    round-off even when the factorization happened to succeed. Factoring H
+    instead is stable to cond(H) ~ 1e16 in float64, because the factor's
+    condition number is only sqrt(cond(H)).
     """
 
     def __init__(self, body: nn.Module, head_layer: nn.Linear, prior_precision: float = 1.0):
@@ -197,6 +211,7 @@ class LastLayerLaplacePosterior(Posterior):
         self.head_layer = head_layer
         self.prior_precision = float(prior_precision)
         self.register_buffer("_cov", torch.empty(0), persistent=False)
+        self.register_buffer("_prec_chol", torch.empty(0), persistent=False)
 
     @property
     def posterior_covariance(self) -> torch.Tensor:
@@ -205,8 +220,19 @@ class LastLayerLaplacePosterior(Posterior):
         return self._cov
 
     @property
+    def precision_cholesky(self) -> torch.Tensor:
+        """Lower-triangular L with L L^T = H. This is what sampling draws on."""
+        if self._prec_chol.numel() == 0:
+            raise RuntimeError(
+                "LastLayerLaplacePosterior has no precision factor; it was "
+                "either never fitted or loaded from a checkpoint written before "
+                "laplace_prec_chol.pt existed"
+            )
+        return self._prec_chol
+
+    @property
     def is_fitted(self) -> bool:
-        return self._cov.numel() > 0
+        return self._cov.numel() > 0 or self._prec_chol.numel() > 0
 
     def fit(self, features: torch.Tensor, targets: torch.Tensor,
             task: str, sigma: float | None = None) -> "LastLayerLaplacePosterior":
@@ -230,9 +256,19 @@ class LastLayerLaplacePosterior(Posterior):
         else:
             raise ValueError(f"unknown task {task!r}; expected 'outcome' or 'final_state'")
 
-        H = torch.einsum("n,ni,nj->ij", lam, phi, phi)
-        H = H + self.prior_precision * torch.eye(phi.shape[1], dtype=phi.dtype, device=phi.device)
-        cov = torch.linalg.inv(H)
+        # Accumulate and factor in float64 regardless of the feature dtype. The
+        # GGN sums N outer products, so lambda_max(H) grows with the training
+        # set while lambda_min stays pinned at prior_precision; float32 runs out
+        # of range for that spread on the larger systems.
+        phi64, lam64 = phi.double(), lam.double()
+        H = torch.einsum("n,ni,nj->ij", lam64, phi64, phi64)
+        H = H + self.prior_precision * torch.eye(
+            phi.shape[1], dtype=torch.float64, device=phi.device)
+        self._prec_chol = torch.linalg.cholesky(0.5 * (H + H.T))
+        # Sigma is kept for diagnostics, the shipped laplace_cov.pt and the
+        # export round-trip. cholesky_inverse rather than inv: same value, but
+        # it reuses the factor instead of running a second unstable solve.
+        cov = torch.cholesky_inverse(self._prec_chol)
         self._cov = 0.5 * (cov + cov.T)  # symmetrize away round-off
         return self
 
@@ -245,11 +281,32 @@ class LastLayerLaplacePosterior(Posterior):
             dim=1,
         )
         map_w = torch.cat([self.head_layer.weight, self.head_layer.bias.unsqueeze(1)], dim=1)
-        # Key off the FEATURE device/dtype like every other posterior does; a
-        # dtype-only `.to` leaves the covariance on whichever device it was
-        # loaded on (torch.load defaults to CPU) after a `.to("cuda")`.
-        L = torch.linalg.cholesky(self._cov.to(device=features.device, dtype=features.dtype))
-        eps = torch.randn(map_w.shape[0], L.shape[0], generator=generator,
-                          device=features.device, dtype=features.dtype)
-        w = map_w + eps @ L.T
+        noise = self._weight_noise(map_w.shape[0], features.device, generator)
+        w = map_w + noise.to(map_w.dtype)
         return phi @ w.T
+
+    def _weight_noise(self, rows: int, device, generator) -> torch.Tensor:
+        """``[rows, D]`` of zero-mean noise whose rows have covariance Sigma."""
+        if self._prec_chol.numel():
+            # Key off the FEATURE device like every other posterior does; a
+            # dtype-only `.to` leaves the factor on whichever device it was
+            # loaded on (torch.load defaults to CPU) after a `.to("cuda")`.
+            L = self._prec_chol.to(device=device)
+            eps = torch.randn(rows, L.shape[0], generator=generator,
+                              device=device, dtype=L.dtype)
+            # Solve X L = eps, so X = eps L^-1 and each row has covariance
+            # L^-T L^-1 = (L L^T)^-1 = H^-1 = Sigma. Sigma is never formed, so
+            # the draw is exact however ill-conditioned H is.
+            return torch.linalg.solve_triangular(L, eps, upper=False, left=False)
+
+        # Checkpoints written before this fix shipped Sigma and nothing else.
+        # Its smallest eigenvalues are the round-off that motivated the change
+        # and can be slightly negative, so clamp them at zero instead of letting
+        # cholesky reject the matrix: the mass discarded sits below float32
+        # resolution and cannot move a draw.
+        cov = self._cov.to(device=device, dtype=torch.float64)
+        evals, evecs = torch.linalg.eigh(0.5 * (cov + cov.T))
+        factor = evecs * evals.clamp_min(0.0).sqrt()
+        eps = torch.randn(rows, factor.shape[0], generator=generator,
+                          device=device, dtype=factor.dtype)
+        return eps @ factor.T

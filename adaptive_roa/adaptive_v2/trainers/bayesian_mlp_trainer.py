@@ -7,6 +7,7 @@ Mirrors ``ClassifierTrainer``'s contract:
 from __future__ import annotations
 
 import glob
+import math
 from pathlib import Path
 from typing import Any
 
@@ -35,7 +36,8 @@ _MONITOR = "val_nll"
 class _OutcomeModule(pl.LightningModule):
     """One posterior's ELBO: Bernoulli likelihood + KL(q||p)/N."""
 
-    def __init__(self, posterior, system, pos_weight, lr, weight_decay, kl_weight, n_train):
+    def __init__(self, posterior, system, pos_weight, lr, weight_decay, kl_weight, n_train,
+                 alpha=None, alpha_n_samples: int = 10):
         super().__init__()
         self.posterior = posterior
         self.system = system  # plain attr; methods are device-agnostic
@@ -43,16 +45,92 @@ class _OutcomeModule(pl.LightningModule):
         self.weight_decay = float(weight_decay)
         self.kl_weight = float(kl_weight)
         self.n_train = max(int(n_train), 1)
+        # alpha=None keeps the single-sample ELBO every already-scored arm was
+        # trained under. Opting in is what makes those runs reproducible from
+        # this file rather than silently retrained under a new objective.
+        self.alpha = None if alpha is None else float(alpha)
+        self.alpha_n_samples = int(alpha_n_samples)
+        if self.alpha is not None and self.alpha_n_samples < 2:
+            raise ValueError(
+                f"BB-alpha needs at least 2 weight draws; got {self.alpha_n_samples}. "
+                "At K=1 logsumexp collapses and the objective is the plain "
+                "likelihood at EVERY alpha, so the arm would be mislabelled."
+            )
         self.register_buffer("pos_weight", torch.as_tensor(float(pos_weight)))
 
     def forward(self, raw_states):
         embedded = self.system.embed_state_for_model(self.system.normalize_state(raw_states))
         return self.posterior.forward_sample(embedded)
 
+    def _bb_alpha_nll(self, raw_states, y):
+        """Black-box alpha-divergence likelihood term (Hernandez-Lobato et al. 2016).
+
+            -(1/a) * mean_n [ logsumexp_k( a * log p(y_n|x_n,w_k) ) - log K ]
+
+        with w_1..w_K drawn from q. Two limits pin what this is: as a -> 0 the
+        bracket tends to mean_k log p, recovering the ELBO's expected
+        log-likelihood; at a = 1 it is log mean_k p, the log of the AVERAGED
+        likelihood. That second form is why Depeweg et al. (2018) use a = 1 --
+        averaging likelihoods before taking the log rewards a q that covers
+        every region assigning mass to the data, where averaging log-likelihoods
+        rewards a q concentrated on the single best region.
+
+        This is the tied-site reparameterization (Li & Gal 2017) of the BB-alpha
+        energy: the per-site cavity factors (p/q)^(alpha/N) collect into the
+        analytic KL(q||p) carried separately in `_step`, leaving the alpha-softened
+        likelihood here. It agrees with the exact cavity form to O(alpha/N) per
+        site, and N runs from 300 to 6.6M across our systems. The same family at
+        alpha -> 0 is the negative ELBO, which is how Depeweg et al.'s supplement
+        produces its own "variational Bayes" arm (alpha = 1e-6).
+
+        logsumexp, never a raw exp: a saturated net drives log p to a few
+        hundred negative, which underflows to exactly zero and silently makes
+        the loss +inf.
+        """
+        return self._alpha_terms(raw_states, y)[0]
+
+    def _alpha_terms(self, raw_states, y):
+        """``(objective, gibbs_nll, predictive_nll)`` from ONE set of K draws.
+
+        Three quantities, three jobs:
+
+        * ``objective`` -- the BB-alpha energy's likelihood term, what we minimize.
+        * ``gibbs_nll`` = mean_k -log p, the quantity the legacy single-draw arms
+          log. Kept for audit so the two generations stay comparable.
+        * ``predictive_nll`` = -log mean_k p, what ``_MONITOR`` selects on for an
+          alpha arm.
+
+        Selecting on the predictive rather than the Gibbs value is deliberate and
+        is the one place this arm departs from its siblings. Gibbs exceeds
+        predictive by exactly the Jensen gap, which IS the posterior spread the
+        alpha=1 objective exists to preserve; with ``rho_init=-5`` q starts almost
+        deterministic and widens as it trains, so a Gibbs-monitored run can stop
+        precisely when the arm begins working and hand "best" to the narrowest q.
+        The predictive value is also what the campaign actually scores
+        (``log_score`` in stoch_prob_metrics is a predictive NLL), so this aligns
+        model selection with the reported metric. At alpha=1 the objective and the
+        predictive NLL coincide by construction.
+        """
+        embedded = self.system.embed_state_for_model(self.system.normalize_state(raw_states))
+        k = self.alpha_n_samples
+        logits = self.posterior.forward_samples(embedded, k).reshape(k, y.shape[0])
+        log_lik = -F.binary_cross_entropy_with_logits(
+            logits, y.expand(k, -1), pos_weight=self.pos_weight, reduction="none")
+        a = self.alpha
+        log_k = math.log(k)
+        bb_alpha = -((torch.logsumexp(a * log_lik, dim=0) - log_k) / a).mean()
+        predictive = -(torch.logsumexp(log_lik, dim=0) - log_k).mean()
+        return bb_alpha, -log_lik.mean(), predictive
+
     def _step(self, batch, stage: str):
         y = batch["label"].float().view(-1)
-        logits = self(batch["inputs"]).view(-1)
-        nll = F.binary_cross_entropy_with_logits(logits, y, pos_weight=self.pos_weight)
+        if self.alpha is None:
+            logits = self(batch["inputs"]).view(-1)
+            nll = selection_nll = F.binary_cross_entropy_with_logits(
+                logits, y, pos_weight=self.pos_weight)
+        else:
+            nll, gibbs_nll, selection_nll = self._alpha_terms(batch["inputs"], y)
+            self.log(f"{stage}_gibbs_nll", gibbs_nll, on_epoch=True, on_step=False)
         # The ELBO's KL is a per-DATASET term while nll is a per-batch mean, so
         # scale by 1/N to put them on the same footing.
         kl = self.posterior.kl_divergence() / self.n_train
@@ -61,7 +139,10 @@ class _OutcomeModule(pl.LightningModule):
         # a model-selection criterion (see _MONITOR). val_nll is what the
         # callbacks watch, so it must be an epoch-level metric.
         self.log(f"{stage}_loss", loss, prog_bar=True, on_epoch=True, on_step=False)
-        self.log(f"{stage}_nll", nll, prog_bar=True, on_epoch=True, on_step=False)
+        # Never the BB-alpha energy itself (it carries the KL and the alpha
+        # softening): the plain BCE for legacy arms, the predictive NLL for alpha
+        # arms. See _alpha_terms for why the alpha arm departs here.
+        self.log(f"{stage}_nll", selection_nll, prog_bar=True, on_epoch=True, on_step=False)
         return loss
 
     def training_step(self, batch, batch_idx):
@@ -187,12 +268,44 @@ class BayesianMLPTrainer:
         pos_weight = (float(cfg_pos_weight) if cfg_pos_weight is not None
                       else data_module.pos_weight)
 
+        # BB-alpha: alpha=1.0 is what Depeweg et al. (2018) fit their BNN with.
+        # Left unset the module keeps the single-sample ELBO (the alpha -> 0
+        # limit), so arms scored before this existed still train identically.
+        # It is refused on the ensemble below rather than ignored: each member
+        # there is deterministic, so there is no q(w) to draw K samples from and
+        # a configured alpha would silently do nothing.
+        alpha = bnn.get("alpha", None)
         common = dict(
             system=self.system, pos_weight=pos_weight,
             lr=float(bnn.get("lr", 1e-3)),
             weight_decay=float(bnn.get("weight_decay", 1e-5)),
             n_train=n_train,
+            alpha=None if alpha is None else float(alpha),
+            alpha_n_samples=int(bnn.get("alpha_n_samples", 10)),
         )
+
+        if common["alpha"] is not None and self.posterior_kind != "mfvi":
+            # Only MFVI has a q(w) that forward_samples actually draws from.
+            # Ensemble members are deterministic; a Laplace posterior returns its
+            # MAP head until `fit` runs, so all K training draws are IDENTICAL and
+            # logsumexp collapses to the plain BCE at every alpha -- the K=1
+            # failure with K=10, and silent. Refuse rather than mislabel the arm.
+            raise ValueError(
+                f"predictor.bnn.alpha is set on a '{self.posterior_kind}' arm, but "
+                "BB-alpha needs K distinct draws from a weight posterior and only "
+                "'mfvi' provides them. The setting would be inert and the arm "
+                "would be reported as alpha-fitted when it is not."
+            )
+        if common["alpha"] is not None and abs(common["pos_weight"] - 1.0) > 1e-9:
+            # Same reasoning hmc_trainer.py uses to refuse pos_weight outright: a
+            # BB-alpha fit of a class-tempered likelihood targets a posterior
+            # nothing else in the comparison approximates.
+            raise ValueError(
+                f"predictor.bnn.alpha is set together with pos_weight="
+                f"{common['pos_weight']:.4f}. BB-alpha would then fit a TEMPERED "
+                "likelihood, which is not the posterior the paper's arms or the "
+                "HMC reference target. Pin predictor.bnn.pos_weight: 1.0."
+            )
 
         if self.posterior_kind == "ensemble":
             n_members = int(bnn.get("n_members", 5))
@@ -241,11 +354,14 @@ class BayesianMLPTrainer:
                     y = data_module._train.labels.float().view(-1)
                     embedded = self.system.embed_state_for_model(self.system.normalize_state(x))
                     posterior.fit(posterior.body(embedded), y, task="outcome")
-                # `_cov` is a non-persistent buffer (its shape is unknown until
-                # fit), so it will NOT round-trip through the Lightning
-                # checkpoint. Save it explicitly or the exported arm silently
-                # falls back to its MAP point estimate and reports zero spread.
+                # `_cov` and `_prec_chol` are non-persistent buffers (their shape
+                # is unknown until fit), so they will NOT round-trip through the
+                # Lightning checkpoint. Save them explicitly or the exported arm
+                # silently falls back to its MAP point estimate and reports zero
+                # spread. The precision factor is what sampling uses; the
+                # covariance is kept because older tooling reads it.
                 torch.save(posterior.posterior_covariance, ckpt_dir / "laplace_cov.pt")
+                torch.save(posterior.precision_cholesky, ckpt_dir / "laplace_prec_chol.pt")
 
         handle = outcome_handle_from_cfg(posterior, self.system, bnn).eval()
         return handle.to(device) if use_gpu else handle

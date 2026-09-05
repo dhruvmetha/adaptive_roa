@@ -1,0 +1,59 @@
+# @package _global_
+# The Depeweg et al. (ICML 2018) reproduction arm.
+#
+# Three things separate it from `bnn_mfvi`, and all three are fidelity fixes
+# rather than tuning:
+#
+#   alpha: 1.0        The paper fits q by black-box alpha-divergence
+#                     minimization at alpha = 1 (Sec. 2), and its supplementary
+#                     shows the uncertainty decomposition degrading as alpha
+#                     falls to the variational-Bayes limit. Plain MFVI IS that
+#                     limit, so it cannot stand in for the paper's method.
+#
+#   pos_weight: 1.0   The paper uses an untempered likelihood. A sigmoid trained
+#                     under class reweight c converges to cp/(cp+1-p), not p, so
+#                     with the data-derived default the arm estimates a
+#                     reweighted field and every probability metric is computed
+#                     on it. hmc_trainer.py refuses pos_weight for this reason.
+#
+#   hidden_dims       Per-system, from the same authority the FM and classifier
+#                     arms already use. The old flat [256, 512, 256] default was
+#                     the pendulum entry applied to every system, so quad3D ran
+#                     a pendulum-sized net on 6.6M training rows.
+#
+# The sampled-posterior backend is required, not optional: the decomposition
+# acquisition needs per-draw member probabilities, which classifier_prob does
+# not expose.
+defaults:
+  - /probability: sampled_posterior_classifier_prob
+threshold:
+  decision_rule: one_sided
+calibration:
+  decision_rule: one_sided
+predictor:
+  type: classifier
+  name: bnn_mfvi_a1
+  trainer_target: adaptive_roa.adaptive_v2.trainers.bayesian_mlp_trainer.BayesianMLPTrainer
+  batch_size: 1024
+  val_batch_size: 2048
+  bnn:
+    posterior: mfvi
+    alpha: 1.0
+    alpha_n_samples: 50     # K weight draws per batch. The -log(mean_k lik) estimator is
+                            # biased upward by ~Var(lik)/(2K E[lik]^2), worst exactly at
+                            # high-disagreement points, so it penalises the disagreement
+                            # the arm exists to find: ~5% of the Jensen gap at K=10,
+                            # ~1% at K=50. Training is not the bottleneck (measured),
+                            # so 50 is cheap insurance. K=1 is refused outright.
+    pos_weight: 1.0
+    hidden_dims: ${model_dims.mlp_hidden_dims}
+    lr: 1.0e-3
+    weight_decay: 1.0e-5
+    max_epochs: 200
+    patience: 20
+    prior_sigma: 1.0
+    kl_weight: 1.0
+    n_marginal_samples: 64
+  lightning_trainer:
+    gradient_clip_val: 1.0
+    log_every_n_steps: 10

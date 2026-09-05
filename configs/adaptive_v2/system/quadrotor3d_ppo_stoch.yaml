@@ -1,0 +1,139 @@
+# @package _global_
+#
+# Stochastic 3D quadrotor under a PPO policy, npz-backed pool.
+# Datasets: ${data_dir}/stochastic/quadrotor3D/corridor_sine_ambient/ppo/${noise_level}
+#
+# NOT comparable to `quadrotor3d_stoch` (the LQR campaign) despite the shared
+# noise-family name. The PPO collector differs in four ways that each break
+# comparability on their own:
+#
+#   * No ambient term. LQR runs `sine + ambient` with ambient_std 0.008; these
+#     are pure twin-curtain sine. The level ladder is therefore different too --
+#     f_0.00/0.12/0.20/0.40 here against f_0.25/0.30 there. Never put a PPO
+#     level beside an LQR level.
+#   * Different box. The policy was trained near hover; the dataset json records
+#     that it scores 2.4-2.7% on the LQR start box against LQR's 8.19%, while
+#     LQR scores 25.14% on THIS box. `index_aligned: false`.
+#   * Different plant rate. ctrl_freq 50 and a 1000-step horizon, against LQR's
+#     100 and 2000. Same 20 s of flight.
+#   * Different eval states. LQR evaluates on the shipped deterministic start
+#     grid; these are a farthest-point sample of MID-FLIGHT states drawn from the
+#     700,000 held-out flights, so they are not sampled starts and are not
+#     index-aligned to anything.
+#
+# f_0.00 IS DETERMINISTIC. No wind, and the eval ships one trial per state
+# rather than 20. Its KL is a clipped log-loss against binary truth, exactly like
+# the cartpole RL `baseline` level, and must never be read beside the three noisy
+# levels. It is worth running as a zero-noise control point in the same 6-D
+# space, not as a fourth noise level.
+#
+# ACQUISITION BUDGET. 10000 + 20*1500 = 40,000 trajectories.
+#
+# The pool here is 100,000 flights, NOT the 800,000 the LQR campaign had:
+# `shuffled_indices_0.txt` is 100,000 lines, and _1..9 are alternate
+# permutations of the same 100,000 rather than extra data. The LQR budget
+# (10000 + 18*5000 = 100,000) would consume the pool exactly, so by the last
+# epochs every arm would hold the identical training set and the adaptive-vs-
+# uniform contrast would measure nothing. 40,000 leaves 60% unselected so
+# acquisition still has real choice at the final epoch.
+#
+# Cost warning: per-epoch time scales with the ACCUMULATED pool, since each
+# epoch retrains on everything collected so far. 10.0/11.5/13.0/.../40.0k over
+# 20 epochs is ~500k cumulative row-epochs, roughly 4x the work of reaching the
+# same 40k in 6 epochs of 5000. Budget ~25-30 h per arm on an 11 GB card, most
+# of it in the back half.
+#
+# NORMALIZATION BOUNDS. Per-level `achieved_bounds`, the default behaviour
+# (adaptive_roa/systems/quadrotor3d.py:_load_bounds_from_json). Recorded so it is
+# a known property rather than a surprise: the body-rate channels grow with the
+# noise level (p/q peak 9.3, 10.7, 12.5, 16.8 across the four), so normalization
+# scale is correlated with the treatment variable. Chosen deliberately over a
+# fixed cross-level envelope; read cross-level differences with it in mind.
+#
+# SUCCESS CRITERION. attractor_radius 0.3 in the raw 13-D state, against a
+# dataset labelling radius of 0.05. That is a far larger volume ratio than the
+# LQR case, but it is measurably free ON THE GROUND TRUTH: `entry_cut` stops a
+# flight the moment it enters the ball, so every terminal row is either inside
+# 0.05 or out at a wall 1.17+ away. Recomputing p_success at every radius from
+# 0.05 to 0.50 reproduces the shipped labels identically on all four levels.
+# What it does NOT settle is the model side -- predicted endpoints are
+# continuous and can land in the gap -- so verify on the pilot that predicted
+# p_success is not saturated at 1 before launching a fleet.
+#
+# TERMINATION BOX. Passed explicitly because the defaults are the LQR walls
+# minus a margin and are wrong here in both directions: against PPO data the
+# 2.9 velocity and 23.5 rate gates fired on ZERO of 480,000 terminal rows (the
+# collector stops at 2.0 and 8.0), while the 1.7 position gates sit inside the
+# real 1.8 walls. Under the LQR gates 48-66% of PPO terminal rows fall through
+# to SEPARATRIX; under this box that goes to 0.
+#
+# Usage: system=quadrotor3d_ppo_stoch noise_level=f_0.12
+
+defaults:
+  - _base
+  - /model/system_dims: quadrotor3d
+  - /prediction_mode: global
+  - _self_
+
+name: adaptive_quadrotor3d_stoch_${noise_family}_${controller}_${noise_level}
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${acquisition.d2_ratio}_warm_start_${warm_start}_adapt_iter_${n_epochs}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
+
+shuffle_variant: 0
+
+noise_regime: stochastic
+noise_family: corridor_sine_ambient
+# f_0.00 (deterministic, see header) | f_0.12 | f_0.20 | f_0.40
+noise_level: f_0.12
+controller: ppo
+dataset_name: quadrotor3D/${noise_family}/${controller}/${noise_level}
+dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
+
+decision_rule: two_sided
+attractor_radius: 0.3
+
+use_log_loss_weights: true
+
+data_source:
+  pool_format: npz
+  trajectories_dir: ${dataset_root}/train.npz
+  shuffled_indices_file: ${dataset_root}/train_test_splits/shuffled_indices_${shuffle_variant}.txt
+  shuffled_labels_file: ${dataset_root}/train_test_splits/shuffled_labels_${shuffle_variant}.txt
+  eval_states_file: ${dataset_root}/eval_states.txt
+  cal_set_file: ${dataset_root}/cal_set.txt
+  test_set_file: ${dataset_root}/test_set.txt
+
+initial_train_size: 10000
+samples_per_epoch: 1500
+n_epochs: 20
+
+threshold:
+  optimize_mode: joint
+
+flow_matching:
+  clamp_noise: false
+  quat_loss_weight: ${quat_loss_weight}
+
+optimizer:
+  lr: 5e-4
+
+system:
+  _target_: adaptive_roa.systems.quadrotor3d.Quadrotor3DSystem
+  dataset_dir: ${dataset_root}
+  # The PPO collector's actual walls, from dataset_description.json ->
+  # termination_thresholds. See the TERMINATION BOX note in the header.
+  termination_thresholds:
+    x: 1.8
+    y: 1.8
+    z_min: 0.1
+    z_max: 3.0
+    vel: 2.0
+    rate: 8.0
+
+flow_matcher:
+  _target_: adaptive_roa.flow_matching.quadrotor_3d.latent_conditional.flow_matcher.Quadrotor3DLatentConditionalFlowMatcher
+
+flow_matcher_local:
+  _target_: adaptive_roa.flow_matching.quadrotor_3d.trajectory.flow_matcher.Quadrotor3DTrajectoryFlowMatcher
+
+adaptive_v2:
+  system_name: quadrotor3d

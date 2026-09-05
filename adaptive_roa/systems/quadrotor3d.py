@@ -25,14 +25,38 @@ class Quadrotor3DSystem(DynamicalSystem):
     Goal: Hover at (0, 0, 1) with identity orientation (qw=1, qx=qy=qz=0)
     """
 
-    def __init__(self, dataset_dir: str = None):
+    # The termination box used by `classify_attractor` when the caller supplies
+    # nothing. These are the LQR collector's walls minus a small overshoot margin
+    # and they are kept as the default ONLY so every already-scored lqr result
+    # stays bit-identical; they are wrong for any other controller. The ppo
+    # collector stops at |x|,|y| = 1.8, z outside [0.1, 3.0], |v| = 2.0, |w| = 8.0,
+    # so against ppo data the 2.9 and 23.5 gates below can never fire -- measured
+    # on 480,000 ppo terminal rows, both fired exactly zero times. Pass
+    # `termination_thresholds` to state the collector's actual box.
+    _DEFAULT_TERMINATION = {"x": 1.7, "y": 1.7, "z_min": 0.2, "z_max": 2.9,
+                            "vel": 2.9, "rate": 23.5}
+
+    def __init__(self, dataset_dir: str = None, termination_thresholds=None):
         """
         Initialize Quadrotor 3D system
 
         Args:
             dataset_dir: Path to dataset directory containing dataset_description.json.
                         If None, uses default path from environment.
+            termination_thresholds: Optional mapping with keys
+                        x, y, z_min, z_max, vel, rate giving the collector's wall
+                        box. None keeps `_DEFAULT_TERMINATION`, i.e. the historical
+                        lqr literals, so existing runs are unaffected.
         """
+        t = dict(self._DEFAULT_TERMINATION)
+        if termination_thresholds is not None:
+            unknown = set(termination_thresholds) - set(t)
+            if unknown:
+                raise ValueError(
+                    f"unknown termination_thresholds keys {sorted(unknown)}; "
+                    f"expected a subset of {sorted(t)}")
+            t.update({k: float(v) for k, v in dict(termination_thresholds).items()})
+        self.termination_thresholds = t
         if dataset_dir is None:
             dataset_dir = f"{get_shared_data_base()}/{get_noise_regime()}/quadrotor3D_lqr"
 
@@ -124,6 +148,28 @@ class Quadrotor3DSystem(DynamicalSystem):
             "linear_velocity": (-self.x_dot_limit, self.x_dot_limit),
             "angular_velocity": (-self.p_limit, self.p_limit),
         }
+
+    def per_dim_bounds(self):
+        """True per-axis support box for the 13-D quaternion state.
+
+        ``state_bounds["position"]`` is x's limit only (its own comment says
+        "Symmetric for x, y"), which drops z entirely -- z is [z_min, z_max],
+        roughly [0.07, 3.03], and not symmetric. Linear and angular velocity
+        likewise collapse three distinct per-axis limits into one.
+        Quaternion components are genuinely [-1, 1] on the unit sphere.
+        """
+        return [
+            (-self.x_limit, self.x_limit),
+            (-self.y_limit, self.y_limit),
+            (self.z_min, self.z_max),
+            (-1.0, 1.0), (-1.0, 1.0), (-1.0, 1.0), (-1.0, 1.0),
+            (-self.x_dot_limit, self.x_dot_limit),
+            (-self.y_dot_limit, self.y_dot_limit),
+            (-self.z_dot_limit, self.z_dot_limit),
+            (-self.p_limit, self.p_limit),
+            (-self.q_limit, self.q_limit),
+            (-self.r_limit, self.r_limit),
+        ]
 
     def attractors(self) -> List[List[float]]:
         """
@@ -233,6 +279,33 @@ class Quadrotor3DSystem(DynamicalSystem):
 
         return result
 
+    def _assert_gates_clear(self, radius: float) -> None:
+        """Fail loudly if any termination gate sits within `radius` of the goal.
+
+        Goal is (0, 0, 1) with zero linear and angular velocity, so a state
+        inside the ball has every velocity and rate component below `radius` and
+        z within `radius` of 1.0. With the shipped boxes the smallest clearance
+        is the z floor (0.9 for ppo, 0.8 for the lqr default) against a radius of
+        0.3, so the branches are disjoint and moving a gate can only reshuffle
+        rows between FAILURE and SEPARATRIX -- it can never reach SUCCESS.
+        """
+        t = self.termination_clearances()
+        tight = {k: c for k, c in t.items() if c <= radius}
+        if tight:
+            raise ValueError(
+                f"termination gate(s) {sorted(tight)} sit within attractor "
+                f"radius {radius} of the goal (clearances {tight}). The failure "
+                "branch overwrites the success branch, so this would convert "
+                "successes into failures and move p_success. Raise the gate or "
+                "lower the radius.")
+
+    def termination_clearances(self) -> dict:
+        """Per-axis distance from the goal to each wall. See `_assert_gates_clear`."""
+        t = self.termination_thresholds
+        return {"x": t["x"], "y": t["y"],
+                "z_min": 1.0 - t["z_min"], "z_max": t["z_max"] - 1.0,
+                "vel": t["vel"], "rate": t["rate"]}
+
     def classify_attractor(self, state: torch.Tensor, radius: float = 0.3) -> torch.Tensor:
         """
         Classify Quadrotor 3D states into three categories based on termination conditions
@@ -242,10 +315,9 @@ class Quadrotor3DSystem(DynamicalSystem):
         2. FAILURE (label=-1): Exceeded termination thresholds (system failed)
         3. SEPARATRIX (label=0): Between attractor and failure (uncertain region)
 
-        Termination thresholds:
-        - Position: |x| > 1.7, |y| > 1.7, z < 0.2 or z > 2.9
-        - Linear velocity: |ẋ| > 2.9, |ẏ| > 2.9, |ż| > 2.9
-        - Angular velocity: |p| > 23.5, |q| > 23.5, |r| > 23.5
+        Termination thresholds come from `self.termination_thresholds`, set at
+        construction. The default is the lqr box minus an overshoot margin
+        (|x|,|y| > 1.7, z outside [0.2, 2.9], |v| > 2.9, |w| > 23.5).
 
         Args:
             state: States [B, 13] as (x, y, z, qw, qx, qy, qz, ẋ, ẏ, ż, p, q, r)
@@ -268,22 +340,31 @@ class Quadrotor3DSystem(DynamicalSystem):
         dist = torch.norm(state - goal.unsqueeze(0), dim=1)
         in_attractor = dist < radius
 
-        # Check termination thresholds (with small margin for overshoot)
-        # Position: |x| > 1.7, |y| > 1.7, z < 0.2 or z > 2.9
-        x_failed = torch.abs(state[:, 0]) > 1.7
-        y_failed = torch.abs(state[:, 1]) > 1.7
-        z_low_failed = state[:, 2] < 0.2
-        z_high_failed = state[:, 2] > 2.9
+        # INVARIANT: every wall must stay clear of the attractor ball, measured
+        # per axis against the goal's coordinate on that axis. It holds because
+        # `labels[exceeded_thresholds] = -1` below OVERWRITES `labels[...] = 1`,
+        # so the moment a gate comes within `radius` of the goal the failure
+        # branch starts silently converting genuine successes into failures and
+        # p_success moves. Nothing downstream protects against that: the success
+        # count is invariant under gate changes only while the two branches are
+        # disjoint, which is a property of these numbers, not of the pipeline.
+        self._assert_gates_clear(float(radius))
 
-        # Linear velocity: |ẋ| > 3.0, |ẏ| > 3.0, |ż| > 3.0
-        xdot_failed = torch.abs(state[:, 7]) > 2.9
-        ydot_failed = torch.abs(state[:, 8]) > 2.9
-        zdot_failed = torch.abs(state[:, 9]) > 2.9
+        # Wall box. Defaults to the historical lqr literals; a controller whose
+        # collector used a different box passes its own via the constructor.
+        t = self.termination_thresholds
+        x_failed = torch.abs(state[:, 0]) > t["x"]
+        y_failed = torch.abs(state[:, 1]) > t["y"]
+        z_low_failed = state[:, 2] < t["z_min"]
+        z_high_failed = state[:, 2] > t["z_max"]
 
-        # Angular velocity: |p| > 24.0, |q| > 24.0, |r| > 24.0
-        p_failed = torch.abs(state[:, 10]) > 23.5
-        q_failed = torch.abs(state[:, 11]) > 23.5
-        r_failed = torch.abs(state[:, 12]) > 23.5
+        xdot_failed = torch.abs(state[:, 7]) > t["vel"]
+        ydot_failed = torch.abs(state[:, 8]) > t["vel"]
+        zdot_failed = torch.abs(state[:, 9]) > t["vel"]
+
+        p_failed = torch.abs(state[:, 10]) > t["rate"]
+        q_failed = torch.abs(state[:, 11]) > t["rate"]
+        r_failed = torch.abs(state[:, 12]) > t["rate"]
 
         exceeded_thresholds = (x_failed | y_failed | z_low_failed | z_high_failed |
                               xdot_failed | ydot_failed | zdot_failed |

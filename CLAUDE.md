@@ -403,20 +403,25 @@ miss — quadrotor3d and humanoid read it instead of `DATA_DIR`, and it falls ba
 iLab path rather than erroring (`adaptive_roa/utils/env_config.py:169`).
 
 **GPU partitions** (all `3-00:00:00` limit, untyped `--gres=gpu:N`):
-- `gpu-redhat` — main pool: volta (sm_70), ampere (sm_80/86), adalovelace (sm_89)
-- `cgpu-redhat` — **Camden nodes, do not submit**
+- `gpu` — main pool, 55 nodes `gpu[015-048]`, `gpuk[001-018]`, `volta[001-003]`:
+  volta (sm_70), ampere (sm_80/86), adalovelace (sm_89)
+- `cgpu` — **Camden nodes `gpuc[001-004]`, do not submit**
 - Torch 2.5.1/cu118 covers every arch present; there are no Blackwell cards on Amarel.
-- There is no `legacy-gpu` partition (it no longer exists), so `gpu-redhat` is the only
-  usable GPU pool and it does queue — check `sbatch --test-only` before assuming a fast start.
+- `gpu` is the only usable GPU pool and it does queue — check `sbatch --test-only` before
+  assuming a fast start, but treat its start time as a worst-case bound, not a prediction
+  (observed: predicted 13:09, actually started 09:34).
+- The partition names carry NO `-redhat` suffix. Earlier notes here said `gpu-redhat` and
+  `cgpu-redhat`; those no longer exist and `sbatch` rejects them outright with
+  `invalid partition specified`. Full live list: `cgpu cmain cmem gpu graphical main mem nonpre`.
 
 **glibc split — the env does NOT run on the Amarel login node.** The login node is CentOS 7
-(glibc 2.17); the `*-redhat` compute partitions are RHEL 9.6 (glibc 2.34). The conda env is
+(glibc 2.17); the compute partitions are RHEL 9.6 (glibc 2.34). The conda env is
 built against the latter, so importing torch on the login node fails with
 `GLIBC_2.27 not found ... libcurand.so.10`. This is expected, not a broken env. Build and test
 the env through SLURM, e.g.
 
 ```bash
-srun --account=general --partition=main-redhat --time=00:10:00 --mem=8G --cpus-per-task=2 \
+srun --account=general --partition=main --time=00:10:00 --mem=8G --cpus-per-task=2 \
      ./env/bin/python -c "import torch; print(torch.__version__)"
 ```
 

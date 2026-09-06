@@ -17,7 +17,7 @@ deterministic, so a collision is a no-op; preferring new means a re-run after a
 ground-truth update actually takes effect.
 """
 from __future__ import annotations
-import argparse, csv, json, subprocess, sys, tempfile
+import argparse, csv, json, os, subprocess, sys, tempfile
 from collections import defaultdict
 from pathlib import Path
 
@@ -261,12 +261,38 @@ def levelsets_path(csv_path: Path) -> Path:
 
 
 def write_csv(path: Path, fields: list[str], rows: list[dict]) -> None:
+    """Replace `path` atomically so a concurrent reader never sees it half-written.
+
+    A plain open(path, "w") truncates before the first byte lands, and these
+    CSVs are read by plot_stoch_all_levels.py / plot_stoch_levelsets.py, which
+    the q3dppo monitor runs on its own schedule. On 2026-09-06 a scoring pass
+    with 12 epochs to write overlapped the monitor's figure step: three of the
+    four levels read back empty and the published all-levels PNG dropped from
+    four panels to one. Nothing errored -- the figure was simply wrong until
+    the next redraw.
+
+    os.replace swaps the completed temp file in as a single step, so a reader
+    gets either the whole old file or the whole new one.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore")
-        w.writeheader()
-        for r in rows:
-            w.writerow({k: r.get(k, "") for k in fields})
+    # mkstemp is 0600; the docs tree is group-shared with login-bekris, so carry
+    # the destination's mode over (0o660 for a file that does not exist yet).
+    mode = path.stat().st_mode & 0o777 if path.exists() else 0o660
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore")
+            w.writeheader()
+            for r in rows:
+                w.writerow({k: r.get(k, "") for k in fields})
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def score_campaign(name: str, dry: bool, rescore: bool = False) -> int:

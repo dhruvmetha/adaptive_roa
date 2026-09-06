@@ -239,9 +239,12 @@ def main():
     print(f"Loading pool state from {state_file}")
     engine.pool.dataset_builder.load_state(str(state_file))
 
-    # Rebuild dataset files
+    # Rebuild dataset files. dataset_kind must come from the engine, not the
+    # build_all_datasets() default: a classifier predictor (clf, bnn, partx's
+    # GP) needs (state, label) rows, and the default hands back (state,
+    # end_state) pairs instead.
     print("Rebuilding dataset files...")
-    dataset_files = engine.pool.build_all_datasets()
+    dataset_files = engine.pool.build_all_datasets(dataset_kind=engine.dataset_kind)
 
     # Find previous best checkpoint
     previous_best_checkpoint = find_best_checkpoint(run_dir, last_completed)

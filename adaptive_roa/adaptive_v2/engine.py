@@ -117,6 +117,20 @@ class AdaptiveEngine:
         self.acquisition         = _instantiate(cfg.acquisition)
         self.evaluator           = _instantiate(cfg.eval,         self.system, self.device)
 
+    @property
+    def dataset_kind(self) -> str:
+        """Row format the pool must emit for this predictor.
+
+        A classifier predictor reads (state, label) rows; everything else reads
+        (state, end_state) pairs. scripts/resume_adaptive.py rebuilds the
+        dataset files itself before calling _run_loop, so it must ask for the
+        same kind run() would have. It used to call build_all_datasets() with no
+        argument, taking the "endpoint" default, which handed a Part-X resume a
+        26-column pair file where its trainer expected 14 columns and killed
+        q3dppo_cs020_partx_fix on its final epoch.
+        """
+        return "classification" if self.predictor_type == "classifier" else "endpoint"
+
     @staticmethod
     def _count_file_rows(filepath: str) -> int:
         """Count non-empty lines in a text file."""
@@ -129,7 +143,7 @@ class AdaptiveEngine:
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-        dataset_kind = "classification" if self.predictor_type == "classifier" else "endpoint"
+        dataset_kind = self.dataset_kind
         dataset_files = self.pool.initialize(
             int(self.cfg.get("initial_train_size", 100)), dataset_kind=dataset_kind
         )
@@ -173,7 +187,7 @@ class AdaptiveEngine:
         loop needs beyond its arguments is re-derived from cfg here, so the two
         entry points cannot drift apart.
         """
-        dataset_kind = "classification" if self.predictor_type == "classifier" else "endpoint"
+        dataset_kind = self.dataset_kind
         samples_per_epoch = int(self.cfg.get("samples_per_epoch", 50))
         d2_ratio = self.acquisition.d2_ratio
         warm_start = bool(self.cfg.get("warm_start", False))

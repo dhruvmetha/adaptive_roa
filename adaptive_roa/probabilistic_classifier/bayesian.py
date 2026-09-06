@@ -91,6 +91,14 @@ class BNNProbabilisticClassifier(ProbabilisticClassifier):
                     "a MAP model and must not be reported as Bayesian."
                 )
             posterior._cov = torch.load(cov_path, map_location="cpu", weights_only=True)
+            # Sampling draws on a factor of the precision, not of the
+            # covariance. Runs finished before that change shipped only the
+            # covariance; the posterior falls back to it, so its absence is not
+            # an error here.
+            chol_path = ckpt_dir / "laplace_prec_chol.pt"
+            if chol_path.exists():
+                posterior._prec_chol = torch.load(
+                    chol_path, map_location="cpu", weights_only=True)
 
         handle = outcome_handle_from_cfg(posterior, system, bnn).eval().to(device)
         return cls(handle, system, device)

@@ -1,0 +1,42 @@
+# @package _global_
+# decomp_yield_mlp with the BALD epistemic entropy in place of the debiased
+# between-member variance. Everything else is identical to decomp_yield_mlp:
+# same MLP/kNN length bake-off each epoch, same alpha=1 pricing
+#   rank(x) = score(x) * L_hat(x) ** alpha
+# so the only difference from that arm is which epistemic score enters `score`.
+#
+# Why run it: epi_var and epi_bald already disagree as plain acquisition scores
+# (they rank differently in every cprl level), but that comparison has only been
+# made per POINT. The yield weight changes what a score is being asked to do --
+# it prices informativeness per trajectory purchased -- and the two scores
+# respond to that reweighting differently. Variance is a second moment of the
+# member spread; BALD is a mutual information and saturates once members
+# disagree at all, so it compresses the high-disagreement tail that the yield
+# weight then multiplies.
+#
+# CAVEAT, and it is not cosmetic. epistemic_bald carries a ~(1/2K)(1-1/M)
+# UPWARD bias when p_m is MC-estimated (see decomp_epi_bald.yaml); unlike
+# epistemic_var there is no debiasing term, and score_by_mode ignores `k` for
+# this mode. Under a plain top-N rule a roughly constant additive offset barely
+# moves the ranking. Here it does move it: the rule is (base + b) * L_hat, so
+# the bias is multiplied by the length weight and inflates long-rollout
+# candidates specifically. Expect this arm to buy longer trajectories than
+# yield_mlp even where the true epistemic signal is the same. Read its
+# diagnostics against yield_mlp's, not against epi_bald's.
+#
+# alpha=0 still reduces EXACTLY to decomp_epi_bald.
+sampling_mode: decomp_yield_mlp_bald
+acquisition:
+  _target_: adaptive_roa.adaptive_v2.strategy.yield_mlp.YieldMLPAcquisitionStrategy
+  score: epistemic_bald
+  d2_ratio: 1.0
+  n_candidates: 50000
+  alpha: 1.0
+  hidden: [64, 64]
+  knn_k: 15
+  min_labeled: 20
+  mlp_seed: 0
+  prior_len_success: 150.0
+  prior_len_failure: 1000.0
+  min_per_class: 5
+  verbose: true

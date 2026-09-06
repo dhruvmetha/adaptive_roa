@@ -6,26 +6,46 @@ from adaptive_roa.partx.classify import classify_region
 from adaptive_roa.partx.region import Region
 
 
-def build_root(system) -> Region:
+def build_root(system, pad_frac: float = 1e-6) -> Region:
     """Full state-space support box in raw coords, with per-dim normalization scale.
 
-    Manifold components can be multi-dimensional (e.g. R^2 position, R^3 velocity,
-    SO3 quaternion with dim=4). Each component is expanded into ``comp.dim`` raw
-    state dimensions, all sharing the component's scalar bounds, so the region
-    dimensionality matches the true state_dim (not the number of components).
+    Bounds come from ``system.per_dim_bounds()``, which gives one (low, high) per
+    RAW state dimension. The older path read ``state_bounds[comp.name]``, keyed by
+    manifold COMPONENT, so a component covering several raw dims applied one
+    scalar range to all of them. On quadrotor2D that gave theta_dot x_dot's
+    +-1.303 against a true +-13.365, and gave z x's symmetric +-1.011 against a
+    true [0.089, 1.510]; only 9% of the eval grid fell inside the resulting box.
+    Everything outside is assigned leaf -1 by PartitionTree.assign and is
+    therefore permanently ineligible for acquisition, which is why partx arms
+    under-spent their budget (quad2D ~41%) or never acquired at all (quad3D
+    noisy_dynamics f_0.048: 0 trajectories across all 18 epochs).
+
+    ``pad_frac`` widens the box by a relative epsilon. Region.contains uses
+    closed-interval comparisons on floats, and grids that store a bound as a
+    rounded decimal land just outside it: the quadrotor2D eval grid stores
+    theta = -3.141593, which is below -math.pi, so the entire theta = -pi column
+    (1/12 of the grid) was excluded from a box built to cover exactly +-pi.
     """
-    lows, highs = [], []
-    for comp in system.manifold_components:
-        dim = int(getattr(comp, "dim", 1))
-        if comp.manifold_type == "SO2":
-            lo, hi = -np.pi, np.pi
-        else:
-            b = system.state_bounds[comp.name]
-            lo, hi = float(b[0]), float(b[1])
-        for _ in range(dim):
-            lows.append(lo); highs.append(hi)
-    low = np.array(lows, dtype=float)
-    high = np.array(highs, dtype=float)
+    fn = getattr(system, "per_dim_bounds", None)
+    if callable(fn):
+        pairs = fn()
+    else:
+        # Duck-typed systems that predate per_dim_bounds: expand components as
+        # before. Correct whenever every component is one-dimensional.
+        pairs = []
+        for comp in system.manifold_components:
+            dim = int(getattr(comp, "dim", 1))
+            if comp.manifold_type == "SO2":
+                lo, hi = -np.pi, np.pi
+            else:
+                b = system.state_bounds[comp.name]
+                lo, hi = float(b[0]), float(b[1])
+            pairs.extend([(lo, hi)] * dim)
+    low = np.array([p[0] for p in pairs], dtype=float)
+    high = np.array([p[1] for p in pairs], dtype=float)
+    span = np.maximum(high - low, 1e-9)
+    pad = pad_frac * span
+    low, high = low - pad, high + pad
     norm_scale = np.maximum(high - low, 1e-9)
     return Region(low, high, norm_scale, region_class="r", rid=0)
 

@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from omegaconf import OmegaConf
 from adaptive_roa.systems.pendulum import PendulumSystem
 from adaptive_roa.partx.gp_classifier import GPClassifier
@@ -34,3 +35,34 @@ def test_strategy_selects_target_count():
     res = strat.select(pool, backend, None, None, target_count=15)
     assert len(res.d2_indices) == 15
     assert "roa_volume" in res.diagnostics
+
+
+class _EndpointBackend:
+    """Stands in for EndpointMCProbabilityBackend: models the FINAL STATE, so it
+    has no robustness latent to partition on."""
+    system = None
+
+    def estimate(self, X):
+        raise NotImplementedError
+
+
+def test_partx_rejects_a_final_state_predictor():
+    # Part-X partitions on the sign of a robustness function. A predictor that
+    # models the endpoint has no such latent; pairing them must fail loudly
+    # rather than at a bare AttributeError deep in select().
+    cfg = OmegaConf.create({"d2_ratio": 1.0, "beta": 1.96,
+                            "allocation": "per_region_volume", "n_candidates": 10})
+    strat = PartXAcquisitionStrategy(cfg)
+    with pytest.raises(TypeError, match="robustness score / label probability"):
+        strat.select(pool=None, probability_backend=_EndpointBackend(),
+                     threshold_backend=None, threshold_state=None, target_count=5)
+
+
+def test_partx_rejects_d2_ratio_zero():
+    # d2_ratio=0 makes engine.py skip d2 acquisition entirely, so select() is
+    # never called and the arm silently becomes a uniform baseline still named
+    # Part-X (gaussian_torque/cp_med_partx did exactly this for 12 epochs).
+    cfg = OmegaConf.create({"d2_ratio": 0, "beta": 1.96,
+                            "allocation": "per_region_volume", "n_candidates": 10})
+    with pytest.raises(ValueError, match="never runs"):
+        PartXAcquisitionStrategy(cfg)

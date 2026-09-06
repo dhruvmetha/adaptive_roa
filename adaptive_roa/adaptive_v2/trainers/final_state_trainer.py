@@ -359,11 +359,14 @@ class FinalStateTrainer:
                         print(f"Laplace observation noise (normalized RMS residual): sigma={sigma:.6g}")
                     posterior.fit(posterior.body(embedded), ends_normalized,
                                   task="final_state", sigma=sigma)
-                # `_cov` is a non-persistent buffer (its shape is unknown until
-                # fit), so it will NOT round-trip through the Lightning
-                # checkpoint. Save it explicitly or the exported arm silently
-                # falls back to its MAP point estimate and reports zero spread.
+                # `_cov` and `_prec_chol` are non-persistent buffers (their shape
+                # is unknown until fit), so they will NOT round-trip through the
+                # Lightning checkpoint. Save them explicitly or the exported arm
+                # silently falls back to its MAP point estimate and reports zero
+                # spread. The precision factor is what sampling uses; the
+                # covariance is kept because older tooling reads it.
                 torch.save(posterior.posterior_covariance, ckpt_dir / "laplace_cov.pt")
+                torch.save(posterior.precision_cholesky, ckpt_dir / "laplace_prec_chol.pt")
 
         handle = FinalStateModelHandle(posterior, head, self.system).eval()
         return handle.to(device) if use_gpu else handle

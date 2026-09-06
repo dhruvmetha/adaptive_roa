@@ -9,15 +9,30 @@
 #   sbatch -J big --gres=gpu:2 --time=2-00:00:00 scripts/sbatch_amarel.sh ...
 #
 #SBATCH --account=general
-#SBATCH --partition=gpu-redhat
+#SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=40G
-#SBATCH --time=1-00:00:00
+#SBATCH --time=3-00:00:00
+# WALLTIME IS A DELIBERATE TRADEOFF, raised from 1 day on 2026-09-05.
+#
+# For: the 1-day default silently killed a 24-epoch quadrotor2d run at epoch 19
+# (TIMEOUT, job 61221125) because nobody passed an override. 3 days is the pool
+# maximum, so this cannot overshoot, and the adaptive arms genuinely need 25-30h.
+#
+# Against: this account is `general`, which preempts SILENTLY. A job that wedges
+# at epoch 0 now occupies a slot for three days instead of one, and preemption
+# gives no clean signal that it happened. Confirm death with sacct, not absence
+# from squeue.
+#
+# The default is only safe while something is actually watching depth. If you
+# submit from this script with no monitor running, pass --time explicitly and
+# size it to the job instead of inheriting three days.
 #SBATCH --output=/home/st1122/Projects/adaptive_roa/slurm_logs/%x_%j.out
 #SBATCH --error=/home/st1122/Projects/adaptive_roa/slurm_logs/%x_%j.err
 
-# NOTE: partition gpu-redhat only. cgpu-redhat is Camden -- do not submit there.
+# NOTE: partition `gpu` only. `cgpu` is Camden -- do not submit there. The old
+# `-redhat` suffixed names no longer exist and sbatch rejects them outright.
 # Max walltime on all Amarel GPU partitions is 3-00:00:00.
 
 set -euo pipefail

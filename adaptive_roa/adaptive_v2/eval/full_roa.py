@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -804,6 +805,29 @@ def evaluate_full_roa_fast(
         # explicitly here rather than delegating to that cursor.
         n_members = getattr(flow_matcher, "n_members", None)
 
+        # TILED-K FAST PATH, opt-in via FM_EVAL_TILE_K (default OFF).
+        #
+        # The sequential loop below issues one forward per (batch, draw) at
+        # batch_size rows. On quadrotor3D that is 2048 rows, which leaves the GPU
+        # at ~67% of fp32 peak. Tiling T draws into one call raises the EFFECTIVE
+        # batch to batch_size*T without changing what is computed per draw --
+        # "larger batch" and "tiled K" are the same lever, not two.
+        #
+        # NOT bit-identical: torch.randn is consumed from one global stream, so
+        # repartitioning it hands different noise to a given row. That is an
+        # UNBIASED re-roll (same distribution), the same category of perturbation
+        # as changing a seed, which the 3-seed control floor already absorbs. It
+        # is NOT the same as changing num_steps or dtype, which introduce bias.
+        #
+        # Member weighting is preserved exactly: member m still takes draws
+        # {m, m+M, m+2M, ...}, so each member is enumerated floor(K/M) or
+        # ceil(K/M) times as the comment above requires.
+        #
+        # Falls back to the sequential loop when refine_invalids or ground-truth
+        # end states are in play, rather than reimplementing those branches.
+        _tile_k = int(os.environ.get("FM_EVAL_TILE_K", "0") or 0)
+        _use_tiled = _tile_k > 1 and not refine_invalids and end_tensor is None
+
         flow_matcher.eval()
         with torch.no_grad():
           with tqdm(total=total_steps, desc="Full ROA eval", disable=not verbose) as pbar:
@@ -811,6 +835,29 @@ def evaluate_full_roa_fast(
                 batch_end = min(batch_start + batch_size, n_total)
                 batch_inputs = X_tensor[batch_start:batch_end]
                 batch_actual = end_tensor[batch_start:batch_end] if end_tensor is not None else None
+
+                if _use_tiled:
+                    B = batch_end - batch_start
+                    n_mem = n_members or 1
+                    for m_idx in range(n_mem):
+                        draws = list(range(m_idx, num_mc_samples, n_mem)) if n_members \
+                                else list(range(num_mc_samples))
+                        for c0 in range(0, len(draws), _tile_k):
+                            chunk = draws[c0:c0 + _tile_k]
+                            t = len(chunk)
+                            rep = batch_inputs.repeat_interleave(t, dim=0)
+                            if n_members:
+                                pr = flow_matcher.predict_endpoint_member(m_idx, rep)
+                            else:
+                                pr = flow_matcher.predict_endpoint(rep)
+                            lab = system.classify_attractor(pr, attractor_radius).view(B, t)
+                            lab_np = lab.cpu().numpy()
+                            for j, s_idx in enumerate(chunk):
+                                mc_labels[batch_start:batch_end, s_idx] = lab_np[:, j]
+                            pred_sum[batch_start:batch_end] += (
+                                pr.view(B, t, -1).sum(dim=1).cpu().numpy())
+                            pbar.update(t)
+                    continue
 
                 for sample_idx in range(num_mc_samples):
                     if n_members:
@@ -1383,6 +1430,17 @@ class FullROAEvaluator:
         self.refine_max_attempts = int(cfg.refine_max_attempts)
         self.max_eval_rows = cfg.max_eval_rows  # may be None
         self.verbose = bool(cfg.verbose)
+        # None (default) = infer from the system, i.e. whether eval_success_prob.npz
+        # sits beside the dataset. Set true/false to FORCE the outcome space.
+        #
+        # Forcing exists for datasets whose scoring rule is a study decision rather
+        # than a property of the files: the deterministic cartpole has no
+        # eval_success_prob.npz, so inference would score it three-way, but a
+        # campaign that defines success-vs-everything-else needs it two-way to sit
+        # in the same table as the stochastic levels. Leaving it None keeps every
+        # existing run's behaviour bit-identical.
+        self.binary_outcomes = (None if cfg.get("binary_outcomes", None) is None
+                                else bool(cfg.get("binary_outcomes")))
         self.system = system
         self.device = device
 
@@ -1406,6 +1464,7 @@ class FullROAEvaluator:
                 verbose=epoch_context.get("verbose", True),
                 invalid_threshold=epoch_context.get("invalid_threshold", None),
                 decision_rule=epoch_context.get("decision_rule", self.decision_rule),
+                binary_outcomes=epoch_context.get("binary_outcomes", self.binary_outcomes),
             )
         return evaluate_full_roa_fast(
             flow_matcher=model_handle,
@@ -1429,4 +1488,5 @@ class FullROAEvaluator:
             refine_num_steps=self.refine_num_steps,
             refine_max_attempts=self.refine_max_attempts,
             max_eval_rows=epoch_context.get("max_eval_rows", self.max_eval_rows),
+            binary_outcomes=epoch_context.get("binary_outcomes", self.binary_outcomes),
         )

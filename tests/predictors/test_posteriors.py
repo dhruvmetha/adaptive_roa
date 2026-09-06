@@ -204,3 +204,103 @@ def test_laplace_regression_requires_an_explicit_sigma():
     post = LastLayerLaplacePosterior(body, head, prior_precision=1.0)
     with pytest.raises(ValueError, match="sigma"):
         post.fit(body(torch.randn(8, 4)), torch.randn(8, 3), task="final_state")
+
+
+def _ill_conditioned_laplace(prior_precision=1.0, n=4000, d=64, hi=3.0, seed=0):
+    """A Laplace posterior whose GGN spans the conditioning real runs produce.
+
+    Last-layer features are strongly correlated in practice, so H's spectrum is
+    wide: lambda_min stays pinned at prior_precision while lambda_max grows with
+    the training set, and the shipped runs that completed already sat at cond(H)
+    of 1e5 to 2e6. Feature scales are spread over decades here to push past
+    where float32 inversion breaks, and the head weights are tiny so
+    the sigmoid stays off its saturated tails -- otherwise lam = p(1-p) hits its
+    1e-6 clamp and flattens the very spectrum this fixture exists to create.
+    """
+    from adaptive_roa.predictors.posteriors import LastLayerLaplacePosterior
+
+    g = torch.Generator().manual_seed(seed)
+    q = torch.linalg.qr(torch.randn(d, d, generator=g))[0]
+    features = (torch.randn(n, d, generator=g) * torch.logspace(-4.0, hi, d)) @ q
+    head = torch.nn.Linear(d, 1)
+    with torch.no_grad():
+        head.weight.fill_(1e-6)
+        head.bias.zero_()
+    post = LastLayerLaplacePosterior(torch.nn.Identity(), head,
+                                    prior_precision=prior_precision)
+    post.fit(features, torch.randint(0, 2, (n,), generator=g).float(), task="outcome")
+    return post, features
+
+
+def test_laplace_sampling_survives_an_ill_conditioned_ggn():
+    """Drawing weights must not depend on Sigma being float32-factorable.
+
+    This is the failure that killed q2d_cs_bnn_lap and q3d_cs030_bnn_lap
+    mid-campaign: H is positive definite by construction (GGN + prior I), but
+    forming Sigma = inv(H) in float32 loses that once cond(H) passes roughly
+    1/sqrt(eps32), so cholesky(Sigma) raises and the run dies. Sampling has to
+    go through a factor of H, which never needs Sigma's smallest eigenvalues to
+    be representable.
+    """
+    post, features = _ill_conditioned_laplace()
+
+    samples = torch.stack([post.forward_sample(features[:16]) for _ in range(8)])
+
+    assert samples.shape == (8, 16, 1)
+    assert torch.isfinite(samples).all()
+    assert samples.std(dim=0).mean().item() > 0.0
+
+
+def test_laplace_samples_carry_the_ggn_covariance():
+    """The draws must have covariance Sigma, not merely be non-degenerate.
+
+    A sampler that silently substituted a jittered or diagonal factor would pass
+    the ill-conditioned test above while reporting the wrong uncertainty, so
+    pin the empirical weight covariance against Sigma on a well-conditioned fit
+    where Sigma itself is trustworthy.
+    """
+    from adaptive_roa.predictors.posteriors import LastLayerLaplacePosterior
+
+    torch.manual_seed(0)
+    d, n = 6, 512
+    head = torch.nn.Linear(d, 1)
+    post = LastLayerLaplacePosterior(torch.nn.Identity(), head, prior_precision=1.0)
+    features = torch.randn(n, d)
+    post.fit(features, torch.randint(0, 2, (n,)).float(), task="outcome")
+    cov = post.posterior_covariance.double()
+
+    # One forward_sample draws a single weight vector w and applies it to every
+    # probe row, so a batch of one-hot rows returns A w with A = [I | 1] (the
+    # trailing column is phi's appended bias input). Its covariance is therefore
+    # A Sigma A^T, which pins Sigma itself up to a known linear map.
+    probe = torch.eye(d)
+    A = torch.cat([probe, torch.ones(d, 1)], dim=1).double()
+    draws = torch.stack([post.forward_sample(probe).view(-1) for _ in range(20000)]).double()
+    empirical = torch.cov(draws.T)
+    expected = A @ cov @ A.T
+
+    torch.testing.assert_close(empirical, expected, rtol=0.15, atol=0.02)
+
+
+def test_laplace_loads_a_pre_fix_checkpoint_that_only_shipped_sigma():
+    """Runs finished before this fix wrote laplace_cov.pt and nothing else.
+
+    Their loaders assign Sigma straight onto the posterior, so sampling must
+    still work from Sigma alone rather than requiring the precision factor that
+    only new fits produce.
+    """
+    from adaptive_roa.predictors.posteriors import LastLayerLaplacePosterior
+
+    torch.manual_seed(0)
+    d = 6
+    post = LastLayerLaplacePosterior(torch.nn.Identity(), torch.nn.Linear(d, 1),
+                                     prior_precision=1.0)
+    shipped = torch.linalg.inv(
+        torch.randn(d + 1, d + 1) @ torch.randn(d + 1, d + 1).T
+        + 3.0 * torch.eye(d + 1))
+    post._cov = 0.5 * (shipped + shipped.T)
+
+    samples = torch.stack([post.forward_sample(torch.randn(4, d)) for _ in range(8)])
+
+    assert torch.isfinite(samples).all()
+    assert samples.std(dim=0).mean().item() > 0.0

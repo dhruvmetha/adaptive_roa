@@ -106,6 +106,37 @@ class DynamicalSystem(ABC):
     def state_bounds(self) -> Dict[str, Tuple[float, float]]:
         """Get state bounds"""
         return self._state_bounds
+
+    def per_dim_bounds(self) -> List[Tuple[float, float]]:
+        """Support box of the raw state space, one (low, high) pair PER RAW DIM.
+
+        ``state_bounds`` is keyed by manifold component, so a component covering
+        several raw dimensions carries exactly one entry for all of them. That is
+        fine for normalization, where the component's scale is shared by
+        construction, but it is wrong for anything that needs the true extent of
+        each axis: quadrotor2D's ``velocity`` component spans (x_dot, z_dot,
+        theta_dot), whose real ranges are +-1.303, +-1.314 and +-13.365, and
+        quadrotor3D's ``position`` spans (x, y, z) where z is [0.07, 3.03] and is
+        not symmetric at all.
+
+        Part-X builds its partition root from this box and drops any state
+        outside it, so the collapsed version silently excluded 91% of the
+        quadrotor2D state space and 43% of quadrotor3D's from acquisition.
+
+        The default below reproduces the component-expansion exactly, so systems
+        whose components are all one-dimensional (pendulum, cartpole) are
+        unchanged. Systems with multi-dimensional components should override.
+        """
+        out: List[Tuple[float, float]] = []
+        for comp in self.manifold_components:
+            dim = int(getattr(comp, "dim", 1))
+            if comp.manifold_type == "SO2":
+                lo, hi = -math.pi, math.pi
+            else:
+                b = self.state_bounds[comp.name]
+                lo, hi = float(b[0]), float(b[1])
+            out.extend([(lo, hi)] * dim)
+        return out
     
     def get_circular_indices(self) -> List[int]:
         """

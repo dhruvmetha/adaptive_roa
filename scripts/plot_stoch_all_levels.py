@@ -88,6 +88,25 @@ ARMS = [
     ("bnn_lap",          "BNN  Laplace",             "#843c39", "--", "s"),
     ("bnn_mfvi",         "BNN  mean-field VI",       "#7b4173", "--", "D"),
     ("bnn_mfvi_bald",    "BNN  MFVI + BALD",         "#7b4173", "-",  "^"),
+    # BB-alpha (alpha=1) MFVI pair, used by the quadrotor3D PPO campaign.
+    # Registered 2026-09-06: the arms had been scoring since launch, but ARMS is
+    # matched by EXACT arm name and neither name was here, so both were dropped
+    # from every figure without an error -- the same silent skip the scorer's own
+    # ARMS list has (an unlisted arm is skipped, not flagged). The PPO level-set
+    # figures were drawing 5 of 10 arms and reporting "5 arms" as if that were
+    # the whole level.
+    #
+    # NAMES ARE CONFUSING AND WORTH READING TWICE. Despite the suffixes:
+    #   bnn_a1_dir00  is the NON-ADAPTIVE control (acquisition=direct, d2=0)
+    #   bnn_mfvi_a1   is the ADAPTIVE arm        (decomp_epi_bald, d2=1.0)
+    # Both run the SAME predictor (bnn_mfvi_a1 config, BB-alpha at alpha=1), so
+    # they differ only in acquisition. That is exactly the matched-budget pair the
+    # dimension hypothesis needs, and it is the reason they share a colour: read
+    # the dashed line as the control for the solid one, as with bnn_mfvi above.
+    # A distinct hue from bnn_mfvi/#7b4173 because these are a different posterior
+    # (BB-alpha) and must not be mistaken for that pair.
+    ("bnn_a1_dir00",     "BNN  BB-α=1 non-adaptive", "#a55194", "--", "D"),
+    ("bnn_mfvi_a1",      "BNN  BB-α=1 + BALD",       "#a55194", "-",  "^"),
 ]
 BAND_C, BAND_A, MEAN_C, MEAN_LW = "0.55", 0.35, "0.15", 3.0
 
@@ -99,7 +118,23 @@ CLEAN = ["epi_bald", "partx_fix", "clf_dir00", "clf_epi_bald", "bnn_mfvi", "bnn_
 
 METRICS = [("KL",             "KL",             "KL divergence  (log, lower better)",  True),
            ("brier_debiased", "debiased Brier", "debiased Brier  (log, lower better)", True),
-           ("sAUROC",         "sAUROC",         "sAUROC  (higher better)",             False)]
+           ("sAUROC",         "sAUROC",         "sAUROC  (higher better)",             False),
+           # Mean balanced accuracy of the level-β sets over the ten levels that
+           # pass the thin-set rule (stoch_prob_metrics.level_set_summary). The
+           # per-level curves are in plot_stoch_levelsets; this column is the
+           # epoch-wise view of their area.
+           ("auc_bal_acc",    "bal. acc. area", "balanced-accuracy area over β  (higher better)", False)]
+
+
+def missing_columns(m, cols):
+    """(arm, epoch, column) triples whose value is absent or blank.
+
+    A CSV scored before a metric existed has the column blank on the old rows,
+    and float('') dies with a message that names none of them. Refusing with
+    the list points at the fix: re-run scripts/score_stoch_incremental.py.
+    """
+    return sorted((arm, e, c) for arm in m for e in m[arm] for c in cols
+                  if m[arm][e].get(c, "") == "")
 
 CAMPAIGNS = {
   "cartpole": dict(
@@ -123,7 +158,9 @@ CAMPAIGNS = {
     # `baseline` is ZERO noise -- it has no lqr counterpart, so this panel set is
     # deliberately not the same shape as the lqr campaign's low/med/high.
     panels=[("baseline","CartPole RL gaussian_signal — baseline (no noise)"),
-            ("med","CartPole RL gaussian_signal — med")]),
+            ("low","CartPole RL gaussian_signal — low"),
+            ("med","CartPole RL gaussian_signal — med"),
+            ("high","CartPole RL gaussian_signal — high")]),
   "quad2d_nd": dict(
     title="Quadrotor2D stochastic noisy_dynamics",
     csv="quadrotor2d/rl/quad2d_noisy_dynamics_all_levels.csv",
@@ -153,13 +190,62 @@ CAMPAIGNS = {
     out="quadrotor3d/lqr/quad3d_corridor_sine_ambient_all_levels.png",
     panels=[("corridor_sine_ambient_f_0.30","Quadrotor3D corridor_sine_ambient — f_0.30")],
     dsroot=DATA / "quadrotor3D",
-    dslevel={"corridor_sine_ambient_f_0.30": "corridor_sine_ambient/lqr/f_0.30"}),
+    dslevel={"corridor_sine_ambient_f_0.30": "corridor_sine_ambient/lqr/f_0.30"},
+    # Reporting window (decision 2026-09-03): the quad3D corridor experiment is
+    # read to 35,000 training trajectories, i.e. epoch 5 on its 10k + 5k/epoch
+    # schedule, although the arms ran on past it. It is the first budget at
+    # which every FM arm beats every classifier, BNN and Part-X arm on KL,
+    # Brier and sAUROC at once, and where FM's deficit on the level-set areas
+    # is narrowest. Every consumer of CAMPAIGNS (this figure, the level-set
+    # figure, the ALC table) clips here, so a deeper epoch never leaks into a
+    # quad3D comparison by accident.
+    budget=35000),
+  # PPO controller on the same quadrotor3D corridor family. Registered
+  # 2026-09-06: the scorer already wrote both CSVs, but with no CAMPAIGNS entry
+  # every plot script silently drew nothing for it, so the docs dir held data
+  # and no figures.
+  #
+  # SEPARATE FROM quad3d_cs ON PURPOSE. This is a different controller, with no
+  # ambient term, a different noise ladder, a different start box, half the
+  # control rate and mid-flight FPS eval states. A PPO level must never be put
+  # in a panel beside an LQR level, so it gets its own campaign key, its own
+  # output file and its own docs subtree rather than extra panels on quad3d_cs.
+  #
+  # f_0.00 is DETERMINISTIC (no wind, one eval trial per state), so its KL is a
+  # clipped log-loss against binary truth and is not on the same scale as the
+  # three noisy levels. It is drawn because the panels are per-level and never
+  # pooled; read its numbers on their own.
+  #
+  # No `budget`: this campaign's arms all run the same 10k + 1.5k/epoch schedule
+  # to 40,000 trajectories, and nothing has finished, so there is no evidence yet
+  # for choosing a reporting window. Add one only from a deliberate decision.
+  "q3dppo_cs": dict(
+    title="Quadrotor3D PPO stochastic corridor_sine_ambient",
+    csv="quadrotor3d/ppo/quad3dppo_corridor_sine_ambient_all_levels.csv",
+    out="quadrotor3d/ppo/quad3dppo_corridor_sine_ambient_all_levels.png",
+    panels=[("corridor_sine_ambient_f_0.00","Quadrotor3D PPO corridor_sine_ambient — f_0.00 (DETERMINISTIC)"),
+            ("corridor_sine_ambient_f_0.12","Quadrotor3D PPO corridor_sine_ambient — f_0.12"),
+            ("corridor_sine_ambient_f_0.20","Quadrotor3D PPO corridor_sine_ambient — f_0.20"),
+            ("corridor_sine_ambient_f_0.40","Quadrotor3D PPO corridor_sine_ambient — f_0.40")],
+    dsroot=DATA / "quadrotor3D",
+    dslevel={"corridor_sine_ambient_f_0.00": "corridor_sine_ambient/ppo/f_0.00",
+             "corridor_sine_ambient_f_0.12": "corridor_sine_ambient/ppo/f_0.12",
+             "corridor_sine_ambient_f_0.20": "corridor_sine_ambient/ppo/f_0.20",
+             "corridor_sine_ambient_f_0.40": "corridor_sine_ambient/ppo/f_0.40"}),
 }
 
 
-def load(csv_path, level, keep=None):
+def within_budget(rows, c):
+    """Rows at or below the campaign's reporting budget; all rows when none is set."""
+    b = c.get("budget")
+    if b is None:
+        return rows
+    return [r for r in rows if int(r["train_trajectories"]) <= b]
+
+
+def load(csv_path, level, keep=None, budget=None):
     m = defaultdict(dict)
-    for r in csv.DictReader(open(csv_path)):
+    for r in within_budget(list(csv.DictReader(open(csv_path))), {"budget": budget}):
         if r["level"] != level or (keep is not None and r["arm"] not in keep):
             continue
         m[r["arm"]][int(str(r["epoch"]).split("_")[-1])] = r
@@ -259,7 +345,7 @@ def main():
 
         loaded, ragged = [], {}
         for lv, lab in c["panels"]:
-            m = load(src, lv, keep)
+            m = load(src, lv, keep, c.get("budget"))
             if not m:
                 print(f"  SKIP {name}/{lv}: no rows"); m = None
             else:
@@ -269,6 +355,15 @@ def main():
             loaded.append((lv, lab, m))
         loaded = [t for t in loaded if t[2]]
         if not loaded:
+            continue
+
+        gaps = [(lv, x) for lv, _, m in loaded
+                for x in missing_columns(m, [col for col, *_ in METRICS])]
+        if gaps:
+            print(f"  REFUSING to plot {name}: {len(gaps)} blank metric cell(s); "
+                  "re-run scripts/score_stoch_incremental.py. First few:")
+            for lv, (arm, e, col) in gaps[:6]:
+                print(f"    {lv}/{arm}/epoch {e}: {col}")
             continue
 
         if ragged and not a.allow_partial:

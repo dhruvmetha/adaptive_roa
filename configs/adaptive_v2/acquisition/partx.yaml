@@ -1,4 +1,13 @@
 # @package _global_
+#
+# Selecting this acquisition also selects the partx evaluator, so the region
+# bounds and the acquisition diagnostics (n_eligible, n_unresolved_leaves,
+# fallback_used) reach artifacts_v2.json. Without it the eval group stays at
+# full_roa and those keys are computed every epoch and then dropped, which is
+# how q3d_nd048_partx ran 18 epochs acquiring nothing with no recorded trace.
+# LAUNCH WITH `eval=partx`. Hydra will not let this group override a sibling
+# group chosen earlier in the parent defaults list, so the pairing cannot be
+# expressed here; scratchpad/launch_fleet.sh adds it for predkind=gp.
 sampling_mode: partx
 acquisition:
   _target_: adaptive_roa.partx.strategy.PartXAcquisitionStrategy

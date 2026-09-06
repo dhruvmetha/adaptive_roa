@@ -254,6 +254,123 @@ def thresholded_roa(p_hat: np.ndarray, p: np.ndarray, beta: float) -> dict:
     }
 
 
+# --------------------------------------------------------------------------
+# level sets
+# --------------------------------------------------------------------------
+# Ten bin centres, and always these ten: a practitioner with risk tolerance
+# alpha reads beta = 1 - alpha, and the same beta must exist for every arm,
+# level and system. 0 and 1 are not on the grid because at beta = 0 both
+# super-level sets are the whole grid, above max(p) both are empty, and every
+# rate is 0/0. A level whose true set IS empty on some dataset still gets its
+# row -- with zero counts and NaN rates, never dropped -- and the oracle ceiling
+# says how far a thin level can be trusted.
+LEVELS = tuple(round(0.05 + 0.1 * i, 2) for i in range(10))
+LEVEL_STATS = ("tpr", "tnr", "fpr", "fnr", "acc", "bal_acc", "f1", "f05", "prec",
+               "realized", "vol_ratio")
+
+
+def _safe_div(a: float, b: float) -> float:
+    return a / b if b else float("nan")
+
+
+def level_set_table(p_hat: np.ndarray, p: np.ndarray, betas=LEVELS) -> list[dict]:
+    """Confusion matrix and its rates at each level, both sides thresholded at beta.
+
+    Raw counts are kept so any classification metric can be derived later.
+    `realized` is the mean TRUE p over the cells the model places at or above
+    beta -- the one entry that does not threshold the truth -- and `vol_ratio`
+    is predicted set size over true set size. Undefined ratios are NaN, never 0.
+    """
+    p_hat = np.asarray(p_hat, dtype=np.float64)
+    p = np.asarray(p, dtype=np.float64)
+    n = len(p)
+    rows = []
+    for b in betas:
+        y, yh = p >= b, p_hat >= b
+        tp = int(np.count_nonzero(y & yh))
+        fp = int(np.count_nonzero(~y & yh))
+        fn = int(np.count_nonzero(y & ~yh))
+        tn = int(np.count_nonzero(~y & ~yh))
+        n_pos, n_neg, claimed = tp + fn, fp + tn, tp + fp
+        tpr, tnr = _safe_div(tp, n_pos), _safe_div(tn, n_neg)
+        rows.append({
+            "beta": float(b), "tp": tp, "tn": tn, "fp": fp, "fn": fn,
+            "n_pos_true": n_pos, "n_neg_true": n_neg,
+            "tpr": tpr, "tnr": tnr, "fpr": 1.0 - tnr, "fnr": 1.0 - tpr,
+            "acc": (tp + tn) / n, "bal_acc": 0.5 * (tpr + tnr),
+            "f1": _safe_div(2 * tp, 2 * tp + fp + fn),
+            # F_beta with beta = 0.5 weights precision twice as heavily as
+            # recall: a false positive is an unsafe cell declared safe.
+            "f05": _safe_div(1.25 * tp, 1.25 * tp + 0.25 * fn + fp),
+            "prec": _safe_div(tp, claimed),
+            "realized": float(p[yh].mean()) if claimed else float("nan"),
+            "vol_ratio": _safe_div(claimed, n_pos),
+        })
+    return rows
+
+
+def level_set_oracle(p: np.ndarray, k: float | None, m: float | None, betas=LEVELS,
+                     n_draws: int = 8, seed: int = 0) -> list[dict]:
+    """Ceiling for the level-set table: a model that knows the field exactly.
+
+    Thresholding the M-rollout truth at beta relabels every cell whose true p
+    sits within a few sampling SDs of beta, so a perfect model cannot score 1 at
+    interior levels and the shortfall is a property of M, not of the arm. The
+    observed p stands in for the unknown true field; each draw resamples the
+    truth as Binom(M, p)/M and, for an MC predictor, the prediction as
+    Binom(K, p)/K, tables the pair, and the stats are averaged over draws.
+    m <= 1 is a deterministic level with nothing to resample.
+    """
+    p = np.asarray(p, dtype=np.float64)
+    rng = np.random.default_rng(seed)
+    m_ok = m is not None and np.isfinite(m) and m > 1
+    k_ok = k is not None and np.isfinite(k) and k > 1
+    draws: list[list[dict]] = []
+    for _ in range(n_draws):
+        p_obs = rng.binomial(int(m), p) / m if m_ok else p
+        p_hat = rng.binomial(int(k), p) / k if k_ok else p
+        draws.append(level_set_table(p_hat, p_obs, betas))
+    out = []
+    for per_level in zip(*draws):
+        r = {"beta": per_level[0]["beta"]}
+        for key in per_level[0]:
+            if key in r:
+                continue
+            vals = [d[key] for d in per_level if not np.isnan(d[key])]
+            r[key] = float(np.mean(vals)) if vals else float("nan")
+        out.append(r)
+    return out
+
+
+def level_set_summary(rows: list[dict], oracle_rows: list[dict]) -> dict:
+    """Area scalars: the mean of each rate over the ten levels, NaN-skipping,
+    for the arm and for its oracle ceiling; `n_levels_defined` counts the
+    levels where both true sets were non-empty (balanced accuracy defined), so
+    a reader sees when a mean rests on fewer than ten; and the worst over-claim,
+    the largest amount by which the realized success of a claimed region falls
+    short of its level."""
+    orc = {r["beta"]: r for r in oracle_rows}
+
+    def mean_of(rs, key):
+        v = [r[key] for r in rs if not np.isnan(r[key])]
+        return float(np.mean(v)) if v else float("nan")
+
+    out = {"n_levels": len(rows),
+           "n_levels_defined": sum(not np.isnan(r["bal_acc"]) for r in rows)}
+    for stat in LEVEL_STATS:
+        out[f"auc_{stat}"] = mean_of(rows, stat)
+        out[f"auc_{stat}_oracle"] = mean_of([orc[r["beta"]] for r in rows], stat)
+    gaps = [r["beta"] - r["realized"] for r in rows if not np.isnan(r["realized"])]
+    out["worst_overclaim"] = float(max([0.0] + gaps))
+    return out
+
+
+def level_set_block(p_hat: np.ndarray, p: np.ndarray, k: float | None, m: float,
+                    seed: int = 0) -> tuple[list[dict], list[dict]]:
+    """The per-level arm table and its oracle, computed once for both consumers."""
+    return level_set_table(p_hat, p), level_set_oracle(p, k, m, seed=seed)
+
+
 def calibration_scores(p_hat: np.ndarray, p: np.ndarray, successes: np.ndarray,
                        trials: np.ndarray) -> dict:
     """KL and per-rollout log score, with the oracle/climatology floors that say
@@ -278,7 +395,13 @@ def calibration_scores(p_hat: np.ndarray, p: np.ndarray, successes: np.ndarray,
 
 def all_metrics(p_hat: np.ndarray, p: np.ndarray, successes: np.ndarray,
                 trials: np.ndarray, k: float | None, n_bins: int | None = None,
-                betas=(0.25, 0.5, 0.75)) -> dict:
+                betas=(0.25, 0.5, 0.75),
+                level_block: tuple[list[dict], list[dict]] | None = None) -> dict:
+    """Every scalar metric for one epoch. Stays FLAT: callers write it to CSV.
+
+    `level_block` lets a caller that also wants the per-level rows pass the
+    tables it already built, so the oracle draws are not repeated.
+    """
     m = float(np.mean(trials))
     out: dict = {"n_points": int(len(p)), "K": k, "M": m}
     out["brier_raw"] = float(np.mean((p_hat - p) ** 2))
@@ -294,6 +417,9 @@ def all_metrics(p_hat: np.ndarray, p: np.ndarray, successes: np.ndarray,
     for b in betas:
         out.update(thresholded_roa(p_hat, p, b))
     out.update(calibration_scores(p_hat, p, successes, trials))
+    if level_block is None:
+        level_block = level_set_block(p_hat, p, k, m)
+    out.update(level_set_summary(*level_block))
     return out
 
 
@@ -326,8 +452,21 @@ def epoch_dirs(run_dir: Path) -> list[Path]:
                   if (d / "full_roa_per_point.npz").exists())
 
 
-def score_epoch(epoch_dir: Path, gt: tuple, k_override: float | None,
-                n_bins: int | None) -> dict:
+def level_rows(rows: list[dict], oracle_rows: list[dict]) -> list[dict]:
+    """Join the arm table and its oracle into one row per level. Oracle entries
+    carry an `_oracle` suffix; `beta` is shared by construction."""
+    out = []
+    for r, o in zip(rows, oracle_rows):
+        assert r["beta"] == o["beta"], "arm and oracle tables disagree on levels"
+        row = dict(r)
+        row.update({f"{k}_oracle": v for k, v in o.items() if k != "beta"})
+        out.append(row)
+    return out
+
+
+def score_epoch_full(epoch_dir: Path, gt: tuple, k_override: float | None,
+                     n_bins: int | None) -> tuple[dict, list[dict]]:
+    """Scalars for the wide CSV plus one long row per level for level_sets.csv."""
     gt_starts, gt_p, gt_s, gt_t = gt
     with np.load(epoch_dir / "full_roa_per_point.npz") as z:
         states = z["start_states"]
@@ -347,7 +486,9 @@ def score_epoch(epoch_dir: Path, gt: tuple, k_override: float | None,
             k = float(meta["eval_metrics"]["num_mc_samples"])
         except (KeyError, ValueError, TypeError):
             k = None
-    out = all_metrics(p_hat, gt_p[idx], gt_s[idx], gt_t[idx], k, n_bins)
+    p, s, t = gt_p[idx], gt_s[idx], gt_t[idx]
+    block = level_set_block(p_hat, p, k, float(np.mean(t)))
+    out = all_metrics(p_hat, p, s, t, k, n_bins, level_block=block)
     out["mean_p_invalid"] = float(p_invalid.mean())
     # Training-set size the epoch's model was fit on. Recorded per row because it
     # is the honest x axis for a budget comparison: epoch index is only a proxy,
@@ -355,7 +496,13 @@ def score_epoch(epoch_dir: Path, gt: tuple, k_override: float | None,
     # samples_per_epoch (quad2D 500 vs quad3D 5000).
     tt = meta.get("train_trajectories")
     out["train_trajectories"] = int(tt) if tt is not None else ""
-    return out
+    return out, level_rows(*block)
+
+
+def score_epoch(epoch_dir: Path, gt: tuple, k_override: float | None,
+                n_bins: int | None) -> dict:
+    """The flat scalar row only. Kept for the callers that index it by key."""
+    return score_epoch_full(epoch_dir, gt, k_override, n_bins)[0]
 
 
 # --------------------------------------------------------------------------
@@ -479,7 +626,7 @@ def main() -> None:
     arms = [Arm(**a) if not isinstance(a, Arm) else a
             for a in (dict(x, run_dir=Path(x["run_dir"])) for x in json.loads(args.spec.read_text()))]
     gt_cache: dict[str, tuple] = {}
-    rows = []
+    rows, long_rows = [], []
     for a in arms:
         if a.level not in gt_cache:
             gt_cache[a.level] = load_ground_truth(args.data_root / a.level)
@@ -491,16 +638,19 @@ def main() -> None:
             eds = [d for d in eds if int(d.name.split("_")[1]) in keep]
         for ed in eds:
             try:
-                row = score_epoch(ed, gt_cache[a.level], None, args.n_bins)
+                row, levels = score_epoch_full(ed, gt_cache[a.level], None, args.n_bins)
             except Exception as exc:  # a half-written epoch must not kill the sweep
                 print(f"  !! {a.predictor}/{a.level}/{a.arm}/{ed.name}: {exc}", flush=True)
                 continue
-            row.update(predictor=a.predictor, level=a.level, arm=a.arm,
-                       epoch=int(ed.name.split("_")[1]), run_dir=str(a.run_dir))
+            head = dict(predictor=a.predictor, level=a.level, arm=a.arm,
+                        epoch=int(ed.name.split("_")[1]))
+            row.update(head, run_dir=str(a.run_dir))
             rows.append(row)
+            long_rows += [dict(head, **lv) for lv in levels]
             print(f"  {a.predictor:3s} {a.level:5s} {a.arm:22s} {ed.name} "
                   f"brier_deb={row['brier_debiased']:+.5f} SS={row['skill_score']:.4f} "
-                  f"sAUROC={row['sAUROC']:.4f}", flush=True)
+                  f"sAUROC={row['sAUROC']:.4f} balacc_area={row['auc_bal_acc']:.4f}",
+                  flush=True)
 
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "metrics.json").write_text(json.dumps(rows, indent=2))
@@ -512,7 +662,17 @@ def main() -> None:
             fh.write(",".join(keys) + "\n")
             for r in rows:
                 fh.write(",".join(str(r.get(k, "")) for k in keys) + "\n")
-    print(f"wrote {len(rows)} rows to {args.out}")
+    if long_rows:
+        # One row per (arm, epoch, level). Column order follows the table's own
+        # insertion order -- counts, then rates, then the oracle's -- rather than
+        # alphabetical, so the file reads as a confusion matrix.
+        lead = ["predictor", "level", "arm", "epoch", "beta"]
+        keys = lead + [k for k in long_rows[0] if k not in lead]
+        with (args.out / "level_sets.csv").open("w") as fh:
+            fh.write(",".join(keys) + "\n")
+            for r in long_rows:
+                fh.write(",".join(str(r.get(k, "")) for k in keys) + "\n")
+    print(f"wrote {len(rows)} rows ({len(long_rows)} level rows) to {args.out}")
 
 
 if __name__ == "__main__":

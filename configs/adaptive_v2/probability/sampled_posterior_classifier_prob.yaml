@@ -1,0 +1,9 @@
+# @package _global_
+# Per-atom probabilities from S draws of a continuous (Gaussian) weight
+# posterior. For mfvi/laplace arms, which have no finite member set to
+# enumerate. See SampledPosteriorClassifierProbabilityBackend for the
+# O(1/S) bias this carries and why member_sample_size stays None.
+probability:
+  _target_: adaptive_roa.adaptive_v2.probability.ensemble_prob.SampledPosteriorClassifierProbabilityBackend
+  attractor_radius: ${attractor_radius}
+  n_posterior_samples: 64

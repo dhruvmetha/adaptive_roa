@@ -53,7 +53,28 @@ class NpzTrajectoryDataSource(TrajectoryDataSource):
         else:
             self.labels = None
 
-        self.start_states = self._starts[self.rollout_ids]
+        # Start states are read from `states`, NOT from the `starts` array.
+        #
+        # Training pairs are built from `states` (load_trajectory slices
+        # states[offsets[r]:offsets[r+1]]), so states[offsets[r]] is the start the
+        # model is actually fitted on. `starts` is a SEPARATE array recording the
+        # sampled initial condition, and on some datasets it is neither the same
+        # width nor the same numbers.
+        #
+        # quadrotor3D forced this. `starts` is 12-D with Euler angles, `states` is
+        # 13-D with a quaternion, and the two angular-velocity blocks are
+        # uncorrelated (r = -0.006 over 5000 rollouts): `starts` is clipped to the
+        # +/-24 sampling bound while states[offsets[r]] already reflects the first
+        # control step and reaches +/-37.7. Feeding `starts` to the model raised
+        # IndexError in Quadrotor3DSystem.normalize_state and killed all 20 scored
+        # -acquisition arms. Padding it to 13-D would have been worse: no crash,
+        # and every epistemic score computed against an angular velocity the model
+        # never saw in training.
+        #
+        # On quadrotor2D the two agree to 2.4e-07 (a float64->float32 cast), so
+        # this is a no-op for every 2-D run.
+        self.start_states = self._states[self._offsets[self.rollout_ids]]
+        self._warn_if_starts_disagree()
         self._traj_cache = {}
         self._length_cache = {}
 
@@ -125,6 +146,25 @@ class NpzTrajectoryDataSource(TrajectoryDataSource):
 
     def get_state_at(self, idx: int, row: int) -> np.ndarray:
         return self.load_trajectory(idx)[row]
+
+    def _warn_if_starts_disagree(self, n_check: int = 5000) -> None:
+        """Log when the npz's `starts` array is not states[offsets[r]].
+
+        Not fatal — `states` is authoritative because the training pairs come
+        from it. The message exists so a dataset carrying this split is visible
+        in the log on line one, instead of being discovered by a crash (or, worse,
+        not discovered at all) partway through a fleet.
+        """
+        if self._starts.shape[1] != self.start_states.shape[1]:
+            print(f"  NOTE: npz 'starts' is {self._starts.shape[1]}-D but 'states' is "
+                  f"{self.start_states.shape[1]}-D; using states[offsets[r]], the "
+                  f"representation training uses.")
+            return
+        k = min(n_check, len(self.rollout_ids))
+        d = float(np.abs(self._starts[self.rollout_ids[:k]] - self.start_states[:k]).max())
+        if d > 1e-4:
+            print(f"  NOTE: npz 'starts' disagrees with states[offsets[r]] by up to "
+                  f"{d:.3g} over {k} rollouts; using states[offsets[r]].")
 
     def get_start_state(self, idx: int) -> np.ndarray:
         return self.start_states[idx]

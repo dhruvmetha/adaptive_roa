@@ -67,3 +67,25 @@ def test_evaluate_epoch_writes_region_tree_png(tmp_path):
     png_path = os.path.join(output_dir, "partx_region_tree.png")
     assert os.path.exists(png_path)
     assert os.path.getsize(png_path) > 0
+
+
+def test_merge_region_bounds_carries_acquisition_health():
+    # The acquisition-health keys are the only on-disk evidence that an epoch
+    # acquired nothing. Dropping them is what made q3d_nd048_partx's 18 empty
+    # epochs indistinguishable from healthy ones in artifacts_v2.json.
+    diag = {
+        "roa_volume": 0.42,
+        "n_eligible": 0,
+        "n_candidates": 250000,
+        "n_outside_tree": 250000,
+        "n_selected": 5000,
+        "fallback_used": True,
+        "fallback_reason": "no candidate in an unresolved leaf",
+        "n_topup_outside_unresolved": 0,
+    }
+    out = merge_region_bounds({}, diag)
+    assert out["partx_fallback_used"] is True
+    assert out["partx_n_eligible"] == 0
+    assert out["partx_n_outside_tree"] == 250000
+    assert out["partx_n_selected"] == 5000
+    assert "no candidate" in out["partx_fallback_reason"]

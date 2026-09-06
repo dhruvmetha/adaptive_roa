@@ -3,6 +3,7 @@ Quadrotor 2D system for Latent Conditional Flow Matching
 
 Manifold: ℝ² × S¹ × ℝ³ (6-dimensional state in XZ plane)
 """
+import math
 import torch
 import numpy as np
 import json
@@ -164,6 +165,23 @@ class Quadrotor2DSystem(DynamicalSystem):
             "pitch_angle": (-self.angle_limit, self.angle_limit),
             "velocity": (-self.x_dot_limit, self.x_dot_limit),
         }
+
+    def per_dim_bounds(self):
+        """True per-axis support box: (x, z, theta, x_dot, z_dot, theta_dot).
+
+        The component-level ``state_bounds`` collapses position to x's limit and
+        velocity to x_dot's, which understates z (asymmetric, [z_min, z_max]) and
+        theta_dot (an order of magnitude wider than x_dot). See
+        DynamicalSystem.per_dim_bounds.
+        """
+        return [
+            (-self.x_limit, self.x_limit),
+            (self.z_min, self.z_max),
+            (-math.pi, math.pi),
+            (-self.x_dot_limit, self.x_dot_limit),
+            (-self.z_dot_limit, self.z_dot_limit),
+            (-self.theta_dot_limit, self.theta_dot_limit),
+        ]
 
     def attractors(self) -> List[List[float]]:
         """

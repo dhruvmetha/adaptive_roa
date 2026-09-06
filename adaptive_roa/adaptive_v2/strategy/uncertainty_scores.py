@@ -23,7 +23,8 @@ from __future__ import annotations
 import numpy as np
 from scipy.special import xlogy
 
-SCORE_MODES: tuple[str, ...] = ("total", "aleatoric", "epistemic_bald", "epistemic_var")
+SCORE_MODES: tuple[str, ...] = ("total", "aleatoric", "epistemic_bald",
+                                "epistemic_bald_debiased", "epistemic_var")
 _DOMAIN_TOL = 1e-9
 
 
@@ -116,6 +117,45 @@ def epistemic_bald(p_members: np.ndarray) -> np.ndarray:
     return binary_entropy(p.mean(axis=0)) - binary_entropy(p).mean(axis=0)
 
 
+def epistemic_bald_debiased(p_members: np.ndarray, k: float | None) -> np.ndarray:
+    """BALD with the K-sample MC bias removed, the counterpart of the debiasing
+    `epistemic_variance` already applies.
+
+    Plug-in binary entropy from a K-sample proportion is biased DOWN by ~1/(2K)
+    (second order: E[H(p_hat)] = H(p) + H''(p)Var(p_hat)/2, and
+    H'' = -1/(p(1-p)) exactly cancels Var = p(1-p)/K). BALD subtracts the mean
+    member entropy from the entropy of the mean, and p_bar averages M members so
+    its own variance is 1/M as large. The two biases therefore do not cancel:
+
+        BALD_hat ~ BALD_true + 1/(2K) - 1/(2KM) = BALD_true + (1/2K)(1 - 1/M)
+
+    which is the upward bias the module docstring warns about.
+
+    The correction is applied PER MEMBER and only where that member's estimate
+    actually carries sampling noise. At p_hat_m of exactly 0 or 1 the MC draw is
+    degenerate, H is exactly 0 with no error, and the true bias is zero -- the
+    Taylor term above does not apply there. Subtracting a flat (1/2K)(1 - 1/M)
+    everywhere would push fully decided states to a spurious negative score, and
+    under the yield rule (score * L_hat) that error gets multiplied by the length
+    weight rather than cancelling out. Gating keeps decided states at ~0.
+
+    Wherever every member is interior this reduces exactly to the flat
+    (1/2K)(1 - 1/M). Pass k=None (a classifier forward pass, no sampling) to get
+    plain BALD back unchanged.
+    """
+    p = _check(p_members)
+    raw = binary_entropy(p.mean(axis=0)) - binary_entropy(p).mean(axis=0)
+    if k is None or not np.isfinite(k) or k <= 0:
+        return raw
+    m = p.shape[0]
+    noisy_member = (p > 0.0) & (p < 1.0)          # (M, N)
+    corr_members = noisy_member.mean(axis=0) / (2.0 * float(k))
+    p_bar = p.mean(axis=0)
+    noisy_bar = (p_bar > 0.0) & (p_bar < 1.0)
+    corr_bar = noisy_bar / (2.0 * float(k) * m)
+    return raw - (corr_members - corr_bar)
+
+
 def epistemic_variance(p_members: np.ndarray, k: float | None) -> np.ndarray:
     """Between-member variance, debiased for each member's K-sample MC noise.
 
@@ -132,13 +172,16 @@ def epistemic_variance(p_members: np.ndarray, k: float | None) -> np.ndarray:
 
 
 def score_by_mode(mode: str, p_members: np.ndarray, k: float | None) -> np.ndarray:
-    """Dispatch to one score. `k` is ignored by every mode except epistemic_var."""
+    """Dispatch to one score. `k` is used only by epistemic_var and
+    epistemic_bald_debiased; the other modes ignore it."""
     if mode == "total":
         return total_uncertainty(p_members)
     if mode == "aleatoric":
         return aleatoric_uncertainty(p_members)
     if mode == "epistemic_bald":
         return epistemic_bald(p_members)
+    if mode == "epistemic_bald_debiased":
+        return epistemic_bald_debiased(p_members, k)
     if mode == "epistemic_var":
         return epistemic_variance(p_members, k)
     raise ValueError(f"unknown score mode {mode!r}; expected one of {SCORE_MODES}")

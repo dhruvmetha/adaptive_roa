@@ -96,3 +96,62 @@ class EnsembleEndpointMCProbabilityBackend(_EnsembleBackendBase):
                 hits += (lab == 1).double().cpu()
             out[m] = (hits / float(self.num_mc_samples)).numpy()
         return out
+
+
+class SampledPosteriorClassifierProbabilityBackend(_EnsembleBackendBase):
+    """Per-atom probabilities from S draws of a CONTINUOUS weight posterior.
+
+    MFVI and Laplace approximate q(w) as a Gaussian, so there is no finite member
+    set to enumerate: `n_members` is undefined on those posteriors and
+    EnsembleClassifierProbabilityBackend rejects them outright. The Gaussian IS
+    the posterior, so the entropies BALD needs are computed by averaging over
+    draws from it -- which is what `Posterior.predictive_logit_samples` exists
+    for (its docstring: Monte Carlo for a continuous posterior, exact
+    enumeration for one with finite support).
+
+    Bias, stated so it is not invisible. BALD = H[E_w p] - E_w H[p]; with S atoms
+    the first term carries the usual O(1/S) Monte-Carlo bias, downward, so BALD
+    is UNDERESTIMATED at small S and the ranking compresses. S=64 is the default.
+    `member_sample_size` stays None on purpose: that field debiases BINOMIAL
+    noise WITHIN a member (the endpoint-MC backend's K rollouts), and this
+    backend has none -- each atom is an exact probability for its weight draw.
+
+    An EnsemblePosterior passed here still works and ignores S, because it
+    overrides predictive_logit_samples to enumerate its members exactly.
+    """
+
+    member_sample_size: int | None = None
+
+    def __init__(self, cfg: Any, system: Any, device: str):
+        super().__init__(cfg, system, device)
+        self.n_samples = int(getattr(cfg, "n_posterior_samples", 64))
+        if self.n_samples < 2:
+            raise ValueError(
+                f"n_posterior_samples={self.n_samples} gives no epistemic signal; "
+                "BALD would score 0 everywhere. Use >= 2 (default 64)."
+            )
+
+    def bind_model(self, model_handle: Any) -> None:
+        # Deliberately does NOT call super(): the base asserts a finite
+        # `n_members`, which a Gaussian posterior does not have.
+        self.model_handle = model_handle
+        post = self._posterior()
+        if not hasattr(post, "predictive_logit_samples"):
+            raise TypeError(
+                f"{type(post).__name__} has no predictive_logit_samples(); a BALD "
+                "arm needs a posterior it can draw predictive atoms from."
+            )
+        self.n_members = self.n_samples
+
+    @torch.no_grad()
+    def estimate_members(self, start_states: np.ndarray, verbose: bool = False) -> np.ndarray:
+        post = self._posterior()
+        x = torch.as_tensor(np.asarray(start_states), dtype=torch.float32,
+                            device=self.device)
+        embedded = self.system.embed_state_for_model(self.system.normalize_state(x))
+        logits = post.predictive_logit_samples(embedded, self.n_samples)  # [K, N, 1]
+        p = torch.sigmoid(logits).squeeze(-1)                             # [K, N]
+        # K is what the posterior actually returned, which is S for a Gaussian
+        # but the member count for one that enumerates. Record the truth.
+        self.n_members = int(p.shape[0])
+        return p.detach().cpu().numpy().astype(np.float64)

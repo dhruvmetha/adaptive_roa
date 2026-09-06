@@ -12,7 +12,14 @@ def merge_region_bounds(base_metrics: dict, diag: dict | None) -> dict:
     out = dict(base_metrics)
     if not diag:
         return out
-    for key in ("roa_volume", "roa_volume_ci", "n_leaves", "n_remaining_leaves"):
+    # Acquisition-health keys are merged alongside the region bounds on purpose.
+    # `fallback_used` / `n_eligible` are the only on-disk evidence that an epoch
+    # failed to find candidates in an unresolved leaf; without them an arm that
+    # acquires nothing is indistinguishable in the artifact from one that had
+    # nothing worth acquiring, which is how q3d_nd048_partx passed 18 epochs.
+    for key in ("roa_volume", "roa_volume_ci", "n_leaves", "n_remaining_leaves",
+                "n_eligible", "n_candidates", "n_outside_tree", "n_selected",
+                "fallback_used", "fallback_reason", "n_topup_outside_unresolved"):
         if key in diag:
             out[f"partx_{key}"] = diag[key]
     return out

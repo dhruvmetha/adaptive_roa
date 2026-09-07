@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -321,9 +322,18 @@ def match_to_truth(states: np.ndarray, gt_starts: np.ndarray, tol: float = 1e-3)
     return idx
 
 
+def _readable(path: Path) -> bool:
+    # Path.exists() raises PermissionError (not False) when a parent is mode
+    # 700; runs copied from another user's scratch have such epochs. Skip them.
+    try:
+        return path.exists() and os.access(path, os.R_OK)
+    except PermissionError:
+        return False
+
+
 def epoch_dirs(run_dir: Path) -> list[Path]:
     return sorted(d for d in run_dir.glob("epoch_*")
-                  if (d / "full_roa_per_point.npz").exists())
+                  if _readable(d / "full_roa_per_point.npz"))
 
 
 def score_epoch(epoch_dir: Path, gt: tuple, k_override: float | None,

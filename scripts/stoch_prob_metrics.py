@@ -341,7 +341,10 @@ def score_epoch(epoch_dir: Path, gt: tuple, k_override: float | None,
     if art.exists():
         try:
             meta = json.loads(art.read_text())
-        except ValueError:
+        except (ValueError, OSError):
+            # A run copied from another user's scratch can leave artifacts_v2.json
+            # unreadable while full_roa_per_point.npz is not (seen on the q3dppo
+            # runs, 2026-09-07). Only K comes from here; fall back as if missing.
             meta = {}
     if k is None:
         try:

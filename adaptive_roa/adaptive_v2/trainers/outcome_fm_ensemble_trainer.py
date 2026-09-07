@@ -24,8 +24,10 @@ which is the contract `EnsemblePosterior` and `OutcomeModelHandle` use. That is
 what lets this arm reuse `EnsembleClassifierProbabilityBackend` unchanged
 instead of needing a probability backend of its own.
 
-Members train SEQUENTIALLY in one process, like `clf_ensemble` and unlike
-`fm_ensemble` which spawns a process per member. The velocity net is the same
+Members train SEQUENTIALLY in one process by default, like `clf_ensemble` and
+unlike `fm_ensemble` which spawns a process per member. `concurrent_members`
+spawns one process per member on the SAME device instead: same members, same
+one GPU per arm, ~3x less wall-clock when the set is millions of rows. The velocity net is the same
 small MLP the classifier uses, so one GPU per arm is enough and a five-arm
 campaign fits on one node rather than needing twenty-five cards.
 """
@@ -124,6 +126,51 @@ class EnsembleOutcomeFMTrainer:
             module.load_state_dict(ckpt["state_dict"], strict=False)
         return use_gpu, device
 
+    @staticmethod
+    def _member_worker(m: int, cfg: Any, system_name: str, dataset_files: dict,
+                       seed_base: int, ckpt_root: str, resident: bool) -> None:
+        """Train member `m` in its own process. Mirrors one iteration of the
+        sequential loop in fit(); the system is rebuilt from cfg because a live
+        system object does not pickle across a spawn."""
+        import hydra
+        torch.manual_seed(seed_base + m)
+        system = hydra.utils.instantiate(cfg.system)
+        trainer = EnsembleOutcomeFMTrainer(cfg, system, system_name)
+        fm_cfg = trainer._predictor_cfg.get("outcome_fm", {})
+        device = str(trainer._predictor_cfg.get("device", cfg.get("device", "cuda:0")))
+        data_module = AdaptiveClassificationDataModule(
+            train_file=dataset_files["train"],
+            val_file=dataset_files["val"],
+            batch_size=trainer._predictor_cfg.get("batch_size", 1024),
+            num_workers=0,
+            device=device if resident else None,
+        )
+        data_module.setup()
+        member = trainer._build_member(fm_cfg)
+        trainer._train_member(member, data_module, fm_cfg, Path(ckpt_root) / f"member_{m}", f"best_member{m}")
+
+    def _concurrent_fit(self, dataset_files, fm_cfg, n_members, seed_base, ckpt_root, resident):
+        import torch.multiprocessing as mp
+        device = str(self._predictor_cfg.get("device", self.cfg.get("device", "cuda:0")))
+        use_gpu = device.startswith("cuda") and torch.cuda.is_available()
+        ctx = mp.get_context("spawn")
+        procs = [
+            ctx.Process(
+                target=EnsembleOutcomeFMTrainer._member_worker,
+                args=(m, self.cfg, self.system_name, dict(dataset_files), int(seed_base), str(ckpt_root), bool(resident)),
+                name=f"outcome_fm_member_{m}",
+            )
+            for m in range(n_members)
+        ]
+        for p in procs:
+            p.start()
+        for p in procs:
+            p.join()
+        failed = [p.name for p in procs if p.exitcode != 0]
+        if failed:
+            raise RuntimeError(f"ensemble members failed: {failed}")
+        return use_gpu, device
+
     def fit(self, dataset_files: dict, output_dir: str, resume_checkpoint: str | None = None):
         fm_cfg = self._predictor_cfg.get("outcome_fm", {})
         n_members = int(fm_cfg.get("n_members", 5))
@@ -134,28 +181,59 @@ class EnsembleOutcomeFMTrainer:
                 "zero, so every acquisition this arm exists for is inert."
             )
 
-        data_module = AdaptiveClassificationDataModule(
-            train_file=dataset_files["train"],
-            val_file=dataset_files["val"],
-            batch_size=self._predictor_cfg.get("batch_size", 1024),
-            num_workers=0,  # in-memory tensors; workers break on NFS
-        )
-        data_module.setup()
+        # gpu_resident_data: slice batches from tensors held on the GPU instead
+        # of a map-style DataLoader. 6x per step on the quad3d PPO sets, where
+        # 3M-row members spent 88% of every adaptive epoch in the collate.
+        device = str(self._predictor_cfg.get("device", self.cfg.get("device", "cuda:0")))
+        resident = bool(fm_cfg.get("gpu_resident_data", False)) and device.startswith("cuda") and torch.cuda.is_available()
+        data_module = None
+        if not bool(fm_cfg.get("concurrent_members", False)):
+            data_module = AdaptiveClassificationDataModule(
+                train_file=dataset_files["train"],
+                val_file=dataset_files["val"],
+                batch_size=self._predictor_cfg.get("batch_size", 1024),
+                num_workers=0,  # in-memory tensors; workers break on NFS
+                device=device if resident else None,
+            )
+            data_module.setup()
 
         ckpt_root = Path(output_dir) / "checkpoints"
         ckpt_root.mkdir(parents=True, exist_ok=True)
         seed_base = resolve_seed_base(self.cfg, fm_cfg)
 
         members, use_gpu, device = [], False, "cpu"
-        for m in range(n_members):
-            # Own seed => own init, own shuffling, own optimizer trajectory.
-            # Without this the members are bit-identical and the spread is 0.
-            torch.manual_seed(seed_base + m)
-            member = self._build_member(fm_cfg)
-            use_gpu, device = self._train_member(
-                member, data_module, fm_cfg, ckpt_root / f"member_{m}", f"best_member{m}"
+        if bool(fm_cfg.get("concurrent_members", False)):
+            # One process per member on the SAME device. Each member trains
+            # exactly as in the sequential branch (same seed, data, callbacks);
+            # only the wall-clock overlaps. The small velocity net leaves the
+            # card mostly idle per step, so five at once is ~3x, measured on the
+            # quad3d PPO arms where members took 17-24 min each sequentially.
+            use_gpu, device = self._concurrent_fit(
+                dataset_files, fm_cfg, n_members, seed_base, ckpt_root, resident
             )
-            members.append(EmbeddedOutcomeFM(member.eval()))
+            for m in range(n_members):
+                best = sorted((ckpt_root / f"member_{m}").glob(f"best_member{m}-*.ckpt"))
+                if not best:
+                    raise RuntimeError(f"member {m} left no best checkpoint under {ckpt_root}")
+                member = OutcomeFlowMatcher.from_checkpoint(
+                    str(best[0]), self.system,
+                    lr=float(fm_cfg.get("lr", 1e-3)),
+                    weight_decay=float(fm_cfg.get("weight_decay", 1e-5)),
+                    num_ode_steps=int(fm_cfg.get("num_ode_steps", 100)),
+                    forward_readout=str(fm_cfg.get("forward_readout", "exact")),
+                    forward_num_samples=int(fm_cfg.get("forward_num_samples", 100)),
+                )
+                members.append(EmbeddedOutcomeFM(member.eval()))
+        else:
+            for m in range(n_members):
+                # Own seed => own init, own shuffling, own optimizer trajectory.
+                # Without this the members are bit-identical and the spread is 0.
+                torch.manual_seed(seed_base + m)
+                member = self._build_member(fm_cfg)
+                use_gpu, device = self._train_member(
+                    member, data_module, fm_cfg, ckpt_root / f"member_{m}", f"best_member{m}"
+                )
+                members.append(EmbeddedOutcomeFM(member.eval()))
 
         posterior = EnsemblePosterior(members)
         torch.save({"state_dict": posterior.state_dict()}, ckpt_root / "best-ensemble.ckpt")

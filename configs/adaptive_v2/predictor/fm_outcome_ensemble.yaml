@@ -49,6 +49,12 @@ predictor:
     patience: 20
     num_time_freqs: 4
     num_ode_steps: 50      # convergence evidence in probability/outcome_fm.yaml
+    # Slice training batches from GPU-resident tensors (adaptive_classification_data.py,
+    # _SliceBatches). Same rows and loss; 6x per step on multi-million-row sets.
+    gpu_resident_data: false
+    # Train the members as concurrent processes on the same GPU instead of one
+    # after another. Identical members; ~3x less wall-clock on big sets.
+    concurrent_members: false
     forward_readout: exact # see the member_sample_size note above
     n_marginal_samples: 64 # ignored by EnsemblePosterior, which enumerates exactly
   lightning_trainer:

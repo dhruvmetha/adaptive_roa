@@ -1,0 +1,79 @@
+# @package _global_
+
+# Static, non-adaptive stochastic CartPole campaign.
+#
+# REPOINTED to gaussian_signal. The noisy_action tree this config was written
+# against no longer exists under DATA_DIR; stochastic/cartpole holds only
+# gaussian_signal. Levels are named low | med | high, not sigma_*.
+
+defaults:
+  - _base
+  - /model/system_dims: cartpole_pybullet
+  - /prediction_mode: global
+  # Selects the data branch AND the goal / angle_limit that go with that
+  # controller. Override as `controller=safe_explorer_ppo`.
+  - /controller: lqr
+  - _self_
+
+name: cartpole_static_${controller}_${noise_level}
+fit_train_size: 1000
+fixed_val_size: 500
+initial_train_size: 1500
+output_dir: ${exp_dir}/${name}/${predictor.name}/train_${fit_train_size}/seed_${seed}
+
+noise_regime: stochastic
+# lqr               : low | med | high
+# safe_explorer_ppo : baseline | low | med | high  (baseline = ZERO noise)
+# Levels are NOT shared across controllers. Never compare an lqr level to an RL
+# level by position; they are different controllers on different data.
+noise_level: med
+dataset_name: cartpole/gaussian_signal/${controller}/${noise_level}
+dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
+
+decision_rule: two_sided
+# DELIBERATE OVERRIDE of the /controller group (lqr 0.2, safe_explorer_ppo 0.15).
+# _self_ is last in the defaults list, so this value wins. Carried over from the
+# campaign as launched. It makes absolute p_success here incomparable to the
+# adaptive cartpole_stoch runs, which take the group's radius; rankings within
+# this campaign are unaffected because every arm shares it.
+attractor_radius: 0.1
+binary_outcomes: true
+
+threshold:
+  optimize_mode: joint
+
+data_source:
+  pool_format: npz
+  expected_state_order: [x, theta, x_dot, theta_dot]
+  trajectories_dir: ${dataset_root}/train.npz
+  shuffled_indices_file: ${dataset_root}/train_test_splits/shuffled_indices_0.txt
+  shuffled_labels_file: ${dataset_root}/train_test_splits/shuffled_labels_0.txt
+  eval_states_file: ${dataset_root}/eval_states.txt
+  cal_set_file: ${dataset_root}/cal_set.txt
+  # Report and persist predictions for the complete evaluation grid.  The
+  # calibration subset remains available separately for calibration fitting.
+  test_set_file: ${dataset_root}/eval_states.txt
+
+n_epochs: 1
+samples_per_epoch: 0
+warm_start: false
+eval_every: 1
+test_ratio: 0
+
+flow_matching:
+  clamp_noise: false
+
+system:
+  _target_: adaptive_roa.systems.cartpole.CartPoleSystem
+  dataset_dir: ${dataset_root}
+  # goal / angle_limit are supplied by the /controller group.
+
+flow_matcher:
+  _target_: adaptive_roa.flow_matching.cartpole.latent_conditional.flow_matcher.CartPoleLatentConditionalFlowMatcher
+
+flow_matcher_local:
+  _target_: adaptive_roa.flow_matching.cartpole.trajectory.flow_matcher.CartPoleTrajectoryFlowMatcher
+
+adaptive_v2:
+  system_name: cartpole_pybullet
+  filter_confident_pairs: false

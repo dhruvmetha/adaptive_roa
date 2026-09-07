@@ -1,7 +1,7 @@
 # @package _global_
 
-# Stochastic cartpole (LQR + noisy action).
-# Datasets: ${data_dir}/stochastic/cartpole/noisy_action/lqr/sigma_{000.0,015.0,020.0,030.0,040.0}
+# Stochastic cartpole. Controller selectable via the /controller group.
+# Datasets: ${data_dir}/stochastic/cartpole/gaussian_signal/{lqr,safe_explorer_ppo}/<level>
 # npz-backed training pool (train.npz) + probabilistic 5-col eval/cal/test files
 # (x, theta, x_dot, theta_dot, p_success).
 #
@@ -34,10 +34,12 @@
 #     but those are 2-D plotting metadata and are NOT read by the scorer.
 #   * 131,859 eval points vs pendulum's 49,770.
 #
-# NOISE AXIS DIFFERS FROM PENDULUM. Pendulum uses named levels {low,med,high,xhigh};
-# cartpole uses sigma directories. sigma_000.0 is the zero-noise baseline, so it is
-# the cartpole analogue of `det`, NOT of `low`. Do not map the two systems' levels
-# onto each other by position.
+# NOISE AXIS, as of the gaussian_signal repoint: cartpole now uses named levels
+# like the pendulum, not sigma directories. lqr has low|med|high and takes its
+# zero-noise anchor from deterministic/cartpole_pybullet; safe_explorer_ppo ships
+# its own `baseline` at zero noise, so a stochastic zero-noise level does exist
+# under that controller. Levels are matched to the pendulum on `mid`, the fraction
+# of eval cells with p in [0.2, 0.8] (see the tree's own README.md).
 
 defaults:
   - _base
@@ -69,9 +71,13 @@ noise_level: med
 dataset_name: cartpole/gaussian_signal/${controller}/${noise_level}
 dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
 
-# Kept from cartpole_pybullet: cartpole's ROA is two-sided and its attractor
-# radius is 0.2, unlike the pendulum's one-sided 0.1. These are system
-# properties, not noise-regime properties, so they carry over unchanged.
+# The collector labels success as FIRST ENTRY into an L2 ball of radius 0.05 over
+# the full 4-D state, no dwell. Not a per-channel box: gaussian_signal's
+# dataset_description.json says the per-channel tolerances the deterministic
+# description advertises were NEVER IMPLEMENTED, and that every shipped success
+# ends with ||state|| in [0.0497, 0.0500]. Read success_criteria there, not this
+# comment. None of the cartpole datasets ship a `success_rule` key, so
+# CartPoleSystem's per_channel_box_entry branch is unreachable on current data.
 decision_rule: two_sided
 # attractor_radius comes from the /controller group (lqr 0.2, safe_explorer_ppo
 # 0.15) -- do NOT set it here, _self_ is last in the defaults list and would win.
@@ -81,6 +87,7 @@ threshold:
 
 data_source:
   pool_format: npz
+  expected_state_order: [x, theta, x_dot, theta_dot]
   trajectories_dir: ${dataset_root}/train.npz
   shuffled_indices_file: ${dataset_root}/train_test_splits/shuffled_indices_${shuffle_variant}.txt
   shuffled_labels_file: ${dataset_root}/train_test_splits/shuffled_labels_${shuffle_variant}.txt

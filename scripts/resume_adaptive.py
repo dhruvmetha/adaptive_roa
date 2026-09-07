@@ -135,6 +135,12 @@ def main():
     parser.add_argument("--samples-per-epoch", type=int, default=None, help="Override samples_per_epoch (default: keep original)")
     parser.add_argument("--device", default=None, help="GPU device (default: from config)")
     parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=None,
+        help="Override predictor DataLoader workers (use 0 for training from NFS)",
+    )
+    parser.add_argument(
         "--no-delete-crashed",
         action="store_true",
         help="Don't delete crashed epoch directories (default: delete them)",
@@ -177,6 +183,13 @@ def main():
 
     if args.device is not None:
         OmegaConf.update(cfg, "device", args.device)
+
+    if args.num_workers is not None:
+        if args.num_workers < 0:
+            parser.error("--num-workers must be nonnegative")
+        # FlowMatchingTrainer reads predictor.num_workers before the top-level
+        # fallback, so update the precise consumer rather than an inert alias.
+        OmegaConf.update(cfg, "predictor.num_workers", args.num_workers, force_add=True)
 
     n_epochs = int(cfg.get("n_epochs", 10))
 

@@ -20,12 +20,26 @@ class TrajectoryPool:
         val_ratio: float = 0.1,
         test_ratio: float = 0.1,
         candidate_mode: str = "start",
+        fixed_val_size: int | None = None,
+        *,
+        system: Any,
     ):
+        # Keyword-only and REQUIRED. yield_mlp/yield_knn read `pool.system` for
+        # the normalisation scales and circular indices their length models
+        # measure distance in, via `getattr(pool, "system", None)`. The pool did
+        # not carry one, so that returned None on every run and `_geometry` fell
+        # back to unit scales with an empty circular mask -- theta stopped
+        # wrapping, so +pi and -pi became the two most distant points in the
+        # space, and on pendulum theta_dot was under-weighted 12.6x. No error,
+        # no log line. A default here would let the same silence come back, so
+        # a caller that forgets it now fails at construction instead.
+        self.system = system
         cfg = TrajectoryDataSourceConfig(
             trajectories_dir=data_source_cfg.trajectories_dir,
             shuffled_indices_file=data_source_cfg.shuffled_indices_file,
             shuffled_labels_file=data_source_cfg.get("shuffled_labels_file", None),
             eval_states_file=data_source_cfg.get("eval_states_file", None),
+            expected_state_order=data_source_cfg.get("expected_state_order", None),
         )
         if str(data_source_cfg.get("pool_format", "text")) == "npz":
             from adaptive_roa.adaptive.npz_data_source import NpzTrajectoryDataSource
@@ -38,6 +52,7 @@ class TrajectoryPool:
             val_ratio=val_ratio,
             test_ratio=test_ratio,
             candidate_mode=candidate_mode,
+            fixed_val_size=fixed_val_size,
         )
 
     def initialize(self, initial_train_size: int, dataset_kind: str = "endpoint") -> dict[str, str]:
@@ -81,3 +96,10 @@ class TrajectoryPool:
     @property
     def train_size(self) -> int:
         return len(self.dataset_builder.train_split)
+
+    @property
+    def fit_train_size(self) -> int:
+        if self.dataset_builder.candidate_mode != "start":
+            return self.train_size
+        train_indices, _val_indices = self.dataset_builder._start_split_indices()
+        return len(train_indices)

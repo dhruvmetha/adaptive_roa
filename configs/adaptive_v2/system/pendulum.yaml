@@ -25,6 +25,7 @@ eval_root: ${data_dir}/${noise_regime}/pendulum/${eval_variant}
 
 decision_rule: one_sided
 attractor_radius: 0.1
+binary_outcomes: true
 
 threshold:
   optimize_mode: joint

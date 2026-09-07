@@ -163,12 +163,15 @@ class OutcomeFlowMatcher(pl.LightningModule):
         return torch.log(p / (1.0 - p)).to(torch.float32).view(-1, 1)
 
     @torch.no_grad()
-    def predict_p_success(self, raw_states: torch.Tensor) -> torch.Tensor:
+    def predict_p_success(self, raw_states: torch.Tensor,
+                          already_embedded: bool = False) -> torch.Tensor:
         if self.forward_readout == "mc":
             return self.p_success_mc(
-                raw_states, num_samples=self.forward_num_samples, num_steps=self.num_ode_steps
+                raw_states, num_samples=self.forward_num_samples,
+                num_steps=self.num_ode_steps, already_embedded=already_embedded,
             )
-        p, _ = self.p_success_exact(raw_states, num_steps=self.num_ode_steps)
+        p, _ = self.p_success_exact(raw_states, num_steps=self.num_ode_steps,
+                                    already_embedded=already_embedded)
         return p
 
     # ---------------------------------------------------------------- training
@@ -242,6 +245,7 @@ class OutcomeFlowMatcher(pl.LightningModule):
         num_samples: int = 100,
         num_steps: int | None = None,
         chunk_size: int = 4096,
+        already_embedded: bool = False,
     ) -> torch.Tensor:
         """K-sample MC fraction. Matches how endpoint-MC forms p, so a difference
         against endpoint FM is attributable to the target rather than the readout.
@@ -250,7 +254,7 @@ class OutcomeFlowMatcher(pl.LightningModule):
         out = []
         for start in range(0, raw_states.shape[0], chunk_size):
             block = raw_states[start:start + chunk_size]
-            cond = self.embed(block)                                  # [b, C]
+            cond = block if already_embedded else self.embed(block)   # [b, C]
             b = cond.shape[0]
             cond_rep = cond.repeat_interleave(num_samples, dim=0)     # [b*K, C]
             x0 = torch.randn(b * num_samples, device=cond.device, dtype=cond.dtype)
@@ -267,6 +271,7 @@ class OutcomeFlowMatcher(pl.LightningModule):
         bisect_iters: int = 20,
         chunk_size: int = 4096,
         fallback_grid_size: int = 1025,
+        already_embedded: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Exact success mass under the learned flow, with no MC noise.
 
@@ -287,7 +292,11 @@ class OutcomeFlowMatcher(pl.LightningModule):
         p_out, mono_out = [], []
         for start in range(0, raw_states.shape[0], chunk_size):
             block = raw_states[start:start + chunk_size]
-            cond = self.embed(block)                                  # [b, C]
+            # `already_embedded` exists for the ensemble path. EnsemblePosterior
+            # hands members states that the caller has ALREADY normalised and
+            # embedded, because that is what the classifier members take.
+            # Embedding again would silently score a different point.
+            cond = block if already_embedded else self.embed(block)   # [b, C]
             b, g = cond.shape[0], grid.shape[0]
 
             cond_rep = cond.repeat_interleave(g, dim=0)               # [b*g, C]
@@ -429,3 +438,40 @@ class OutcomeFlowMatcher(pl.LightningModule):
             )
         model.eval()
         return model
+
+
+class EmbeddedOutcomeFM(nn.Module):
+    """One outcome-FM ensemble member, in the shape `EnsemblePosterior` expects.
+
+    `EnsemblePosterior.forward_all_members` calls `m(x)` and stacks the results,
+    and every caller upstream hands it states that are ALREADY normalised and
+    embedded: `OutcomeModelHandle.__call__` embeds before marginalising, and
+    `EnsembleClassifierProbabilityBackend.estimate_members` embeds before asking
+    for per-member probabilities. Classifier members take embedded states, so
+    that is the contract.
+
+    `OutcomeFlowMatcher.forward` takes RAW states and embeds internally. Dropping
+    one in unwrapped would embed twice, which raises no error and quietly scores
+    a different point in state space than the caller asked about. This wrapper is
+    the whole reason an outcome-FM ensemble needs no new probability backend: with
+    it, `EnsembleClassifierProbabilityBackend` works unchanged.
+    """
+
+    def __init__(self, flow_matcher: "OutcomeFlowMatcher"):
+        super().__init__()
+        self.flow_matcher = flow_matcher
+
+    @property
+    def forward_readout(self) -> str:
+        """Surfaced so a backend can check it, as OutcomeFMProbabilityBackend does."""
+        return self.flow_matcher.forward_readout
+
+    def forward(self, embedded_states: torch.Tensor) -> torch.Tensor:
+        """Embedded states -> logit(p_success), shape [N, 1].
+
+        Same clamp as `OutcomeFlowMatcher.forward`: the exact readout genuinely
+        returns values within 1e-7 of 0 and 1, and logit is unbounded there.
+        """
+        p = self.flow_matcher.predict_p_success(embedded_states, already_embedded=True)
+        p = p.clamp(1e-6, 1.0 - 1e-6)
+        return torch.log(p / (1.0 - p)).to(torch.float32).view(-1, 1)

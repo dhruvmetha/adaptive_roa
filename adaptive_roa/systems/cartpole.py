@@ -23,6 +23,7 @@ class CartPoleSystem(DynamicalSystem):
 
     def __init__(self,
                  dataset_dir: str = None,
+                 success_tolerance: List[float] = None,
                  goal: List[float] | None = None,
                  angle_limit: float | None = None):
         """
@@ -61,6 +62,17 @@ class CartPoleSystem(DynamicalSystem):
                 f"Achieved bounds are required for consistent normalization."
             )
         self._load_bounds_from_json(json_path)
+        if success_tolerance is not None:
+            if len(success_tolerance) != 4:
+                raise ValueError(
+                    "CartPole success_tolerance must contain four canonical "
+                    "coordinates: [x, theta, x_dot, theta_dot]"
+                )
+            self.success_rule = {
+                "kind": "per_channel_box_entry",
+                "tol": [float(value) for value in success_tolerance],
+                "source": "CartPoleSystem.success_tolerance override",
+            }
 
         super().__init__()
 
@@ -131,6 +143,10 @@ class CartPoleSystem(DynamicalSystem):
         # Store the full dataset info for reference
         self.dataset_info = dataset_info
         self.achieved_bounds = bounds
+        self.success_rule = (
+            dataset_info.get("success_rule")
+            or dataset_info.get("collection", {}).get("success_rule")
+        )
 
         # Print in state vector order: [x, θ, ẋ, θ̇]
         print(f"  [0] Cart position (x): [{bounds['x']['min']:.3f}, {bounds['x']['max']:.3f}] -> limit: ±{self.cart_limit:.3f}")
@@ -207,6 +223,24 @@ class CartPoleSystem(DynamicalSystem):
         if state.dim() == 1:
             state = state.unsqueeze(0)
 
+        # The stochastic datasets use direct entry into an axis-aligned box in
+        # the unwrapped environment state. Their canonicalized copies retain
+        # that rule verbatim; do not silently substitute the deterministic
+        # CartPole L2 ball.
+        if self.success_rule and self.success_rule.get("kind") == "per_channel_box_entry":
+            tolerance = torch.as_tensor(
+                self.success_rule["tol"], dtype=state.dtype, device=state.device
+            )
+            if tolerance.shape != (state.shape[1],):
+                raise ValueError(
+                    "CartPole per_channel_box_entry tolerance has shape "
+                    f"{tuple(tolerance.shape)}, expected {(state.shape[1],)}"
+                )
+            result = torch.all(torch.abs(state) < tolerance, dim=1)
+            if len(result) == 1:
+                return result.item()
+            return result
+
         # Distances are measured from self.goal, NOT the origin.
         g = torch.as_tensor(self.goal, dtype=state.dtype, device=state.device)
         euclidean_diff = state[:, [0, 2, 3]] - g[[0, 2, 3]]
@@ -258,17 +292,28 @@ class CartPoleSystem(DynamicalSystem):
 
         x, theta, x_dot, theta_dot = state[:, 0], state[:, 1], state[:, 2], state[:, 3]
 
-        # SUCCESS: distance from self.goal < radius (circular handling for θ)
-        g = torch.as_tensor(self.goal, dtype=state.dtype, device=state.device)
-        euclidean_diff = state[:, [0, 2, 3]] - g[[0, 2, 3]]
+        if self.success_rule and self.success_rule.get("kind") == "per_channel_box_entry":
+            tolerance = torch.as_tensor(
+                self.success_rule["tol"], dtype=state.dtype, device=state.device
+            )
+            if tolerance.shape != (state.shape[1],):
+                raise ValueError(
+                    "CartPole per_channel_box_entry tolerance has shape "
+                    f"{tuple(tolerance.shape)}, expected {(state.shape[1],)}"
+                )
+            in_attractor = torch.all(torch.abs(state) < tolerance, dim=1)
+        else:
+            # SUCCESS: distance from self.goal < radius (circular handling for θ)
+            g = torch.as_tensor(self.goal, dtype=state.dtype, device=state.device)
+            euclidean_diff = state[:, [0, 2, 3]] - g[[0, 2, 3]]
 
-        # Circular component: θ (index 1) - wrap the DIFFERENCE to [-π, π]
-        dth = theta - g[1]
-        angle_diff = torch.atan2(torch.sin(dth), torch.cos(dth))
+            # Circular component: θ (index 1) - wrap the DIFFERENCE to [-π, π]
+            dth = theta - g[1]
+            angle_diff = torch.atan2(torch.sin(dth), torch.cos(dth))
 
-        # Combined distance
-        dist = torch.sqrt(torch.sum(euclidean_diff**2, dim=1) + angle_diff**2)
-        in_attractor = dist < radius
+            # Combined distance
+            dist = torch.sqrt(torch.sum(euclidean_diff**2, dim=1) + angle_diff**2)
+            in_attractor = dist < radius
 
 
 

@@ -87,3 +87,45 @@ def test_generative_path_reports_threshold_free_block_with_count_smoothing(tmp_p
     assert np.isfinite(tf["log_score"])
     assert tf["n_saturated"] == n     # every point unanimous
     assert tf["auc"] is not None
+
+
+def test_generative_eval_can_collapse_invalid_endpoints_into_failure(tmp_path):
+    rng = np.random.default_rng(2)
+    eval_file, rows = _write_eval_file(tmp_path, rng, n=6)
+    n, k = len(rows), 10
+
+    # Mix all three endpoint labels.  The binary evaluation must preserve
+    # successes while folding both explicit failures and invalids into failure.
+    mc_labels = np.array([
+        [1] * k,
+        [0] * k,
+        [-1] * k,
+        [1, 0, -1, 1, 0, -1, 1, 0, -1, 1],
+        [0] * k,
+        [-1] * k,
+    ], dtype=np.int8)
+    cache = MCCache(
+        mc_endpoints=np.zeros((n, k, 2), dtype=np.float32),
+        mc_labels=mc_labels,
+        start_states=rows[:, :2].astype(np.float32),
+        attractor_radius=0.2,
+        num_mc_samples=k,
+    )
+    output_dir = tmp_path / "binary_eval"
+
+    metrics = evaluate_full_roa_fast(
+        flow_matcher=None, system=None, eval_states_file=str(eval_file),
+        num_mc_samples=k, lambda_star=0.5, delta=0.1,
+        decision_rule="one_sided", device="cpu", output_dir=str(output_dir),
+        verbose=False, mc_cache=cache, collapse_invalid_to_failure=True,
+    )
+
+    per_point = np.load(output_dir / "full_roa_per_point.npz")
+    np.testing.assert_allclose(per_point["p_invalid"], 0.0)
+    np.testing.assert_allclose(
+        per_point["p_failure"], 1.0 - per_point["p_success"]
+    )
+    assert bool(per_point["collapse_invalid_to_failure"]) is True
+    assert per_point["p_failure"][1] == 1.0
+    assert metrics["collapse_invalid_to_failure"] is True
+    assert metrics["threshold_free"]["mean_p_invalid"] == 0.0

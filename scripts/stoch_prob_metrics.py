@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -321,18 +322,28 @@ def match_to_truth(states: np.ndarray, gt_starts: np.ndarray, tol: float = 1e-3)
     return idx
 
 
+def _readable(path: Path) -> bool:
+    # Path.exists() raises PermissionError (not False) when a parent is mode
+    # 700; runs copied from another user's scratch have such epochs. Skip them.
+    try:
+        return path.exists() and os.access(path, os.R_OK)
+    except PermissionError:
+        return False
+
+
 def epoch_dirs(run_dir: Path) -> list[Path]:
     return sorted(d for d in run_dir.glob("epoch_*")
-                  if (d / "full_roa_per_point.npz").exists())
+                  if _readable(d / "full_roa_per_point.npz"))
 
 
 def score_epoch(epoch_dir: Path, gt: tuple, k_override: float | None,
-                n_bins: int | None) -> dict:
+                n_bins: int | None, collapse_invalid_to_failure: bool = False) -> dict:
     gt_starts, gt_p, gt_s, gt_t = gt
     with np.load(epoch_dir / "full_roa_per_point.npz") as z:
         states = z["start_states"]
         p_hat = z["p_success"].astype(np.float64)
-        p_invalid = z["p_invalid"].astype(np.float64)
+        p_invalid_raw = z["p_invalid"].astype(np.float64)
+    p_invalid = np.zeros_like(p_invalid_raw) if collapse_invalid_to_failure else p_invalid_raw
     idx = match_to_truth(states, gt_starts)
     k = k_override
     art = epoch_dir / "artifacts_v2.json"
@@ -340,7 +351,10 @@ def score_epoch(epoch_dir: Path, gt: tuple, k_override: float | None,
     if art.exists():
         try:
             meta = json.loads(art.read_text())
-        except ValueError:
+        except (ValueError, OSError):
+            # A run copied from another user's scratch can leave artifacts_v2.json
+            # unreadable while full_roa_per_point.npz is not (seen on the q3dppo
+            # runs, 2026-09-07). Only K comes from here; fall back as if missing.
             meta = {}
     if k is None:
         try:
@@ -349,6 +363,8 @@ def score_epoch(epoch_dir: Path, gt: tuple, k_override: float | None,
             k = None
     out = all_metrics(p_hat, gt_p[idx], gt_s[idx], gt_t[idx], k, n_bins)
     out["mean_p_invalid"] = float(p_invalid.mean())
+    out["mean_p_unresolved_raw"] = float(p_invalid_raw.mean())
+    out["collapse_invalid_to_failure"] = bool(collapse_invalid_to_failure)
     # Training-set size the epoch's model was fit on. Recorded per row because it
     # is the honest x axis for a budget comparison: epoch index is only a proxy,
     # and it stops being a fair one the moment two campaigns use different
@@ -436,6 +452,12 @@ def selftest() -> None:
     naive_sharp = float(np.mean(p_hat * (1 - p_hat)))
     assert naive_sharp < target - 1e-4, "undebiased sharpness should underestimate"
 
+    # A deterministic arm can have exactly one rollout per state. Its empirical
+    # probabilities are exact 0/1 outcomes, so the ground-truth sharpness is
+    # finite (zero) rather than an m/(m-1) division by zero.
+    sh_det = sharpness(np.array([0.1, 0.9]), np.array([0.0, 1.0]), None, 1.0)
+    assert sh_det["SHARP_star"] == 0.0, "M=1 deterministic sharpness must be finite"
+
     # thresholded RoA against sklearn
     try:
         from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score
@@ -467,6 +489,8 @@ def main() -> None:
     ap.add_argument("--epochs", default="all", help="'all', 'last', or a comma list of ints")
     ap.add_argument("--n-bins", type=int, default=None,
                     help="quantile bins for the decomposition (default: exact p_hat levels)")
+    ap.add_argument("--collapse-invalid-to-failure", action="store_true",
+                    help="binary outcome semantics: report unresolved endpoint mass as failure")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
 
@@ -491,7 +515,10 @@ def main() -> None:
             eds = [d for d in eds if int(d.name.split("_")[1]) in keep]
         for ed in eds:
             try:
-                row = score_epoch(ed, gt_cache[a.level], None, args.n_bins)
+                row = score_epoch(
+                    ed, gt_cache[a.level], None, args.n_bins,
+                    collapse_invalid_to_failure=args.collapse_invalid_to_failure,
+                )
             except Exception as exc:  # a half-written epoch must not kill the sweep
                 print(f"  !! {a.predictor}/{a.level}/{a.arm}/{ed.name}: {exc}", flush=True)
                 continue

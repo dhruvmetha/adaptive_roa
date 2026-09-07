@@ -57,6 +57,7 @@ dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
 
 decision_rule: one_sided
 attractor_radius: 0.1
+binary_outcomes: true
 
 threshold:
   optimize_mode: joint

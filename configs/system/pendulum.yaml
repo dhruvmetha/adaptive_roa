@@ -5,10 +5,14 @@
 # Pendulum dynamics with S^1 x R manifold structure
 # State: (theta, theta_dot) where theta in S^1 (angle), theta_dot in R (angular velocity)
 #
-# Attractors:
-#   - [0.0, 0.0]: Bottom equilibrium (stable)
-#   - [2.1, 0.0]: Top-right equilibrium
-#   - [-2.1, 0.0]: Top-left equilibrium
+# Attractors (corrected 2026-07-15 — the previous comment had this backwards):
+#   - [0.0, 0.0]:  UPRIGHT / inverted equilibrium, UNSTABLE. This is the GOAL the LQR stabilises.
+#                  EOM theta_ddot = (g/l)sin(theta) + u/I - (b/I)theta_dot has
+#                  d(theta_ddot)/d(theta)|_0 = +(g/l) > 0, so theta=0 is unstable, not a stable
+#                  "bottom" equilibrium. Both dataset_description.json files agree: 0 = upright.
+#   - [+-2.1, 0.0]: TORQUE-SATURATION equilibria (FAILURE), not "top". With u pinned at -u_sat,
+#                  sin(theta*) = (u_sat/I)/(g/l) = 0.866025 -> theta* = 2.0944 rad = 120 deg.
+#                  Saturated torque cannot lift past this, so the pendulum sticks there.
 # =====================================================================
 
 _target_: adaptive_roa.systems.pendulum.PendulumSystem

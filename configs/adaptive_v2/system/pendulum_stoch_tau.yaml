@@ -1,0 +1,113 @@
+# @package _global_
+
+# Stochastic pendulum, v3 datasets (2026-08-06): LQR under additive torque noise,
+# indexed by the noise magnitude itself rather than by low/med/high/xhigh labels.
+#
+# Datasets: ${data_dir}/stochastic/pendulum/noisy_torque/lqr/tau_{0.00,0.10,0.15,0.30,0.50}
+#   * training pool: flat train.npz (states/offsets/starts/labels/seeds), 100k rollouts
+#     from uniform-random unique starts, plain rollout-level shuffle -- no block structure
+#   * eval/cal/test: 3-col (theta_s, theta_dot_s, p_success) over a 158x315 grid,
+#     49,770 cells = 1,000 cal + 48,770 test
+#
+# This is NOT the same data as system=pendulum_stoch, which reads the older
+# ${data_dir}/noisy/pendulum/lqr/{low,med,high,xhigh} tree. Both are kept: the older
+# one is what the stoch_compare campaign ran on.
+#
+# Usage:
+#   python scripts/run_adaptive.py system=pendulum_stoch_tau tau=t030 \
+#     predictor=classifier acquisition=direct acquisition.d2_ratio=1.0 device=cuda:0
+
+defaults:
+  - _base
+  - /model/system_dims: pendulum
+  - /prediction_mode: global
+  - _self_
+
+# Noise magnitude, selected by TOKEN rather than by number: t000 | t010 | t015 | t030 | t050.
+#
+# It has to be a token. Hydra parses `tau=0.30` as a float, so a numeric key renders
+# "tau_0.3" and misses the "tau_0.30" directory -- and only 0.15 would survive, because
+# it alone has no trailing zero to lose. A token is not coercible, and an unknown one
+# raises InterpolationKeyError naming the missing key before any training starts.
+tau: t030
+
+_tau_dirs:
+  t000: tau_0.00
+  t010: tau_0.10
+  t015: tau_0.15
+  t030: tau_0.30
+  t050: tau_0.50
+
+_tau_values:
+  t000: "0.00"
+  t010: "0.10"
+  t015: "0.15"
+  t030: "0.30"
+  t050: "0.50"
+
+# tau_0.00 is the deterministic control arm. Its eval grid ran ONE batch and its
+# metadata reports converged=false, mean_se=0.25 -- that is the uninformative-prior
+# Jeffreys SD, not a real error bar: at zero noise p_success is 0 or 1, so one rollout
+# per cell is already exact. Anything that filters arms on `converged` will drop it.
+# The other four ran 100 batches to se_tol=0.01, landing at mean_se 0.0075-0.0087.
+
+name: adaptive_pendulum_stoch_tau_${_tau_values.${tau}}
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${acquisition.d2_ratio}_warm_start_${warm_start}_adapt_iter_${n_epochs}_sampling_mode_${sampling_mode}/${now:%Y-%m-%d_%H-%M-%S}
+
+shuffle_variant: 0
+
+noise_regime: stochastic
+dataset_name: pendulum/noisy_torque/lqr/${_tau_dirs.${tau}}
+dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
+
+decision_rule: one_sided
+binary_outcomes: true
+
+# NOTE -- the model-side and data-side success tests are different SHAPES, and this
+# radius does not reconcile them. The datasets label a rollout 1 when it enters the
+# per-channel box |theta| < 0.05 AND |theta_dot| < 0.05 (rollout stops on entry, so the
+# label is a function of the terminal state). `PendulumSystem.classify_attractor` instead
+# thresholds a combined disc, sqrt(dtheta^2 + dtheta_dot^2) < radius, and also reports
+# the +/-2.1 saturation equilibria as failures. The box's far corner sits at 0.0707, so
+# at radius 0.1 the box is strictly INSIDE the disc: an endpoint outside the box but
+# inside the disc reads as success to the model and would not have been one in the data.
+# That only bites the generative path, which classifies PREDICTED endpoints
+# (ensemble_prob.EnsembleEndpointMCProbabilityBackend); the classifier path takes its
+# labels off disk and is unaffected. Kept at 0.1 to match system=pendulum_stoch so the
+# two are comparable -- changing it here would silently fork the metric.
+attractor_radius: 0.1
+
+threshold:
+  optimize_mode: joint
+
+data_source:
+  pool_format: npz
+  trajectories_dir: ${dataset_root}/train.npz
+  shuffled_indices_file: ${dataset_root}/train_test_splits/shuffled_indices_${shuffle_variant}.txt
+  shuffled_labels_file: ${dataset_root}/train_test_splits/shuffled_labels_${shuffle_variant}.txt
+  eval_states_file: ${dataset_root}/eval_states.txt
+  cal_set_file: ${dataset_root}/cal_set.txt
+  test_set_file: ${dataset_root}/test_set.txt
+
+# 1,000 + 19 x 1,000 = 20k of the 100k pool. Same schedule as system=pendulum_stoch so
+# arms stay comparable, even though that pool was 300k.
+initial_train_size: 1000
+n_epochs: 19
+samples_per_epoch: 1000
+
+flow_matching:
+  clamp_noise: true
+  use_log_loss_weights: false
+
+system:
+  _target_: adaptive_roa.systems.pendulum.PendulumSystem
+  dataset_dir: ${dataset_root}
+
+flow_matcher:
+  _target_: adaptive_roa.flow_matching.pendulum.latent_conditional.flow_matcher.PendulumLatentConditionalFlowMatcher
+
+flow_matcher_local:
+  _target_: adaptive_roa.flow_matching.pendulum.trajectory.flow_matcher.PendulumTrajectoryFlowMatcher
+
+adaptive_v2:
+  system_name: pendulum

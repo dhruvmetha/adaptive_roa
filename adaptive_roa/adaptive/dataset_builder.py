@@ -66,6 +66,7 @@ class AdaptiveDatasetBuilder:
         test_ratio: float = 0.1,
         candidate_mode: str = "start",
         seed: int = 42,
+        fixed_val_size: int | None = None,
     ):
         """
         Initialize dataset builder.
@@ -78,6 +79,10 @@ class AdaptiveDatasetBuilder:
             candidate_mode: "start" (default, byte-identical to legacy behaviour) or
                             "intermediate" (maps opaque candidate-ids to (traj_idx, row)).
             seed: RNG seed for val/test split shuffle in intermediate mode (default 42).
+            fixed_val_size: In start mode, reserve this many leading pool
+                            trajectories for validation instead of recomputing a
+                            percentage at each budget. This makes the remaining
+                            training prefixes exactly sized and nested.
         """
         self.data_source = data_source
         self.output_dir = Path(output_dir)
@@ -88,6 +93,7 @@ class AdaptiveDatasetBuilder:
         self.test_ratio = test_ratio
         self.candidate_mode = candidate_mode
         self.seed = seed
+        self.fixed_val_size = fixed_val_size
 
         # Tracks indices added to training (used for sampling available candidates)
         self.used_indices: set = set()
@@ -96,7 +102,10 @@ class AdaptiveDatasetBuilder:
         self.max_train_idx = self.data_source.n_trajectories
 
         print(f"Total trajectories available: {self.max_train_idx}")
-        print(f"Val will be {val_ratio:.0%} of training set (no overlap — FM trains on remaining {1-val_ratio:.0%})")
+        if fixed_val_size is None:
+            print(f"Val will be {val_ratio:.0%} of training set (no overlap — FM trains on remaining {1-val_ratio:.0%})")
+        else:
+            print(f"Val will be a fixed prefix of {fixed_val_size} trajectories (no overlap)")
 
         # ---- intermediate mode state ----------------------------------------
         if self.candidate_mode == "intermediate":
@@ -114,6 +123,22 @@ class AdaptiveDatasetBuilder:
     # =========================================================================
     # Intermediate-mode helpers (candidate-id ↔ (traj_idx, row))
     # =========================================================================
+
+    def _start_split_indices(self) -> Tuple[List[int], List[int]]:
+        """Return (train, val) indices for start mode from one source of truth."""
+        train_indices = list(self.train_split)
+        if self.fixed_val_size is None:
+            n_val = max(1, int(len(train_indices) * self.val_ratio))
+        else:
+            n_val = int(self.fixed_val_size)
+            if n_val < 1:
+                raise ValueError("fixed_val_size must be at least 1")
+        if n_val >= len(train_indices):
+            raise ValueError(
+                f"validation size {n_val} leaves no training trajectories out of "
+                f"{len(train_indices)} selected"
+            )
+        return train_indices[n_val:], train_indices[:n_val]
 
     def traj_row_to_candidate(self, traj_idx: int, row: int) -> int:
         """Return the opaque candidate-id for (traj_idx, row).
@@ -381,9 +406,8 @@ class AdaptiveDatasetBuilder:
             return str(output_path)
 
         # ---- start mode (unchanged) ----
-        train_indices = list(self.train_split)
-        n_val = max(1, int(len(train_indices) * self.val_ratio))
-        train_only = train_indices[n_val:]  # Exclude first n_val (val portion)
+        train_only, val_indices = self._start_split_indices()
+        n_val = len(val_indices)
 
         n_pairs = self.data_source.save_endpoint_dataset(
             train_only,
@@ -414,9 +438,8 @@ class AdaptiveDatasetBuilder:
 
         # ---- start mode (unchanged) ----
         # Take val_ratio of training indices
-        train_indices = list(self.train_split)
-        n_val = max(1, int(len(train_indices) * self.val_ratio))
-        val_indices = train_indices[:n_val]  # First n_val from training
+        _train_only, val_indices = self._start_split_indices()
+        n_val = len(val_indices)
 
         n_pairs = self.data_source.save_endpoint_dataset(
             val_indices,
@@ -430,9 +453,8 @@ class AdaptiveDatasetBuilder:
     def build_train_classification_dataset(self, filename: str = "train_classification_dataset.txt") -> str:
         """Build training (state, binary_label) classification dataset (excludes val portion)."""
         output_path = self.output_dir / filename
-        train_indices = list(self.train_split)
-        n_val = max(1, int(len(train_indices) * self.val_ratio))
-        train_only = train_indices[n_val:]
+        train_only, val_indices = self._start_split_indices()
+        n_val = len(val_indices)
         n_rows = self.data_source.save_classification_dataset(train_only, str(output_path), mode="train")
         print(f"Built training classification dataset: {n_rows} (state,label) rows from {len(train_only)} trajectories (excl. {n_val} val)")
         return str(output_path)
@@ -440,9 +462,8 @@ class AdaptiveDatasetBuilder:
     def build_val_classification_dataset(self, filename: str = "val_classification_dataset.txt") -> str:
         """Build validation (state, binary_label) classification dataset (no overlap with train)."""
         output_path = self.output_dir / filename
-        train_indices = list(self.train_split)
-        n_val = max(1, int(len(train_indices) * self.val_ratio))
-        val_indices = train_indices[:n_val]
+        _train_only, val_indices = self._start_split_indices()
+        n_val = len(val_indices)
         n_rows = self.data_source.save_classification_dataset(val_indices, str(output_path), mode="train")
         print(f"Built validation classification dataset: {n_rows} (state,label) rows from {n_val} trajectories")
         return str(output_path)
@@ -602,10 +623,7 @@ class AdaptiveDatasetBuilder:
             }
 
         # ---- start mode (unchanged) ----
-        train_indices = list(self.train_split)
-        n_val = max(1, int(len(train_indices) * self.val_ratio))
-        train_only = train_indices[n_val:]
-        val_indices = train_indices[:n_val]
+        train_only, val_indices = self._start_split_indices()
 
         if dataset_kind == "classification":
             return {
@@ -650,9 +668,7 @@ class AdaptiveDatasetBuilder:
             )
 
         # ---- start mode (unchanged) ----
-        train_indices = list(self.train_split)
-        n_val = max(1, int(len(train_indices) * self.val_ratio))
-        train_only = train_indices[n_val:]
+        train_only, _val_indices = self._start_split_indices()
         return self.data_source.build_endpoint_dataset(train_only, mode="train")
 
     def get_val_data(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -684,9 +700,7 @@ class AdaptiveDatasetBuilder:
             )
 
         # ---- start mode (unchanged) ----
-        train_indices = list(self.train_split)
-        n_val = max(1, int(len(train_indices) * self.val_ratio))
-        val_indices = train_indices[:n_val]
+        _train_only, val_indices = self._start_split_indices()
         return self.data_source.build_endpoint_dataset(val_indices, mode="train")
 
     def get_val_labels(self) -> Tuple[np.ndarray, np.ndarray]:
@@ -716,9 +730,7 @@ class AdaptiveDatasetBuilder:
             )
 
         # ---- start mode (unchanged) ----
-        train_indices = list(self.train_split)
-        n_val = max(1, int(len(train_indices) * self.val_ratio))
-        val_indices = train_indices[:n_val]
+        _train_only, val_indices = self._start_split_indices()
         starts = self.data_source.get_start_states(val_indices)
         labels = self.data_source.get_labels(val_indices)
         return starts, labels
@@ -751,9 +763,7 @@ class AdaptiveDatasetBuilder:
             Tuple of (start_states [N_traj, dim], labels [N_traj])
             Note: One per trajectory, not expanded
         """
-        train_indices = list(self.train_split)
-        n_val = max(1, int(len(train_indices) * self.val_ratio))
-        train_only = train_indices[n_val:]
+        train_only, _val_indices = self._start_split_indices()
         starts = self.data_source.get_start_states(train_only)
         labels = self.data_source.get_labels(train_only)
         return starts, labels

@@ -41,6 +41,10 @@ class NpzTrajectoryDataSource(TrajectoryDataSource):
         npz_path = Path(config.trajectories_dir)
         if npz_path.is_dir():
             npz_path = npz_path / "train.npz"
+        if config.expected_state_order is not None:
+            from adaptive_roa.data.state_schema import validate_dataset_state_order
+
+            validate_dataset_state_order(npz_path.parent, config.expected_state_order)
         with np.load(npz_path) as z:
             # float32 to match the text loader's dtype and halve memory
             self._states = z["states"].astype(np.float32)

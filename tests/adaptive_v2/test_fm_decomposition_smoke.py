@@ -17,12 +17,13 @@ Requires a GPU (the trainer uses torch.multiprocessing.spawn onto CUDA devices),
 so it is marked `slow` and skipped when none is visible.
 """
 import os
+from pathlib import Path
 
 import pytest
 from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
-CONFIG_DIR = "/common/home/st1122/Projects/adaptive_roa/configs/adaptive_v2"
+CONFIG_DIR = str(Path(__file__).resolve().parents[2] / "configs" / "adaptive_v2")
 ARMS = ["decomp_total", "decomp_epi_var", "decomp_epi_bald", "decomp_aleat", "direct"]
 
 

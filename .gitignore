@@ -22,12 +22,21 @@ attractor_analysis*
 env_blackwell/
 **/*.egg-info/
 
+# Per-user context: concrete env paths and machine facts. CLAUDE.md is shared and
+# carries rules only; the values that differ per person live here.
+CLAUDE.local.md
+
 # Lightning writes here when a run is launched without an output dir override
 checkpoints/
 *.ckpt
 
 # Generated artifacts
 *.pdf
+# ...but PDFs under docs/ are content, not artifacts -- including archived ones.
+# Without these, `git mv` into docs/archive/ reads as a plain deletion and the file
+# stops travelling with the clone.
+!docs/*.pdf
+!docs/archive/*.pdf
 Untitled
 telemetry-id
 slurm_logs/

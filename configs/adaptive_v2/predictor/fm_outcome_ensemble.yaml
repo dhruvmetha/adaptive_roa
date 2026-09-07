@@ -1,0 +1,62 @@
+# @package _global_
+#
+# Deep ensemble of scalar-outcome flow matchers: the generative x binary-target
+# cell, with the per-member spread that every epistemic and yield acquisition
+# needs. `fm_outcome` is one flow, so BALD and epistemic variance are identically
+# zero for it and `yield_mlp.py:213-216` refuses it outright. This arm is what
+# makes that family reachable from the outcome-FM target.
+#
+# It reuses `ensemble_classifier_prob` rather than shipping its own backend.
+# Members are wrapped in `EmbeddedOutcomeFM`, so they take already-embedded
+# states and return logits, which is exactly the contract
+# `EnsembleClassifierProbabilityBackend.estimate_members` calls.
+#
+# That reuse has ONE condition: the backend hardcodes `member_sample_size = None`
+# (ensemble_prob.py:55), which is correct only when members do no sampling.
+# Keep `forward_readout: exact`. Switching it to `mc` would make BALD's
+# finite-sample correction silently absent when it is needed.
+#
+# `type: classifier` names the DATA PATH and EVAL BRANCH, not the machinery, for
+# the same reason `fm_outcome.yaml` does: this arm is generative but consumes
+# (state, label) rows and has no endpoint, so the branches that tag disables are
+# disabled correctly rather than as a workaround. It also means this arm and
+# `clf_ensemble` see byte-identical training data at every adaptive epoch.
+defaults:
+  - /probability: ensemble_classifier_prob
+threshold:
+  decision_rule: one_sided
+calibration:
+  decision_rule: one_sided
+predictor:
+  type: classifier
+  name: fm_outcome_ensemble
+  trainer_target: adaptive_roa.adaptive_v2.trainers.outcome_fm_ensemble_trainer.EnsembleOutcomeFMTrainer
+  batch_size: 1024
+  val_batch_size: 2048
+  outcome_fm:
+    # n_members matches clf_ensemble and fm_ensemble so the three arms are
+    # compared at the same posterior width.
+    n_members: 5
+    # Mirrors classifier.yaml, so against clf_ensemble this varies ONLY the loss
+    # at matched capacity on identical data. Changing these without changing the
+    # classifier's breaks that comparison.
+    hidden_dims: [256, 512, 256]
+    dropout: 0.0
+    activation: relu
+    lr: 1.0e-3
+    weight_decay: 1.0e-5
+    max_epochs: 200
+    patience: 20
+    num_time_freqs: 4
+    num_ode_steps: 50      # convergence evidence in probability/outcome_fm.yaml
+    # Slice training batches from GPU-resident tensors (adaptive_classification_data.py,
+    # _SliceBatches). Same rows and loss; 6x per step on multi-million-row sets.
+    gpu_resident_data: false
+    # Train the members as concurrent processes on the same GPU instead of one
+    # after another. Identical members; ~3x less wall-clock on big sets.
+    concurrent_members: false
+    forward_readout: exact # see the member_sample_size note above
+    n_marginal_samples: 64 # ignored by EnsemblePosterior, which enumerates exactly
+  lightning_trainer:
+    gradient_clip_val: 1.0
+    log_every_n_steps: 10

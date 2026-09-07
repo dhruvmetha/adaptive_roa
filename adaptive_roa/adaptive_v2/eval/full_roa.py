@@ -679,6 +679,7 @@ def evaluate_full_roa_fast(
     decision_rule: str | None = None,
     binary_outcomes: bool | None = None,
     refine_invalids: bool = False,
+    collapse_invalid_to_failure: bool = False,
     refine_t_range: tuple[float, float] = (0.7, 0.9),
     refine_num_steps: int = 100,
     refine_max_attempts: int = 5,
@@ -696,6 +697,11 @@ def evaluate_full_roa_fast(
     ``eval_states_file`` (passed through to ``load_eval_states``).  Default
     None loads all rows.  Use to cap large FPS files (e.g. 1.3 GB humanoid
     test set) without reading the entire file into memory.
+
+    When ``collapse_invalid_to_failure`` is true, endpoint labels outside every
+    attractor (0) are changed to failure (-1) before probabilities and metrics
+    are computed.  This yields the binary rule used by ensemble acquisition:
+    ``p_failure = 1 - p_success`` and ``p_invalid = 0``.
     """
     from tqdm import tqdm
 
@@ -872,6 +878,11 @@ def evaluate_full_roa_fast(
     else:
         geodesic_errors = (pred_mean - end_states_all).astype(np.float32)
         component_names = [f"dim_{i}" for i in range(geodesic_errors.shape[1])]
+
+    if collapse_invalid_to_failure:
+        # np.where returns a copy, so an MCCache supplied by the caller is not
+        # mutated and can still be reused for a three-outcome evaluation.
+        mc_labels = np.where(mc_labels == 0, -1, mc_labels).astype(np.int8, copy=False)
 
     p_success = (mc_labels == 1).sum(axis=1) / num_mc_samples
     p_failure = (mc_labels == -1).sum(axis=1) / num_mc_samples
@@ -1085,6 +1096,7 @@ def evaluate_full_roa_fast(
 
     metrics = {
         "_doc": "Full ROA evaluation on held-out test set using MC sampling",
+        "collapse_invalid_to_failure": bool(collapse_invalid_to_failure),
         "n_total": int(n_total),
         "num_mc_samples": int(num_mc_samples),
         "lambda_star": float(lambda_star),
@@ -1170,6 +1182,7 @@ def evaluate_full_roa_fast(
             lambda_star=lambda_star,
             delta=delta,
             attractor_radius=attractor_radius,
+            collapse_invalid_to_failure=bool(collapse_invalid_to_failure),
         )
 
         hook.maybe_plot(
@@ -1377,6 +1390,9 @@ class FullROAEvaluator:
         self.num_mc_samples_eval = int(cfg.num_mc_samples_eval)
         self.decision_rule = str(cfg.decision_rule)
         self.refine_invalids = bool(cfg.refine_invalids)
+        self.collapse_invalid_to_failure = bool(
+            cfg.get("collapse_invalid_to_failure", False)
+        )
         self.refine_t_min = float(cfg.refine_t_min)
         self.refine_t_max = float(cfg.refine_t_max)
         self.refine_num_steps = int(cfg.refine_num_steps)
@@ -1425,6 +1441,7 @@ class FullROAEvaluator:
             invalid_threshold=epoch_context.get("invalid_threshold", None),
             decision_rule=epoch_context.get("decision_rule", self.decision_rule),
             refine_invalids=self.refine_invalids,
+            collapse_invalid_to_failure=self.collapse_invalid_to_failure,
             refine_t_range=(self.refine_t_min, self.refine_t_max),
             refine_num_steps=self.refine_num_steps,
             refine_max_attempts=self.refine_max_attempts,

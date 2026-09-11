@@ -127,6 +127,26 @@ def test_a_pickled_run_resumes_exactly(tmp_path):
         load_state(tmp_path / "s.pkl", "other")
 
 
+def test_attach_refuses_a_sampler_whose_labels_differ_at_used_indices():
+    full, ps = _px(budget=60)
+    full.run()
+    used_pool_idx = full.store.pool_idx(np.arange(full.store.n))
+    used_pool_idx = used_pool_idx[used_pool_idx >= 0]
+    flip_idx = int(used_pool_idx[0])
+
+    bad_labels = ps.labels.copy()
+    bad_labels[flip_idx] *= -1.0
+    bad_ps = PoolSampler(ps.starts.copy(), bad_labels, np.zeros(len(ps.starts), dtype=bool),
+                         scale=np.ones(2))
+    with pytest.raises(RuntimeError, match="labels"):
+        full.attach(bad_ps, _Stub)
+
+    good_ps = PoolSampler(ps.starts.copy(), ps.labels.copy(), np.zeros(len(ps.starts), dtype=bool),
+                          scale=np.ones(2))
+    full.attach(good_ps, _Stub)                        # matching labels: no error
+    assert good_ps.used[used_pool_idx].all()
+
+
 def test_multinomial_counts():
     rng = np.random.default_rng(0)
     c = multinomial_counts([0.0, 1.0, 3.0], 400, rng)

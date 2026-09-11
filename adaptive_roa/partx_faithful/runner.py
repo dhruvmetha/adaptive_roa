@@ -9,6 +9,7 @@ can be killed at any point and restarted with the same command.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import time
@@ -203,9 +204,12 @@ def run_partx_faithful(*, system, starts, labels, eval_states_file, output_dir, 
     used[:initial] = True
     sampler = PoolSampler(starts, labels, used, scale=root_high - root_low)
     factory = backend_factory("gpc", falsify=falsify, **gp_kwargs)
+    starts_digest = hashlib.sha256(np.ascontiguousarray(starts).tobytes()).hexdigest()[:16]
+    labels_digest = hashlib.sha256(np.ascontiguousarray(labels).tobytes()).hexdigest()[:16]
     chash = config_hash({"pcfg": asdict(pcfg), "gp": gp_kwargs, "falsify": falsify, "initial": initial,
                          "samples_per_epoch": samples_per_epoch, "n_epochs": n_epochs,
-                         "n_pool": len(starts)})
+                         "n_pool": len(starts), "eval_states_file": str(eval_states_file),
+                         "starts": starts_digest, "labels": labels_digest})
     state_path = out / "partx_state.pkl"
     if state_path.exists():
         px = load_state(state_path, chash)

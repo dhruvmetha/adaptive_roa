@@ -93,10 +93,31 @@ class PartX:
         return state
 
     def attach(self, sampler, model_factory) -> None:
-        """Reattach after unpickling. Rebuilds the sampler's used-mask from the store."""
+        """Reattach after unpickling. Rebuilds the sampler's used-mask from the store.
+
+        Verifies first that the store's recorded labels still match the sampler's
+        labels at the same pool indices (a sample id with pool_idx < 0, the
+        continuous sampler, is skipped). A mismatch means this state was built
+        against a different pool -- e.g. a mistyped output_dir landing on another
+        level's checkpoint -- and resuming would silently attach the wrong labels.
+        """
+        ids = np.arange(self.store.n)
+        pool = self.store.pool_idx(ids)
+        used_mask = pool >= 0
+        used_ids, used_pool = ids[used_mask], pool[used_mask]
+        if len(used_pool):
+            stored_y = self.store.y(used_ids)
+            sampler_y = np.asarray(sampler.labels, dtype=float)[used_pool]
+            mismatch = stored_y != sampler_y
+            if mismatch.any():
+                bad = used_pool[mismatch]
+                raise RuntimeError(
+                    f"PartX.attach: {int(mismatch.sum())} of {len(used_pool)} stored labels do not "
+                    f"match the sampler at pool indices {sorted(bad[:5].tolist())}"
+                    f"{', ...' if len(bad) > 5 else ''}; refusing to attach a sampler for a "
+                    "different pool")
         self.sampler, self.model_factory, self.model_cache = sampler, model_factory, {}
-        pool = self.store.pool_idx(np.arange(self.store.n))
-        sampler.mark_used(pool[pool >= 0])
+        sampler.mark_used(used_pool)
 
     def leaves(self) -> list:
         return [self.regions[k] for k in sorted(self.regions) if not self.regions[k].children]

@@ -30,7 +30,10 @@ class SampleStore:
         self._X, self._y, self._pool = X, y, p
 
     def add(self, X, y, pool_idx) -> list:
-        X = np.atleast_2d(np.asarray(X, dtype=float))
+        X = np.asarray(X, dtype=float)
+        if X.size == 0:
+            return []
+        X = np.atleast_2d(X)
         y = np.asarray(y, dtype=float).reshape(-1)
         p = np.asarray(pool_idx, dtype=np.int64).reshape(-1)
         k = len(X)
@@ -162,6 +165,9 @@ class ContinuousSampler:
         return U, U
 
     def take(self, handles):
-        X = np.atleast_2d(np.asarray(handles, dtype=float))
+        X = np.asarray(handles, dtype=float)
+        if X.size == 0:
+            return np.empty((0, 0)), np.empty(0), np.empty(0, dtype=np.int64)
+        X = np.atleast_2d(X)
         y = np.array([float(self.fn(x)) for x in X])
         return X, y, np.full(len(X), -1, dtype=np.int64)

@@ -105,3 +105,10 @@ def test_continuous_sampler_evaluates_the_function():
     assert y[0] == 3.0 and p[0] == -1
     U, h = cs.candidates(_region([0, 0], [1, 1]), 7, np.random.default_rng(0))
     assert U.shape == (7, 2) and np.all((U >= 0) & (U <= 1))
+
+
+def test_empty_batches_are_no_ops():
+    s = SampleStore(2)
+    assert s.add([], [], []) == [] and s.n == 0
+    X, y, p = ContinuousSampler(lambda x: x[0]).take([])
+    assert len(X) == 0 and len(y) == 0 and len(p) == 0

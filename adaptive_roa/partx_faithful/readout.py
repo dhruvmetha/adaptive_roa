@@ -18,13 +18,21 @@ class PiecewiseModel:
         self.high = np.asarray(root_high, dtype=float)
 
     def p_success(self, X) -> np.ndarray:
-        X = np.clip(np.atleast_2d(np.asarray(X, dtype=float)), self.low, self.high)
-        p = np.full(len(X), np.nan)
-        todo = np.ones(len(X), dtype=bool)
+        """Find the leaf with the clipped point, but evaluate its GP at the raw point.
+
+        A state outside S (e.g. 33% of quad3D's eval states, in the quaternion
+        dimensions) still needs a leaf to answer for it; clipping only decides
+        which leaf that is. The GP itself extrapolates fine and should see the
+        state actually asked about.
+        """
+        X_raw = np.atleast_2d(np.asarray(X, dtype=float))
+        X_clipped = np.clip(X_raw, self.low, self.high)
+        p = np.full(len(X_raw), np.nan)
+        todo = np.ones(len(X_raw), dtype=bool)
         for leaf in self.leaves:
-            m = todo & leaf.contains(X)
+            m = todo & leaf.contains(X_clipped)
             if m.any():
-                p[m] = self.models[leaf.rid].p_success(X[m])
+                p[m] = self.models[leaf.rid].p_success(X_raw[m])
                 todo &= ~m
         if todo.any():
             raise RuntimeError(f"readout: {int(todo.sum())} points fall in no leaf")

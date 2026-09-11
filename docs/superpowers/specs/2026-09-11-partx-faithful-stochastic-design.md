@@ -54,7 +54,7 @@ gives a posterior mean m(x) and standard deviation s(x) of g. z = Φ⁻¹(1 − 
 
 | Part-X step | This implementation | Status |
 |---|---|---|
-| Input space S | The box from `system.per_dim_bounds()`, padded by a relative 1e-6 as in `partx/tree.py::build_root` | As published |
+| Input space S | The bounding box of the pool's start states, padded by a relative 1e-4. The pool's starts occupy a small part of `system.per_dim_bounds()` on every system but pendulum, and design points snapped to the latter would pile up on the edge of the data | Forced |
 | Initial samples | The shared initial set (pool indices 0..n−1, the same set every arm starts from) sits in the root as existing samples. Every system's initial set is at least n0, so Alg. 1 step 1 uses it as is | Adapted |
 | Root | Like cpslab: nBO EI steps on the root, then MCstep and Classify, before the main loop | As published |
 | Branching | Remaining regions (r, r+, r−) split into B = 2 equal halves. The split dimension is `perm[branch_dir mod d]`, where `perm` is one seeded permutation per run and a child's `branch_dir` is its parent's plus 1 (cpslab `singlereplication.py:64-65,109`). Children inherit the parent's samples that fall inside them | As published |
@@ -127,7 +127,8 @@ p̂(x) = Φ(m(x)/√(1 + s²(x))), using the GP of the leaf containing x, where 
 latent posterior of f. This is f itself, not the falsify-oriented g. Under `falsify: success`
 the readout negates the backend's mean back to f, so p̂ means the same thing under either setting
 of D2. A leaf with zero samples uses its nearest ancestor that
-has samples, refit on that ancestor's samples as of the snapshot.
+has samples, refit on that ancestor's samples as of the snapshot. An eval state outside S finds
+its leaf with the state clipped into S, but the GP is evaluated at the raw, unclipped state.
 
 ### 5.5 Interface
 

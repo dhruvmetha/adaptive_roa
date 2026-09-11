@@ -8,6 +8,8 @@ import pytest
 
 from adaptive_roa.partx.tree import build_root
 from adaptive_roa.partx_faithful.algorithm import PartX, PartXConfig
+from adaptive_roa.partx_faithful.readout import PiecewiseModel
+from adaptive_roa.partx_faithful.region import Region
 from adaptive_roa.partx_faithful.runner import resolve_n0, run_partx_faithful, schedule
 from adaptive_roa.systems.pendulum import PendulumSystem
 
@@ -47,6 +49,40 @@ def _go(toy, out):
         pcfg=PartXConfig(n0=5, n_bo=2, n_c=10, R=4, M=50, seed=0),
         gp_kwargs=dict(n_restarts=1, max_points=500), falsify="failure",
         attractor_radius=0.1, extra={"test": True})
+
+
+def test_root_box_is_the_padded_pool_bounding_box(toy, tmp_path):
+    """Finding 1a: S is the pool's own bounding box, not build_root(system)."""
+    system, starts, labels, droot = toy
+    out = tmp_path / "run"
+    _go(toy, out)
+    with np.load(out / "epoch_000" / "partx_leaves.npz") as z:
+        root_low, root_high = z["root_low"], z["root_high"]
+    lo, hi = starts.min(axis=0), starts.max(axis=0)
+    pad = 1e-4 * np.maximum(hi - lo, 1e-9)
+    np.testing.assert_allclose(root_low, lo - pad, atol=1e-9)
+    np.testing.assert_allclose(root_high, hi + pad, atol=1e-9)
+
+
+class _XDependentStub:
+    """p_success(x) = 1 / (1 + exp(-x0)), so the raw and clipped coordinates disagree."""
+
+    def p_success(self, X):
+        X = np.atleast_2d(np.asarray(X, dtype=float))
+        return 1.0 / (1.0 + np.exp(-X[:, 0]))
+
+
+def test_readout_evaluates_the_raw_state_not_the_clipped_one():
+    """Finding 1b: the clipped point only finds the leaf; the GP sees the raw point."""
+    leaf = Region(rid=0, parent=-1, low=np.array([-1.0, -1.0]), high=np.array([1.0, 1.0]),
+                  branch_dir=0, depth=0)
+    pw = PiecewiseModel([leaf], {0: _XDependentStub()}, leaf.low, leaf.high)
+    x_outside = np.array([[5.0, 0.0]])
+    p = pw.p_success(x_outside)
+    p_raw = 1.0 / (1.0 + np.exp(-5.0))
+    p_clipped = 1.0 / (1.0 + np.exp(-1.0))
+    assert p[0] == pytest.approx(p_raw)
+    assert p[0] != pytest.approx(p_clipped)
 
 
 def test_schedule_and_n0():

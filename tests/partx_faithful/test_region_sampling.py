@@ -77,6 +77,19 @@ def test_snap_returns_unused_unique_in_box_points():
     assert np.all(h >= 10)                                     # the initial set is excluded
 
 
+def test_snap_design_normalizes_by_scale_not_raw_distance():
+    # Candidate 0 is nearer in raw coordinates; candidate 1 is nearer once the
+    # stretched second dimension is divided by scale. The two picks disagree.
+    starts = np.array([[1.0, 0.0], [0.0, 5.0]])
+    labels = np.array([1.0, 1.0])
+    used = np.array([False, False])
+    ps = PoolSampler(starts, labels, used, scale=np.array([1.0, 10.0]))
+    region = _region([-10, -10], [10, 10])
+    ps.init_root(region)
+    chosen = ps.snap_design(np.array([[0.0, 0.0]]), region)
+    assert chosen.tolist() == [1]                              # normalized nearest, not raw (0)
+
+
 def test_take_marks_used_and_refuses_reuse():
     ps, _ = _pool()
     _, kids, _ = _split_root(ps)

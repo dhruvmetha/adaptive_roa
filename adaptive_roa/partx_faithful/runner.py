@@ -20,7 +20,6 @@ import numpy as np
 
 from adaptive_roa.adaptive_v2.engine import _atomic_write_json, _convert_numpy
 from adaptive_roa.adaptive_v2.eval.full_roa import evaluate_full_roa_classifier
-from adaptive_roa.partx.tree import build_root
 from adaptive_roa.partx_faithful.algorithm import PartX, PartXConfig, derive_seed
 from adaptive_roa.partx_faithful.backends import backend_factory
 from adaptive_roa.partx_faithful.readout import PiecewiseHandle, PiecewiseModel
@@ -191,10 +190,18 @@ def run_partx_faithful(*, system, starts, labels, eval_states_file, output_dir, 
     starts = np.asarray(starts, dtype=float)
     labels = np.asarray(labels, dtype=float)
     budget, checkpoints = schedule(initial, samples_per_epoch, n_epochs)
-    root = build_root(system)
+    # Spec §3: S is the box the pool's start states occupy, padded by a relative 1e-4.
+    # per_dim_bounds() describes where trajectories go, not where starts are drawn: on
+    # quad3D its box holds the pool's starts in 0.54% of its volume, and every design
+    # point drawn in the empty part snaps to a start on the edge of the data.
+    lo, hi = starts.min(axis=0), starts.max(axis=0)
+    pad = 1e-4 * np.maximum(hi - lo, 1e-9)
+    root_low, root_high = lo - pad, hi + pad
+    print(f"[partx_faithful] S = pool start box, low {np.array2string(root_low, precision=3)} "
+          f"high {np.array2string(root_high, precision=3)}", flush=True)
     used = np.zeros(len(starts), dtype=bool)
     used[:initial] = True
-    sampler = PoolSampler(starts, labels, used, scale=root.high - root.low)
+    sampler = PoolSampler(starts, labels, used, scale=root_high - root_low)
     factory = backend_factory("gpc", falsify=falsify, **gp_kwargs)
     chash = config_hash({"pcfg": asdict(pcfg), "gp": gp_kwargs, "falsify": falsify, "initial": initial,
                          "samples_per_epoch": samples_per_epoch, "n_epochs": n_epochs,
@@ -205,7 +212,7 @@ def run_partx_faithful(*, system, starts, labels, eval_states_file, output_dir, 
         px.attach(sampler, factory)
         print(f"[partx_faithful] resuming at iteration {px.iteration}, used {px.used}/{px.budget}", flush=True)
     else:
-        px = PartX(pcfg, root.low, root.high, sampler, factory, budget, init_X=starts[:initial],
+        px = PartX(pcfg, root_low, root_high, sampler, factory, budget, init_X=starts[:initial],
                    init_y=labels[:initial], init_pool_idx=np.arange(initial))
     writer = CheckpointWriter(output_dir=out, system=system, eval_states_file=eval_states_file,
                               attractor_radius=attractor_radius, checkpoints=checkpoints,

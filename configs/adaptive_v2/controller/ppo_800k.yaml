@@ -1,0 +1,9 @@
+# @package _global_
+# Same PPO policy and success criterion as `ppo`; the only difference is the
+# trainable pool, 800,000 flights against 100,000 (shuffled_indices_0.txt).
+# Exists as a group member because `controller` collides with this config group,
+# so `controller=ppo_800k` and `++controller=ppo_800k` are both rejected by Hydra
+# -- a plain value override is impossible and `+controller=ppo_800k` needs a file.
+# Carries no system semantics: attractor_radius, goal and the termination box all
+# stay with quadrotor3d_ppo_stoch.yaml.
+controller: ppo_800k

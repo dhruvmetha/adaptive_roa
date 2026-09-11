@@ -92,3 +92,25 @@ def test_latent_of_empty_input_is_empty():
     X, y = _data()
     m, s = LaplaceGPClassifier(seed=0).fit(X, y).latent(np.empty((0, 2)))
     assert m.shape == (0,) and s.shape == (0,)
+
+
+def test_fit_prefers_a_finite_restart_over_a_nan_incumbent(monkeypatch):
+    """Finding 5: `res.fun < best.fun` never fires against a NaN incumbent, so a
+    NaN first restart used to be kept forever no matter how good later restarts were."""
+    import adaptive_roa.partx_faithful.gp_laplace as gpl
+
+    X, y = _data(n=20)
+    good_theta = np.log([2.0, 3.0])
+    calls = {"n": 0}
+
+    class _Res:
+        def __init__(self, fun, x):
+            self.fun, self.x = fun, x
+
+    def fake_minimize(objective, t0, **kwargs):
+        calls["n"] += 1
+        return _Res(fun=np.nan, x=t0) if calls["n"] == 1 else _Res(fun=1.0, x=good_theta)
+
+    monkeypatch.setattr(gpl, "minimize", fake_minimize)
+    gp = LaplaceGPClassifier(seed=0, n_restarts=1).fit(X, y)
+    np.testing.assert_allclose(np.log([gp.sigma_f2_, gp.lengthscale_]), good_theta)

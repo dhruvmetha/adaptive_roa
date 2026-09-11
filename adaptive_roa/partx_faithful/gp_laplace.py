@@ -171,7 +171,11 @@ class LaplaceGPClassifier:
             best = None
             for t0 in starts:
                 res = minimize(objective, t0, jac=True, method="L-BFGS-B", bounds=bounds)
-                if best is None or res.fun < best.fun:
+                # A non-finite res.fun never satisfies `<`, so a NaN first restart used to be
+                # kept forever. Prefer any finite result over a non-finite incumbent, and
+                # otherwise only replace the incumbent with a strictly better finite one.
+                if best is None or (np.isfinite(res.fun)
+                                    and (not np.isfinite(best.fun) or res.fun < best.fun)):
                     best = res
             theta = best.x
             self.at_bound_ = bool(np.any(np.isclose(theta, bounds[:, 0], atol=1e-6)

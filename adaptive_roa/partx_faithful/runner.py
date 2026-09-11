@@ -58,12 +58,13 @@ def _git_commit() -> str:
 
 class CheckpointWriter:
     def __init__(self, *, output_dir, system, eval_states_file, attractor_radius, checkpoints,
-                 initial, model_factory, pcfg, extra):
+                 initial, model_factory, pcfg, extra, decision_rule: str = "one_sided"):
         self.out = Path(output_dir)
         self.system, self.eval_states_file = system, str(eval_states_file)
         self.attractor_radius = float(attractor_radius)
         self.checkpoints, self.initial = list(checkpoints), int(initial)
         self.model_factory, self.pcfg, self.extra = model_factory, pcfg, extra
+        self.decision_rule = str(decision_rule)
         self.next_e = 0
         self._cache: dict = {}
 
@@ -146,7 +147,7 @@ class CheckpointWriter:
             classifier=PiecewiseHandle(PiecewiseModel(leaves, models, root.low, root.high)),
             system=self.system, eval_states_file=self.eval_states_file, lambda_star=0.5, delta=0.1,
             attractor_radius=self.attractor_radius, device="cpu", output_dir=str(d), verbose=False,
-            decision_rule="one_sided")
+            decision_rule=self.decision_rule)
         np.savez(d / "partx_leaves.npz",
                  low=np.array([r.low for r in leaves]), high=np.array([r.high for r in leaves]),
                  rtype=np.array([r.rtype for r in leaves]), rid=np.array([r.rid for r in leaves]),
@@ -185,7 +186,8 @@ class CheckpointWriter:
 
 def run_partx_faithful(*, system, starts, labels, eval_states_file, output_dir, initial: int,
                        samples_per_epoch: int, n_epochs: int, pcfg: PartXConfig, gp_kwargs: dict,
-                       falsify: str, attractor_radius: float, extra: dict) -> dict:
+                       falsify: str, attractor_radius: float, extra: dict,
+                       decision_rule: str = "one_sided") -> dict:
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     starts = np.asarray(starts, dtype=float)
@@ -221,7 +223,7 @@ def run_partx_faithful(*, system, starts, labels, eval_states_file, output_dir, 
     writer = CheckpointWriter(output_dir=out, system=system, eval_states_file=eval_states_file,
                               attractor_radius=attractor_radius, checkpoints=checkpoints,
                               initial=initial, model_factory=factory, pcfg=pcfg,
-                              extra={**extra, "commit": _git_commit()})
+                              extra={**extra, "commit": _git_commit()}, decision_rule=decision_rule)
     px.on_sample = writer.on_sample
     writer.on_sample(px)                     # epoch 0, and anything a crash left unwritten
     t0 = time.time()
@@ -285,4 +287,4 @@ def run_from_cfg(cfg) -> dict:
         initial=int(cfg.initial_train_size), samples_per_epoch=int(cfg.samples_per_epoch),
         n_epochs=int(cfg.n_epochs), pcfg=pcfg, gp_kwargs=gp_kwargs,
         falsify=str(cfg.partx_faithful.falsify), attractor_radius=float(cfg.attractor_radius),
-        extra=extra)
+        extra=extra, decision_rule=str(cfg.get("decision_rule", "one_sided")))

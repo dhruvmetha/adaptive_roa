@@ -76,16 +76,43 @@ def test_every_epoch_is_written_and_scoreable(toy, tmp_path):
     row, _ = spm.score_epoch_full(out / "epoch_003", spm.load_ground_truth(toy[3]), None, None)
     assert np.isfinite(row["KL"]) and row["train_trajectories"] == 150
     assert json.loads((out / "final_results.json").read_text())["used"] == 90
+    assert json.loads((out / "epoch_003" / "artifacts_v2.json").read_text())["acquisition"]["diagnostics"]["done"]
 
 
-def test_a_crash_and_resume_matches_an_uninterrupted_run(toy, tmp_path, monkeypatch):
+def _epoch(d):
+    a = json.loads((d / "artifacts_v2.json").read_text())
+    with np.load(d / "full_roa_per_point.npz") as z:
+        arrays = {k: z[k].copy() for k in z.files}
+    with np.load(d / "partx_leaves.npz") as z:
+        leaves = {k: z[k].copy() for k in z.files}
+    return a, arrays, leaves
+
+
+def _assert_same_run(a_dir, b_dir, n_epochs=4):
+    for e in range(n_epochs):
+        ja, arr_a, lv_a = _epoch(a_dir / f"epoch_{e:03d}")
+        jb, arr_b, lv_b = _epoch(b_dir / f"epoch_{e:03d}")
+        assert ja == jb, f"epoch {e}: artifacts_v2.json differs"
+        for k in arr_a:
+            np.testing.assert_array_equal(arr_a[k], arr_b[k])
+        for k in lv_a:
+            np.testing.assert_array_equal(lv_a[k], lv_b[k])
+    fa = json.loads((a_dir / "final_results.json").read_text())
+    fb = json.loads((b_dir / "final_results.json").read_text())
+    fa.pop("elapsed_s_this_process")
+    fb.pop("elapsed_s_this_process")
+    assert fa == fb
+
+
+@pytest.mark.parametrize("crash_at", [3, 4])
+def test_a_crash_between_iterations_resumes_identically(toy, tmp_path, monkeypatch, crash_at):
     _go(toy, tmp_path / "a")
     real_step = PartX.step
     calls = {"n": 0}
 
     def flaky(self):
         calls["n"] += 1
-        if calls["n"] == 3:
+        if calls["n"] == crash_at:
             raise RuntimeError("simulated preemption")
         return real_step(self)
 
@@ -94,11 +121,39 @@ def test_a_crash_and_resume_matches_an_uninterrupted_run(toy, tmp_path, monkeypa
         _go(toy, tmp_path / "b")
     monkeypatch.setattr(PartX, "step", real_step)
     _go(toy, tmp_path / "b")
-    for e in range(4):
-        da, db = tmp_path / "a" / f"epoch_{e:03d}", tmp_path / "b" / f"epoch_{e:03d}"
-        with np.load(da / "full_roa_per_point.npz") as za, np.load(db / "full_roa_per_point.npz") as zb:
-            np.testing.assert_array_equal(za["p_success"], zb["p_success"])
-        ja = json.loads((da / "artifacts_v2.json").read_text())
-        jb = json.loads((db / "artifacts_v2.json").read_text())
-        assert ja["acquisition"]["d2_indices"] == jb["acquisition"]["d2_indices"]
-        assert ja["train_trajectories"] == jb["train_trajectories"]
+    _assert_same_run(tmp_path / "a", tmp_path / "b")
+
+
+def test_a_crash_mid_iteration_after_a_checkpoint_resumes_identically(toy, tmp_path, monkeypatch):
+    _go(toy, tmp_path / "a")
+    real_take = PartX._take
+    marker = tmp_path / "b" / "epoch_002" / "artifacts_v2.json"
+
+    def flaky(self, region, handles):
+        ids = real_take(self, region, handles)
+        if marker.exists():
+            raise RuntimeError("simulated preemption")
+        return ids
+
+    monkeypatch.setattr(PartX, "_take", flaky)
+    with pytest.raises(RuntimeError, match="simulated preemption"):
+        _go(toy, tmp_path / "b")
+    monkeypatch.setattr(PartX, "_take", real_take)
+    _go(toy, tmp_path / "b")
+    _assert_same_run(tmp_path / "a", tmp_path / "b")
+
+
+def test_a_pool_too_small_for_the_budget_leaves_the_rest_unspent(toy, tmp_path):
+    system, starts, labels, droot = toy
+    out = tmp_path / "small"
+    run_partx_faithful(
+        system=system, starts=starts[:110], labels=labels[:110],
+        eval_states_file=str(droot / "test_set.txt"), output_dir=str(out), initial=60,
+        samples_per_epoch=30, n_epochs=4, pcfg=PartXConfig(n0=5, n_bo=2, n_c=10, R=4, M=50, seed=0),
+        gp_kwargs=dict(n_restarts=1, max_points=500), falsify="failure", attractor_radius=0.1,
+        extra={"test": True})
+    tt = [json.loads((out / f"epoch_{e:03d}" / "artifacts_v2.json").read_text())["train_trajectories"]
+          for e in range(4)]
+    assert tt[:2] == [60, 90] and tt[2] == tt[3] < 150      # D8: never topped up
+    last = json.loads((out / "epoch_003" / "artifacts_v2.json").read_text())["acquisition"]["diagnostics"]
+    assert last["done"] and last["unspent"] == 90 - (tt[3] - 60)

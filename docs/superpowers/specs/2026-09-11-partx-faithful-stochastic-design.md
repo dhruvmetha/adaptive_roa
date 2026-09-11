@@ -205,8 +205,7 @@ sample sets have not changed, and writes `epoch_XXX/`:
   - `sampling_mode: "partx_faithful"`,
   - `threshold_state` (λ* = 0.5, δ* = 0.1, as for `predictor=gp`),
   - `eval_metrics`,
-  - `acquisition.d2_indices`, the pool indices taken since the previous checkpoint, which
-    `acquired_true_p.py` reads,
+  - `acquisition.d2_indices`, the pool indices bought between this checkpoint and the next, as the engine records them,
   - `acquisition.diagnostics`: iteration, phase, a count of leaves by type, both falsification
     volumes, unspent budget, 'i' shortfalls, capped fits, and fits that hit a hyperparameter
     bound,
@@ -235,7 +234,7 @@ every cell.
 
 - State (the tree, per-leaf sample indices, used-mask, RNG state, counters, acquisition log and a
   config hash) is pickled atomically (temp file, then `os.replace`) to `output_dir/partx_state.pkl`
-  after every iteration and every checkpoint.
+  at every iteration boundary. A pickle taken mid-iteration would re-branch the same parents on resume.
 - On start, a matching state file resumes the run. A config-hash mismatch refuses to start.
 - An interrupted iteration replays from the saved RNG state. Epoch directories that already have
   both files are skipped.

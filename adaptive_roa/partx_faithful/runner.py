@@ -78,8 +78,15 @@ class CheckpointWriter:
         return self.checkpoints[e] - self.initial
 
     def on_sample(self, px) -> None:
-        """Write every checkpoint the sample count has reached (called after each batch)."""
-        while self.next_e < len(self.checkpoints) and self.initial + px.used >= self.checkpoints[self.next_e]:
+        """Write every checkpoint the sample count has reached (called after each batch).
+
+        The final-budget epoch is left to finish(): the batch that reaches it can
+        still be followed by that region's classification, and the epoch must
+        record Part-X's final state.
+        """
+        while (self.next_e < len(self.checkpoints)
+               and self.initial + px.used >= self.checkpoints[self.next_e]
+               and self.n_new(self.next_e) < px.budget):
             e = self.next_e
             self.next_e += 1
             if not self.complete(e):
@@ -92,6 +99,8 @@ class CheckpointWriter:
         for e in range(self.next_e, len(self.checkpoints)):
             if not self.complete(e):
                 self.write(px, e)
+            else:
+                self._fill_prev_d2(px, e)
         self.next_e = len(self.checkpoints)
 
     def _fill_prev_d2(self, px, e: int) -> None:

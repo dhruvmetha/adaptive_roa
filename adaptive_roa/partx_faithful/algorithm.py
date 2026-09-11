@@ -84,6 +84,7 @@ class PartX:
         self.log: list = []
         self.iteration, self.phase, self.done = 0, "root", False
         self.shortfall = self.n_fits = self.n_capped = self.n_at_bound = 0
+        self._fit_keys: set = set()   # (rid, n) fits already counted; pickled, so a resume counts the same
 
     # ---- bookkeeping ------------------------------------------------------
     def __getstate__(self):
@@ -121,9 +122,15 @@ class PartX:
             return cached[1]
         model = self.model_factory(derive_seed(self.cfg.seed, region.rid, n))
         model.fit(self.store.X(region.samples), self.store.y(region.samples))
-        self.n_fits += 1
-        self.n_capped += int(bool(getattr(model, "capped", False)))
-        self.n_at_bound += int(bool(getattr(model, "at_bound", False)))
+        key = (region.rid, n)
+        if key not in self._fit_keys:
+            # Count each distinct fit once. After a resume the cache is empty and the
+            # same fits are recomputed; counting only first occurrences keeps the
+            # diagnostics identical to an uninterrupted run (spec §8.1).
+            self._fit_keys.add(key)
+            self.n_fits += 1
+            self.n_capped += int(bool(getattr(model, "capped", False)))
+            self.n_at_bound += int(bool(getattr(model, "at_bound", False)))
         self.model_cache[region.rid] = (n, model)
         return model
 

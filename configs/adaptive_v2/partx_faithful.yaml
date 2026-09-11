@@ -1,0 +1,28 @@
+# Faithful Part-X runner config (spec docs/superpowers/specs/2026-09-11-partx-faithful-stochastic-design.md).
+# Composes `default` so system / controller / noise_family / noise_level overrides
+# resolve the data paths exactly as run_adaptive.py does. The predictor,
+# acquisition and eval groups that `default` pulls in are unused here.
+defaults:
+  - default
+  - _self_
+
+partx_faithful:
+  algorithm:
+    n0: auto             # spec §6.5: 10 when the state is 2-D, else 30
+    n_bo: 10
+    n_c: 100
+    R: 20
+    M: 500
+    B: 2
+    delta_c: 0.05
+    delta_v: 0.001
+    ei_cand_cap: 20000
+    ei_f_star: plugin
+    compat_ci_var: false             # reference check only (spec §4 row 1)
+    compat_eq4_times_volume: false   # reference check only (spec §4 row 2)
+  gp:
+    n_restarts: 5
+    max_points: 2000
+    lengthscale_bounds: [0.01, 100.0]
+    sigma_f2_bounds: [0.01, 25.0]
+  falsify: failure       # D2; `success` exists for a later sensitivity run only

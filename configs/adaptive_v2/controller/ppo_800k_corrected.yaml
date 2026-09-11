@@ -1,0 +1,10 @@
+# @package _global_
+# Same PPO policy and success criterion as `ppo`, re-collected (dm1487,
+# 2026-09-11) as quadrotor3D/corridor_sine_ambient/ppo_800k_corrected/<level>.
+# Differences from ppo_800k that matter when reading results side by side:
+#   * start tilt is drawn over the whole sphere (tilt max pi), not the 0.4 rad
+#     cap, so the base rate drops (f_0.00: 6.68% vs 21.76%);
+#   * the trainable pool (shuffled_indices_0.txt) is 100,000 flights, not 800,000;
+#   * levels are f_0.00, f_0.12_a0.03, f_0.20_a0.035, f_0.40_a0.04.
+# Use as `+controller=ppo_800k_corrected` for the same reason as ppo_800k.yaml.
+controller: ppo_800k_corrected

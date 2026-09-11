@@ -46,6 +46,8 @@ class NpzTrajectoryDataSource(TrajectoryDataSource):
             self._states = z["states"].astype(np.float32)
             self._offsets = z["offsets"].astype(np.int64)
             self._starts = z["starts"].astype(np.float32)
+            # Only the quadrotor3D ppo pools ship this; used as a cross-check.
+            timeout_all = z["timeout"] if "timeout" in z.files else None
 
         self._load_shuffled_indices(config.shuffled_indices_file)
         if config.shuffled_labels_file:
@@ -85,6 +87,11 @@ class NpzTrajectoryDataSource(TrajectoryDataSource):
             n_success = np.sum(self.labels == 1)
             n_failure = np.sum(self.labels == -1)
             print(f"  Labels: {n_success} success, {n_failure} failure")
+        lengths = np.diff(self._offsets)[self.rollout_ids]
+        self._init_timeout_policy(
+            lengths=lengths,
+            timeout_flags=None if timeout_all is None else timeout_all[self.rollout_ids],
+        )
 
     @staticmethod
     def _parse_rollout_ids(filepath: str) -> np.ndarray:

@@ -111,8 +111,9 @@ offers the logistic link.
   n training points. This is the analog of cpslab's `normalize_y`, which sets the mean from the
   data. The add-one smoothing keeps single-class regions finite: 30 failures out of 30 gives
   μ = −1.86. Fitting μ by maximum likelihood would send it to −∞ on single-class data.
-- Restart seeds derive from (run seed, iteration, region id, fit counter), so every fit is
-  reproducible regardless of process scheduling.
+- Restart seeds derive from (run seed, region id, number of samples in the fit). A given sample set
+  therefore always gets the same fit, which is what lets a resumed run replay exactly after its
+  model cache resets (§6.6).
 
 ### 5.3 Size cap
 

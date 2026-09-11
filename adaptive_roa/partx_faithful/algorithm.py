@@ -258,6 +258,9 @@ class PartX:
                 self._sample_more(r, int(cnt), self._rng(rid, _FINAL))
             self._file(r, remaining, classified)
         self.remaining, self.classified = remaining, classified
+        # Spec §3: the final phase ends the loop. D8: anything the pool could not
+        # supply stays unspent and is never topped up.
+        self.done = True
 
     def run(self) -> None:
         if self.phase == "root":

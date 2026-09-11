@@ -138,3 +138,15 @@ def test_multinomial_counts():
 def test_the_budget_must_cover_the_root():
     with pytest.raises(ValueError):
         _px(budget=1, n0=4, n_bo=2)
+
+
+def test_the_final_phase_ends_the_run_even_when_the_pool_falls_short():
+    px, ps = _px(budget=400)
+    px.run_root()                                     # used = n_bo = 2
+    free = np.flatnonzero(~ps.used)[:2]
+    ps.used[:] = True
+    ps.used[free] = False                             # only 2 unused pool points remain
+    px.budget = px.used + 3                           # the gate needs 4, so the final phase runs with 3
+    px.step()
+    assert px.phase == "final" and px.done            # spec §3: the final phase ends the loop
+    assert px.budget - px.used == 1 == px.shortfall   # D8: the unmet evaluation stays unspent

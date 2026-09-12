@@ -405,7 +405,11 @@ iLab path rather than erroring (`adaptive_roa/utils/env_config.py:169`).
 **GPU partitions** (all `3-00:00:00` limit, untyped `--gres=gpu:N`):
 - `gpu` — main pool, 55 nodes `gpu[015-048]`, `gpuk[001-018]`, `volta[001-003]`:
   volta (sm_70), ampere (sm_80/86), adalovelace (sm_89)
-- `cgpu` — **Camden nodes `gpuc[001-004]`, do not submit**
+- `cgpu` — **Camden nodes `gpuc[001-004]`, do not submit: they have NO `/scratch` mount.**
+  `AllowAccounts` lists `general`, so submission succeeds and the job is scheduled — then dies in
+  0 s with an EMPTY log, because neither the code at `/scratch/.../code` nor the env path resolves
+  (`No such file or directory`). The account check passing is exactly what makes this look like it
+  should work. Verified 2026-09-08 on gpuc001.
 - Torch 2.5.1/cu118 covers every arch present; there are no Blackwell cards on Amarel.
 - `gpu` is the only usable GPU pool and it does queue — check `sbatch --test-only` before
   assuming a fast start, but treat its start time as a worst-case bound, not a prediction
@@ -432,3 +436,14 @@ evidence of a CPU-only build; check `torch.version.cuda` instead.
 (`deterministic/`, `noisy/`, `partial_deterministic/`); a run copies in the subtree it needs.
 Reference sizes on iLab: `deterministic/pendulum` 1.9G, `noisy/pendulum` 12G,
 `deterministic/humanoid_get_up_medium` 88G (the tree totals ~119G).
+
+## Project Tracking (Notion)
+
+<!-- managed by the notion-link-project skill; read by notion-task -->
+
+- **Project:** Verification using Global Dynamics — https://app.notion.com/p/2c6334e227c280148fd8f27d3b834937
+- **Project page ID:** 2c6334e2-27c2-8014-8fd8-f27d3b834937
+- **Projects data source:** `collection://2c4334e2-27c2-8027-aca7-000b24d8b3b0`
+- **Tasks data source:** `collection://4a9b842b-f7b0-44c1-87b7-5c986f836c97`
+- **Task properties:** title=`Name`, status=`Status`, project-relation=`Project`
+- **Task view filter:** `Status board filtered on Project relation_contains https://app.notion.com/p/2c6334e227c280148fd8f27d3b834937` (sub-items hidden)

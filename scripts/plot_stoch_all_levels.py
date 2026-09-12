@@ -110,6 +110,40 @@ ARMS = [
 ]
 BAND_C, BAND_A, MEAN_C, MEAN_LW = "0.55", 0.35, "0.15", 3.0
 
+def _timeout_fix_arms():
+    """The timeout-fix arms, styled from plot_levelsets_paper.py's ARM_STYLES.
+
+    Derived rather than copied so this campaign's colour and marker for a method
+    are the SAME object of truth as its level-set and KL figures; a palette edit
+    there moves all three. Note the family line styles differ between the two
+    scripts (this one reserves dash-dot for Part-X, the paper module gives it to
+    BNN); the paper module wins here, because these figures are read beside its
+    output, and Part-X is not an arm in this campaign.
+    """
+    import importlib.util as _ilu
+    _sp = _ilu.spec_from_file_location(
+        "levelsets_paper", ROOT / "scripts/paper/plot_levelsets_paper.py")
+    _m = _ilu.module_from_spec(_sp); _sp.loader.exec_module(_m)
+    out = []
+    for arm in ("dir00_s42", "epi_bald_greedy", "clf_epi_bald_greedy", "bnn_mfvi_a1_greedy"):
+        if arm == "dir00_s42":                       # the uniform control: black, as in the paper figures
+            out.append((arm, "FM uniform", "#000000", "-", "o"))
+            continue
+        label, family, colour, _lw, marker = _m.ARM_STYLES[arm]
+        out.append((arm, label, colour, _m.FAMILY_LS[family], marker))
+    return out
+
+
+# The timeout-fix campaign runs the `_greedy` (top-N) arms and a SINGLE uniform
+# seed, so none of its four arms appears in the canonical table above and the
+# band (which needs all three seeds) never draws. Listing them here, attached to
+# those campaigns only via `extra_arms`, keeps every existing figure identical
+# while making this campaign's arms visible instead of silently dropped -- the
+# same trap the BB-alpha comment above records. Colours match each arm's family
+# twin in the table so a method reads the same across figures; the uniform
+# control is the black line the 3-seed band would otherwise be.
+ARMS_TIMEOUT_FIX = _timeout_fix_arms()
+
 # --clean: the four-arm read for slides and the paper. One representative per
 # predictor family plus its own non-adaptive control, so the figure answers
 # "does acquisition help, in each family" without eleven overlapping lines.
@@ -136,7 +170,44 @@ def missing_columns(m, cols):
     return sorted((arm, e, c) for arm in m for e in m[arm] for c in cols
                   if m[arm][e].get(c, "") == "")
 
+TF_FIG = "timeout_fix/paper_draft/figures"
 CAMPAIGNS = {
+  # ---- timeout-corrected campaign (docs/stochastic/timeout_fix) ----
+  "tf_cartpole": dict(
+    title="CartPole RL gaussian_signal — timeout-corrected pairing",
+    csv="timeout_fix/cartpole_safe_explorer_ppo_all_levels.csv",
+    out=f"{TF_FIG}/learning_curves_cartpole_ppo.png",
+    extra_arms=ARMS_TIMEOUT_FIX,
+    panels=[("baseline","CartPole RL — baseline (no noise)"),
+            ("low","CartPole RL — low"),
+            ("med","CartPole RL — med"),
+            ("high","CartPole RL — high")]),
+  "tf_pendulum": dict(
+    title="Pendulum LQR gaussian_signal — timeout-corrected pairing",
+    csv="timeout_fix/pendulum_lqr_all_levels.csv",
+    out=f"{TF_FIG}/learning_curves_pendulum_lqr.png",
+    extra_arms=ARMS_TIMEOUT_FIX,
+    panels=[("baseline","Pendulum — baseline (no noise)"),
+            ("low","Pendulum — low"),
+            ("med","Pendulum — med"),
+            ("high","Pendulum — high")]),
+  "tf_quad2d": dict(
+    title="Quadrotor2D RL corridor_sine_ambient — timeout-corrected pairing",
+    csv="timeout_fix/quad2d_corridor_sine_ambient_all_levels.csv",
+    out=f"{TF_FIG}/learning_curves_quad2d_rl.png",
+    extra_arms=ARMS_TIMEOUT_FIX,
+    panels=[("corridor_sine_ambient_baseline","Quadrotor2D — baseline (no noise)"),
+            ("corridor_sine_ambient_smooth","Quadrotor2D — smooth"),
+            ("corridor_sine_ambient_loud","Quadrotor2D — loud")]),
+  "tf_quad3d": dict(
+    title="Quadrotor3D PPO 1.5M-pool corridor_sine_ambient — timeout-corrected pairing",
+    csv="timeout_fix/quad3d_ppo1500k_corridor_sine_ambient_all_levels.csv",
+    out=f"{TF_FIG}/learning_curves_quad3d_ppo1500k.png",
+    extra_arms=ARMS_TIMEOUT_FIX,
+    panels=[("corridor_sine_ambient_f_0.00","Quadrotor3D — f_0.00 (DETERMINISTIC)"),
+            ("corridor_sine_ambient_f_0.12_a0.03","Quadrotor3D — f_0.12, a=0.03"),
+            ("corridor_sine_ambient_f_0.20_a0.035","Quadrotor3D — f_0.20, a=0.035"),
+            ("corridor_sine_ambient_f_0.40_a0.04","Quadrotor3D — f_0.40, a=0.04")]),
   "cartpole": dict(
     title="CartPole stochastic gaussian_signal",
     csv="cartpole/lqr/gaussian_all_levels.csv",
@@ -232,6 +303,36 @@ CAMPAIGNS = {
              "corridor_sine_ambient_f_0.12": "corridor_sine_ambient/ppo/f_0.12",
              "corridor_sine_ambient_f_0.20": "corridor_sine_ambient/ppo/f_0.20",
              "corridor_sine_ambient_f_0.40": "corridor_sine_ambient/ppo/f_0.40"}),
+  # Same PPO controller and the same corridor levels as q3dppo_cs, but an 800k
+  # trajectory pool instead of 100k: a pool-size ablation, identical policy and
+  # hence identical ROA, which is why it borrows ppo/ ground truth for dslevel
+  # rather than shipping its own. Registered 2026-09-10 for the same reason the
+  # note above records for q3dppo_cs -- the scorer had been writing both CSVs
+  # under ppo_800k/ since 2026-09-09 with no CAMPAIGNS entry here, so every plot
+  # script defaulted to list(CAMPAIGNS), never saw the key, and silently drew
+  # nothing. The docs dir held data and no figures for a day.
+  #
+  # SEPARATE KEY, NOT EXTRA PANELS on q3dppo_cs. Putting a 100k and an 800k
+  # level side by side in one panel set would read as a noise ladder when it is
+  # a budget ladder; they also have separate CSVs and separate docs subtrees.
+  #
+  # budget=40000 set by the user 2026-09-10. Note this is ABOVE the 35,000 used
+  # for quad3d_cs, so the two are not clipped alike and a cross-campaign claim
+  # must say which budget it is quoting.
+  "q3d800k_cs": dict(
+    title="Quadrotor3D PPO 800k-pool stochastic corridor_sine_ambient",
+    csv="quadrotor3d/ppo_800k/quad3d800k_corridor_sine_ambient_all_levels.csv",
+    out="quadrotor3d/ppo_800k/quad3d800k_corridor_sine_ambient_all_levels.png",
+    panels=[("corridor_sine_ambient_f_0.00","Quadrotor3D PPO 800k corridor_sine_ambient — f_0.00 (DETERMINISTIC)"),
+            ("corridor_sine_ambient_f_0.12","Quadrotor3D PPO 800k corridor_sine_ambient — f_0.12"),
+            ("corridor_sine_ambient_f_0.20","Quadrotor3D PPO 800k corridor_sine_ambient — f_0.20"),
+            ("corridor_sine_ambient_f_0.40","Quadrotor3D PPO 800k corridor_sine_ambient — f_0.40")],
+    dsroot=DATA / "quadrotor3D",
+    dslevel={"corridor_sine_ambient_f_0.00": "corridor_sine_ambient/ppo/f_0.00",
+             "corridor_sine_ambient_f_0.12": "corridor_sine_ambient/ppo/f_0.12",
+             "corridor_sine_ambient_f_0.20": "corridor_sine_ambient/ppo/f_0.20",
+             "corridor_sine_ambient_f_0.40": "corridor_sine_ambient/ppo/f_0.40"},
+    budget=40000),
 }
 
 
@@ -392,6 +493,7 @@ def main():
         # row stranded.
         _tbl = {x[0] for x in ARMS}
         _present = {a_ for _, _, m in loaded for a_ in m}
+        _tbl = _tbl | {a[0] for a in c.get("extra_arms", [])}
         nlab = len(_present & _tbl) + (2 if len(_present & set(SEEDS)) == 3 else 0)
         legcol = min(6, max(3, (nlab + 1) // 2))
         LEG_IN = 0.42 + 0.26 * ((nlab + legcol - 1) // legcol)   # legend strip, inches
@@ -418,7 +520,7 @@ def main():
                                     label="FM non-adaptive (3-seed range)")
                     ax.plot(bx, [st.mean(v) for v in vals], color=MEAN_C, lw=MEAN_LW,
                             zorder=2, label="FM non-adaptive (mean)")
-                for arm, label, colour, style, mk in ARMS:
+                for arm, label, colour, style, mk in (ARMS + c.get("extra_arms", [])):
                     if arm not in m:
                         continue
                     x, e = xs(m, arm)
@@ -449,14 +551,24 @@ def main():
         # Count the acquisition arms drawn as lines separately from the uniform
         # seeds, which are drawn once as the band. Pooling them reads as extra
         # methods -- the 4-arm clean figure would announce itself as 7 arms.
-        table = {x[0] for x in ARMS}
+        table = {x[0] for x in ARMS} | {x[0] for x in c.get("extra_arms", [])}
         present = {a_ for _, _, m in loaded for a_ in m}
-        narms = len(present & table)
+        # A campaign's extra arms are drawn, so they count; without this the
+        # timeout-fix figures announced "0 acquisition arms" while plotting four.
+        # The uniform control is excluded either way: it is the band, or (single
+        # seed) the black line, not an acquisition method.
+        narms = len((present & table) - set(SEEDS))
         nseed = len(present & set(SEEDS))
         scope = ("one arm per predictor family vs non-adaptive"
                  if a.clean else "all acquisition methods vs non-adaptive")
+        # A campaign with its own arm table also has its own family styles, so the
+        # canonical legend line would be wrong (this campaign's dash-dot is BNN,
+        # and it has no Part-X arm at all).
+        styles = ("(solid = flow matching · dotted = classifier · dash-dot = BNN)"
+                  if c.get("extra_arms") else
+                  "(solid = flow matching · dotted = classifier · dash-dot = Part-X GP)")
         fig.suptitle(f"{c['title']} — {scope}   "
-                     "(solid = flow matching · dotted = classifier · dash-dot = Part-X GP)\n"
+                     f"{styles}\n"
                      f"{narms} acquisition arms vs a {nseed}-seed FM non-adaptive control "
                      "(shaded band)   ·   "
                      "gaps under the printed 2·SD floor are not claimable",

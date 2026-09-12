@@ -28,7 +28,8 @@ class Quadrotor3DEndpointDataset(Dataset):
                  dataset_dir: str = None,
                  shuffled_indices_file: str = None,
                  trajectories_dir: str = None,
-                 max_samples: int = None):
+                 max_samples: int = None,
+                 cache_transformed: bool = None):
         """
         Initialize Quadrotor 3D endpoint dataset.
 
@@ -57,6 +58,46 @@ class Quadrotor3DEndpointDataset(Dataset):
             self._load_from_shuffled_indices(shuffled_indices_file, trajectories_dir, max_samples)
         else:
             raise ValueError("Must provide either data_file or shuffled_indices_file")
+
+        # OPT-IN fast path, default OFF.
+        # `__getitem__` is pure and per-row (quaternion normalize + canonicalize on
+        # cols 3:7), so the whole transform can be done once at construction and the
+        # per-item Python work removed from the training loop. Measured: the per-item
+        # path costs ~37 us/row and dominates the 23 ms/step, where the GPU work in
+        # that step is ~1 ms.
+        #
+        # DEFAULT False is load-bearing: 40 jobs are running against this file and
+        # their mp.spawn children re-import it every epoch. With the default they get
+        # byte-identical behaviour and never touch this branch.
+        # Gate on an env var when not passed explicitly, so enabling the fast path
+        # needs NO change to the DataModule or the trainer -- three more files that
+        # every live mp.spawn child re-imports each epoch. Unset (every running job)
+        # means False, i.e. byte-identical to before.
+        if cache_transformed is None:
+            cache_transformed = os.environ.get("Q3D_CACHE_TRANSFORMED", "0") == "1"
+        self._cache_start = None
+        self._cache_end = None
+        if cache_transformed:
+            self._cache_start, self._cache_end = self._build_transform_cache()
+
+    def _build_transform_cache(self):
+        """Apply the exact per-row transform to every row once, return float32 tensors.
+
+        Uses the SAME normalize/canonicalize methods as __getitem__ rather than a
+        vectorized reimplementation, so the result is bit-identical by construction
+        instead of by testing. A batched np.linalg.norm would be ~1e-8 off, which is
+        harmless numerically but would make the fast path a different experiment.
+        """
+        n = len(self.start_states)
+        st = np.empty((n, 13), dtype=np.float32)
+        en = np.empty((n, 13), dtype=np.float32)
+        for i in range(n):
+            a = self.start_states[i].copy()
+            b = self.end_states[i].copy()
+            a[3:7] = self.canonicalize_quaternion(self.normalize_quaternion(a[3:7]))
+            b[3:7] = self.canonicalize_quaternion(self.normalize_quaternion(b[3:7]))
+            st[i] = a; en[i] = b
+        return torch.from_numpy(st), torch.from_numpy(en)
 
     def _load_from_endpoint_file(self, data_file: str, max_samples: int = None):
         """Load endpoint data directly from a file."""
@@ -168,7 +209,23 @@ class Quadrotor3DEndpointDataset(Dataset):
             return np.array([1.0, 0.0, 0.0, 0.0])
         return quat / norm
 
+    def __getitems__(self, indices):
+        """Batch fetch. torch 2.5's DataLoader calls this instead of per-item
+        __getitem__ when it exists.
+
+        MUST return a LIST OF SAMPLES, not a pre-batched dict: the fetcher hands the
+        result straight to default_collate, which does batch[0] and raises KeyError
+        on a dict. Returning cached slices still removes the expensive part (the
+        per-row copy, quaternion normalize/canonicalize and tensor construction);
+        only the collate itself remains."""
+        if self._cache_start is None:
+            return [self.__getitem__(i) for i in indices]
+        return [{'start_state': self._cache_start[i], 'end_state': self._cache_end[i]}
+                for i in indices]
+
     def __getitem__(self, idx):
+        if self._cache_start is not None:
+            return {'start_state': self._cache_start[idx], 'end_state': self._cache_end[idx]}
         start_state = self.start_states[idx].copy()
         end_state = self.end_states[idx].copy()
 

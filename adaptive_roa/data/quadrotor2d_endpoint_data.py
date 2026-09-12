@@ -58,6 +58,12 @@ class Quadrotor2DEndpointDataset(Dataset):
         else:
             raise ValueError("Must provide either data_file or shuffled_indices_file")
 
+        # Opt-in transform cache, default OFF. Left off, nothing above or below
+        # this line changes, which matters because live jobs re-import this
+        # module every epoch via mp.spawn.
+        if os.environ.get("Q2D_CACHE_TRANSFORMED", "0") == "1":
+            self._build_transform_cache()
+
     def _load_from_endpoint_file(self, data_file: str, max_samples: int = None):
         """Load endpoint data directly from a file."""
         print(f"Loading Quadrotor2D endpoint data from {data_file}...")
@@ -136,7 +142,40 @@ class Quadrotor2DEndpointDataset(Dataset):
         """Wrap angle to [-pi, pi] for proper S^1 manifold representation"""
         return np.arctan2(np.sin(angle), np.cos(angle))
 
+    def _build_transform_cache(self):
+        """Precompute the per-row transform that __getitem__ does, once.
+
+        Opt-in via Q2D_CACHE_TRANSFORMED=1. This calls the SAME per-row
+        wrap_angle on the SAME .copy() that __getitem__ would, rather than a
+        vectorised reimplementation, so the cached rows are bit-identical to the
+        sequential path instead of merely close. A vectorised np.arctan2 over the
+        whole column would be faster to build but can differ in the last ulp.
+        """
+        n = len(self.start_states)
+        starts = torch.empty((n, 6), dtype=torch.float32)
+        ends = torch.empty((n, 6), dtype=torch.float32)
+        for i in range(n):
+            s = self.start_states[i].copy()
+            e = self.end_states[i].copy()
+            s[2] = self.wrap_angle(s[2])
+            e[2] = self.wrap_angle(e[2])
+            starts[i] = torch.tensor(s, dtype=torch.float32)
+            ends[i] = torch.tensor(e, dtype=torch.float32)
+        self._cached_starts = starts
+        self._cached_ends = ends
+        print(f"[Q2D_CACHE_TRANSFORMED] cached {n} transformed rows at construction")
+
     def __getitem__(self, idx):
+        # Fast path: only ever taken when the cache was built at construction,
+        # i.e. when Q2D_CACHE_TRANSFORMED=1. getattr keeps this safe for any
+        # instance that predates the attribute.
+        cached = getattr(self, "_cached_starts", None)
+        if cached is not None:
+            return {
+                'start_state': cached[idx],
+                'end_state': self._cached_ends[idx]
+            }
+
         start_state = self.start_states[idx].copy()
         end_state = self.end_states[idx].copy()
 

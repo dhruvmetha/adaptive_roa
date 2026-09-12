@@ -203,8 +203,15 @@ def main() -> None:
                       "(pass --allow-partial to override)")
                 continue
             out = (DOCS / c["out"]).with_name(f"levelsets_{lv}.png")
-            draw_level(by_arm, depth, out, lab + cap)
-            print(f"  wrote {out.relative_to(DOCS)}  ({len(by_arm)} arms, "
+            # A campaign whose arms are not in the canonical table (the timeout-fix
+            # ones are not) must hand its own styles down, or draw_level falls back
+            # to ARMS, matches nothing, and writes a figure holding only the oracle
+            # ceilings. Appending keeps every other campaign's figure identical,
+            # since an arm absent from the data is skipped inside draw_level.
+            arms = ARMS + c["extra_arms"] if c.get("extra_arms") else None
+            draw_level(by_arm, depth, out, lab + cap, arms=arms)
+            n_drawn = sum(1 for a, *_ in (arms or ARMS) if a in by_arm)
+            print(f"  wrote {out.relative_to(DOCS)}  ({n_drawn} of {len(by_arm)} arms drawn, "
                   f"final epoch {max(depth.values())})")
 
 

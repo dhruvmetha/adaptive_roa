@@ -125,7 +125,13 @@ def _timeout_fix_arms():
         "levelsets_paper", ROOT / "scripts/paper/plot_levelsets_paper.py")
     _m = _ilu.module_from_spec(_sp); _sp.loader.exec_module(_m)
     out = []
-    for arm in ("dir00_s42", "epi_bald_greedy", "clf_epi_bald_greedy", "bnn_mfvi_a1_greedy"):
+    # partx_faithful is included here without the depth guard the level-set figures
+    # need. These curves draw each arm to ITS OWN depth and stamp what is short, so
+    # a partial arm adds a short curve and changes nothing about the others; the
+    # level-set figures read every arm at the deepest SHARED epoch, where a partial
+    # arm would drag the whole panel back with it.
+    for arm in ("dir00_s42", "epi_bald_greedy", "clf_epi_bald_greedy", "bnn_mfvi_a1_greedy",
+                "partx_faithful"):
         if arm == "dir00_s42":                       # the uniform control: black, as in the paper figures
             out.append((arm, "FM uniform", "#000000", "-", "o"))
             continue

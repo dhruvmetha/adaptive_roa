@@ -202,7 +202,15 @@ def main() -> None:
                 print(f"  REFUSING {name}/{lv}: ragged depths {dict(sorted(depth.items()))} "
                       "(pass --allow-partial to override)")
                 continue
-            out = (DOCS / c["out"]).with_name(f"levelsets_{lv}.png")
+            # Campaign key in the filename, not just the level. Two systems can
+            # share a level name and write into one figure dir: cartpole and
+            # pendulum BOTH have baseline/low/med/high, so the old
+            # `levelsets_{lv}.png` had them overwriting each other silently --
+            # whichever campaign ran last won and the other's four figures simply
+            # did not exist. quad2d and quad3d collided less visibly, sharing the
+            # corridor_sine_ambient prefix so that neither filename said which
+            # system it was.
+            out = (DOCS / c["out"]).with_name(f"levelsets_{name}_{lv}.png")
             # A campaign whose arms are not in the canonical table (the timeout-fix
             # ones are not) must hand its own styles down, or draw_level falls back
             # to ARMS, matches nothing, and writes a figure holding only the oracle

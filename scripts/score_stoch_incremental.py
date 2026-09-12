@@ -112,6 +112,11 @@ ARMS = ["dir00_s42", "dir00_s43", "dir00_s44", "epi_var", "epi_var_anch", "epi_b
         # is the whole reason the adaptive arms need explicit names here, and a
         # name missing from this list is skipped SILENTLY, so an unregistered
         # seed would look like a run that never banked anything.
+        # The faithful Part-X arm (Algorithms 1-4 of arXiv 2110.10729), run into
+        # this campaign's dirs by the partx-faithful session. Distinct from the
+        # existing `partx_fix`, which is a single global GP with straddle
+        # sampling and is NOT Part-X.
+        "partx_faithful",
         "epi_bald_greedy_s43", "epi_bald_greedy_s44",
         "bnn_mfvi_a1_greedy_s43", "bnn_mfvi_a1_greedy_s44",
         "clf_epi_bald_greedy_s43", "clf_epi_bald_greedy_s44"]

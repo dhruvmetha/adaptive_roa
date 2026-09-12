@@ -202,15 +202,19 @@ def main() -> None:
                 print(f"  REFUSING {name}/{lv}: ragged depths {dict(sorted(depth.items()))} "
                       "(pass --allow-partial to override)")
                 continue
-            # Campaign key in the filename, not just the level. Two systems can
-            # share a level name and write into one figure dir: cartpole and
-            # pendulum BOTH have baseline/low/med/high, so the old
-            # `levelsets_{lv}.png` had them overwriting each other silently --
-            # whichever campaign ran last won and the other's four figures simply
-            # did not exist. quad2d and quad3d collided less visibly, sharing the
-            # corridor_sine_ambient prefix so that neither filename said which
-            # system it was.
-            out = (DOCS / c["out"]).with_name(f"levelsets_{name}_{lv}.png")
+            # PER-LEVEL DIAGNOSTICS, not paper figures, so they go under
+            # diagnostics/ instead of beside the report's figures. The paper wants
+            # ONE combined figure per system -- noise levels as columns,
+            # F0.5/Recall/Precision as rows -- and scripts/paper/plot_timeout_fix.py
+            # already produces exactly that as levelsets_<system>.png. Writing one
+            # file per level next to it left a dozen near-identical names in the
+            # figures directory with nothing to say which one anyone should read
+            # (user, 2026-09-12).
+            #
+            # Campaign key still in the filename, because cartpole and pendulum
+            # BOTH have baseline/low/med/high: naming by level alone had them
+            # overwriting each other silently, whichever ran last winning.
+            out = (DOCS / c["out"]).parent / "diagnostics" / f"levelsets_{name}_{lv}.png"
             # A campaign whose arms are not in the canonical table (the timeout-fix
             # ones are not) must hand its own styles down, or draw_level falls back
             # to ARMS, matches nothing, and writes a figure holding only the oracle

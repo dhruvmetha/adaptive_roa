@@ -4,6 +4,7 @@ Trajectory Data Source for Adaptive Sampling.
 Manages the mapping between eval_states, shuffled_indices, and trajectory files.
 Provides efficient access to trajectory data by index.
 """
+import json
 import numpy as np
 import torch
 from pathlib import Path
@@ -13,6 +14,68 @@ from dataclasses import dataclass
 # Maximum rows per trajectory for packed candidate-id scheme.
 # Any trajectory longer than this will raise at get_trajectory_length time.
 MAX_ROWS = 10000
+
+# How training rows are built from a TIMEOUT trajectory, one the collector cut at
+# its horizon T because time ran out (not by success, not at a wall).
+#
+# A trajectory that terminates at step L-1 <= T reaches that terminal state from
+# every x_t within T steps, so (x_t, x_{L-1}) is a valid T-step pair. A timeout
+# is not: the T-step future of x_t is x_{t+T}, which was never recorded, so
+# (x_t, x_T) claims an outcome over only T - t steps.
+#   "keep": every row paired with x_T (historical behaviour, the default so that
+#           running and resumed runs are unchanged).
+#   "drop": a timeout contributes only (x_0, x_T), the one pair whose future is
+#           known. Row inclusion then depends on the outcome: measured on the
+#           pendulum-med pool, rows at true p_success 0.1-0.2 carry mean label
+#           0.93 under "drop" against 0.13 under "keep".
+TIMEOUT_INTERMEDIATE_MODES = ("keep", "drop")
+
+
+def _horizon_from_description(desc: dict) -> Optional[int]:
+    """Collector horizon in steps from a dataset description json, if recorded.
+
+    Pendulum writes a top-level `horizon_steps`; cartpole and the quadrotors
+    write `horizon: {steps: ...}`.
+    """
+    h = desc.get("horizon_steps")
+    if h is None and isinstance(desc.get("horizon"), dict):
+        h = desc["horizon"].get("steps")
+    return None if h is None else int(h)
+
+
+def resolve_horizon_steps(config: "TrajectoryDataSourceConfig") -> int:
+    """The collector horizon T for this pool, in control steps.
+
+    Read from train_description.json / dataset_description.json next to the
+    pool (the train.npz's directory, or the parent of a trajectories/ dir).
+    An explicit `config.horizon_steps` must agree with them. Raises when no
+    horizon is found or two sources disagree.
+    """
+    explicit = getattr(config, "horizon_steps", None)
+    base = Path(config.trajectories_dir)
+    roots = ([base] if base.is_dir() else []) + [base.parent]
+    found: Dict[str, int] = {}
+    for root in roots:
+        for name in ("train_description.json", "dataset_description.json"):
+            p = root / name
+            if p.is_file():
+                with open(p) as f:
+                    h = _horizon_from_description(json.load(f))
+                if h is not None:
+                    found[str(p)] = h
+        if found:
+            break
+    values = set(found.values())
+    if explicit is not None:
+        values.add(int(explicit))
+    if not values:
+        raise ValueError(
+            f"timeout_intermediates='drop' needs the collector horizon, but no "
+            f"horizon was found beside {base} and data_source.horizon_steps is unset.")
+    if len(values) > 1:
+        raise ValueError(
+            f"Conflicting horizon values for {base}: {found}, explicit horizon_steps={explicit}.")
+    return values.pop()
 
 
 def load_eval_states(
@@ -144,6 +207,12 @@ class TrajectoryDataSourceConfig:
     # Internal: -1 = failure, 0 = separatrix, 1 = success
     label_mapping: Dict[int, int] = None
 
+    # Pairing of timeout trajectories' intermediate states; see
+    # TIMEOUT_INTERMEDIATE_MODES. "drop" needs the horizon (from the dataset
+    # description, or horizon_steps below).
+    timeout_intermediates: str = "keep"
+    horizon_steps: Optional[int] = None
+
     def __post_init__(self):
         if self.label_mapping is None:
             # Default: map 0 → -1 (failure), 1 → 1 (success)
@@ -211,6 +280,64 @@ class TrajectoryDataSource:
             n_success = np.sum(self.labels == 1)
             n_failure = np.sum(self.labels == -1)
             print(f"  Labels: {n_success} success, {n_failure} failure")
+        # Text pools: lengths are checked per trajectory as rows are built.
+        self._init_timeout_policy()
+
+    def _init_timeout_policy(
+        self,
+        lengths: Optional[np.ndarray] = None,
+        timeout_flags: Optional[np.ndarray] = None,
+    ) -> None:
+        """Validate `timeout_intermediates` and, for "drop", fix the horizon.
+
+        lengths: rows per pool trajectory, when the whole pool is known up front
+            (npz). Checked against the horizon, and used for a log line.
+        timeout_flags: the collector's own per-trajectory timeout flag, when the
+            pool ships one (quadrotor3D ppo). Must agree with the length rule.
+        """
+        mode = getattr(self.config, "timeout_intermediates", None) or "keep"
+        if mode not in TIMEOUT_INTERMEDIATE_MODES:
+            raise ValueError(
+                f"data_source.timeout_intermediates={mode!r}; expected one of "
+                f"{TIMEOUT_INTERMEDIATE_MODES}")
+        self.timeout_intermediates = mode
+        self.horizon_steps = None
+        if mode == "keep":
+            return
+        if self.labels is None:
+            raise ValueError("timeout_intermediates='drop' needs shuffled_labels_file: a "
+                             "trajectory cut at the horizon is a timeout only if it did not succeed.")
+        self.horizon_steps = resolve_horizon_steps(self.config)
+        if lengths is None:
+            print(f"  Timeout intermediates: drop (horizon {self.horizon_steps} steps)")
+            return
+        lengths = np.asarray(lengths)
+        too_long = lengths > self.horizon_steps + 1
+        if too_long.any():
+            raise ValueError(
+                f"{int(too_long.sum())} pool trajectories have more than horizon+1 = "
+                f"{self.horizon_steps + 1} rows (max {int(lengths.max())}); the horizon is wrong.")
+        timeout = (lengths == self.horizon_steps + 1) & (self.labels != 1)
+        if timeout_flags is not None:
+            flagged = (np.asarray(timeout_flags) != 0) & (self.labels != 1)
+            if not np.array_equal(flagged, timeout):
+                raise ValueError(
+                    f"The pool's timeout flag marks {int(flagged.sum())} unsuccessful "
+                    f"trajectories, the horizon rule marks {int(timeout.sum())}; they must agree.")
+        dropped = int((lengths[timeout] - 2).sum())
+        print(f"  Timeout intermediates: drop (horizon {self.horizon_steps} steps): "
+              f"{int(timeout.sum())} of {len(lengths)} pool trajectories time out; "
+              f"{dropped} of {int((lengths - 1).sum())} pool rows would be dropped")
+
+    def _drops_intermediates(self, idx: int, n_rows: int) -> bool:
+        """True when trajectory idx is a timeout and its intermediate rows go."""
+        # getattr: instances unpickled from before the attribute existed keep "keep".
+        if getattr(self, "timeout_intermediates", "keep") != "drop":
+            return False
+        if n_rows > self.horizon_steps + 1:
+            raise ValueError(f"Trajectory {idx} has {n_rows} rows, more than horizon+1 = "
+                             f"{self.horizon_steps + 1}; the horizon is wrong.")
+        return n_rows == self.horizon_steps + 1 and self.get_label(idx) != 1
 
     def _load_shuffled_indices(self, filepath: str):
         """Load shuffled indices file."""
@@ -397,7 +524,9 @@ class TrajectoryDataSource:
         """
         Get all endpoint pairs from a single trajectory.
 
-        For training: every state → final state (many pairs per trajectory)
+        For training: every state → final state (many pairs per trajectory),
+        except that with timeout_intermediates="drop" a timeout trajectory gives
+        only its first state (see TIMEOUT_INTERMEDIATE_MODES)
         For testing: only first state → final state (one pair per trajectory)
 
         Args:
@@ -415,12 +544,15 @@ class TrajectoryDataSource:
         if mode == "test":
             # Only first state → end state
             return traj[0:1], np.array([end_state])
+        if self._drops_intermediates(idx, len(traj)):
+            # Only x_0's T-step future (x_T) is on record; none exists from row > 0.
+            starts = traj[0:1] if start_row == 0 else traj[0:0]
         else:
             # All states from start_row (inclusive) up to but not including last → end state
             starts = traj[start_row:-1]
-            n_states = len(starts)
-            ends = np.tile(end_state, (n_states, 1))
-            return starts, ends
+        n_states = len(starts)
+        ends = np.tile(end_state, (n_states, 1))
+        return starts, ends
 
     def build_endpoint_dataset(
         self,
@@ -443,6 +575,7 @@ class TrajectoryDataSource:
         all_starts = []
         all_ends = []
         all_labels = []
+        n_timeouts = n_dropped = 0
 
         for idx in indices:
             starts, ends = self.get_all_endpoint_pairs_from_trajectory(idx, mode)
@@ -451,6 +584,15 @@ class TrajectoryDataSource:
             all_starts.append(starts)
             all_ends.append(ends)
             all_labels.extend([label] * len(starts))
+            if mode != "test":
+                n_rows = self.get_trajectory_length(idx)
+                if self._drops_intermediates(idx, n_rows):
+                    n_timeouts += 1
+                    n_dropped += n_rows - 2
+
+        if getattr(self, "timeout_intermediates", "keep") == "drop" and mode != "test":
+            print(f"  timeout_intermediates=drop: {n_timeouts} of {len(indices)} trajectories "
+                  f"time out, {n_dropped} intermediate rows dropped")
 
         return (
             np.vstack(all_starts),

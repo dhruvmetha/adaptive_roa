@@ -26,6 +26,10 @@ class TrajectoryPool:
             shuffled_indices_file=data_source_cfg.shuffled_indices_file,
             shuffled_labels_file=data_source_cfg.get("shuffled_labels_file", None),
             eval_states_file=data_source_cfg.get("eval_states_file", None),
+            # Absent from every config written before the timeout fix, so a
+            # resumed legacy run keeps its original rows.
+            timeout_intermediates=str(data_source_cfg.get("timeout_intermediates", "keep")),
+            horizon_steps=data_source_cfg.get("horizon_steps", None),
         )
         if str(data_source_cfg.get("pool_format", "text")) == "npz":
             from adaptive_roa.adaptive.npz_data_source import NpzTrajectoryDataSource

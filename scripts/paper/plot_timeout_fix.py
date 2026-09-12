@@ -41,6 +41,13 @@ SYSTEMS = {
     "cartpole_ppo":  ROOT / "cartpole_safe_explorer_ppo_all_levels.csv",
     "quad2d_rl":     ROOT / "quad2d_corridor_sine_ambient_all_levels.csv",
     "quad3d_ppo800k": ROOT / "quad3d_ppo1500k_corridor_sine_ambient_all_levels.csv",
+    # The 40k-budget rerun of the same four q3d cells (10,000 + 10x3,000 instead
+    # of 5,000 + 10x1,000). Its CSV lives in the sibling timeout_fix_40k docs
+    # dir -- deliberately NOT merged with the 15k one, since a paper script that
+    # averaged two budgets under one arm name would produce a curve belonging to
+    # neither. The figures land beside the 15k ones with a _40k suffix, which is
+    # what the system key gives us for free (user, 2026-09-12).
+    "quad3d_40k": DOCS / "timeout_fix_40k" / "quad3d_40k_corridor_sine_ambient_all_levels.csv",
 }
 # The final profile renames levels; this campaign carries levels the paper set
 # does not (cartpole/pendulum high, q3d f_0.20_a0.035), so extend rather than
@@ -57,6 +64,10 @@ EXTRA_PAPER_LEVELS = {
                        ("corridor_sine_ambient_f_0.12_a0.03", "low"),
                        ("corridor_sine_ambient_f_0.20_a0.035", "medium"),
                        ("corridor_sine_ambient_f_0.40_a0.04", "high")],
+    "quad3d_40k": [("corridor_sine_ambient_f_0.00", "deterministic"),
+                   ("corridor_sine_ambient_f_0.12_a0.03", "low"),
+                   ("corridor_sine_ambient_f_0.20_a0.035", "medium"),
+                   ("corridor_sine_ambient_f_0.40_a0.04", "high")],
 }
 
 
@@ -131,6 +142,10 @@ def main() -> None:
     # different schedule, so asking for epoch 11 plots nothing at all. Read every
     # system at its deepest common epoch instead.
     S.FINAL_EPOCHS.update({s: "common" for s in SYSTEMS})
+    # Without this the 40k figures carry the bare dict key as their title.
+    # The budget is in the title because it is the ONLY thing separating these
+    # panels from the 15k ones they sit beside in the same directory.
+    S.SYSTEM_TITLES.setdefault("quad3d_40k", "Quadrotor 3D (RL) — 40k budget")
     for profile in args.profiles:
         S.set_profile(profile)
         S.FIG_DIR = ROOT / f"paper_{profile}" / "figures"      # redirect the output root

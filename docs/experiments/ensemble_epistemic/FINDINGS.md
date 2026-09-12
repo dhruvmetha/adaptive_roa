@@ -3,6 +3,17 @@
 **Status as of 2026-08-11.** This file holds only what is *currently defensible*; `LOG.md` is the
 chronological record including superseded claims and their corrections.
 
+> **See also `YIELD_AWARE.md` (2026-08-16).** This file covers the init=1000/step=1000 sweep,
+> whose headline is that the score does not matter. A follow-up sweep at **init=100/step=100** on
+> `noisy/pendulum/lqr/high` found a mechanism that the coarse step size had hidden: the budget is
+> denominated in **trajectories** while the model trains on **pairs**, and on pendulum the two are
+> outcome-coupled (successes stop at the goal at ~136 steps, failures run to the 1001-step cap).
+> Every uncertainty arm buys the short rollouts and accrues pairs at 0.27–0.50× the control's
+> rate. Ranking by informativeness **per trajectory purchased** beats the non-adaptive control on
+> **KL** by +1.87 / +1.68 floor units across two seeds. That is a result on one system and one
+> metric; it does not overturn the nulls below, which were measured at a step size where the
+> effect is diluted.
+
 | half | state |
 |---|---|
 | **[CLF]** | det complete 19/19; **high complete 19/19 on all five arms** (rescored, §1); low/med/xhigh from truncated curves (walltime, see §6) |

@@ -1,10 +1,15 @@
 # Yield-aware acquisition — the i100 pendulum sweep
 
-**Status as of 2026-08-16 13:45.** Live campaign; two arms still training. This file records what
-is currently defensible and flags in-flight work as in-flight. `FINDINGS.md` covers the earlier
-init=1000/step=1000 sweep across five noise levels, whose headline was that **the score does not
-matter** — every uncertainty arm was interchangeable with the non-adaptive control. This sweep
-found the reason on one system, and a fix that beats the control on one of three metrics.
+**Status as of 2026-08-20 00:20. CAMPAIGN COMPLETE — all 17 arms at 20/20, 340 rows scored in one
+pass (`I100_ALL`), 0 collapsed epochs.** `FINDINGS.md` covers the earlier init=1000/step=1000
+sweep across five noise levels, whose headline was that **the score does not matter** — every
+uncertainty arm was interchangeable with the non-adaptive control. This sweep found the reason on
+one system, and a fix that beats the control on one of three metrics.
+
+> **Reference convention.** Gaps below are quoted against **`dir00` alone** (the seed-42 control),
+> a paired seed-42-vs-seed-42 comparison. Against the more conservative **3-seed control mean**
+> (pooled ep15–19 KL 0.0497 vs `dir00`'s 0.0525) every figure shrinks by ~10%: `epi_var_yield` is
+> +1.70 rather than +1.87. The win survives either convention; the two must not be mixed.
 
 **Headline.** On `noisy/pendulum/lqr/high` the acquisition budget is denominated in
 **trajectories** but the model trains on **pairs**, and the two are coupled to the outcome:
@@ -71,10 +76,15 @@ Total pairs bought over the full 2,000-trajectory budget:
 | arm | pairs | pairs per 100 trajectories | vs control |
 |---|---|---|---|
 | `dir00` / `_s43` / `_s44` (uniform) | 1,310,733 | 65,537 | 1.00× |
-| `length_only` (in flight) | — | **95,813** | **1.46×** |
+| `length_only` | **1,905,202** | **95,260** | **1.45×** |
+| `yield_mlp` | 1,121,874 | 56,094 | 0.86× |
+| `yield_knn` | 958,725 | 47,936 | 0.73× |
+| `yield_a20` (α=2) | 933,526 | 46,676 | 0.71× |
 | `epi_var_anch` | 873,633 | 43,682 | 0.67× |
 | `epi_var_yield` | 871,630 | 43,582 | 0.66× |
+| `yield_s44` | 787,202 | 39,360 | 0.60× |
 | `yield_s43` | 768,628 | 38,431 | 0.59× |
+| `yield_a05` (α=0.5) | 556,379 | 27,819 | 0.42× |
 | `epi_var_qknn2` | 650,147 | 32,507 | 0.50× |
 | `total` | 646,965 | 32,348 | 0.49× |
 | `epi_var_qknn` | 456,674 | 22,834 | 0.35× |
@@ -148,7 +158,7 @@ reduces **exactly** to `epi_var`, making this a single-knob comparison.
 
 Replicated at seeds 43 and 44 (`yield_s43`, `yield_s44`).
 
-### 3.3 Arms isolating the mechanism (launched 2026-08-16 12:11, in flight)
+### 3.3 Arms isolating the mechanism (launched 2026-08-16 12:11; all complete 20/20 — verdicts in §6.4–6.5)
 
 **`length_only` — expected length alone** (`…/strategy/length_only.py`). The control that the
 campaign was missing. Ranks by `E[L(x)]` and ignores the uncertainty score entirely for
@@ -302,34 +312,122 @@ All three seeds pass through these at the same depths. The pre-registered falsif
 E/act staying above 3× through epoch 6 would mean the weight is inert on this system — is
 **passed** by every alpha arm run so far.
 
-### 6.4 Alpha dose-response (in flight, 8/20 epochs)
+### 6.4 Alpha dose-response — COMPLETE at 20/20, and it is a PEAK, not a plateau
 
-| alpha | E/act by epoch (0→7) | cum pairs @ep6 |
-|---|---|---|
-| 0.5 | 8.3 · 3.1 · 2.3 · 4.2 · 3.8 · 2.8 · **2.5** · 1.4 | 134,473 |
-| 1.0 | 7.2 · 4.8 · 2.0 · 4.9 · 2.1 · 2.1 · **1.3** · 1.6 | 223,489 |
-| 2.0 | 8.2 · 1.9 · 4.0 · 2.4 · 2.9 · 1.6 · **1.6** · 1.1 | 214,665 |
+Pooled ep15–19, KL in converged-floor units vs the 3-seed control mean:
 
-With `alpha=0` (= plain `epi_var`) losing by 3.32 floor units, the emerging shape is a **plateau
-from alpha≈1 to alpha≈2 rather than a monotone gain** — alpha=0.5 is clearly behind both, while 1
-and 2 are close. If that holds at ep15–19 it says the knob is not delicate. Eight epochs in, this
-is the direction of the acquisition diagnostics, **not a result**; pair volume is not the outcome,
-and alpha=1 beat uniform *despite* having fewer pairs than the control.
+| alpha | arm | KL gap |
+|---|---|---:|
+| 0.0 | `epi_var` (= no yield weight) | **−3.48** |
+| 0.5 | `yield_a05` | +0.20 |
+| 1.0 | `epi_var_yield` | **+1.70** |
+| 2.0 | `yield_a20` | +0.86 |
+
+**This supersedes the provisional 8-epoch read, which called the shape "a plateau from alpha≈1 to
+alpha≈2 … the knob is not delicate." Full depth contradicts it.** alpha=0.5 lands at +0.20, inside
+the control-seed spread (−0.16 to +0.09), i.e. indistinguishable from uniform; alpha=2 retains
+about half the gain. The curve rises steeply from 0, peaks at 1, and decays. **alpha=1 is a
+genuine optimum and the knob IS somewhat delicate** — the opposite of the earlier guess.
+
+This is why the 8-epoch snapshot was labelled "not a result": the ordering at epoch 7 (0.5 behind,
+1 and 2 close) did not survive to convergence.
+
+### 6.5 The decisive control: `length_only` — the epistemic term is load-bearing
+
+`length_only` ranks by `E[L(x)]` **alone**, ignoring the uncertainty score for selection. Because
+`L_failure ≫ L_success` here, that is monotone decreasing in p̄, so it greedily buys the model's
+predicted-**failure** region — the opposite pole from every scored arm. §3.3 registered the test:
+if it reproduces `epi_var_yield`'s win, the epistemic term contributes nothing and the honest
+description of the headline is "buy long trajectories".
+
+**It does not reproduce the win. It is catastrophic:**
+
+| arm | sAUROC | KL | recal |
+|---|---:|---:|---:|
+| `epi_var_yield` | +1.07 | **+1.70** | +1.20 |
+| `length_only` | **−14.61** | **−10.22** | **−18.85** |
+
+Not a collapse — screened, 0 hits; sAUROC holds 0.87–0.97 with RES ≥ 0.111 throughout. It is a
+stable, thoroughly bad model. **The yield win requires BOTH terms**: the uncertainty score to pick
+*where*, and the length weight to pick *how much data that costs*. Buying long trajectories alone
+is far worse than buying nothing adaptively at all.
+
+`yield_mlp` fails the same way and harder (−40.23 sAUROC, −13.90 KL, −20.74 recal), which is worth
+flagging because **the same strategy WINS on cartpole** at med and high. See §6.6.
+
+### 6.6 Why `yield_mlp` wins on cartpole and comes last here — partly resolved
+
+Measured from the acquisition records of both campaigns (cartpole indices are
+`sequence_<row>.txt` FILENAMES, not integers; parsed and verified `labels[perm] == shuffled_labels`
+at 1.000000 before use):
+
+| case | batch succ | pool succ | mean len | pool len | pairs vs control |
+|---|---:|---:|---:|---:|---:|
+| pendulum i100 high | 0.537 | 0.403 | 561 | 653 | **0.86×** |
+| cartpole med | 0.602 | 0.119 | 378 | 78 | **4.64×** |
+| cartpole high | 0.572 | 0.100 | 408 | 74 | **5.19×** |
+
+**`yield_mlp` does the same thing on both systems** — it buys the success region above the pool
+rate (+0.13 on pendulum, +0.48 on cartpole). What differs is the *price*. Because successes are
+SHORT on pendulum (137 vs 1001) and LONG on cartpole (550 vs 14), the identical preference buys
+0.86× the control's training pairs on pendulum and **4.6–5.2×** on cartpole. The strategy is not
+behaving differently across systems; the pool's length–outcome coupling is converting the same
+behaviour into opposite data budgets.
+
+**What this does NOT explain.** Pair volume alone is insufficient: `epi_var_yield` wins here on
+0.66× the control's pairs, so 0.86× is not fatal by itself. Two candidate mechanisms were tested
+against all 17 arms and **both failed**:
+
+- *Training-marginal distortion* (the `FINDINGS.md` §2 mechanism, established across noise levels
+  for the classifier). Within this level, Pearson r between an arm's PAIR-marginal distortion and
+  its KL gap is **+0.167** — essentially nothing. The scatter does show a non-monotone shape (both
+  extremes lose: `length_only` at 0.11× → −10.22, `epi_var`/`epi_bald` at ~7.9× → −2.3/−3.5, while
+  the 2.4–3.6× band holds every winner) but `yield_mlp` sits at **2.06×, inside the winning band,
+  and is the worst arm in the sweep.** The law does not hold within-level.
+- *Spatial degeneracy.* `yield_mlp` occupies 358/1600 coarse phase-space cells vs the control's
+  1136 — the most concentrated arm — but `yield_knn` at 440 scores +1.04 while `yield_mlp` at 358
+  scores −13.90. Concentration does not separate them.
+
+**`yield_mlp`'s failure on this system is unexplained.** The cross-system pair-budget account above
+is solid; the residual — why 0.86× pairs plus a mild marginal shift produces the sweep's worst
+model — is open. Do not quote a mechanism for it.
 
 ---
 
-## 7. In flight
+## 7. Final standings — all 17 arms at full depth
 
-| run | job | depth | what it decides |
-|---|---|---|---|
-| `yield_s44` | 209954 | 18/20 | third seed of the KL replication |
-| `length_only` | 210229 | 6/20 | whether the win is the score or the pairs |
-| `yield_a05` | 210230 | 7/20 | dose-response below alpha=1 |
-| `yield_a20` | 210231 | 7/20 | dose-response above alpha=1 |
+Pooled ep15–19, gaps in converged-floor units vs the **3-seed control mean** (see the reference
+note at the top; against `dir00` alone each figure is ~10% larger).
 
-Health across the whole campaign: **258 epochs screened by magnitude
+| arm | sAUROC | KL | recal | sA | KL | recal |
+|---|---|---|---|---|---|---|
+| **`epi_var_yield`** (α=1) | 0.9803 | **0.0209** | 0.00126 | +1.07 | **+1.70** | +1.20 |
+| **`yield_s43`** (α=1, seed 43) | 0.9792 | **0.0240** | 0.00264 | +0.33 | **+1.52** | +0.27 |
+| `yield_knn` | 0.9797 | 0.0320 | 0.00214 | +0.66 | +1.04 | +0.60 |
+| `yield_a20` (α=2) | 0.9789 | 0.0352 | 0.00200 | +0.13 | +0.86 | +0.70 |
+| `epi_var_anch` (d2=0.5) | 0.9790 | 0.0354 | 0.00212 | +0.24 | +0.84 | +0.62 |
+| **`yield_s44`** (α=1, seed 44) | 0.9795 | 0.0369 | 0.00154 | +0.55 | **+0.76** | +1.01 |
+| `epi_var_qknn2` | 0.9794 | 0.0379 | 0.00221 | +0.50 | +0.70 | +0.55 |
+| `yield_a05` (α=0.5) | 0.9788 | 0.0464 | 0.00215 | +0.11 | +0.20 | +0.59 |
+| `dir00_s43` *(control)* | 0.9789 | 0.0481 | 0.00282 | +0.16 | +0.09 | +0.14 |
+| `epi_var_qknn` | 0.9776 | 0.0482 | 0.00386 | −0.72 | +0.09 | −0.56 |
+| `dir00_s44` *(control)* | 0.9786 | 0.0485 | 0.00304 | −0.05 | +0.07 | −0.00 |
+| `dir00` *(control)* | 0.9785 | 0.0525 | 0.00324 | −0.10 | −0.16 | −0.14 |
+| `total` | 0.9763 | 0.0565 | 0.00507 | −1.55 | −0.40 | −1.37 |
+| `epi_bald` | 0.9745 | 0.0886 | 0.00625 | −2.79 | −2.30 | −2.16 |
+| `epi_var` | 0.9747 | 0.1086 | 0.00650 | −2.66 | −3.48 | −2.33 |
+| `length_only` | 0.9567 | 0.2228 | 0.03103 | −14.61 | −10.22 | −18.85 |
+| `yield_mlp` | 0.9181 | 0.2852 | 0.03384 | −40.23 | −13.90 | −20.74 |
+
+**KL replication across three seeds: +1.70, +1.52, +0.76.** All three clear the control-seed
+spread (−0.16 to +0.09), so the win replicates three times — but the third seed is **less than
+half** the first, so the *effect size* is materially less stable than the two-seed picture
+suggested. Mean ≈ +1.33. Quote the range, not the best seed.
+
+Health across the whole campaign: **340 epochs screened by magnitude
 (`max(success_mae, failure_mae, overall_mae) > 1.0` or non-finite), zero flags**; endpoint MAE
-band 0.225–0.343. `filter_diagnostics` null in every `results.json` on every scored run.
+band 0.225–0.343. **Collapsed-epoch screen: 340 rows, 0 collapsed.** `filter_diagnostics` null in
+every `results.json` on every scored run.
 
 ---
 

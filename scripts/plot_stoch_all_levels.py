@@ -208,6 +208,21 @@ CAMPAIGNS = {
             ("corridor_sine_ambient_f_0.12_a0.03","Quadrotor3D — f_0.12, a=0.03"),
             ("corridor_sine_ambient_f_0.20_a0.035","Quadrotor3D — f_0.20, a=0.035"),
             ("corridor_sine_ambient_f_0.40_a0.04","Quadrotor3D — f_0.40, a=0.04")]),
+  # Same four q3d cells at the 40k budget (10,000 + 10x3,000). Its CSV lives in
+  # the sibling timeout_fix_40k docs dir and is NEVER merged with the 15k one --
+  # two budgets under one arm name would let a paper script average them into a
+  # curve belonging to neither -- but the FIGURE sits beside the 15k one with a
+  # _40k suffix, so the two budgets can be read against each other (user,
+  # 2026-09-12).
+  "tf_quad3d_40k": dict(
+    title="Quadrotor3D PPO 1.5M-pool corridor_sine_ambient — 40k budget, timeout-corrected",
+    csv="timeout_fix_40k/quad3d_40k_corridor_sine_ambient_all_levels.csv",
+    out=f"{TF_FIG}/learning_curves_quad3d_40k.png",
+    extra_arms=ARMS_TIMEOUT_FIX,
+    panels=[("corridor_sine_ambient_f_0.00","Quadrotor3D 40k — f_0.00 (DETERMINISTIC)"),
+            ("corridor_sine_ambient_f_0.12_a0.03","Quadrotor3D 40k — f_0.12, a=0.03"),
+            ("corridor_sine_ambient_f_0.20_a0.035","Quadrotor3D 40k — f_0.20, a=0.035"),
+            ("corridor_sine_ambient_f_0.40_a0.04","Quadrotor3D 40k — f_0.40, a=0.04")]),
   "cartpole": dict(
     title="CartPole stochastic gaussian_signal",
     csv="cartpole/lqr/gaussian_all_levels.csv",

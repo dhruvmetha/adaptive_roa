@@ -1,0 +1,12 @@
+# @package _global_
+# quadrotor3D/corridor_sine_ambient/ppo_1500K — the tree that was called
+# ppo_800k_corrected until 2026-09-11 20:12. Same 1,500,000 flights (train.npz is
+# byte-identical); what changed is train_test_splits, regenerated at 20:10 so the
+# trainable pool (shuffled_indices_0.txt) is the WHOLE 1.5M collection instead of
+# a 100,000 subset. A run against this pool is therefore NOT comparable with one
+# against the old 100k subset, even at the same budget: the shuffle order differs,
+# so the uniform arm draws different trajectories from epoch 0.
+# Levels: f_0.00 (deterministic, 1 eval trial), f_0.12_a0.03, f_0.20_a0.035,
+# f_0.40_a0.04 (50 eval trials each). Start tilt covers the whole sphere.
+# Use as `+controller=ppo_1500K` for the same reason as the other controller files.
+controller: ppo_1500K

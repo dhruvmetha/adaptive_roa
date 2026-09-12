@@ -43,13 +43,24 @@ FAMILY_LS = {"fm": "-", "clf": ":", "bnn": "-.", "gp": "--"}
 OURS = "epi_bald_greedy"
 # Validated categorical palette (dataviz reference instance; the main trio passes
 # all-pairs, the ablation trio adjacent pairs). Shared by every figure family.
-PAL = dict(blue="#2a78d6", orange="#eb6834", aqua="#1baf7a", yellow="#eda100", magenta="#e87ba4")
+PAL = dict(blue="#2a78d6", orange="#eb6834", aqua="#1baf7a", yellow="#eda100", magenta="#e87ba4",
+           purple="#7d4fc4")   # partx_faithful; distinct from partx_fix's orange so the two
+                               # Part-X arms never read as one method drawn twice
 ARM_STYLES = {
     "epi_bald_greedy":     ("FM-BALD (ours)", "fm",  PAL["blue"],    2.2, "o"),
     "epi_var_greedy":      ("FM epi-var",     "fm",  PAL["yellow"],  1.5, "s"),
     "clf_epi_bald_greedy": ("CLF-BALD",       "clf", PAL["aqua"],    1.5, "^"),
     "bnn_mfvi_a1_greedy":  ("BNN-BALD",       "bnn", PAL["magenta"], 1.5, "D"),
     "partx_fix":           ("Part-X (GP)",    "gp",  PAL["orange"],  1.5, "v"),
+    # The faithful implementation of Algorithms 1-4 (arXiv 2110.10729), as opposed
+    # to partx_fix above, which is a single global GP with straddle sampling and is
+    # NOT Part-X. The label carries the readout because the two arms score
+    # differently -- this one from a per-leaf local GP per region, every other arm
+    # in these figures from one global model -- and that difference is currently
+    # confounded with its sampling. Do not drop "per-leaf GP readout" from the
+    # label until the global-GP rescore separates the two.
+    "partx_faithful":      ("Part-X (faithful, per-leaf GP readout)",
+                                               "gp",  PAL["purple"],  1.5, "P"),
 }
 MARKER_SIZE = 3.2
 LINE_ALPHA = 0.95
@@ -65,7 +76,13 @@ FIGURE_SETS = {
     # the three BALD arms as lines plus the uniform control as the black band arm.
     # It has no partx_fix or epi_var_greedy, so `main`/`ablation` would each draw
     # a panel with a missing curve.
-    "timeoutfix": dict(arms=["epi_bald_greedy", "bnn_mfvi_a1_greedy", "clf_epi_bald_greedy"],
+    # partx_faithful joins the three BALD arms wherever it has run to full depth.
+    # plot_timeout_fix.py drops it per-system where it has not: these figures are
+    # drawn at the DEEPEST EPOCH ALL ARMS SHARE, so one arm at epoch 1 would drag
+    # every other arm in that panel down to epoch 1 as well and quietly replace a
+    # finished comparison with a first-epoch one.
+    "timeoutfix": dict(arms=["epi_bald_greedy", "bnn_mfvi_a1_greedy", "clf_epi_bald_greedy",
+                             "partx_faithful"],
                        band=True),
 }
 

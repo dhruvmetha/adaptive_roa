@@ -32,7 +32,17 @@ _spec.loader.exec_module(S)
 DOCS = Path("/common/users/shared/pracsys/genMoPlan/docs/stochastic")
 ROOT = DOCS / "timeout_fix"
 SET = "timeoutfix"                      # FIGURE_SETS entry: the campaign's 4 arms
-ARMS = ["epi_bald_greedy", "dir00_s42", "bnn_mfvi_a1_greedy", "clf_epi_bald_greedy"]
+ARMS = ["epi_bald_greedy", "dir00_s42", "bnn_mfvi_a1_greedy", "clf_epi_bald_greedy",
+        "partx_faithful"]
+
+# partx_faithful is drawn only where it has run to full depth. Both figure families
+# read every arm at the deepest epoch the arms SHARE, so including an arm that sits
+# at epoch 1 of 11 does not add a short curve beside finished ones -- it pulls the
+# whole panel back to epoch 1 and silently turns a completed comparison into a
+# first-epoch one. As of 2026-09-12 its cartpole, pendulum and quad2D cells are
+# complete at 11 epochs; its four quad3D cells are at 1-3 and still running, so
+# quad3D draws without it and gets redrawn when they finish.
+ARM_MIN_DEPTH = {"partx_faithful": 11}
 UNIFORM_STYLE = ("FM uniform", "fm", "#000000", 1.4, "o")
 
 # system -> its wide CSV in this campaign's scorer output
@@ -79,8 +89,9 @@ def style_of(arm):
     return UNIFORM_STYLE if arm == "dir00_s42" else S.ARM_STYLES[arm]
 
 
-def kl_figure(system: str, wide: Path, out_dir: Path) -> Path | None:
+def kl_figure(system: str, wide: Path, out_dir: Path, arms: list | None = None) -> Path | None:
     """KL per arm at each arm's deepest epoch, grouped by noise level."""
+    arms = ARMS if arms is None else arms
     df = pd.read_csv(wide)
     levels = [l for l in S.LEVEL_ORDER if l in set(df["level"])] + \
              [l for l in dict.fromkeys(df["level"]) if l not in S.LEVEL_ORDER]
@@ -91,12 +102,12 @@ def kl_figure(system: str, wide: Path, out_dir: Path) -> Path | None:
     fig, ax = plt.subplots(figsize=(S.PANEL_W * len(levels) + 1.2, S.PANEL_H + 1.1), dpi=S.DPI)
     xs, labels, drew = [], [], False
     for i, lv in enumerate(levels):
-        for j, arm in enumerate(ARMS):
+        for j, arm in enumerate(arms):
             sub = df[(df["level"] == lv) & (df["arm"] == arm) & df["KL"].notna()]
             if sub.empty:
                 continue
             row = sub.loc[sub["epoch"].idxmax()]
-            x = i * (len(ARMS) + 1) + j
+            x = i * (len(arms) + 1) + j
             colour, marker = style_of(arm)[2], style_of(arm)[4]
             ax.vlines(x, 0, row["KL"], color=colour, lw=1.3, alpha=0.5)
             ax.plot([x], [row["KL"]], marker=marker, color=colour, markersize=S.MARKER_SIZE + 2)
@@ -115,10 +126,10 @@ def kl_figure(system: str, wide: Path, out_dir: Path) -> Path | None:
         ax.spines[sp].set_visible(False)
     ax.tick_params(labelsize=S.TICK_SIZE)
     for i, lv in enumerate(levels):
-        ax.text(i * (len(ARMS) + 1) + (len(ARMS) - 1) / 2, ax.get_ylim()[1],
+        ax.text(i * (len(arms) + 1) + (len(arms) - 1) / 2, ax.get_ylim()[1],
                 S.level_title(lv, system), ha="center", va="bottom", fontsize=S.TITLE_SIZE)
     ax.legend(handles=[Line2D([], [], color=style_of(a)[2], marker=style_of(a)[4], ls="",
-                              markersize=4, label=style_of(a)[0]) for a in ARMS],
+                              markersize=4, label=style_of(a)[0]) for a in arms],
               loc="upper left", ncol=2, frameon=False, fontsize=S.LEGEND_SIZE)
     fig.suptitle(f"{S.SYSTEM_TITLES.get(system, system)}: KL", fontsize=S.SUPTITLE_SIZE)
     fig.tight_layout(rect=(0, 0, 1, 0.92))
@@ -158,15 +169,32 @@ def main() -> None:
             # Only ask for levels this campaign has actually scored: the final
             # profile filters by name, and a named-but-empty level would render
             # an empty column.
-            present = set(pd.read_csv(wide)["level"])
+            df = pd.read_csv(wide)
+            present = set(df["level"])
             if S.LEVEL_FILTER.get(system):
                 S.LEVEL_FILTER[system] = [l for l in S.LEVEL_FILTER[system] if l in present]
+            # Drop any arm that has not reached its minimum depth ON THIS SYSTEM.
+            # Depth is counted per level and the shallowest level decides, because
+            # one shallow level is enough to pull that panel back.
+            drop = set()
+            for arm, need in ARM_MIN_DEPTH.items():
+                sub = df[df["arm"] == arm]
+                if sub.empty:
+                    drop.add(arm)
+                    continue
+                depth = sub.groupby("level")["epoch"].max().min() + 1
+                if depth < need:
+                    drop.add(arm)
+                    print(f"     [depth] {system}: dropping {arm}, deepest common level "
+                          f"is {int(depth)}/{need} epochs")
+            S.ARMS = {a: st for a, st in S.ARMS.items() if a not in drop}
+            system_arms = [a for a in ARMS if a not in drop]
             outs, skipped = S.render(system, levelsets_path(wide), "common", wide)
             for p in outs:
                 print(f"[ok] {p}")
             for s in skipped:
                 print(f"     skipped {s}")
-            p = kl_figure(system, wide, S.FIG_DIR)
+            p = kl_figure(system, wide, S.FIG_DIR, system_arms)
             print(f"[ok] {p}" if p else f"[skip] {profile}/{system}: no KL rows")
 
 

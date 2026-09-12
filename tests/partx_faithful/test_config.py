@@ -37,7 +37,9 @@ def test_config_composes_with_the_engine_overrides():
      "output_dir=/tmp/unused"],
     ["system=quadrotor3d_ppo_stoch", "noise_family=corridor_sine_ambient", "+controller=ppo_800k",
      "noise_level=f_0.12_a0.03", "output_dir=/tmp/unused"],
-], ids=["cartpole", "quadrotor2d", "quadrotor3d"])
+    ["system=quadrotor3d_ppo_stoch", "noise_family=corridor_sine_ambient", "+controller=ppo_1500k",
+     "noise_level=f_0.12_a0.03", "output_dir=/tmp/unused"],
+], ids=["cartpole", "quadrotor2d", "quadrotor3d", "quadrotor3d_1500k"])
 def test_config_composes_for_the_other_systems(overrides):
     # Finding 3: the quad3D case needs configs/adaptive_v2/controller/ppo_800k.yaml.
     cfg = _compose(overrides)

@@ -240,6 +240,42 @@ the tag. Worth noting that `fm_outcome_bald` under `readout: exact` emits a
 continuous p_hat while the BNN arms emit K-quantised values, and the scorer
 handles both, on its own, by that data-driven rule.
 
+## Plotting, deferred until the runs are at full depth
+
+Scoring alone does not put an arm in a figure. Both figure families take
+hardcoded arm lists rather than discovering them from the CSV
+(`scripts/paper/plot_timeout_fix.py:35`, `scripts/plot_stoch_all_levels.py:133`),
+so these rows sit in the shared CSVs unplotted until deliberately registered.
+That is a useful property while the runs are in flight: a half-finished arm of
+ours cannot appear in a figure the user reads as the campaign's.
+
+Registration, when the time comes, touches three places:
+
+| file | change |
+|---|---|
+| `scripts/paper/plot_levelsets_paper.py` | an `ARM_STYLES` entry per arm: (label, family, colour, lw, marker) |
+| `scripts/paper/plot_timeout_fix.py` | add to `ARMS`, and to `ARM_MIN_DEPTH` |
+| `scripts/plot_stoch_all_levels.py` | add to the arm tuple at :133 |
+
+**`ARM_MIN_DEPTH` is mandatory for these three, set to 11.** The level-set and KL
+figures read every arm at the deepest epoch the arms SHARE, so registering an arm
+sitting at epoch 2 does not add a short curve beside finished ones. It drags the
+whole panel back to epoch 2 and silently converts a completed comparison into a
+first-epoch one. `partx_faithful` is the worked example of this at
+`plot_timeout_fix.py:45`. The learning curves carry no such constraint: they draw
+each arm to its own depth and stamp what is short.
+
+Family tags: `bnn` for the two final-state arms, `fm` for the outcome arm, which
+gives them the existing per-family linestyles.
+
+**Open issue, to resolve at plot time rather than now.** `PAL` currently holds six
+colours and all six are in use. Three more arms means nine categorical colours,
+which is past the point where the palette's all-pairs distinguishability check
+still holds. Resolve this with the dataviz skill when registering, rather than
+appending three colours and hoping. Options if it does not hold: drop the
+`_greedy` variant arms from the crowded figure, or split the new arms into their
+own figure set via `FIGURE_SETS`.
+
 ## No uniform controls
 
 Decided by the user on 2026-09-13, against a reasonable objection from the

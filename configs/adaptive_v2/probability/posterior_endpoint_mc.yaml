@@ -1,0 +1,37 @@
+# @package _global_
+# Endpoint MC with the WEIGHT DRAW PINNED across the K samples, so the
+# final-state (endpoint-regressing) arms can be decomposed into aleatoric and
+# epistemic parts.
+#
+# Strict superset of `endpoint_mc`: the backend subclasses it, so estimate(),
+# sample_endpoints(), p_invalid and the whole calibration/eval path are
+# inherited untouched. Swapping an arm onto this changes nothing except that
+# acquisition gains `estimate_members()`.
+probability:
+  _target_: adaptive_roa.adaptive_v2.probability.posterior_endpoint_mc.PosteriorEndpointMCProbabilityBackend
+  attractor_radius: ${attractor_radius}
+  num_mc_samples: 10
+  refine_invalids: false
+  refine_t_min: 0.7
+  refine_t_max: 0.9
+  refine_num_steps: 100
+  refine_max_attempts: 5
+  trajectory_checking: false
+  # S weight draws per candidate. Ignored by an ensemble posterior, which
+  # enumerates its members exactly instead. Matches the 64 that
+  # sampled_posterior_classifier_prob already uses for bnn_mfvi_a1 at this
+  # candidate count, so the cost is precedented rather than estimated.
+  #
+  # BALD = H(E_w p) - E_w H(p); with S atoms the first term carries the usual
+  # O(1/S) Monte-Carlo bias, DOWNWARD, so BALD is underestimated at small S and
+  # the ranking compresses.
+  n_posterior_samples: 64
+  # Candidates per chunk. q3d runs 250,000 candidates and materialising
+  # [S, N, n_params] at once would cost gigabytes.
+  #
+  # Chunking redraws weights per chunk for a continuous posterior, so "member s"
+  # is a different weight vector in chunk 1 than in chunk 2. That is SAFE:
+  # epistemic_bald is a per-point functional and needs only the S values at a
+  # GIVEN point to come from S distinct draws. It never compares member s at one
+  # point against member s at another.
+  chunk_size: 4096

@@ -1,0 +1,53 @@
+# @package _global_
+# Deep ensemble of scalar-outcome flow matchers, wired for BALD acquisition.
+#
+# `type: classifier` names the DATA PATH and EVAL BRANCH, not the machinery, for
+# exactly the reasons fm_outcome.yaml records: this arm is generative but
+# consumes classification data and has no endpoint, so every branch the
+# classifier tag disables is disabled CORRECTLY here.
+#
+# `name: fm_outcome_ens`, unlike the two BNN BALD arms, takes a NEW name: this is
+# a different model class (an ensemble handle, not a single OutcomeFlowMatcher),
+# so a shared name would load the wrong checkpoint class if it were ever
+# exported. fm_outcome is not registered for export today at all.
+#
+# hidden_dims goes per-system rather than the [256, 512, 256] fm_outcome.yaml
+# carries. Stated cost, decided 2026-09-13: this arm is therefore NOT
+# capacity-matched to classifier.yaml, which was the original defining contrast
+# of the outcome-FM ablation, and it is not comparable to the pendulum
+# fm_outcome runs of that ablation.
+defaults:
+  - /probability: ensemble_outcome_fm
+threshold:
+  decision_rule: one_sided
+calibration:
+  decision_rule: one_sided
+predictor:
+  type: classifier
+  name: fm_outcome_ens
+  trainer_target: adaptive_roa.adaptive_v2.trainers.ensemble_outcome_fm_trainer.EnsembleOutcomeFMTrainer
+  batch_size: 1024
+  val_batch_size: 2048
+  ensemble:
+    # 5 matches fm_ensemble and clf_ensemble, so member count is not a free
+    # variable across the BALD arms in this campaign.
+    n_members: 5
+  outcome_fm:
+    hidden_dims: ${model_dims.mlp_hidden_dims}
+    dropout: 0.0
+    activation: relu
+    lr: 1.0e-3
+    weight_decay: 1.0e-5
+    max_epochs: 200
+    patience: 20
+    num_time_freqs: 4
+    num_ode_steps: 50      # see probability/outcome_fm.yaml for the convergence evidence
+    # THIS is the knob that decides how the pipeline forms p, not
+    # probability.readout: eval and calibration both reach p via `model(x) ->
+    # logits` (full_roa.py:1301). Must match probability.readout, which
+    # bind_model enforces.
+    forward_readout: exact
+  lightning_trainer:
+    gradient_clip_val: 1.0
+    log_every_n_steps: 10
+    enable_progress_bar: false

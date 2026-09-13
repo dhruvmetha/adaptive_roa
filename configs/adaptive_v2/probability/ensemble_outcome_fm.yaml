@@ -1,0 +1,21 @@
+# @package _global_
+# Per-member probabilities from a deep ensemble of scalar-outcome flow matchers.
+#
+# Subclasses OutcomeFMProbabilityBackend, so every note in
+# probability/outcome_fm.yaml about readout agreement applies here unchanged:
+# `readout` must EQUAL predictor.outcome_fm.forward_readout, and bind_model
+# refuses a mismatch rather than letting calibration and evaluation optimise
+# different quantities.
+probability:
+  _target_: adaptive_roa.adaptive_v2.probability.outcome_fm_ensemble.EnsembleOutcomeFMProbabilityBackend
+  attractor_radius: ${attractor_radius}
+  # `exact` is unquantised and cheaper than MC (grid + bisect is ~53
+  # integrations/point vs 100 at num_mc_samples=100). It also makes BALD
+  # unbiased: with no MC noise inside a member there is no ~(1/2K)(1-1/M) term
+  # to remove, which is why member_sample_size is None on this backend.
+  readout: exact
+  num_mc_samples: 100
+  num_ode_steps: 50
+  grid_size: 33
+  bisect_iters: 20
+  chunk_size: 4096

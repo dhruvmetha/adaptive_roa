@@ -41,11 +41,14 @@ ROWS = _rows() if MANIFEST.exists() else []
 
 @pytest.mark.parametrize("row", ROWS, ids=_ids(ROWS))
 def test_row_composes(row):
+    # Compose the row EXACTLY as launched, output_dir included. An earlier
+    # revision stripped output_dir and substituted a temp path, which is
+    # precisely why it passed on a manifest whose every row ended in a stray
+    # "\r": csv.DictWriter defaults to "\r\n", the CR landed on the last
+    # field, and all 27 runs died at compose time with
+    # LexerNoViableAltException pointing at output_dir. Substituting the one
+    # field most likely to carry trailing junk removed the test's whole point.
     overrides = shlex.split(row["overrides"])
-    # output_dir points at the shared experiment tree; compose does not create
-    # it, but keep it out of the way regardless.
-    overrides = [o for o in overrides if not o.startswith("output_dir=")]
-    overrides.append("output_dir=/tmp/compose_check")
     with initialize_config_dir(config_dir=str(CONFIG_DIR), version_base=None):
         cfg = compose(config_name="default", overrides=overrides)
     assert cfg.acquisition.score == "epistemic_bald"
@@ -79,6 +82,19 @@ def test_q3d_uses_the_controller_the_reported_figures_use():
         if r["system"] == "q3d":
             assert "+controller=ppo_1500K" in r["overrides"], r["name"]
             assert "ppo_800k" not in r["overrides"], r["name"]
+
+
+@pytest.mark.parametrize("row", ROWS, ids=_ids(ROWS))
+def test_row_has_no_trailing_whitespace_or_control_characters(row):
+    """Catches the \r class directly, with a message that names the cause."""
+    for field, value in row.items():
+        assert value == value.strip(), (
+            f"{row['name']}: field {field!r} carries leading/trailing whitespace "
+            f"({value!r}). A trailing CR here reaches Hydra as part of the override "
+            f"and kills the run at compose time; check make_manifest.py's "
+            f"lineterminator.")
+        assert not any(ord(c) < 32 for c in value), (
+            f"{row['name']}: field {field!r} contains a control character: {value!r}")
 
 
 def test_run_dirs_are_unique():

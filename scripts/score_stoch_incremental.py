@@ -119,7 +119,22 @@ ARMS = ["dir00_s42", "dir00_s43", "dir00_s44", "epi_var", "epi_var_anch", "epi_b
         "partx_faithful",
         "epi_bald_greedy_s43", "epi_bald_greedy_s44",
         "bnn_mfvi_a1_greedy_s43", "bnn_mfvi_a1_greedy_s44",
-        "clf_epi_bald_greedy_s43", "clf_epi_bald_greedy_s44"]
+        "clf_epi_bald_greedy_s43", "clf_epi_bald_greedy_s44",
+        # Added 2026-09-13. BALD on two predictor families the campaign did not
+        # cover: a BNN that regresses the FINAL STATE (rather than the binary
+        # outcome, which is what bnn_mfvi_a1_greedy does) and a deep ensemble of
+        # scalar-outcome flow matchers. Both needed new probability backends to
+        # expose estimate_members at all; see
+        # docs/superpowers/specs/2026-09-13-bald-final-state-and-outcome-fm-design.md
+        #
+        # These are BALD-only, with no matched uniform control, matching how
+        # bnn_mfvi_a1_greedy and clf_epi_bald_greedy are already read against the
+        # single FM-uniform reference (dir00_s42). That confounds predictor with
+        # acquisition and is a known, accepted limitation of this table.
+        #
+        # Width is per-system here, unlike the base bnn_*_reg arms, so these are
+        # NOT comparable to any earlier final-state or fm_outcome result.
+        "bnn_mfvi_reg_bald", "bnn_ens_reg_bald", "fm_outcome_bald"]
 
 # campaign -> run-dir prefix, ground-truth root, dataset level fragment, CSV level key
 CAMPAIGNS = {

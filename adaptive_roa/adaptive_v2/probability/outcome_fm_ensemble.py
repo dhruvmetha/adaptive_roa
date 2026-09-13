@@ -36,7 +36,7 @@ class EnsembleOutcomeFMProbabilityBackend(OutcomeFMProbabilityBackend):
         self.n_members = 0
 
     def bind_model(self, model_handle: Any) -> None:
-        # Parent enforces readout agreement between model and backend.
+        # Parent enforces that the readout NAME agrees between model and backend.
         super().bind_model(model_handle)
         n = int(getattr(model_handle, "n_members", 0))
         if n < 2:
@@ -45,7 +45,38 @@ class EnsembleOutcomeFMProbabilityBackend(OutcomeFMProbabilityBackend):
                 "1-member 'ensemble' has no epistemic signal and would silently "
                 "score BALD = 0 everywhere."
             )
+        self._reject_readout_parameter_mismatch(model_handle)
         self.n_members = n
+
+    def _reject_readout_parameter_mismatch(self, model_handle: Any) -> None:
+        """Matching readout NAMES are not enough; the parameters must match too.
+
+        Calibration and evaluation reach p through `model(x) -> logits`, which
+        goes to `OutcomeFlowMatcher.predict_p_success` and uses the MEMBER's own
+        `num_ode_steps` plus the flow matcher's DEFAULT grid_size=33 and
+        bisect_iters=20. Acquisition reaches p through this backend, which passes
+        `probability.*`. Equal names with unequal parameters therefore still
+        computes two different numbers, silently, with both looking reasonable.
+
+        Measured divergence, max|sigmoid(model(x)) - backend.estimate(x)|:
+            shipped config (both 50 steps, grid 33, bisect 20)    2.6e-08
+            model 10 steps against backend 50                     3.4e-04
+            bisect_iters 4                                        1.5e-03
+        The latter two are the order of the Brier gaps this ablation measures
+        (probability/outcome_fm.yaml:27-32), so they would be a readout artefact
+        masquerading as a result.
+        """
+        members = list(getattr(model_handle, "members", []))
+        if not members:
+            return
+        member_steps = {int(getattr(m, "num_ode_steps", self.num_ode_steps)) for m in members}
+        if member_steps != {self.num_ode_steps}:
+            raise ValueError(
+                f"num_ode_steps mismatch: probability.num_ode_steps={self.num_ode_steps} "
+                f"but the members use {sorted(member_steps)}. Calibration and evaluation "
+                f"would integrate the flow differently from acquisition. Set "
+                f"predictor.outcome_fm.num_ode_steps to match."
+            )
 
     @torch.no_grad()
     def estimate_members(self, start_states: np.ndarray, verbose: bool = False) -> np.ndarray:

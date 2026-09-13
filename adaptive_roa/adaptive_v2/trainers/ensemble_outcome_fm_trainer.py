@@ -30,6 +30,24 @@ from adaptive_roa.model.outcome_flow_matcher import OutcomeFlowMatcher, OutcomeV
 _LOGIT_CLAMP = 1e-6
 
 
+def _load_warm_start(module, state, source: str) -> None:
+    """Warm-start ``module`` from ``state``, loudly reporting any key mismatch.
+
+    Mirrors ``final_state_trainer._load_warm_start``. ``strict=False`` alone
+    turns an architecture mismatch into a silent cold start: warm start is an
+    optimization so a mismatch must not abort the run, but it must be visible in
+    the log rather than inferred later from an unexplained jump in the loss.
+    """
+    missing, unexpected = module.load_state_dict(state, strict=False)
+    if missing or unexpected:
+        print(
+            f"WARNING: warm start from {source} did not match the model: "
+            f"{len(missing)} missing key(s) {list(missing)[:3]}, "
+            f"{len(unexpected)} unexpected key(s) {list(unexpected)[:3]}. "
+            f"Those parameters stay at their random initialization."
+        )
+
+
 class EnsembleOutcomeFMHandle(nn.Module):
     """M outcome flow matchers presenting one ensemble predictive.
 
@@ -213,7 +231,7 @@ class EnsembleOutcomeFMTrainer:
             pl.seed_everything(seed_base + m, workers=True)
             module = self._build_member(fm_cfg)
             if warm is not None:
-                module.load_state_dict(warm[m], strict=False)
+                _load_warm_start(module, warm[m], f"{resume_checkpoint} [members.{m}.*]")
 
             # Member checkpoints go in their OWN subdirectory. The engine globs
             # `checkpoints/best*.ckpt` (engine.py:218) and hands the result back
@@ -247,12 +265,23 @@ class EnsembleOutcomeFMTrainer:
             # Lightning leaves LAST-epoch weights in the module; export and eval
             # must see the best-val ones or the arm is selected differently from
             # every other arm it is compared against.
+            #
+            # This RAISES rather than warning, matching FinalStateTrainer._load_best
+            # (final_state_trainer.py:234-242). Keeping last-epoch weights on a
+            # missing checkpoint is the exact asymmetry recorded against the MLP
+            # baseline: one arm selected on best-val, another on last-epoch, with
+            # nothing in the artifacts saying which.
             best = sorted(glob.glob(str(member_dir / "best*.ckpt")))
-            if best:
-                ckpt = torch.load(best[0], map_location="cpu", weights_only=False)
-                module.load_state_dict(ckpt["state_dict"], strict=False)
-            else:
-                print(f"WARNING: member {m} wrote no checkpoint; keeping last-epoch weights")
+            if not best:
+                raise RuntimeError(
+                    f"member {m} wrote no checkpoint to {member_dir}; refusing to "
+                    f"return last-epoch weights, which would select this arm "
+                    f"differently from every arm it is compared against"
+                )
+            ckpt = torch.load(best[0], map_location="cpu", weights_only=False)
+            # strict=True: this is a checkpoint THIS code just wrote from THIS
+            # architecture, so any key mismatch is a bug, not a tolerable variation.
+            module.load_state_dict(ckpt["state_dict"], strict=True)
 
             module.eval()
             members.append(module)

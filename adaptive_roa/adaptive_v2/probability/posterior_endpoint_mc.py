@@ -53,6 +53,9 @@ class PosteriorEndpointMCProbabilityBackend(EndpointMCProbabilityBackend):
                 "signal; BALD would score 0 everywhere. Use >= 2 (default 64)."
             )
         self.chunk_size = int(cfg.get("chunk_size", 4096))
+        # Seeds the per-chunk weight draws. See _members_for_chunk for why the
+        # SAME seed is reused for every chunk rather than advanced.
+        self.member_seed = int(cfg.get("member_seed", 0))
         # Set to what the posterior actually returned on the last call, which is
         # S for a Gaussian and the member count for one that enumerates.
         self.n_members = 0
@@ -103,6 +106,15 @@ class PosteriorEndpointMCProbabilityBackend(EndpointMCProbabilityBackend):
                 f"ensemble posterior needs at least 2 members, got {int(n)}. A "
                 "1-member 'ensemble' has no epistemic signal and would score 0."
             )
+        # An UNFITTED Laplace posterior returns the MAP point for every draw
+        # (posteriors.py:277-278), which is the same silent BALD = 0 as a
+        # deterministic one but reached by a different route.
+        if getattr(posterior, "is_fitted", True) is False:
+            raise ValueError(
+                f"{type(posterior).__name__} is not fitted, so every draw returns the "
+                "MAP point and BALD would be 0 everywhere. Fit the posterior before "
+                "binding it to a BALD arm."
+            )
 
     def _posterior(self) -> Any:
         if self.model_handle is None:
@@ -141,7 +153,8 @@ class PosteriorEndpointMCProbabilityBackend(EndpointMCProbabilityBackend):
 
         chunks: list[np.ndarray] = []
         for lo in range(0, n_points, self.chunk_size):
-            chunks.append(self._members_for_chunk(posterior, head, states[lo:lo + self.chunk_size]))
+            chunks.append(self._members_for_chunk(
+                posterior, head, states[lo:lo + self.chunk_size], device))
 
         out = np.concatenate(chunks, axis=1)
         self.n_members = int(out.shape[0])
@@ -150,17 +163,25 @@ class PosteriorEndpointMCProbabilityBackend(EndpointMCProbabilityBackend):
                   f"K={self.num_mc_samples}")
         return out
 
-    def _members_for_chunk(self, posterior: Any, head: Any, states: torch.Tensor) -> np.ndarray:
+    def _members_for_chunk(self, posterior: Any, head: Any, states: torch.Tensor,
+                           device: torch.device) -> np.ndarray:
         """One chunk of candidates: [B, D] -> [S, B].
 
-        Chunking redraws weights per chunk for a CONTINUOUS posterior, so
-        "member s" is a different weight vector in chunk 1 than in chunk 2. That
-        is safe, and deliberately so: ``epistemic_bald`` is a per-point
-        functional, H(mean_s p_s[n]) - mean_s H(p_s[n]), which needs only the S
-        values AT A GIVEN POINT to come from S distinct posterior draws. It
-        never compares member s at one point against member s at another. An
-        enumerating posterior is consistent across chunks anyway, since
-        ``forward_all_members`` is deterministic.
+        WHY THE GENERATOR IS RE-SEEDED IDENTICALLY PER CHUNK
+        ----------------------------------------------------
+        Unbiasedness alone is not enough here. ``epistemic_bald`` is a per-point
+        functional, so a fresh weight draw per chunk would still give every
+        chunk an individually valid estimate. But greedy top-N COMPARES scores
+        ACROSS points, and every point in a chunk shares that chunk's S draws:
+        a chunk whose draws happen to be unusually spread lifts all of its
+        points together, so selection over-samples "lucky" chunks. That is
+        chunk-structured noise in the ranking, not noise that averages out.
+
+        ``MFVIPosterior.forward_sample`` draws weight noise per ``VILinear``
+        with a shape independent of the batch (``posteriors.py:44-47``), so
+        re-seeding one generator identically at the top of every chunk makes
+        member ``s`` the SAME weight vector at every candidate. That is exactly
+        the consistency the enumerating-ensemble branch has for free.
         """
         embedded = self.system.embed_state_for_model(self.system.normalize_state(states))
 
@@ -168,18 +189,24 @@ class PosteriorEndpointMCProbabilityBackend(EndpointMCProbabilityBackend):
             # Finite support: enumerate it. Sampling M atoms with replacement
             # instead gives a multinomial weight vector rather than an exact
             # 1/M, which is a systematic bias, not noise that averages out.
+            # Deterministic, so it is already chunk-consistent.
             params = posterior.forward_all_members(embedded)            # [M, B, P]
         else:
-            params = posterior.forward_samples(embedded, self.n_posterior_samples)  # [S, B, P]
+            generator = torch.Generator(device=device)
+            generator.manual_seed(self.member_seed)
+            params = posterior.forward_samples(
+                embedded, self.n_posterior_samples, generator=generator)   # [S, B, P]
 
         n_members, batch = int(params.shape[0]), int(states.shape[0])
         out = np.empty((n_members, batch), dtype=np.float64)
         for m in range(n_members):
             member_params = params[m]        # pinned for the whole K loop below
-            hits = torch.zeros(batch, dtype=torch.float64)
+            # Accumulate ON DEVICE and transfer once per member: a .cpu() per
+            # head draw costs one sync each, and q3d runs ~62 chunks x S draws.
+            hits = torch.zeros(batch, dtype=torch.float64, device=member_params.device)
             for _ in range(self.num_mc_samples):
                 endpoint = head.sample(member_params)
                 label = self.system.classify_attractor(endpoint, self.attractor_radius)
-                hits += (label == 1).double().cpu()
-            out[m] = (hits / float(self.num_mc_samples)).numpy()
+                hits += (label == 1).to(hits.dtype)
+            out[m] = (hits / float(self.num_mc_samples)).cpu().numpy()
         return out

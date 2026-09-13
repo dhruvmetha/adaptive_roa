@@ -121,7 +121,7 @@ running job.
 
 | file | contents |
 |---|---|
-| `configs/adaptive_v2/probability/posterior_endpoint_mc.yaml` | new backend, `n_posterior_samples: 64`, `num_mc_samples: 10` |
+| `configs/adaptive_v2/probability/posterior_endpoint_mc.yaml` | new backend, `n_posterior_samples: 64`, `num_mc_samples: 20` |
 | `configs/adaptive_v2/probability/ensemble_outcome_fm.yaml` | new backend, `readout: exact` |
 | `configs/adaptive_v2/predictor/bnn_mfvi_reg_bald.yaml` | `bnn_mfvi_reg` + new probability group + per-system width |
 | `configs/adaptive_v2/predictor/bnn_ens_reg_bald.yaml` | `bnn_ensemble_reg` + new probability group + per-system width |
@@ -205,9 +205,17 @@ Three arms, nine cells, seed 42. 27 runs.
 Copied verbatim from `slurm_logs/timeout_fix/manifest.tsv`:
 `acquisition=decomp_epi_bald acquisition.d2_ratio=1.0 acquisition.selection_rule=greedy`,
 `num_workers=0 adaptive_v2.filter_confident_pairs=false seed=42`,
-`++data_source.timeout_intermediates=drop n_epochs=11`,
-`predictor.lightning_trainer.enable_progress_bar=false`, and an explicit
+`++data_source.timeout_intermediates=drop n_epochs=11`, and an explicit
 `output_dir`.
+
+**No `enable_progress_bar` override**, unlike the campaign's manifest. Neither
+BNN BALD config defines that key, so the bare `predictor.lightning_trainer.
+enable_progress_bar=false` form raises `ConfigCompositionException` at compose
+time and the run never starts. It is also unnecessary:
+`FinalStateTrainer._run_lightning` hardcodes `enable_progress_bar=False`
+(`final_state_trainer.py:257`) and `fm_outcome_bald.yaml` sets it in config.
+`tests/adaptive_v2/test_bald_manifest_composes.py` composes every manifest row
+so this class of error is caught mechanically rather than by reading.
 
 Output root is the existing
 `/common/users/shared/pracsys/adaptive_roa_experiments/timeout_fix/`, run dirs
@@ -225,7 +233,7 @@ is a separate campaign (`tf40_q3d_*`) and is out of scope.
 
 ## Scoring
 
-Three names added to `ARMS` in `scripts/score_stoch_incremental.py` near line 59:
+Three names added to the `ARMS` list in `scripts/score_stoch_incremental.py`:
 `bnn_mfvi_reg_bald`, `bnn_ens_reg_bald`, `fm_outcome_bald`. No new `CAMPAIGNS`
 entry, since the root, prefix and ground truth are unchanged.
 
@@ -233,7 +241,7 @@ A name missing from `ARMS` is skipped **silently** and the scorer still exits 0,
 so the acceptance check is that the three arms appear as rows in the level CSV
 after the first scoring pass. Exit status is not evidence.
 
-`predictor_of()` labels these `fm`, matching how the existing `bnn_*` arms are
+`predictor_of()` (`score_stoch_incremental.py:423`) labels these `fm`, matching how the existing `bnn_*` arms are
 labelled. The tag is a CSV label, not a branch: `stoch_prob_metrics.py` decides
 continuous-versus-discrete from the number of distinct predicted values, not from
 the tag. Worth noting that `fm_outcome_bald` under `readout: exact` emits a

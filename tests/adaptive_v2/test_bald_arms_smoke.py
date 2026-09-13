@@ -60,14 +60,29 @@ def _overrides(arm, tmp_path):
         f"output_dir={tmp_path}/{arm}",
     ]
     if arm.startswith("bnn_"):
+        # num_mc_samples=100, well above the shipped 20, ON PURPOSE. K sets
+        # BALD's noise floor at ~(1/2K)(1-1/M), and the assertion below has to
+        # be able to tell signal from that floor. Simulated null (members
+        # identical, K-sample noise only) at M=4: K=10 gives mean 0.043, K=100
+        # gives 0.004. At 500 candidates the extra draws are cheap, and they are
+        # what make this test able to fail on a degenerate arm.
         common += ["predictor.final_state.max_epochs=2",
-                   "probability.n_posterior_samples=4"]
+                   "probability.n_posterior_samples=4",
+                   "probability.num_mc_samples=100"]
         if arm == "bnn_ens_reg_bald":
             common += ["predictor.final_state.n_members=2"]
     else:
-        common += ["predictor.outcome_fm.max_epochs=2",
-                   "predictor.ensemble.n_members=2",
-                   "predictor.outcome_fm.num_ode_steps=10"]
+        # NOT 2 epochs. Measured budget sweep (2026-09-13), pendulum/high:
+        #   epochs  M  ode   epistemic_mean   epistemic_max
+        #        2  2   10        5.2e-07         2.5e-06     <- degenerate
+        #       20  3   50        9.3e-04         1.1e-02
+        #       60  5   50        2.9e-03         1.3e-02
+        # At 2 epochs the flow predicts p ~ 1.0 everywhere, members agree, and
+        # BOTH uncertainty terms vanish; the arm looks broken when it is only
+        # untrained. 20 epochs is the cheapest row with signal to assert on.
+        common += ["predictor.outcome_fm.max_epochs=20",
+                   "predictor.ensemble.n_members=3",
+                   "predictor.outcome_fm.num_ode_steps=50"]
     return common
 
 
@@ -80,6 +95,22 @@ def test_one_adaptive_epoch_runs(arm, tmp_path):
         AdaptiveEngine(compose(config_name="default",
                                overrides=_overrides(arm, tmp_path))).run()
     assert (tmp_path / arm / "epoch_000" / "full_roa_per_point.npz").exists()
+
+
+def _bald_noise_floor(diag) -> float:
+    """What BALD reads when members carry ONLY K-sample MC noise.
+
+    ~(1/2K)(1 - 1/M), from uncertainty_scores.py's finite-sample warning. At the
+    shipped K=10, M=5 that is 0.04 nats, so `epistemic_mean > 0` is not evidence
+    of anything on an MC-member arm: pure sampling noise clears it comfortably.
+    Backends whose members carry no sampling noise report member_sample_size
+    None and have no floor.
+    """
+    k = diag.get("member_sample_size")
+    m = int(diag.get("n_members", 0))
+    if not k or m < 2:
+        return 0.0
+    return (1.0 / (2.0 * float(k))) * (1.0 - 1.0 / m)
 
 
 @pytest.mark.slow
@@ -95,8 +126,20 @@ def test_acquisition_found_real_epistemic_disagreement(arm, tmp_path):
     diag = art.get("acquisition", {}).get("diagnostics", {})
     assert diag.get("score_mode") == "epistemic_bald", diag
     assert diag.get("n_members", 0) >= 2, diag
-    epi = diag.get("epistemic_mean")
-    assert epi is not None and epi > 0.0, (
-        f"{arm} scored zero epistemic uncertainty: its members agree everywhere, so "
-        f"selection is an arbitrary tie-break while the config reports an adaptive "
-        f"arm. diagnostics={diag}")
+
+    # The MEAN over candidates, against the floor. Deliberately not score_max:
+    # a max over 500 candidates is an extreme-value statistic and clears a
+    # mean-valued floor by ~7x even on a fully degenerate arm (measured), so an
+    # assertion on it has almost no power. The mean is what the floor describes.
+    floor = _bald_noise_floor(diag)
+    assert diag["epistemic_mean"] > floor, (
+        f"{arm}: mean BALD {diag['epistemic_mean']:.5g} does not clear its own "
+        f"MC-noise floor {floor:.5g}, so the score is consistent with members that "
+        f"agree everywhere. Selection would be an arbitrary tie-break while the "
+        f"config reports an adaptive arm. {diag}")
+
+    # NOT asserted: epistemic_mean_selected > epistemic_mean. With
+    # score_mode=epistemic_bald, `score` and `epi` in decomposition._diagnostics
+    # are the SAME array and greedy takes the top 200 of 500, so
+    # mean-of-top-40% > overall mean holds unless every score ties exactly. That
+    # tests select_greedy, not acquisition, and it passes on a degenerate arm.

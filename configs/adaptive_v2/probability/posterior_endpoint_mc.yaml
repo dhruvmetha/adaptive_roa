@@ -10,7 +10,16 @@
 probability:
   _target_: adaptive_roa.adaptive_v2.probability.posterior_endpoint_mc.PosteriorEndpointMCProbabilityBackend
   attractor_radius: ${attractor_radius}
-  num_mc_samples: 10
+  # K = 20, NOT the 10 that endpoint_mc.yaml carries. That 10 is the EVAL
+  # setting for the non-BALD reg arms; here K also sets BALD's noise floor,
+  # because decomp_epi_bald scores the naive `epistemic_bald` and the
+  # ~(1/2K)(1-1/M) bias therefore lands in the ranking. Simulated null (members
+  # identical, K-sample noise only): K=10 gives mean BALD 0.052 at M=64, K=20
+  # gives 0.025. ensemble_endpoint_mc.yaml -- the backend behind epi_bald_greedy,
+  # the arm these are tabulated beside -- uses 20, so 10 would put these arms
+  # under twice its floor. Nearly free: the K loop samples the head on
+  # already-computed params, it does not re-run the net.
+  num_mc_samples: 20
   refine_invalids: false
   refine_t_min: 0.7
   refine_t_max: 0.9

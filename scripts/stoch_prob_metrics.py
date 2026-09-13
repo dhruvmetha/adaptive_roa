@@ -268,6 +268,15 @@ LEVELS = tuple(round(0.05 + 0.1 * i, 2) for i in range(10))
 LEVEL_STATS = ("tpr", "tnr", "fpr", "fnr", "acc", "bal_acc", "f1", "f05", "prec",
                "realized", "vol_ratio")
 
+# The auc_* area scalars average a rate over beta >= this floor, NOT over all ten
+# levels. Every level keeps its own row in the per-level table and its own point in
+# the level-set figures; only the AREA restricts. beta = 1 - alpha, so the dropped
+# levels are risk tolerances alpha >= 0.55 -- "the region where success is at least
+# 5% likely" is not a claim anyone verifies against, and averaging it in moves the
+# area by an amount that has nothing to do with the arm's useful range
+# (user, 2026-09-13).
+AREA_BETA_MIN = 0.5
+
 
 def _safe_div(a: float, b: float) -> float:
     return a / b if b else float("nan")
@@ -343,23 +352,31 @@ def level_set_oracle(p: np.ndarray, k: float | None, m: float | None, betas=LEVE
 
 
 def level_set_summary(rows: list[dict], oracle_rows: list[dict]) -> dict:
-    """Area scalars: the mean of each rate over the ten levels, NaN-skipping,
-    for the arm and for its oracle ceiling; `n_levels_defined` counts the
-    levels where both true sets were non-empty (balanced accuracy defined), so
-    a reader sees when a mean rests on fewer than ten; and the worst over-claim,
-    the largest amount by which the realized success of a claimed region falls
-    short of its level."""
+    """Area scalars: the mean of each rate over the levels at or above
+    AREA_BETA_MIN, NaN-skipping, for the arm and for its oracle ceiling;
+    `n_levels_defined` counts the AVERAGED levels where both true sets were
+    non-empty (balanced accuracy defined), so a reader sees when a mean rests on
+    fewer than `n_levels`; and the worst over-claim, the largest amount by which
+    the realized success of a claimed region falls short of its level.
+
+    The arm and its oracle are averaged over the SAME levels. Letting them differ
+    would compare a mean against a ceiling computed somewhere else, which reads as
+    an arm beating its own oracle. `worst_overclaim` deliberately still scans every
+    level: it is a safety check, not an area, and an over-claim at a low beta is
+    still an over-claim.
+    """
     orc = {r["beta"]: r for r in oracle_rows}
+    area = [r for r in rows if r["beta"] >= AREA_BETA_MIN]
 
     def mean_of(rs, key):
         v = [r[key] for r in rs if not np.isnan(r[key])]
         return float(np.mean(v)) if v else float("nan")
 
-    out = {"n_levels": len(rows),
-           "n_levels_defined": sum(not np.isnan(r["bal_acc"]) for r in rows)}
+    out = {"n_levels": len(area),
+           "n_levels_defined": sum(not np.isnan(r["bal_acc"]) for r in area)}
     for stat in LEVEL_STATS:
-        out[f"auc_{stat}"] = mean_of(rows, stat)
-        out[f"auc_{stat}_oracle"] = mean_of([orc[r["beta"]] for r in rows], stat)
+        out[f"auc_{stat}"] = mean_of(area, stat)
+        out[f"auc_{stat}_oracle"] = mean_of([orc[r["beta"]] for r in area], stat)
     gaps = [r["beta"] - r["realized"] for r in rows if not np.isnan(r["realized"])]
     out["worst_overclaim"] = float(max([0.0] + gaps))
     return out

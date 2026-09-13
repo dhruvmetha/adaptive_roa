@@ -159,11 +159,13 @@ CLEAN = ["epi_bald", "partx_fix", "clf_dir00", "clf_epi_bald", "bnn_mfvi", "bnn_
 METRICS = [("KL",             "KL",             "KL divergence  (log, lower better)",  True),
            ("brier_debiased", "debiased Brier", "debiased Brier  (log, lower better)", True),
            ("sAUROC",         "sAUROC",         "sAUROC  (higher better)",             False),
-           # Mean balanced accuracy of the level-β sets over the ten levels that
-           # pass the thin-set rule (stoch_prob_metrics.level_set_summary). The
-           # per-level curves are in plot_stoch_levelsets; this column is the
-           # epoch-wise view of their area.
-           ("auc_bal_acc",    "bal. acc. area", "balanced-accuracy area over β  (higher better)", False)]
+           # Mean F0.5 of the level-β sets over the ten levels that pass the
+           # thin-set rule (stoch_prob_metrics.level_set_summary). The per-level
+           # curves are in plot_stoch_levelsets; this column is the epoch-wise
+           # view of their area. F0.5 rather than balanced accuracy because the
+           # paper's level-set panels are read at F0.5, and a learning curve on a
+           # different statistic cannot be compared against them (user, 2026-09-13).
+           ("auc_f05",        "F0.5 area",      "F0.5 area over β  (higher better)",   False)]
 
 
 def missing_columns(m, cols):

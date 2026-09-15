@@ -213,14 +213,15 @@ def toy(tmp_path):
     return system, starts, labels, droot
 
 
-def _go(toy, out):
+def _go(toy, out, reuse=False):
     system, starts, labels, droot = toy
     return run_partx_faithful(
         system=system, starts=starts, labels=labels, eval_states_file=str(droot / "test_set.txt"),
         output_dir=str(out), initial=60, samples_per_epoch=30, n_epochs=4,
         pcfg=PartXConfig(n0=5, n_bo=2, n_c=10, R=4, M=50, seed=0),
         gp_kwargs=dict(n_restarts=1, max_points=500), falsify="failure",
-        attractor_radius=0.1, extra={"test": True}, trajectory=_Mirror(starts, 0.0))
+        attractor_radius=0.1, extra={"test": True}, trajectory=_Mirror(starts, 0.0),
+        reuse_hyperparameters=reuse)
 
 
 def test_each_epoch_snapshots_exactly_the_states_of_its_rollouts(toy, tmp_path):
@@ -242,8 +243,27 @@ def test_each_epoch_snapshots_exactly_the_states_of_its_rollouts(toy, tmp_path):
             assert int(z["n_samples"].sum()) == len(allowed)
 
 
-def test_the_traj_arm_resumes_after_a_crash(toy, tmp_path, monkeypatch):
+def test_reuse_leaves_epoch_0_alone_and_reports_its_fixed_fits(toy, tmp_path):
+    plain = _go(toy, tmp_path / "a")
+    reused = _go(toy, tmp_path / "b", reuse=True)
+    assert "n_fixed_fits" not in plain
+    assert 0 < reused["n_fixed_fits"] < reused["n_fits"]
+    with np.load(tmp_path / "a" / "epoch_000" / "full_roa_per_point.npz") as za, \
+            np.load(tmp_path / "b" / "epoch_000" / "full_roa_per_point.npz") as zb:
+        assert sorted(za.files) == sorted(zb.files)
+        for k in za.files:
+            np.testing.assert_array_equal(za[k], zb[k])
+
+
+def test_a_run_without_reuse_refuses_to_resume_with_it(toy, tmp_path):
     _go(toy, tmp_path / "a")
+    with pytest.raises(RuntimeError, match="refusing to resume"):
+        _go(toy, tmp_path / "a", reuse=True)
+
+
+@pytest.mark.parametrize("reuse", [False, True])
+def test_the_traj_arm_resumes_after_a_crash(toy, tmp_path, monkeypatch, reuse):
+    _go(toy, tmp_path / "a", reuse)
     real_step = PartX.step
     calls = {"n": 0}
 
@@ -255,9 +275,9 @@ def test_the_traj_arm_resumes_after_a_crash(toy, tmp_path, monkeypatch):
 
     monkeypatch.setattr(PartX, "step", flaky)
     with pytest.raises(RuntimeError, match="simulated preemption"):
-        _go(toy, tmp_path / "b")
+        _go(toy, tmp_path / "b", reuse)
     monkeypatch.setattr(PartX, "step", real_step)
-    _go(toy, tmp_path / "b")
+    _go(toy, tmp_path / "b", reuse)
     fa = json.loads((tmp_path / "a" / "final_results.json").read_text())
     fb = json.loads((tmp_path / "b" / "final_results.json").read_text())
     fa.pop("elapsed_s_this_process")

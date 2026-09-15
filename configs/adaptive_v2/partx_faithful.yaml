@@ -25,6 +25,9 @@ partx_faithful:
     max_points: 2000
     lengthscale_bounds: [0.01, 100.0]
     sigma_f2_bounds: [0.01, 25.0]
+    # partx_faithful_traj only: a region optimizes hyperparameters on its first fit in an
+    # iteration and reuses them for its later fits that iteration (EI steps, classification).
+    reuse_hyperparameters: false
   falsify: failure       # D2; `success` exists for a later sensitivity run only
   # partx_faithful_traj (spec 2026-09-15): true adds traj[1:-1] of every evaluated rollout
   # as labelled samples. Needs ++data_source.timeout_intermediates=drop.

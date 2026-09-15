@@ -39,7 +39,11 @@ def sample_bo(region, store, sampler, fit_model, take, n0: int, n_bo: int, cand_
         model = fit_model(region)
         m, s = model.latent(Xc)
         if f_star_mode == "plugin":
-            f_star = float(np.min(model.latent(store.X(region.samples))[0]))
+            # f* uses only the posterior mean; computing it without the variance is identical
+            # and saves the variance over every sample in the region.
+            Xs = store.X(region.samples)
+            means = model.latent_mean(Xs) if hasattr(model, "latent_mean") else model.latent(Xs)[0]
+            f_star = float(np.min(means))
         elif f_star_mode == "observed":
             f_star = float(np.min(store.y(region.samples)))
         else:

@@ -202,7 +202,8 @@ class CheckpointWriter:
 def run_partx_faithful(*, system, starts, labels, eval_states_file, output_dir, initial: int,
                        samples_per_epoch: int, n_epochs: int, pcfg: PartXConfig, gp_kwargs: dict,
                        falsify: str, attractor_radius: float, extra: dict,
-                       decision_rule: str = "one_sided", trajectory=None) -> dict:
+                       decision_rule: str = "one_sided", trajectory=None,
+                       reuse_hyperparameters: bool = False) -> dict:
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     starts = np.asarray(starts, dtype=float)
@@ -230,6 +231,8 @@ def run_partx_faithful(*, system, starts, labels, eval_states_file, output_dir, 
     if trajectory is not None:
         # Only when on, so every existing Part-X* checkpoint keeps its hash and still resumes.
         hashed["trajectory_states"] = True
+    if reuse_hyperparameters:
+        hashed["reuse_hyperparameters"] = True
     chash = config_hash(hashed)
     state_path = out / "partx_state.pkl"
     if state_path.exists():
@@ -238,7 +241,8 @@ def run_partx_faithful(*, system, starts, labels, eval_states_file, output_dir, 
         print(f"[partx_faithful] resuming at iteration {px.iteration}, used {px.used}/{px.budget}", flush=True)
     else:
         px = PartX(pcfg, root_low, root_high, sampler, factory, budget, init_X=starts[:initial],
-                   init_y=labels[:initial], init_pool_idx=np.arange(initial), trajectory=trajectory)
+                   init_y=labels[:initial], init_pool_idx=np.arange(initial), trajectory=trajectory,
+                   reuse_hyperparameters=reuse_hyperparameters)
     writer = CheckpointWriter(output_dir=out, system=system, eval_states_file=eval_states_file,
                               attractor_radius=attractor_radius, checkpoints=checkpoints,
                               initial=initial, model_factory=factory, pcfg=pcfg,
@@ -258,6 +262,7 @@ def run_partx_faithful(*, system, starts, labels, eval_states_file, output_dir, 
         leaves = px.leaves()
         types = Counter(r.rtype for r in leaves)
         states = f" traj_states={px.n_traj_states}" if px.traj_enabled else ""
+        states += f" fixed_fits={px.n_fixed_fits}" if px.reuse_hyperparameters else ""
         print(f"[partx_faithful] iter {px.iteration} phase={px.phase} used={px.used}/{px.budget} "
               f"leaves={len(leaves)} " + " ".join(f"{t}={types[t]}" for t in RTYPES if types.get(t))
               + f" fits={px.n_fits} capped={px.n_capped}{states} elapsed={time.time() - t0:.0f}s",
@@ -272,6 +277,8 @@ def run_partx_faithful(*, system, starts, labels, eval_states_file, output_dir, 
     if px.traj_enabled:
         summary.update(n_traj_states=px.n_traj_states, n_traj_rollouts=px.n_traj_rollouts,
                        n_timeout_rollouts=px.n_timeout_rollouts)
+    if px.reuse_hyperparameters:
+        summary.update(n_fixed_fits=px.n_fixed_fits)
     _atomic_write_json(out / "final_results.json", _convert_numpy(summary), indent=2)
     return summary
 
@@ -318,4 +325,5 @@ def run_from_cfg(cfg) -> dict:
         n_epochs=int(cfg.n_epochs), pcfg=pcfg, gp_kwargs=gp_kwargs,
         falsify=str(cfg.partx_faithful.falsify), attractor_radius=float(cfg.attractor_radius),
         extra=extra, decision_rule=str(cfg.get("decision_rule", "one_sided")),
-        trajectory=PoolTrajectoryStates(ds) if traj_on else None)
+        trajectory=PoolTrajectoryStates(ds) if traj_on else None,
+        reuse_hyperparameters=bool(gp.get("reuse_hyperparameters", False)))

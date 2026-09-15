@@ -16,7 +16,9 @@ exactly.
 With a trajectory provider (partx_faithful_traj, spec 2026-09-15) every evaluated
 rollout also contributes its intermediate states as labelled samples, routed to the
 leaves that contain them. They count toward region sample counts but never toward the
-budget or the log.
+budget or the log. With reuse_hyperparameters, a region optimizes its GP hyperparameters
+on its first fit in an iteration and later fits of that region in the same iteration
+reuse them.
 """
 from __future__ import annotations
 
@@ -65,7 +67,8 @@ _ITERATION = -1          # region-id slot for draws that belong to the whole ite
 
 class PartX:
     def __init__(self, cfg: PartXConfig, low, high, sampler, model_factory, budget: int,
-                 init_X=None, init_y=None, init_pool_idx=None, trajectory=None):
+                 init_X=None, init_y=None, init_pool_idx=None, trajectory=None,
+                 reuse_hyperparameters: bool = False):
         low, high = np.asarray(low, dtype=float), np.asarray(high, dtype=float)
         self.cfg, self.d, self.budget, self.used = cfg, len(low), int(budget), 0
         self.sampler, self.model_factory = sampler, model_factory
@@ -90,6 +93,9 @@ class PartX:
         self.iteration, self.phase, self.done = 0, "root", False
         self.shortfall = self.n_fits = self.n_capped = self.n_at_bound = 0
         self._fit_keys: set = set()   # (rid, n) fits already counted; pickled, so a resume counts the same
+        self.reuse_hyperparameters = bool(reuse_hyperparameters)
+        self._theta: dict = {}        # rid -> (iteration, sigma_f2, lengthscale) of its last optimized fit
+        self.n_fixed_fits = 0
         self.trajectory = trajectory
         self.traj_enabled = trajectory is not None
         self.traj_ids: dict = {}      # pool sample id -> ids of the states it contributed
@@ -127,10 +133,12 @@ class PartX:
                     f"match the sampler at pool indices {sorted(bad[:5].tolist())}"
                     f"{', ...' if len(bad) > 5 else ''}; refusing to attach a sampler for a "
                     "different pool")
-        # States pickled before trajectory support existed carry none of these fields.
+        # States pickled before these features existed carry none of these fields.
         self.__dict__.setdefault("traj_enabled", False)
         self.__dict__.setdefault("traj_ids", {})
-        for k in ("n_traj_states", "n_traj_rollouts", "n_timeout_rollouts"):
+        self.__dict__.setdefault("reuse_hyperparameters", False)
+        self.__dict__.setdefault("_theta", {})
+        for k in ("n_traj_states", "n_traj_rollouts", "n_timeout_rollouts", "n_fixed_fits"):
             self.__dict__.setdefault(k, 0)
         if self.traj_enabled and trajectory is None:
             raise RuntimeError("PartX.attach: this run adds trajectory states; pass the provider")
@@ -193,8 +201,14 @@ class PartX:
         cached = self.model_cache.get(region.rid)
         if cached is not None and cached[0] == n:
             return cached[1]
-        model = self.model_factory(derive_seed(self.cfg.seed, region.rid, n))
+        seed = derive_seed(self.cfg.seed, region.rid, n)
+        reuse = getattr(self, "reuse_hyperparameters", False)
+        theta = self._theta.get(region.rid) if reuse else None
+        fixed = tuple(theta[1:]) if theta is not None and theta[0] == self.iteration else None
+        model = self.model_factory(seed, fixed) if fixed is not None else self.model_factory(seed)
         model.fit(self.store.X(region.samples), self.store.y(region.samples))
+        if reuse and fixed is None and hasattr(model, "hyperparameters"):
+            self._theta[region.rid] = (self.iteration, *(float(v) for v in model.hyperparameters()))
         key = (region.rid, n)
         if key not in self._fit_keys:
             # Count each distinct fit once. After a resume the cache is empty and the
@@ -204,6 +218,7 @@ class PartX:
             self.n_fits += 1
             self.n_capped += int(bool(getattr(model, "capped", False)))
             self.n_at_bound += int(bool(getattr(model, "at_bound", False)))
+            self.n_fixed_fits += int(fixed is not None)
         self.model_cache[region.rid] = (n, model)
         return model
 

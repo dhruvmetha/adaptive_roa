@@ -15,11 +15,13 @@ from adaptive_roa.partx_faithful.gp_laplace import LaplaceGPClassifier
 
 
 class GPCBackend:
-    def __init__(self, falsify: str = "failure", seed: int = 0, **gp_kwargs):
+    def __init__(self, falsify: str = "failure", seed: int = 0, fixed=None, **gp_kwargs):
         if falsify not in ("failure", "success"):
             raise ValueError(f"falsify must be 'failure' or 'success', got {falsify!r}")
         self.sign = 1.0 if falsify == "failure" else -1.0
-        self.gp = LaplaceGPClassifier(seed=seed, **gp_kwargs)
+        # fixed = (sigma_f2, lengthscale) skips the hyperparameter optimizer (partx_faithful_traj's
+        # within-iteration reuse); None optimizes as Part-X* does.
+        self.gp = LaplaceGPClassifier(seed=seed, fixed=fixed, **gp_kwargs)
 
     def fit(self, X, y):
         """y uses the pool convention: +1 success, -1 failure."""
@@ -29,6 +31,12 @@ class GPCBackend:
     def latent(self, X):
         m, s = self.gp.latent(X)
         return self.sign * m, s
+
+    def latent_mean(self, X):
+        return self.sign * self.gp.latent_mean(X)
+
+    def hyperparameters(self):
+        return (self.gp.sigma_f2_, self.gp.lengthscale_)
 
     def p_success(self, X):
         return self.gp.predict_proba(X)
@@ -80,9 +88,9 @@ class SklearnGPRBackend:
 
 
 def backend_factory(kind: str = "gpc", falsify: str = "failure", **gp_kwargs):
-    """seed -> fresh local model. cpslab pins every GPR to random_state=12345."""
+    """(seed, fixed=None) -> fresh local model. cpslab pins every GPR to random_state=12345."""
     if kind == "gpc":
-        return lambda seed: GPCBackend(falsify=falsify, seed=seed, **gp_kwargs)
+        return lambda seed, fixed=None: GPCBackend(falsify=falsify, seed=seed, fixed=fixed, **gp_kwargs)
     if kind == "gpr":
-        return lambda seed: SklearnGPRBackend(seed=12345)
+        return lambda seed, fixed=None: SklearnGPRBackend(seed=12345)
     raise ValueError(f"unknown backend kind {kind!r}")

@@ -199,6 +199,20 @@ class LaplaceGPClassifier:
             variances.append(self.sigma_f2_ - np.einsum("ij,ij->j", v, v))
         return np.concatenate(means), np.sqrt(np.maximum(np.concatenate(variances), 1e-12))
 
+    def latent_mean(self, X, chunk: int = 4096):
+        """The posterior mean of latent(X), without the variance.
+
+        Same chunks and the same arithmetic as latent(), so the result is identical to
+        latent(X)[0]. The plug-in f* only needs the mean, and skipping the variance matters
+        once trajectory states make a region tens of thousands of samples wide.
+        """
+        Zs = self._prep(np.atleast_2d(np.asarray(X, dtype=float)))
+        if len(Zs) == 0:
+            return np.empty(0)
+        return np.concatenate([self.mu_ + matern52(Zs[i:i + chunk], self.Z_, self.sigma_f2_,
+                                                   self.lengthscale_) @ self.grad_
+                               for i in range(0, len(Zs), chunk)])
+
     def predict_proba(self, X):
         if self.link != "probit":
             raise NotImplementedError("predict_proba is probit-only; the logistic link exists for tests")

@@ -48,6 +48,17 @@ def resolve_n0(n0, state_dim: int) -> int:
     return int(n0)
 
 
+def snapshot_ids(px, n_new: int) -> set:
+    """Sample ids an epoch may use: the initial set, the first n_new acquisitions, and the
+    trajectory states of exactly those rollouts (spec 2026-09-15 §4.7)."""
+    base = set(range(px.n_init)) | set(px.log[:n_new])
+    allowed = set(base)
+    traj = getattr(px, "traj_ids", {})
+    for s in base:
+        allowed.update(traj.get(s, ()))
+    return allowed
+
+
 def _git_commit() -> str:
     try:
         return subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=Path(__file__).resolve().parent,
@@ -137,7 +148,8 @@ class CheckpointWriter:
 
     def write(self, px, e: int) -> None:
         n_new = min(self.n_new(e), px.used)
-        allowed = set(range(px.n_init)) | set(px.log[:n_new])
+        allowed = snapshot_ids(px, n_new)
+        traj_on = bool(getattr(px, "traj_enabled", False))
         leaves = px.leaves()
         models = self._models(px, leaves, allowed)
         root = px.regions[0]
@@ -169,9 +181,12 @@ class CheckpointWriter:
             "n_capped_fits": int(px.n_capped), "n_at_bound_fits": int(px.n_at_bound),
             "done": bool(px.done),
         }
+        if traj_on:
+            # States in THIS snapshot: those of the rollouts the epoch may use.
+            diag["n_traj_states"] = int(len(allowed) - px.n_init - n_new)
         art = {
             "epoch": int(e), "train_trajectories": int(self.initial + n_new),
-            "sampling_mode": "partx_faithful",
+            "sampling_mode": "partx_faithful_traj" if traj_on else "partx_faithful",
             "threshold_state": {"lambda_star": 0.5, "delta_star": 0.1, "q_hat": None, "q_hat_eval": None,
                                 "q_hat_success_eval": None, "q_hat_failure_eval": None},
             "acquisition": {"d1_indices": [], "d2_indices": [], "n_candidates_evaluated": None,
@@ -187,7 +202,7 @@ class CheckpointWriter:
 def run_partx_faithful(*, system, starts, labels, eval_states_file, output_dir, initial: int,
                        samples_per_epoch: int, n_epochs: int, pcfg: PartXConfig, gp_kwargs: dict,
                        falsify: str, attractor_radius: float, extra: dict,
-                       decision_rule: str = "one_sided") -> dict:
+                       decision_rule: str = "one_sided", trajectory=None) -> dict:
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     starts = np.asarray(starts, dtype=float)
@@ -208,18 +223,22 @@ def run_partx_faithful(*, system, starts, labels, eval_states_file, output_dir, 
     factory = backend_factory("gpc", falsify=falsify, **gp_kwargs)
     starts_digest = hashlib.sha256(np.ascontiguousarray(starts).tobytes()).hexdigest()[:16]
     labels_digest = hashlib.sha256(np.ascontiguousarray(labels).tobytes()).hexdigest()[:16]
-    chash = config_hash({"pcfg": asdict(pcfg), "gp": gp_kwargs, "falsify": falsify, "initial": initial,
-                         "samples_per_epoch": samples_per_epoch, "n_epochs": n_epochs,
-                         "n_pool": len(starts), "eval_states_file": str(eval_states_file),
-                         "starts": starts_digest, "labels": labels_digest})
+    hashed = {"pcfg": asdict(pcfg), "gp": gp_kwargs, "falsify": falsify, "initial": initial,
+              "samples_per_epoch": samples_per_epoch, "n_epochs": n_epochs,
+              "n_pool": len(starts), "eval_states_file": str(eval_states_file),
+              "starts": starts_digest, "labels": labels_digest}
+    if trajectory is not None:
+        # Only when on, so every existing Part-X* checkpoint keeps its hash and still resumes.
+        hashed["trajectory_states"] = True
+    chash = config_hash(hashed)
     state_path = out / "partx_state.pkl"
     if state_path.exists():
         px = load_state(state_path, chash)
-        px.attach(sampler, factory)
+        px.attach(sampler, factory, trajectory)
         print(f"[partx_faithful] resuming at iteration {px.iteration}, used {px.used}/{px.budget}", flush=True)
     else:
         px = PartX(pcfg, root_low, root_high, sampler, factory, budget, init_X=starts[:initial],
-                   init_y=labels[:initial], init_pool_idx=np.arange(initial))
+                   init_y=labels[:initial], init_pool_idx=np.arange(initial), trajectory=trajectory)
     writer = CheckpointWriter(output_dir=out, system=system, eval_states_file=eval_states_file,
                               attractor_radius=attractor_radius, checkpoints=checkpoints,
                               initial=initial, model_factory=factory, pcfg=pcfg,
@@ -238,9 +257,11 @@ def run_partx_faithful(*, system, starts, labels, eval_states_file, output_dir, 
             continue                             # this step only noticed termination
         leaves = px.leaves()
         types = Counter(r.rtype for r in leaves)
+        states = f" traj_states={px.n_traj_states}" if px.traj_enabled else ""
         print(f"[partx_faithful] iter {px.iteration} phase={px.phase} used={px.used}/{px.budget} "
               f"leaves={len(leaves)} " + " ".join(f"{t}={types[t]}" for t in RTYPES if types.get(t))
-              + f" fits={px.n_fits} capped={px.n_capped} elapsed={time.time() - t0:.0f}s", flush=True)
+              + f" fits={px.n_fits} capped={px.n_capped}{states} elapsed={time.time() - t0:.0f}s",
+              flush=True)
     writer.finish(px)
     leaves = px.leaves()
     summary = {"budget": px.budget, "used": px.used, "unspent": px.budget - px.used,
@@ -248,6 +269,9 @@ def run_partx_faithful(*, system, starts, labels, eval_states_file, output_dir, 
                "leaf_types": dict(Counter(r.rtype for r in leaves)), "shortfall": px.shortfall,
                "n_fits": px.n_fits, "n_capped_fits": px.n_capped, "n_at_bound_fits": px.n_at_bound,
                "elapsed_s_this_process": time.time() - t0}
+    if px.traj_enabled:
+        summary.update(n_traj_states=px.n_traj_states, n_traj_rollouts=px.n_traj_rollouts,
+                       n_timeout_rollouts=px.n_timeout_rollouts)
     _atomic_write_json(out / "final_results.json", _convert_numpy(summary), indent=2)
     return summary
 
@@ -259,15 +283,21 @@ def run_from_cfg(cfg) -> dict:
 
     from adaptive_roa.adaptive.data_source import TrajectoryDataSourceConfig
     from adaptive_roa.adaptive.npz_data_source import NpzTrajectoryDataSource
+    from adaptive_roa.partx_faithful.trajectory import PoolTrajectoryStates
 
     if str(cfg.data_source.get("pool_format", "text")) != "npz":
         raise ValueError("partx_faithful needs an npz pool (data_source.pool_format=npz)")
+    traj_on = bool(cfg.partx_faithful.get("trajectory_states", False))
+    if traj_on and str(cfg.data_source.get("timeout_intermediates", "keep")) != "drop":
+        raise ValueError("partx_faithful.trajectory_states needs ++data_source.timeout_intermediates=drop, "
+                         "so a timeout contributes x0 only, exactly as it does for the neural arms")
     system = hydra.utils.instantiate(cfg.system)
     ds = NpzTrajectoryDataSource(TrajectoryDataSourceConfig(
         trajectories_dir=cfg.data_source.trajectories_dir,
         shuffled_indices_file=cfg.data_source.shuffled_indices_file,
         shuffled_labels_file=cfg.data_source.get("shuffled_labels_file", None),
-        eval_states_file=cfg.data_source.get("eval_states_file", None)))
+        eval_states_file=cfg.data_source.get("eval_states_file", None),
+        timeout_intermediates="drop" if traj_on else "keep"))
     if ds.labels is None:
         raise ValueError("the pool has no shuffled_labels_file; Part-X needs outcomes")
     starts = np.asarray(ds.start_states, dtype=float)
@@ -287,4 +317,5 @@ def run_from_cfg(cfg) -> dict:
         initial=int(cfg.initial_train_size), samples_per_epoch=int(cfg.samples_per_epoch),
         n_epochs=int(cfg.n_epochs), pcfg=pcfg, gp_kwargs=gp_kwargs,
         falsify=str(cfg.partx_faithful.falsify), attractor_radius=float(cfg.attractor_radius),
-        extra=extra, decision_rule=str(cfg.get("decision_rule", "one_sided")))
+        extra=extra, decision_rule=str(cfg.get("decision_rule", "one_sided")),
+        trajectory=PoolTrajectoryStates(ds) if traj_on else None)

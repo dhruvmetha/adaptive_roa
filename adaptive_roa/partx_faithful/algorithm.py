@@ -12,6 +12,11 @@ other arm and are free. `log` lists new sample ids in canonical order
 generator seeded by (seed, iteration, region id, stage), and every fit is
 seeded by (seed, region id, number of samples), so a resumed run replays
 exactly.
+
+With a trajectory provider (partx_faithful_traj, spec 2026-09-15) every evaluated
+rollout also contributes its intermediate states as labelled samples, routed to the
+leaves that contain them. They count toward region sample counts but never toward the
+budget or the log.
 """
 from __future__ import annotations
 
@@ -60,7 +65,7 @@ _ITERATION = -1          # region-id slot for draws that belong to the whole ite
 
 class PartX:
     def __init__(self, cfg: PartXConfig, low, high, sampler, model_factory, budget: int,
-                 init_X=None, init_y=None, init_pool_idx=None):
+                 init_X=None, init_y=None, init_pool_idx=None, trajectory=None):
         low, high = np.asarray(low, dtype=float), np.asarray(high, dtype=float)
         self.cfg, self.d, self.budget, self.used = cfg, len(low), int(budget), 0
         self.sampler, self.model_factory = sampler, model_factory
@@ -85,21 +90,27 @@ class PartX:
         self.iteration, self.phase, self.done = 0, "root", False
         self.shortfall = self.n_fits = self.n_capped = self.n_at_bound = 0
         self._fit_keys: set = set()   # (rid, n) fits already counted; pickled, so a resume counts the same
+        self.trajectory = trajectory
+        self.traj_enabled = trajectory is not None
+        self.traj_ids: dict = {}      # pool sample id -> ids of the states it contributed
+        self.n_traj_states = self.n_traj_rollouts = self.n_timeout_rollouts = 0
+        self._add_trajectory_states(list(range(self.n_init)))
 
     # ---- bookkeeping ------------------------------------------------------
     def __getstate__(self):
         state = self.__dict__.copy()
-        state.update(sampler=None, model_factory=None, on_sample=None, model_cache={})
+        state.update(sampler=None, model_factory=None, on_sample=None, model_cache={}, trajectory=None)
         return state
 
-    def attach(self, sampler, model_factory) -> None:
+    def attach(self, sampler, model_factory, trajectory=None) -> None:
         """Reattach after unpickling. Rebuilds the sampler's used-mask from the store.
 
         Verifies first that the store's recorded labels still match the sampler's
         labels at the same pool indices (a sample id with pool_idx < 0, the
-        continuous sampler, is skipped). A mismatch means this state was built
-        against a different pool -- e.g. a mistyped output_dir landing on another
-        level's checkpoint -- and resuming would silently attach the wrong labels.
+        continuous sampler or a trajectory state, is skipped). A mismatch means this
+        state was built against a different pool -- e.g. a mistyped output_dir landing
+        on another level's checkpoint -- and resuming would silently attach the wrong
+        labels.
         """
         ids = np.arange(self.store.n)
         pool = self.store.pool_idx(ids)
@@ -116,7 +127,15 @@ class PartX:
                     f"match the sampler at pool indices {sorted(bad[:5].tolist())}"
                     f"{', ...' if len(bad) > 5 else ''}; refusing to attach a sampler for a "
                     "different pool")
+        # States pickled before trajectory support existed carry none of these fields.
+        self.__dict__.setdefault("traj_enabled", False)
+        self.__dict__.setdefault("traj_ids", {})
+        for k in ("n_traj_states", "n_traj_rollouts", "n_timeout_rollouts"):
+            self.__dict__.setdefault(k, 0)
+        if self.traj_enabled and trajectory is None:
+            raise RuntimeError("PartX.attach: this run adds trajectory states; pass the provider")
         self.sampler, self.model_factory, self.model_cache = sampler, model_factory, {}
+        self.trajectory = trajectory if self.traj_enabled else None
         sampler.mark_used(used_pool)
 
     def leaves(self) -> list:
@@ -125,6 +144,38 @@ class PartX:
     def _rng(self, rid: int, stage: int):
         return np.random.default_rng(derive_seed(self.cfg.seed, self.iteration, rid, stage))
 
+    def _add_trajectory_states(self, sample_ids) -> None:
+        """Each rollout's intermediate states, labelled with its outcome, into the leaves holding them."""
+        if getattr(self, "trajectory", None) is None or not len(sample_ids):
+            return
+        root = self.regions[0]
+        leaves = self.leaves()
+        for sid in sample_ids:
+            sid = int(sid)
+            p = int(self.store.pool_idx([sid])[0])
+            if p < 0:
+                continue
+            rows, timed_out = self.trajectory.states(p)
+            self.n_timeout_rollouts += int(bool(timed_out))
+            rows = np.asarray(rows, dtype=float).reshape(-1, self.d)
+            if len(rows) == 0:
+                self.traj_ids[sid] = []
+                continue
+            rows = np.clip(rows, root.low, root.high)
+            y = np.full(len(rows), float(self.store.y([sid])[0]))
+            ids = self.store.add(rows, y, np.full(len(rows), -1, dtype=np.int64))
+            todo = np.ones(len(rows), dtype=bool)
+            for leaf in leaves:
+                m = todo & leaf.contains(rows)
+                if m.any():
+                    leaf.samples.extend(ids[i] for i in np.flatnonzero(m))
+                    todo &= ~m
+            if todo.any():
+                raise RuntimeError(f"{int(todo.sum())} trajectory states fall in no leaf")
+            self.traj_ids[sid] = list(ids)
+            self.n_traj_states += len(ids)
+            self.n_traj_rollouts += 1
+
     def _take(self, region, handles) -> list:
         if len(handles) == 0:
             return []
@@ -132,6 +183,7 @@ class PartX:
         region.samples.extend(ids)
         self.log.extend(ids)
         self.used += len(ids)
+        self._add_trajectory_states(ids)
         if self.on_sample is not None:
             self.on_sample(self)
         return ids

@@ -25,7 +25,7 @@ from adaptive_roa.partx_faithful.algorithm import PartX, PartXConfig, derive_see
 from adaptive_roa.partx_faithful.backends import backend_factory
 from adaptive_roa.partx_faithful.readout import PiecewiseHandle, PiecewiseModel
 from adaptive_roa.partx_faithful.region import RTYPES
-from adaptive_roa.partx_faithful.sampling import PoolSampler
+from adaptive_roa.partx_faithful.sampling import PoolSampler, StatePoolSampler, state_pool_arrays
 from adaptive_roa.partx_faithful.state import config_hash, load_state, save_state
 from adaptive_roa.partx_faithful.volume import (classified_falsification_volume,
                                                 gp_quantile_falsification_volume,
@@ -203,7 +203,7 @@ def run_partx_faithful(*, system, starts, labels, eval_states_file, output_dir, 
                        samples_per_epoch: int, n_epochs: int, pcfg: PartXConfig, gp_kwargs: dict,
                        falsify: str, attractor_radius: float, extra: dict,
                        decision_rule: str = "one_sided", trajectory=None,
-                       reuse_hyperparameters: bool = False) -> dict:
+                       reuse_hyperparameters: bool = False, state_pool=None) -> dict:
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     starts = np.asarray(starts, dtype=float)
@@ -218,9 +218,21 @@ def run_partx_faithful(*, system, starts, labels, eval_states_file, output_dir, 
     root_low, root_high = lo - pad, hi + pad
     print(f"[partx_faithful] S = pool start box, low {np.array2string(root_low, precision=3)} "
           f"high {np.array2string(root_high, precision=3)}", flush=True)
-    used = np.zeros(len(starts), dtype=bool)
-    used[:initial] = True
-    sampler = PoolSampler(starts, labels, used, scale=root_high - root_low)
+    if state_pool is None:
+        used = np.zeros(len(starts), dtype=bool)
+        used[:initial] = True
+        sampler = PoolSampler(starts, labels, used, scale=root_high - root_low)
+        init_idx = np.arange(initial)
+        init_X, init_y = starts[:initial], labels[:initial]
+    else:
+        # D22c: candidates are every non-terminal state of the pool trajectories; the
+        # initial set is row 0 of the first `initial` trajectories, as for the neural arms.
+        sp_states, sp_labels, sp_traj, sp_start, sp_rows = state_pool
+        sampler = StatePoolSampler(sp_states, sp_labels, sp_traj, sp_start, sp_rows,
+                                   scale=root_high - root_low)
+        init_idx = sp_start[:initial]
+        sampler.mark_used(init_idx)
+        init_X, init_y = sampler.starts[init_idx].astype(float), sp_labels[init_idx]
     factory = backend_factory("gpc", falsify=falsify, **gp_kwargs)
     starts_digest = hashlib.sha256(np.ascontiguousarray(starts).tobytes()).hexdigest()[:16]
     labels_digest = hashlib.sha256(np.ascontiguousarray(labels).tobytes()).hexdigest()[:16]
@@ -233,6 +245,9 @@ def run_partx_faithful(*, system, starts, labels, eval_states_file, output_dir, 
         hashed["trajectory_states"] = True
     if reuse_hyperparameters:
         hashed["reuse_hyperparameters"] = True
+    if state_pool is not None:
+        hashed["state_pool"] = True
+        hashed["n_states"] = int(len(state_pool[0]))
     chash = config_hash(hashed)
     state_path = out / "partx_state.pkl"
     if state_path.exists():
@@ -240,8 +255,8 @@ def run_partx_faithful(*, system, starts, labels, eval_states_file, output_dir, 
         px.attach(sampler, factory, trajectory)
         print(f"[partx_faithful] resuming at iteration {px.iteration}, used {px.used}/{px.budget}", flush=True)
     else:
-        px = PartX(pcfg, root_low, root_high, sampler, factory, budget, init_X=starts[:initial],
-                   init_y=labels[:initial], init_pool_idx=np.arange(initial), trajectory=trajectory,
+        px = PartX(pcfg, root_low, root_high, sampler, factory, budget, init_X=init_X,
+                   init_y=init_y, init_pool_idx=init_idx, trajectory=trajectory,
                    reuse_hyperparameters=reuse_hyperparameters)
     writer = CheckpointWriter(output_dir=out, system=system, eval_states_file=eval_states_file,
                               attractor_radius=attractor_radius, checkpoints=checkpoints,
@@ -295,6 +310,9 @@ def run_from_cfg(cfg) -> dict:
     if str(cfg.data_source.get("pool_format", "text")) != "npz":
         raise ValueError("partx_faithful needs an npz pool (data_source.pool_format=npz)")
     traj_on = bool(cfg.partx_faithful.get("trajectory_states", False))
+    state_on = bool(cfg.partx_faithful.get("state_pool", False))
+    if traj_on and state_on:
+        raise ValueError("partx_faithful.state_pool and trajectory_states are different arms; pick one")
     if traj_on and str(cfg.data_source.get("timeout_intermediates", "keep")) != "drop":
         raise ValueError("partx_faithful.trajectory_states needs ++data_source.timeout_intermediates=drop, "
                          "so a timeout contributes x0 only, exactly as it does for the neural arms")
@@ -304,7 +322,8 @@ def run_from_cfg(cfg) -> dict:
         shuffled_indices_file=cfg.data_source.shuffled_indices_file,
         shuffled_labels_file=cfg.data_source.get("shuffled_labels_file", None),
         eval_states_file=cfg.data_source.get("eval_states_file", None),
-        timeout_intermediates="drop" if traj_on else "keep"))
+        timeout_intermediates="drop" if (traj_on or state_on) else "keep",
+        horizon_steps=cfg.data_source.get("horizon_steps", None)))
     if ds.labels is None:
         raise ValueError("the pool has no shuffled_labels_file; Part-X needs outcomes")
     starts = np.asarray(ds.start_states, dtype=float)
@@ -326,4 +345,11 @@ def run_from_cfg(cfg) -> dict:
         falsify=str(cfg.partx_faithful.falsify), attractor_radius=float(cfg.attractor_radius),
         extra=extra, decision_rule=str(cfg.get("decision_rule", "one_sided")),
         trajectory=PoolTrajectoryStates(ds) if traj_on else None,
-        reuse_hyperparameters=bool(gp.get("reuse_hyperparameters", False)))
+        reuse_hyperparameters=bool(gp.get("reuse_hyperparameters", False)),
+        state_pool=_state_pool_from(ds) if state_on else None)
+
+
+def _state_pool_from(ds):
+    lengths = np.diff(ds._offsets)[ds.rollout_ids]
+    timeout = np.array([ds._drops_intermediates(k, int(n)) for k, n in enumerate(lengths)])
+    return state_pool_arrays(ds._states, ds._offsets, ds.rollout_ids, ds.labels, timeout)

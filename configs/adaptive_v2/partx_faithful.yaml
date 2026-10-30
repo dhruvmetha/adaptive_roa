@@ -32,3 +32,8 @@ partx_faithful:
   # partx_faithful_traj (spec 2026-09-15): true adds traj[1:-1] of every evaluated rollout
   # as labelled samples. Needs ++data_source.timeout_intermediates=drop.
   trajectory_states: false
+  # Det paper D22c: evaluations snap to the nearest unused state of any pool
+  # trajectory (all non-terminal rows; row 0 for timeouts), one labelled point per
+  # evaluation as published. Taking a state retires the rest of its trajectory.
+  # Needs ++data_source.timeout_intermediates=drop. Not combinable with trajectory_states.
+  state_pool: false

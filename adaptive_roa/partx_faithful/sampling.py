@@ -139,6 +139,83 @@ class PoolSampler:
         return self.starts[idx], self.labels[idx], idx
 
 
+class StatePoolSampler(PoolSampler):
+    """PoolSampler over every non-terminal state of the pool trajectories (det paper D22c).
+
+    Under deterministic first-hitting dynamics a query at row t of trajectory k
+    returns k's outcome, so every stored state is a legitimate evaluation point.
+    The flat arrays list each trajectory's candidate rows contiguously, in row
+    order (row 0 only for a timeout). Taking a state marks its row and every later
+    row of the same trajectory used, since their outcomes are then known. One
+    design batch never takes two states of one trajectory. Part-X still gets one
+    labelled point per evaluation, as published.
+    """
+
+    def __init__(self, states, labels, traj_of, traj_start, n_rows, scale):
+        # float32 on purpose: quad3d's pool is about 33M states.
+        self.starts = np.asarray(states, dtype=np.float32)
+        self.labels = np.asarray(labels, dtype=float)
+        self.traj_of = np.asarray(traj_of, dtype=np.int64)
+        self.traj_start = np.asarray(traj_start, dtype=np.int64)
+        self.n_rows = np.asarray(n_rows, dtype=np.int64)
+        self.used = np.zeros(len(self.starts), dtype=bool)
+        self.scale = np.asarray(scale, dtype=np.float32)
+
+    def mark_used(self, pool_idx) -> None:
+        for i in np.asarray(pool_idx, dtype=np.int64).reshape(-1):
+            t = self.traj_of[i]
+            self.used[i:self.traj_start[t] + self.n_rows[t]] = True
+
+    def snap_design(self, design, region) -> np.ndarray:
+        avail = self._available(region)
+        design = np.atleast_2d(np.asarray(design, dtype=np.float32))
+        if len(avail) == 0 or len(design) == 0:
+            return np.empty(0, dtype=np.int64)
+        Z = self.starts[avail] / self.scale
+        owner = self.traj_of[avail]
+        taken = np.zeros(len(avail), dtype=bool)
+        chosen = []
+        for q in design / self.scale:
+            d2 = np.sum((Z - q) ** 2, axis=1)
+            d2[taken] = np.inf
+            j = int(np.argmin(d2))
+            if not np.isfinite(d2[j]):
+                break
+            taken |= owner == owner[j]
+            chosen.append(int(avail[j]))
+        return np.asarray(chosen, dtype=np.int64)
+
+    def take(self, handles):
+        idx = np.asarray(handles, dtype=np.int64).reshape(-1)
+        if len(np.unique(idx)) != len(idx):
+            raise RuntimeError("StatePoolSampler.take: duplicate state index")
+        if len(np.unique(self.traj_of[idx])) != len(idx):
+            raise RuntimeError("StatePoolSampler.take: two states of one trajectory in one batch")
+        if self.used[idx].any():
+            raise RuntimeError("StatePoolSampler.take: state already used")
+        self.mark_used(idx)
+        return self.starts[idx].astype(float), self.labels[idx], idx
+
+
+def state_pool_arrays(states, offsets, rollout_ids, labels, timeout):
+    """Flat candidate arrays for StatePoolSampler from an npz pool.
+
+    states/offsets are the npz's; rollout_ids maps pool index k to its npz row;
+    labels and timeout are per pool index. Returns (states, labels, traj_of,
+    traj_start, n_rows), with candidate rows 0..len-2 (row 0 only for timeouts and
+    length-1 trajectories, whose start is still a rollout).
+    """
+    rollout_ids = np.asarray(rollout_ids, dtype=np.int64)
+    lengths = np.diff(np.asarray(offsets, dtype=np.int64))[rollout_ids]
+    n_rows = np.where(np.asarray(timeout, dtype=bool), 1, np.maximum(lengths - 1, 1))
+    traj_start = np.concatenate([[0], np.cumsum(n_rows)[:-1]])
+    traj_of = np.repeat(np.arange(len(rollout_ids)), n_rows)
+    row_of = np.arange(int(n_rows.sum())) - np.repeat(traj_start, n_rows)
+    flat = np.asarray(offsets, dtype=np.int64)[rollout_ids][traj_of] + row_of
+    return (np.asarray(states)[flat].astype(np.float32), np.asarray(labels, dtype=float)[traj_of],
+            traj_of, traj_start, n_rows)
+
+
 class ContinuousSampler:
     """Reference-check sampler (spec §8.2): evaluates fn anywhere in the box."""
 

@@ -1,0 +1,30 @@
+# @package _global_
+# Deterministic-paper BNN final-state predictor (tracker C13, rulings D10/D14).
+#
+# det_mlp_reg plus a block last-layer Laplace posterior around the same MAP
+# network. Blocks: the mixture logits, and each component's location outputs;
+# the scale outputs stay at MAP (see final_state_trainer._fit_laplace_streamed).
+# Each block's prior precision is chosen by the Laplace evidence.
+defaults:
+  - /probability: endpoint_mc
+predictor:
+  type: generative
+  name: det_bnn_reg
+  trainer_target: adaptive_roa.adaptive_v2.trainers.final_state_trainer.FinalStateTrainer
+  batch_size: 1024
+  val_batch_size: 2048
+  final_state:
+    posterior: laplace
+    prior_precision: auto
+    hidden_dims: ${model_dims.mlp_hidden_dims}
+    head:
+      kind: mixture
+      n_components: 5
+    beta_nll: 0.0
+    lr: 1.0e-3
+    weight_decay: 1.0e-5
+    max_epochs: 200
+    patience: 20
+  lightning_trainer:
+    gradient_clip_val: 1.0
+    log_every_n_steps: 10

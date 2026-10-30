@@ -23,7 +23,7 @@ import torch
 from adaptive_roa.adaptive_v2.types import OutcomeProbabilities
 from adaptive_roa.predictors.bayesian_mlp import build_from_cfg
 from adaptive_roa.predictors.final_state_handle import FinalStateModelHandle
-from adaptive_roa.predictors.heads import FinalStateHead
+from adaptive_roa.predictors.heads import build_head
 from .base import ProbabilisticClassifier
 from .endpoint_mc import endpoint_mc_probabilities
 from .registry import register_probabilistic_classifier
@@ -93,7 +93,9 @@ class FinalStateProbabilisticClassifier(ProbabilisticClassifier):
     @classmethod
     def load_from_run(cls, run_dir, epoch, cfg, system, device="cuda"):
         fs = cfg.get("predictor", {}).get("final_state", {})
-        head = FinalStateHead(system, beta=float(fs.get("beta_nll", 0.5)))
+        # Same factory as the trainer: the single FinalStateHead unless the config
+        # asks for the mixture head.
+        head = build_head(system, fs)
         # Same builder the trainer uses (bayesian_mlp.build_from_cfg), so the
         # skeleton cannot drift from the architecture the checkpoint was
         # written with. It already branches on posterior_kind == "ensemble"
@@ -133,7 +135,13 @@ class FinalStateProbabilisticClassifier(ProbabilisticClassifier):
         # writes it alongside the checkpoint. Without it the arm would load as
         # a MAP point estimate and silently report zero epistemic uncertainty
         # while still being labelled Bayesian.
-        if cls.posterior_kind == "laplace":
+        blocks_path = ckpt_dir / "laplace_blocks.pt"
+        if cls.posterior_kind == "laplace" and blocks_path.exists():
+            # Block-mode Laplace (mixture head): one precision factor per block
+            # of output rows, no single covariance to load.
+            posterior.load_block_state(
+                torch.load(blocks_path, map_location="cpu", weights_only=True))
+        elif cls.posterior_kind == "laplace":
             cov_path = ckpt_dir / "laplace_cov.pt"
             if not cov_path.exists():
                 raise FileNotFoundError(
@@ -177,3 +185,18 @@ class EnsembleFinalStateProbabilisticClassifier(FinalStateProbabilisticClassifie
 class LaplaceFinalStateProbabilisticClassifier(FinalStateProbabilisticClassifier):
     predictor_name = "bnn_laplace_reg"
     posterior_kind = "laplace"
+
+
+# Deterministic-paper arms (2 x 2 with the outcome arms in bayesian.py). They
+# share the loader; the head they need comes from the config via build_head.
+@register_probabilistic_classifier
+class DetMLPRegProbabilisticClassifier(FinalStateProbabilisticClassifier):
+    predictor_name = "det_mlp_reg"
+    posterior_kind = "deterministic"
+
+
+@register_probabilistic_classifier
+class DetBNNRegProbabilisticClassifier(FinalStateProbabilisticClassifier):
+    predictor_name = "det_bnn_reg"
+    posterior_kind = "laplace"
+

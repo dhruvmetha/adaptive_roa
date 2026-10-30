@@ -1,0 +1,39 @@
+# @package _global_
+# Deterministic-paper BNN classifier (tracker C13, rulings D10/D14).
+#
+# det_mlp_clf plus a last-layer Laplace posterior fitted around the same MAP
+# network. A test asserts the two configs differ only in `posterior`,
+# `prior_precision` and `n_marginal_samples`.
+#
+#   prior_precision: auto   chosen each round by maximizing the last-layer
+#                 Laplace evidence (laplace_marglik.py). A fixed 1/prior_sigma^2
+#                 is swamped by 1e5 to 1e7 intermediate-state rows.
+#   probability   classifier_prob: it averages the posterior draws inside the
+#                 model handle and exposes the `estimator` that direct and
+#                 ranked acquisition read. The sampled-posterior backend GRAPE's
+#                 BNN used does not.
+defaults:
+  - /probability: classifier_prob
+threshold:
+  decision_rule: one_sided
+calibration:
+  decision_rule: one_sided
+predictor:
+  type: classifier
+  name: det_bnn_clf
+  trainer_target: adaptive_roa.adaptive_v2.trainers.bayesian_mlp_trainer.BayesianMLPTrainer
+  batch_size: 1024
+  val_batch_size: 2048
+  bnn:
+    posterior: laplace
+    prior_precision: auto
+    pos_weight: 1.0
+    hidden_dims: ${model_dims.mlp_hidden_dims}
+    lr: 1.0e-3
+    weight_decay: 1.0e-5
+    max_epochs: 200
+    patience: 20
+    n_marginal_samples: 64
+  lightning_trainer:
+    gradient_clip_val: 1.0
+    log_every_n_steps: 10

@@ -7,6 +7,7 @@ Mirrors ``ClassifierTrainer``'s contract:
 from __future__ import annotations
 
 import glob
+import json
 import math
 from pathlib import Path
 from typing import Any
@@ -341,7 +342,13 @@ class BayesianMLPTrainer:
             # Reloads the best-val_nll checkpoint into `posterior` before returning.
             use_gpu, device = self._run_lightning(module, data_module, bnn, ckpt_dir, "best")
 
-            if self.posterior_kind == "laplace":
+            if self.posterior_kind == "laplace" and posterior.tune_prior_precision:
+                # Opt-in (prior_precision: auto). Same GGN as the inline fit
+                # below, streamed in chunks, with the prior precision chosen by
+                # the Laplace evidence. Existing Laplace arms take the branch
+                # below unchanged.
+                _fit_outcome_laplace_streamed(posterior, self.system, data_module, ckpt_dir)
+            elif self.posterior_kind == "laplace":
                 # Post-hoc GGN over the full training set, fitted AFTER the best
                 # checkpoint is back in memory: H^-1 is a curvature at a specific
                 # parameter vector, so pairing a last-epoch covariance with
@@ -423,3 +430,33 @@ def _load_warm_start(module, state, source: str) -> None:
             f"{len(unexpected)} unexpected key(s) {list(unexpected)[:3]}. "
             f"Those parameters stay at their random initialization."
         )
+
+
+_LAPLACE_CHUNK = 65536
+
+
+def _fit_outcome_laplace_streamed(posterior, system, data_module, ckpt_dir: Path) -> None:
+    """Bernoulli-GGN Laplace over the training set, one chunk at a time.
+
+    lam = p (1 - p) at the MAP, clamped at 1e-6 exactly like
+    ``LastLayerLaplacePosterior.fit``; only the accumulation is chunked, so the
+    features of every training row never sit in memory at once.
+    """
+    from adaptive_roa.predictors.posteriors import accumulate_ggn
+
+    posterior.eval()
+    dev = next(posterior.parameters()).device
+    x_all = data_module._train.states.float()
+    g = None
+    with torch.no_grad():
+        for i in range(0, len(x_all), _LAPLACE_CHUNK):
+            x = x_all[i:i + _LAPLACE_CHUNK].to(dev)
+            feats = posterior.body(system.embed_state_for_model(system.normalize_state(x)))
+            p = torch.sigmoid(posterior.head_layer(feats).view(-1))
+            g = accumulate_ggn(g, feats, (p * (1.0 - p)).clamp_min(1e-6))
+    posterior.fit_from_ggn(g)
+    torch.save(posterior.posterior_covariance, ckpt_dir / "laplace_cov.pt")
+    torch.save(posterior.precision_cholesky, ckpt_dir / "laplace_prec_chol.pt")
+    (ckpt_dir / "laplace_fit.json").write_text(json.dumps(
+        {"head": "outcome", "n_rows": int(len(x_all)), "blocks": posterior.fit_info}, indent=1))
+

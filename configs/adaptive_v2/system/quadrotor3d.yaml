@@ -10,7 +10,9 @@ name: adaptive_quadrotor3d
 output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${acquisition.d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_adapt_iter_${n_epochs}_sampling_mode_${sampling_mode}_selection_${oc.select:acquisition.selection_rule,none}_exp_${exp_id}/${now:%Y-%m-%d_%H-%M-%S}
 
 decision_rule: two_sided
-attractor_radius: 0.3
+# Label radius 0.05 (dataset_description.json) plus the D12 buffer of 0.1.
+# 0.3 since 32a5884; the det-paper rerun uses 0.15.
+attractor_radius: 0.15
 # Collector horizon in control steps (dataset_description.json), read by
 # data_source.timeout_intermediates=drop through experiment/det_rerun.yaml.
 horizon_steps: 100000

@@ -51,6 +51,11 @@ flow_matching:
 system:
   _target_: adaptive_roa.systems.pendulum.PendulumSystem
   dataset_dir: ${dataset_root}
+  # Failure balls around the two equilibria where saturated torque balances
+  # gravity: label radius 0.05 plus the D12 buffer of 0.1. Success keeps
+  # attractor_radius 0.1 (label 0.075, kept at 0.1 by ruling).
+  failure_radius: 0.15
+  failure_theta: 2.0957
 
 flow_matcher:
   _target_: adaptive_roa.flow_matching.pendulum.latent_conditional.flow_matcher.PendulumLatentConditionalFlowMatcher

@@ -40,6 +40,14 @@ flow_matching:
 system:
   _target_: adaptive_roa.systems.cartpole.CartPoleSystem
   dataset_dir: ${dataset_root}
+  # Collector criteria from dataset_description.json termination_conditions,
+  # plus the det-paper buffer (D12: 0.1 per channel). Success becomes this box,
+  # so attractor_radius no longer sets the cartpole success test. Without these
+  # keys the class gates failure at achieved_bounds, which reads every stored
+  # failure endpoint of this dataset as invalid (963f4e3).
+  failure_thresholds: {x: 6.0, x_dot: 5.0, theta_dot: 5.0}
+  success_tolerances: {x: 0.01, theta: 0.05, x_dot: 0.05, theta_dot: 0.05}
+  criteria_buffer: 0.1
 
 flow_matcher:
   _target_: adaptive_roa.flow_matching.cartpole.latent_conditional.flow_matcher.CartPoleLatentConditionalFlowMatcher

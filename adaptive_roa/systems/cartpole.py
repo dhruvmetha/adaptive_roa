@@ -24,7 +24,10 @@ class CartPoleSystem(DynamicalSystem):
     def __init__(self,
                  dataset_dir: str = None,
                  goal: List[float] | None = None,
-                 angle_limit: float | None = None):
+                 angle_limit: float | None = None,
+                 failure_thresholds: dict | None = None,
+                 success_tolerances: dict | None = None,
+                 criteria_buffer: float = 0.0):
         """
         Initialize CartPole system
 
@@ -42,6 +45,21 @@ class CartPoleSystem(DynamicalSystem):
                   range). The RL policy terminates at |theta| >= 0.48, so passing pi
                   there would compress the entire usable angular range into +-0.153
                   of the normalised space.
+            failure_thresholds: the collector's termination thresholds,
+                  {"x", "x_dot", "theta_dot"}. A state fails when a channel exceeds
+                  its threshold minus ``criteria_buffer``. None keeps the gate at the
+                  largest value any stored trajectory reached (``achieved_bounds``),
+                  which the stochastic sets need. On the deterministic LQR set that
+                  gate reads every true failure endpoint as invalid, because the last
+                  stored state overshoots 6/5/5 by one control step.
+            success_tolerances: the collector's per-channel goal tolerances,
+                  {"x", "theta", "x_dot", "theta_dot"}. Success is the box
+                  |state - goal| < tolerance + ``criteria_buffer`` on every channel
+                  (theta wrapped), and the ``radius`` passed to classify_attractor
+                  is then unused. None keeps the L2 ball of that radius.
+            criteria_buffer: margin added to both criteria to absorb final-state
+                  prediction error (det paper D12). Only read when one of the two
+                  criteria above is set.
         """
         if dataset_dir is None:
             dataset_dir = f"{get_data_dir()}/{get_noise_regime()}/cartpole_pybullet"
@@ -52,6 +70,12 @@ class CartPoleSystem(DynamicalSystem):
         if len(self.goal) != 4:
             raise ValueError(f"cartpole goal must be 4-D [x, theta, x_dot, theta_dot], got {self.goal}")
         self._angle_limit_override = None if angle_limit is None else float(angle_limit)
+        self.failure_thresholds = None if failure_thresholds is None else {
+            k: float(failure_thresholds[k]) for k in ("x", "x_dot", "theta_dot")}
+        self.success_tolerances = None if success_tolerances is None else {
+            k: float(success_tolerances[k]) for k in ("x", "theta", "x_dot", "theta_dot")}
+        self.criteria_buffer = float(criteria_buffer)
+        self._check_criteria_disjoint()
         json_path = dataset_dir / "dataset_description.json"
 
         # Load bounds from JSON - no fallback, error if not found
@@ -111,6 +135,20 @@ class CartPoleSystem(DynamicalSystem):
             "theta":     {"min": -np.pi,              "max": np.pi},
             "theta_dot": {"min": -limit("theta_dot"), "max": limit("theta_dot")},
         }
+
+    def _check_criteria_disjoint(self):
+        """Refuse a buffered success box that reaches the buffered failure walls."""
+        if self.failure_thresholds is None or self.success_tolerances is None:
+            return
+        b = self.criteria_buffer
+        goal = dict(zip(("x", "theta", "x_dot", "theta_dot"), self.goal))
+        for k, thr in self.failure_thresholds.items():
+            reach = abs(goal[k]) + self.success_tolerances[k] + b
+            if reach >= thr - b:
+                raise ValueError(
+                    f"cartpole success and failure sets intersect on {k}: the buffered "
+                    f"success box reaches {reach:.3f}, the buffered failure wall is at "
+                    f"{thr - b:.3f} (buffer {b})")
 
     def _load_bounds_from_json(self, json_path: Path):
         """Load actual data bounds from dataset_description.json"""
@@ -266,9 +304,17 @@ class CartPoleSystem(DynamicalSystem):
         dth = theta - g[1]
         angle_diff = torch.atan2(torch.sin(dth), torch.cos(dth))
 
-        # Combined distance
-        dist = torch.sqrt(torch.sum(euclidean_diff**2, dim=1) + angle_diff**2)
-        in_attractor = dist < radius
+        if self.success_tolerances is None:
+            # Combined distance
+            dist = torch.sqrt(torch.sum(euclidean_diff**2, dim=1) + angle_diff**2)
+            in_attractor = dist < radius
+        else:
+            t = self.success_tolerances
+            tol = torch.tensor([t["x"], t["theta"], t["x_dot"], t["theta_dot"]],
+                               dtype=state.dtype, device=state.device) + self.criteria_buffer
+            diffs = torch.stack([euclidean_diff[:, 0], angle_diff,
+                                 euclidean_diff[:, 1], euclidean_diff[:, 2]], dim=1).abs()
+            in_attractor = (diffs < tol).all(dim=1)
 
 
 
@@ -280,9 +326,16 @@ class CartPoleSystem(DynamicalSystem):
         # they could never fire. Both datasets store only states strictly inside
         # their box, so testing at the limit is inert on stored data and correct
         # for predicted states that fall outside it.
-        x_failed = torch.abs(x) >= self.cart_limit
-        x_dot_failed = torch.abs(x_dot) >= self.velocity_limit
-        theta_dot_failed = torch.abs(theta_dot) >= self.angular_velocity_limit
+        if self.failure_thresholds is None:
+            x_failed = torch.abs(x) >= self.cart_limit
+            x_dot_failed = torch.abs(x_dot) >= self.velocity_limit
+            theta_dot_failed = torch.abs(theta_dot) >= self.angular_velocity_limit
+        else:
+            # The collector terminates when a channel EXCEEDS its threshold.
+            f, b = self.failure_thresholds, self.criteria_buffer
+            x_failed = torch.abs(x) > f["x"] - b
+            x_dot_failed = torch.abs(x_dot) > f["x_dot"] - b
+            theta_dot_failed = torch.abs(theta_dot) > f["theta_dot"] - b
         # Note: theta has no termination threshold (inf)
 
         exceeded_thresholds = x_failed | x_dot_failed | theta_dot_failed

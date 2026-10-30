@@ -1,6 +1,7 @@
 """
 Pendulum system for Latent Conditional Flow Matching
 """
+import numpy as np
 import torch
 import json
 import math
@@ -19,14 +20,22 @@ class PendulumSystem(DynamicalSystem):
     - θ̇ ∈ ℝ (angular velocity, normalized to [-1, 1])
     """
 
-    def __init__(self, dataset_dir: str = None):
+    def __init__(self, dataset_dir: str = None,
+                 failure_radius: float | None = None,
+                 failure_theta: float | None = None):
         """
         Initialize Pendulum system
 
         Args:
             dataset_dir: Path to dataset directory containing dataset_description.json.
                         If None, uses default path.
+            failure_radius: radius of the two failure balls. None uses the radius
+                        passed to classify_attractor for every attractor, as before.
+            failure_theta: |theta| of the two failure equilibria, where saturated
+                        torque balances gravity. None keeps 2.1.
         """
+        self.failure_radius = None if failure_radius is None else float(failure_radius)
+        self.failure_theta = 2.1 if failure_theta is None else float(failure_theta)
         if dataset_dir is None:
             dataset_dir = f"{get_data_dir()}/{get_noise_regime()}/pendulum_lqr_50k"
 
@@ -103,8 +112,8 @@ class PendulumSystem(DynamicalSystem):
         """
         return [
             [0.0, 0.0],      # Bottom equilibrium (stable)
-            [2.1, 0.0],      # Top-right equilibrium  
-            [-2.1, 0.0],     # Top-left equilibrium
+            [self.failure_theta, 0.0],    # Top-right equilibrium
+            [-self.failure_theta, 0.0],   # Top-left equilibrium
         ]
     
     def is_in_attractor(self, state: torch.Tensor, radius: float = 0.1) -> torch.Tensor:
@@ -137,7 +146,20 @@ class PendulumSystem(DynamicalSystem):
         distances = torch.sqrt(angle_diff**2 + vel_diff**2)  # [B, 3]
 
         # Check if any attractor is within radius
-        return (distances < radius).any(dim=1)  # [B]
+        if self.failure_radius is None:
+            return (distances < radius).any(dim=1)  # [B]
+        return (distances < self._ball_radii(radius, state)).any(dim=1)
+
+    def _ball_radii(self, radius: float, state: torch.Tensor) -> torch.Tensor:
+        """[success, failure, failure] radii, refusing balls that meet."""
+        fr, ft = self.failure_radius, self.failure_theta
+        gap_success = ft                       # wrapped distance (0,0) to (+-ft,0)
+        gap_failure = 2 * np.pi - 2 * ft       # (+ft,0) to (-ft,0) across the wrap
+        if radius + fr >= gap_success or 2 * fr >= gap_failure:
+            raise ValueError(
+                f"pendulum success and failure balls intersect: success radius {radius}, "
+                f"failure radius {fr}, failure centres at +-{ft}")
+        return torch.tensor([radius, fr, fr], dtype=state.dtype, device=state.device)
 
     def classify_attractor(self, state: torch.Tensor, radius: float = 0.1) -> torch.Tensor:
         """
@@ -170,11 +192,19 @@ class PendulumSystem(DynamicalSystem):
         # Combined distance: sqrt(angle_diff² + vel_diff²)
         distances = torch.sqrt(angle_diff**2 + vel_diff**2)  # [B, 3]
 
-        # Find closest attractor for each state
-        min_distances, closest_attractor_idx = distances.min(dim=1)  # [B]
-
         # Initialize all as separatrix (0)
         labels = torch.zeros(state.shape[0], dtype=torch.long, device=state.device)
+
+        if self.failure_radius is not None:
+            # Separate success and failure radii (det paper D12). The balls are
+            # disjoint, so a state lies in at most one of them.
+            inside = distances < self._ball_radii(radius, state)
+            labels[inside[:, 0]] = 1
+            labels[inside[:, 1] | inside[:, 2]] = -1
+            return labels
+
+        # Find closest attractor for each state
+        min_distances, closest_attractor_idx = distances.min(dim=1)  # [B]
 
         # Mask for states within radius of an attractor
         within_radius = min_distances < radius

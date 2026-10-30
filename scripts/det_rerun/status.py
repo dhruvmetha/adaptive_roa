@@ -55,7 +55,9 @@ def main():
                     detail += f" | silent {int(silent / 60)} min, last epoch {int(last_epoch / 60)} min"
             if state == "finished" and a.check:
                 from adaptive_roa.adaptive_v2.eval.store_check import check_run
-                problems = check_run(out)
+                # Part-X writes no prediction store; its run ends with final_results.json.
+                problems = (check_run(out) if r["arm"] != "partx_faithful" else
+                            ([] if (out / "final_results.json").exists() else ["no final_results.json"]))
                 state = "DONE" if not problems else "FAILED CHECK"
                 if problems:
                     detail += " | " + problems[0]

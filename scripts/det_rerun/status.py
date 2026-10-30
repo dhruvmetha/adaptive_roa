@@ -2,7 +2,9 @@
 """Per-cell status of the det-paper rerun, counted from disk (tracker rules).
 
 A cell is DONE only when its final epoch's artifacts_v2.json exists, reports the
-final budget, and the prediction-store check passes. Usage: status.py [--check]
+final budget, and the prediction-store check passes. A cell short of its epochs
+whose log has not been written for STALE_MIN minutes shows as "stalled?": check
+its process before trusting "running". Usage: status.py [--check]
 """
 from __future__ import annotations
 
@@ -10,9 +12,11 @@ import argparse
 import csv
 import json
 import re
+import time
 from pathlib import Path
 
 HERE = Path("/common/home/st1122/Projects/adaptive_roa/slurm_logs/det_rerun")
+STALE_MIN = 90      # an FM eval writes its tqdm line every few seconds; training logs per epoch
 
 
 def main():
@@ -29,13 +33,18 @@ def main():
     for r in rows:
         out = Path(re.search(r"output_dir=(\S+)", r["overrides"]).group(1))
         arts = sorted(out.glob("epoch_*/artifacts_v2.json"))
-        n_ep = 11
+        m = re.search(r"(?:^| )n_epochs=(\d+)", r["overrides"])
+        n_ep = int(m.group(1)) if m else 11
         state = "not launched" if r["name"] not in launched else "launched"
         detail = ""
         if arts:
             last = json.loads(arts[-1].read_text())
             detail = f"epochs {len(arts)}/{n_ep}, budget {last.get('train_trajectories')}"
             state = "running" if len(arts) < n_ep else "finished"
+            log = Path(launched[r["name"]][5]) if r["name"] in launched else None
+            if state == "running" and log and log.exists() and time.time() - log.stat().st_mtime > 60 * STALE_MIN:
+                state = "stalled?"
+                detail += f" | log silent {int((time.time() - log.stat().st_mtime) / 60)} min"
             if state == "finished" and a.check:
                 from adaptive_roa.adaptive_v2.eval.store_check import check_run
                 problems = check_run(out)

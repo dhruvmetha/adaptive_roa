@@ -94,3 +94,16 @@ def test_output_dir_names_every_knob_a_cell_varies():
     for knob in ("${predictor.name}", "${sampling_mode}", "${acquisition.d2_ratio}",
                  "${acquisition_mc_samples}", "${threshold.w}", "${seed}", "${samples_per_epoch}"):
         assert knob in raw
+
+
+def test_fm_det_is_generative_with_grapes_schedule():
+    a = _compose("system=quadrotor3d", "predictor=fm_det", "+experiment=det_rerun")
+    b = _compose("system=quadrotor3d", "predictor=generative", "+experiment=det_rerun")
+    assert a.predictor.lightning_trainer.max_epochs == 200
+    es = a.predictor.lightning_trainer.callbacks[1]
+    assert (es.patience, es.min_delta) == (30, 0.0001)
+    assert a.predictor.lightning_trainer.callbacks[0].save_last is False
+    assert a.predictor.name == b.predictor.name == "fm"
+    assert a.predictor.flow_matching == b.predictor.flow_matching
+    assert a.probability == b.probability
+    assert "unet" in str(a.model._target_).lower()

@@ -24,7 +24,8 @@ from pathlib import Path
 
 import numpy as np
 
-from adaptive_roa.det_rerun.splits import assert_disjoint, group_split, partition_ids, pool_order, row_key
+from adaptive_roa.det_rerun.pool_npz import parse_rows, write_pool_npz
+from adaptive_roa.det_rerun.splits import assert_disjoint, group_split, partition_ids, row_key
 
 DATA = Path(os.environ.get("DATA_DIR", "/common/users/shared/pracsys/genMoPlan/data_trajectories")) / "deterministic"
 PARTITION_SEED = 20261029
@@ -35,13 +36,13 @@ SYSTEMS = {
     # name: dataset dir, state dim, eval file, sizes, whether eval states are trajectory starts
     "pendulum": dict(dir="pendulum/lqr_failset", k=2, eval="eval_states.txt",
                      labels="trajectory_labels.txt", sizes=dict(pool=25000, cal=2000, val=2000),
-                     starts=True, float_keys=True),
+                     starts=True, float_keys=True, horizon=502),
     "cartpole": dict(dir="cartpole_pybullet", k=4, eval="eval_states.txt", labels=None,
-                     sizes=dict(pool=50000, cal=2000, val=2000), starts=True, float_keys=False),
+                     sizes=dict(pool=50000, cal=2000, val=2000), starts=True, float_keys=False, horizon=1000),
     "quad2d": dict(dir="quadrotor2D_rl", k=6, eval="eval_states.txt", labels=None,
-                   sizes=dict(pool=300000, cal=10000, val=10000), starts=True, float_keys=False),
+                   sizes=dict(pool=300000, cal=10000, val=10000), starts=True, float_keys=False, horizon=1200),
     "quad3d": dict(dir="quadrotor3D_lqr", k=13, eval="eval_states.txt", labels=None,
-                   sizes=dict(pool=600000, cal=10000, val=10000), starts=False, float_keys=False),
+                   sizes=dict(pool=600000, cal=10000, val=10000), starts=False, float_keys=False, horizon=100000),
 }
 
 
@@ -75,13 +76,16 @@ def key_of(line: str, k: int, float_keys: bool) -> str:
 
 
 def scan(root: Path, names, eval_keys: dict, k: int, float_keys: bool):
-    """Return n_rows per trajectory and a list of (eval_row, traj, row) matches."""
+    """Return n_rows per trajectory, (eval_row, traj, row) matches, and every trajectory as float32."""
     n_rows = np.zeros(len(names), dtype=np.int32)
     matches = []
+    arrays = []
     tdir = root / "trajectories"
     for t, n in enumerate(names):
         with open(tdir / n) as f:
-            lines = [ln.strip() for ln in f.read().split("\n") if ln.strip()]
+            text = f.read()
+        arrays.append(parse_rows(text))
+        lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
         n_rows[t] = len(lines)
         for r, ln in enumerate(lines):
             hit = eval_keys.get(key_of(ln, k, float_keys))
@@ -90,7 +94,7 @@ def scan(root: Path, names, eval_keys: dict, k: int, float_keys: bool):
                     matches.append((e, t, r))
         if (t + 1) % 50000 == 0:
             log(f"  scanned {t + 1}/{len(names)} trajectories, {len(matches)} matches")
-    return n_rows, np.array(matches, dtype=np.int64).reshape(-1, 3)
+    return n_rows, np.array(matches, dtype=np.int64).reshape(-1, 3), arrays
 
 
 def validate(root: Path, names, eval_start: np.ndarray, matches: np.ndarray, k: int, n: int) -> dict:
@@ -135,7 +139,7 @@ def main() -> None:
     dup_eval = sum(len(v) - 1 for v in eval_keys.values() if len(v) > 1)
     log(f"{len(eval_lines)} eval rows, {len(eval_keys)} distinct states ({dup_eval} duplicate rows)")
 
-    n_rows, matches = scan(root, names, dict(eval_keys), k, spec["float_keys"])
+    n_rows, matches, arrays = scan(root, names, dict(eval_keys), k, spec["float_keys"])
     log(f"scan done: {len(matches)} matches")
     eval_start = np.array([[float(v) for v in ln.split(",")[:k]] for ln in eval_lines])
     check = validate(root, names, eval_start, matches, k, args.validate) if args.validate else {}
@@ -243,12 +247,12 @@ def main() -> None:
     pool_lab = {names[t]: int(labels[t] == 1) for t in pool_set}
     with open(out / "pool_trajectories.txt", "w") as f:
         f.write("\n".join(pool_names) + "\n")
-    for s in RUN_SEEDS + DEFAULT_SEEDS:
-        order = pool_order(pool_names, s)
-        with open(out / f"pool_order_{s}.txt", "w") as f:
-            f.write("\n".join(order) + "\n")
-        with open(out / f"pool_labels_{s}.txt", "w") as f:
-            f.write("\n".join(str(pool_lab[n]) for n in order) + "\n")
+    # npz rows: the pool, then any timeout trajectories (flagged, never in a pool order).
+    timeout_ids = [t for t in range(len(names)) if labels[t] < 0]
+    npz_rows = sorted(pool_set) + timeout_ids
+    npz = write_pool_npz(out, [names[t] for t in npz_rows], [arrays[t] for t in npz_rows],
+                         [int(labels[t] == 1) for t in npz_rows], [bool(labels[t] < 0) for t in npz_rows],
+                         seeds=RUN_SEEDS + DEFAULT_SEEDS, horizon_steps=spec["horizon"])
     for name, rows in rows_of.items():
         with open(out / f"{name}_set.txt", "w") as f:
             f.write("\n".join(eval_lines[e] for e in rows.tolist()) + "\n")
@@ -267,13 +271,15 @@ def main() -> None:
         "source_files": {spec["eval"]: sha1(root / spec["eval"])},
         "pool_trajectories": {"n": len(pool_names), "success": int(sum(pool_lab.values()))},
         "pool_rows": int(n_rows[sorted(pool_set)].sum()),
+        "pool_npz": npz,
         "splits": {name: lab(rows) for name, rows in rows_of.items()},
         "split_trajectories": {name: int(len(v)) for name, v in eval_trajs.items()},
         "scan": stats,
         "validation": check,
         "overlap_check": overlap,
         "format": "cal/val/test rows are copied verbatim from the eval file: start, end, label (0/1); "
-                  "pool_order_<seed>.txt lists trajectory files for data_source.shuffled_indices_file, "
+                  "train.npz is the pool for NpzTrajectoryDataSource (rows follow npz_row_names.txt); "
+                  "pool_order_<seed>.txt lists its row ids for data_source.shuffled_indices_file, "
                   "pool_labels_<seed>.txt the aligned 0/1 labels.",
     }
     with open(out / "split_manifest.json", "w") as f:

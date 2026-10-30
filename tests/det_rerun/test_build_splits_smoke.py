@@ -58,8 +58,18 @@ def test_starts_branch_disjoint(tmp_path):
         pool_rows |= {ln for ln in (root / "trajectories" / n).read_text().splitlines() if ln}
     for split in ("cal", "val", "test"):
         assert not (_states(out / f"{split}_set.txt", 4) & pool_rows)
-    order = (out / "pool_order_99512.txt").read_text().split()
+    row_names = (out / "npz_row_names.txt").read_text().split()
+    order = [row_names[int(i)] for i in (out / "pool_order_99512.txt").read_text().split()]
     assert sorted(order) == sorted(pool)
+    from adaptive_roa.adaptive.data_source import TrajectoryDataSourceConfig
+    from adaptive_roa.adaptive.npz_data_source import NpzTrajectoryDataSource
+    src = NpzTrajectoryDataSource(TrajectoryDataSourceConfig(
+        trajectories_dir=str(out / "train.npz"), shuffled_indices_file=str(out / "pool_order_99512.txt"),
+        shuffled_labels_file=str(out / "pool_labels_99512.txt"), timeout_intermediates="drop"))
+    for k in range(5):
+        text = (root / "trajectories" / order[k]).read_text().splitlines()
+        expect = np.array([[float(v) for v in ln.split(",")] for ln in text if ln], dtype=np.float32)
+        assert np.array_equal(src.load_trajectory(k), expect)
 
 
 def test_picks_branch_groups_by_trajectory(tmp_path):

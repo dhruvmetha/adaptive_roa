@@ -134,8 +134,14 @@ def main() -> None:
         "termination_rule": "Recut at the first row inside either failure ball; that row is the final state.",
     }
     tc["first_hit_rule"] = "label = whichever of success or failure is entered first; neither within the horizon = timeout (label -1, listed in timeouts.txt, excluded from eval_states.txt)"
-    # The loader counts a timeout as rows == horizon_steps + 1: 502 stored states = 501 steps.
-    desc["horizon_steps"] = int(n_rows.max()) - 1
+    # The loader treats rows == horizon_steps + 1 as a timeout. Timeouts are excluded from
+    # every split, and a failure can first hit on the last stored row, so set the horizon
+    # to the stored row count: no pool trajectory is then read as a timeout.
+    desc["horizon_steps"] = int(n_rows.max())
+    desc["horizon_note"] = ("Stored trajectories have at most this many rows. Timeouts (label -1) are "
+                            "excluded from all splits, so timeout_intermediates=drop is a no-op here; "
+                            "a horizon of rows - 1 would misread failures that first hit on the last row "
+                            f"({stats['failure_hit_on_last_row']} trajectories) as timeouts.")
     desc["first_hit_statistics"] = stats
     with open(dst / "dataset_description.json", "w") as f:
         json.dump(desc, f, indent=2)

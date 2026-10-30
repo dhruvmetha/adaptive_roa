@@ -18,13 +18,16 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=ROOT)
     ap.add_argument("--out", default=f"{ROOT}/det_rerun_scores.csv")
+    ap.add_argument("--thresholds", choices=["run", "val", "both"], default="run",
+                    help="the run's lambda*/delta*, a refit on the stored val split (D27b), or both")
     a = ap.parse_args()
+    modes = ["run", "val"] if a.thresholds == "both" else [a.thresholds]
     rows = []
     for run in sorted(Path(a.root).glob("*/dr_*")):
         if (run / "partx_state.pkl").exists():
             continue                      # Part-X: scored by its own readout
         try:
-            rows += [{"system": run.parent.name, **r} for r in score_run(run)]
+            rows += [{"system": run.parent.name, **r} for m in modes for r in score_run(run, m)]
         except Exception as e:            # keep scoring the rest; report the failure
             print(f"FAIL {run}: {type(e).__name__}: {e}")
     if not rows:

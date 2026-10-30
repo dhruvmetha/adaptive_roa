@@ -118,7 +118,28 @@ def score_epoch(p_test, pf_test, pinv_test, y_test, lam, delta, rule, inv_thr,
     return row
 
 
-def score_run(run_dir: str | Path) -> list[dict]:
+def _refit_on_val(cfg, z) -> tuple[float, float]:
+    import contextlib
+    import io
+
+    from adaptive_roa.adaptive_v2.eval.store_threshold import refit    # imports this module
+    tcfg = OmegaConf.to_container(cfg.threshold, resolve=True)
+    if "n_success" in z.files:
+        k = float(z["num_mc_samples"])
+        p_s, p_f, p_i = z["n_success"] / k, z["n_failure"] / k, z["n_invalid"] / k
+    else:                                  # classifier: one probability per state
+        p_s = np.asarray(z["p_success"], float)
+        p_f, p_i = 1.0 - p_s, np.zeros_like(p_s)
+    with contextlib.redirect_stdout(io.StringIO()):                     # the optimizer prints its grid
+        return refit(tcfg, float(tcfg.get("w", 0.9)), p_s, p_f, p_i, z["true_labels"])
+
+
+def score_run(run_dir: str | Path, thresholds: str = "run") -> list[dict]:
+    """thresholds="run" scores each epoch with the run's own lambda*/delta*;
+    "val" refits them on the stored val split at its stored K (tracker D27b)
+    with the run's threshold settings, and scores test with the refit rule."""
+    if thresholds not in ("run", "val"):
+        raise ValueError(f"thresholds must be 'run' or 'val', not {thresholds!r}")
     run = Path(run_dir)
     cfg_path = run / "resolved_config.yaml"
     cfg = OmegaConf.load(cfg_path if cfg_path.exists() else run / ".hydra" / "config.yaml")
@@ -137,9 +158,15 @@ def score_run(run_dir: str | Path) -> list[dict]:
         if val.exists():
             z = np.load(val)
             p_val, y_val = _p_from_store(z), z["true_labels"]
+        lam, delta, inv_thr = float(ld["lambda_star"]), float(ld["delta"]), ld.get("invalid_threshold")
+        if thresholds == "val":
+            if not val.exists():
+                continue
+            lam, delta = _refit_on_val(cfg, z)
+            inv_thr = None                # lambda* - delta*, as the rule defines it
         row = score_epoch(pp["p_success"], pp["p_failure"], pp["p_invalid"], pp["true_labels"],
-                          float(ld["lambda_star"]), float(ld["delta"]), rule, ld.get("invalid_threshold"),
-                          p_val, y_val)
-        row.update(run=run.name, epoch=int(art["epoch"]), train_trajectories=int(art["train_trajectories"]))
+                          lam, delta, rule, inv_thr, p_val, y_val)
+        row.update(run=run.name, epoch=int(art["epoch"]), train_trajectories=int(art["train_trajectories"]),
+                   thresholds=thresholds, lambda_star=lam, delta_star=delta)
         rows.append(row)
     return rows

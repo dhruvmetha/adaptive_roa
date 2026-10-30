@@ -72,3 +72,25 @@ def test_without_the_experiment_nothing_moves():
     assert cfg.probability.num_mc_samples == 10
     assert cfg.calibration.num_mc_samples == 10
     assert cfg.adaptive_v2.filter_confident_pairs is True
+
+
+SCHEDULES = {"pendulum": (100, 50, 600), "cartpole_pybullet": (100, 100, 1100),
+             "quadrotor2d": (2000, 1000, 12000), "quadrotor3d": (10000, 2000, 30000)}
+
+
+@pytest.mark.parametrize("system", DET_SYSTEMS)
+def test_schedules_are_the_ruled_ten_iterations(system):
+    cfg = _compose(f"system={system}", "+experiment=det_rerun")
+    init, step, final = SCHEDULES[system]
+    assert (cfg.initial_train_size, cfg.samples_per_epoch, cfg.n_epochs) == (init, step, 11)
+    # The epoch-10 model trains on initial + 10 * step trajectories.
+    assert cfg.initial_train_size + (cfg.n_epochs - 1) * cfg.samples_per_epoch == final
+
+
+def test_output_dir_names_every_knob_a_cell_varies():
+    from omegaconf import OmegaConf
+    cfg = _compose("system=quadrotor2d", "acquisition=entropy", "+experiment=det_rerun")
+    raw = OmegaConf.to_container(cfg, resolve=False)["output_dir"]
+    for knob in ("${predictor.name}", "${sampling_mode}", "${acquisition.d2_ratio}",
+                 "${acquisition_mc_samples}", "${threshold.w}", "${seed}", "${samples_per_epoch}"):
+        assert knob in raw

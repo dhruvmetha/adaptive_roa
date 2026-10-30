@@ -41,8 +41,8 @@ data_source:
   test_set_file: ${eval_root}/test_set.txt
 
 initial_train_size: 100
-n_epochs: 19
-samples_per_epoch: 100
+n_epochs: 11            # epoch 0 + 10 adaptive iterations (det paper D03)
+samples_per_epoch: 50
 
 flow_matching:
   clamp_noise: true

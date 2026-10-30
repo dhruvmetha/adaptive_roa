@@ -31,8 +31,9 @@ data_source:
   cal_set_file: ${data_source.base_dir}/cal_set.txt
   test_set_file: ${data_source.base_dir}/test_set.txt
 
-initial_train_size: 300
-n_epochs: 15
+initial_train_size: 100
+n_epochs: 11            # epoch 0 + 10 adaptive iterations (det paper D03)
+samples_per_epoch: 100
 
 flow_matching:
   clamp_noise: false

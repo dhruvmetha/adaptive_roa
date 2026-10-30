@@ -8,6 +8,9 @@
 # +experiment is composed last, so these values win over the predictor and
 # acquisition groups; CLI overrides still win over this file.
 
+# Every knob a cell varies is in the path, so two cells can never share a dir.
+output_dir: ${exp_dir}/det_rerun/${name}/${predictor.name}/${sampling_mode}_d2_${acquisition.d2_ratio}_K_${acquisition_mc_samples}_w_${threshold.w}_sched_${initial_train_size}-${samples_per_epoch}x${n_epochs}_seed_${seed}/${now:%Y-%m-%d_%H-%M-%S}_exp_${exp_id}
+
 # D06: one acquisition K for every signal. direct and ranked draw through the
 # probability backend's estimator; entropy draws its own samples. Ablation A-K1
 # moves this to 50 and 100.

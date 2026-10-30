@@ -29,11 +29,11 @@ data_source:
   test_set_file: ${data_source.base_dir}/test_set.txt
 
 initial_train_size: 2000
-samples_per_epoch: 500
+samples_per_epoch: 1000
 # Stop once the training set reaches 12k trajectories: 2000 + 500*20 = 12,000.
 # (Was 201, which requested 102,500 — far beyond the ~16k available after the
 # 0.2 val split, so every epoch past ~28 retrained on an exhausted pool.)
-n_epochs: 20
+n_epochs: 11            # epoch 0 + 10 adaptive iterations (det paper D03)
 
 flow_matching:
   clamp_noise: false

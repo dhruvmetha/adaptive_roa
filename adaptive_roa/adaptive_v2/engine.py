@@ -106,6 +106,7 @@ class AdaptiveEngine:
             val_ratio=cfg.get("val_ratio", 0.1),
             test_ratio=cfg.get("test_ratio", 0.1),
             candidate_mode=str(cfg.get("candidate_mode", "start")),
+            seed=int(cfg.get("seed", 42)),
         )
         from hydra.utils import get_class
         self.predictor_type = str(cfg.predictor.type)
@@ -262,13 +263,13 @@ class AdaptiveEngine:
                     verbose=self.calibration_backend.verbose,
                 )
 
-            d1_states, d1_indices = self.pool.sample_candidates_without_marking(n_d1_target)
+            d1_states, d1_indices = self.pool.sample_uniform(n_d1_target)
             if n_d1_target > 0 and len(d1_indices) == 0:
                 print("No more trajectories available, stopping.")
                 break
 
             self.pool.mark_indices_as_used(d1_indices)
-            self.pool.add_to_training_balanced(d1_indices)
+            self.pool.add_to_training_balanced(d1_indices, source="uniform")
 
             q_hat = None
             test_metrics = {"coverage": None, "f1": None, "unknown_rate": None}
@@ -310,7 +311,7 @@ class AdaptiveEngine:
 
             if acquisition.d2_indices:
                 self.pool.mark_indices_as_used(acquisition.d2_indices)
-                self.pool.add_to_training_balanced(acquisition.d2_indices)
+                self.pool.add_to_training_balanced(acquisition.d2_indices, source="acquisition")
 
             q_hat_eval = None
             n_cal_eval = 0

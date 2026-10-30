@@ -32,6 +32,12 @@ calibration:
 adaptive_v2:
   filter_confident_pairs: false   # D16: same training data for every head
 
+# D22: acquisition over intermediate states. A pick of (trajectory, row) adds the
+# suffix from that row; an earlier pick of the same trajectory replaces it. The
+# uniform share draws trajectory starts in pool order; every pick is one rollout.
+candidate_mode: suffix
+test_ratio: 0
+
 data_source:
   timeout_intermediates: drop     # C15: a timeout contributes only (x_0, x_T)
   horizon_steps: ${horizon_steps}

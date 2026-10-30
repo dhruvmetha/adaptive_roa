@@ -46,6 +46,12 @@ def test_filter_off_and_timeouts_dropped():
     assert cfg.data_source.timeout_intermediates == "drop"
 
 
+def test_acquisition_runs_over_suffixes():
+    cfg = _compose("system=quadrotor2d", "+experiment=det_rerun")
+    assert cfg.candidate_mode == "suffix"
+    assert cfg.test_ratio == 0
+
+
 def test_default_d2_and_uniform_override():
     cfg = _compose("system=quadrotor2d", "acquisition=ranked", "+experiment=det_rerun")
     assert cfg.acquisition.d2_ratio == 0.5

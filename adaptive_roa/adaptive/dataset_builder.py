@@ -111,6 +111,22 @@ class AdaptiveDatasetBuilder:
             # Per-trajectory minimum added row (populated by add_to_training_balanced)
             self._added_min_row: Dict[int, int] = {}
 
+        # ---- suffix mode state (det paper D22/C20; see suffix_pool.py) -------
+        if self.candidate_mode == "suffix":
+            if test_ratio > 0:
+                raise ValueError(
+                    "candidate_mode='suffix' takes no test slice of the training "
+                    "trajectories; set test_ratio=0 (evaluation uses test_set_file)")
+            from adaptive_roa.adaptive.suffix_pool import SuffixPoolState
+            ds = self.data_source
+            self._suffix = SuffixPoolState(
+                n_trajectories=self.max_train_idx,
+                val_ratio=val_ratio,
+                seed=seed,
+                length_fn=ds.get_trajectory_length,
+                is_timeout_fn=lambda i: ds._drops_intermediates(i, ds.get_trajectory_length(i)),
+            )
+
     # =========================================================================
     # Intermediate-mode helpers (candidate-id ↔ (traj_idx, row))
     # =========================================================================
@@ -134,6 +150,71 @@ class AdaptiveDatasetBuilder:
         Only valid in ``candidate_mode="intermediate"``.
         """
         return divmod(cid, MAX_ROWS)
+
+    # =========================================================================
+    # Suffix-mode helpers
+    # =========================================================================
+
+    def _suffix_encode(self, picks) -> List[int]:
+        for traj, row in picks:
+            if row >= MAX_ROWS:
+                raise ValueError(f"row {row} of trajectory {traj} exceeds MAX_ROWS={MAX_ROWS}")
+        return [self.traj_row_to_candidate(t, r) for t, r in picks]
+
+    @staticmethod
+    def _suffix_exclude_trajs(exclude) -> set:
+        return {int(c) // MAX_ROWS for c in exclude} if exclude else set()
+
+    def _suffix_states(self, picks) -> np.ndarray:
+        return np.array([self.data_source.get_state_at(t, r) for t, r in picks])
+
+    def _suffix_pairs(self, trajs: List[int]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """(starts, ends, labels) over each trajectory's stored suffix."""
+        ds = self.data_source
+        starts, ends, labels = [], [], []
+        for t in trajs:
+            st, en = ds.get_all_endpoint_pairs_from_trajectory(
+                t, mode="train", start_row=self._suffix.suffix_start[t])
+            starts.append(st)
+            ends.append(en)
+            labels.append(np.full(len(st), ds.get_label(t), dtype=np.int64))
+        if not starts or sum(len(x) for x in starts) == 0:
+            d = ds.get_state_dim()
+            return (np.zeros((0, d), dtype=np.float32), np.zeros((0, d), dtype=np.float32),
+                    np.zeros(0, dtype=np.int64))
+        return np.vstack(starts), np.vstack(ends), np.concatenate(labels)
+
+    def _suffix_write_endpoint(self, trajs: List[int], filename: str) -> str:
+        output_path = self.output_dir / filename
+        starts, ends, _ = self._suffix_pairs(trajs)
+        np.savetxt(str(output_path), np.hstack([starts, ends]), fmt='%.8f')
+        print(f"Built suffix {filename}: {len(starts)} pairs from {len(trajs)} trajectories")
+        return str(output_path)
+
+    def _suffix_write_classification(self, trajs: List[int], filename: str) -> str:
+        import os as _os
+        from adaptive_roa.utils.env_config import get_data_dir
+        output_path = self.output_dir / filename
+        abs_out = _os.path.abspath(output_path)
+        data_dir = _os.path.abspath(get_data_dir())
+        if abs_out == data_dir or abs_out.startswith(data_dir + _os.sep):
+            raise ValueError(f"Refusing to write dataset under DATA_DIR ({data_dir}): {abs_out}")
+        starts, _ends, labels = self._suffix_pairs(trajs)
+        label01 = (labels == 1).astype(np.float64).reshape(-1, 1)
+        np.savetxt(str(output_path), np.hstack([starts, label01]), fmt='%.8f')
+        print(f"Built suffix {filename}: {len(starts)} (state,label) rows from {len(trajs)} trajectories")
+        return str(output_path)
+
+    def sample_uniform_starts(self, n: int, exclude: set = None) -> Tuple[np.ndarray, List[int]]:
+        """Suffix mode: row 0 of the next trajectories in pool order whose start is unused."""
+        if self.candidate_mode != "suffix":
+            raise RuntimeError("sample_uniform_starts is only defined for candidate_mode='suffix'")
+        picks = self._suffix.next_uniform_starts(n, self._suffix_exclude_trajs(exclude))
+        if not picks:
+            if n > 0:
+                print("WARNING: No more trajectory starts available!")
+            return np.array([]), []
+        return self._suffix_states(picks), self._suffix_encode(picks)
 
     def add_to_training(self, indices: List[int]):
         """
@@ -186,6 +267,16 @@ class AdaptiveDatasetBuilder:
         Returns:
             Tuple of (start_states [n, dim], trajectory_indices or candidate_ids)
         """
+        if self.candidate_mode == "suffix":
+            picks = self._suffix.draw_candidates(n, self._suffix_exclude_trajs(exclude))
+            if not picks:
+                if n > 0:
+                    print("WARNING: No more candidates available!")
+                return np.array([]), []
+            if len(picks) < n:
+                print(f"WARNING: Only {len(picks)} candidates remaining (requested {n})")
+            return self._suffix_states(picks), self._suffix_encode(picks)
+
         if self.candidate_mode == "intermediate":
             # Guard n<=0: matches start mode (min(n,...) -> [:0] -> []) and the
             # old intermediate behaviour. Without this, the collect-until-n loop
@@ -264,6 +355,8 @@ class AdaptiveDatasetBuilder:
         Args:
             indices: Trajectory indices (start mode) or candidate-ids (intermediate mode)
         """
+        if self.candidate_mode == "suffix":
+            return  # add_to_training_balanced records the pick and its tail
         if self.candidate_mode == "intermediate":
             for cid in indices:
                 traj_i, row_t = self.candidate_to_traj_row(cid)
@@ -280,7 +373,7 @@ class AdaptiveDatasetBuilder:
         for idx in indices:
             self.used_indices.add(idx)
 
-    def add_to_training_balanced(self, indices: List[int]):
+    def add_to_training_balanced(self, indices: List[int], source: str = "acquisition"):
         """
         Add indices to training set AND mark as used.
 
@@ -292,7 +385,12 @@ class AdaptiveDatasetBuilder:
 
         Args:
             indices: Trajectory indices (start mode) or candidate-ids (intermediate mode)
+            source: suffix mode only; recorded in the pick log ("initial",
+                "uniform", "acquisition").
         """
+        if self.candidate_mode == "suffix":
+            self._suffix.record_picks([self.candidate_to_traj_row(int(c)) for c in indices], source)
+            return
         if self.candidate_mode == "intermediate":
             for cid in indices:
                 traj_i, row_t = self.candidate_to_traj_row(cid)
@@ -333,6 +431,12 @@ class AdaptiveDatasetBuilder:
         if n_actual < n:
             print(f"WARNING: Only {n_actual} trajectories available (requested {n})")
 
+        if self.candidate_mode == "suffix":
+            picks = self._suffix.next_uniform_starts(n_actual)
+            cids = self._suffix_encode(picks)
+            self.add_to_training_balanced(cids, source="initial")
+            return cids
+
         if self.candidate_mode == "intermediate":
             # Seed n distinct trajectories at row 0 (full tails).
             # Passing list(range(n)) would encode integers 0..n-1 as candidate-ids
@@ -366,6 +470,9 @@ class AdaptiveDatasetBuilder:
         """
         output_path = self.output_dir / filename
 
+        if self.candidate_mode == "suffix":
+            return self._suffix_write_endpoint(self._suffix.train_trajectories(), filename)
+
         if self.candidate_mode == "intermediate":
             train, _val, _test = self._intermediate_split()
             if train:
@@ -398,6 +505,9 @@ class AdaptiveDatasetBuilder:
         """Build validation endpoint dataset file (no overlap with train)."""
         output_path = self.output_dir / filename
 
+        if self.candidate_mode == "suffix":
+            return self._suffix_write_endpoint(self._suffix.val_trajectories(), filename)
+
         if self.candidate_mode == "intermediate":
             _train, val, _test = self._intermediate_split()
             if val:
@@ -429,6 +539,8 @@ class AdaptiveDatasetBuilder:
 
     def build_train_classification_dataset(self, filename: str = "train_classification_dataset.txt") -> str:
         """Build training (state, binary_label) classification dataset (excludes val portion)."""
+        if self.candidate_mode == "suffix":
+            return self._suffix_write_classification(self._suffix.train_trajectories(), filename)
         output_path = self.output_dir / filename
         train_indices = list(self.train_split)
         n_val = max(1, int(len(train_indices) * self.val_ratio))
@@ -439,6 +551,8 @@ class AdaptiveDatasetBuilder:
 
     def build_val_classification_dataset(self, filename: str = "val_classification_dataset.txt") -> str:
         """Build validation (state, binary_label) classification dataset (no overlap with train)."""
+        if self.candidate_mode == "suffix":
+            return self._suffix_write_classification(self._suffix.val_trajectories(), filename)
         output_path = self.output_dir / filename
         train_indices = list(self.train_split)
         n_val = max(1, int(len(train_indices) * self.val_ratio))
@@ -569,6 +683,20 @@ class AdaptiveDatasetBuilder:
         Returns:
             Dict mapping split name to file path
         """
+        if self.candidate_mode == "suffix":
+            if dataset_kind == "classification":
+                return {
+                    'train': self.build_train_classification_dataset(),
+                    'val': self.build_val_classification_dataset(),
+                }
+            # Local (trajectory) prediction mode is out of scope for suffixes.
+            return {
+                'train': self.build_train_dataset(),
+                'val': self.build_val_dataset(),
+                'train_trajectories': self._build_empty_val_dataset("train_trajectories.txt"),
+                'val_trajectories': self._build_empty_val_dataset("val_trajectories.txt"),
+            }
+
         if self.candidate_mode == "intermediate":
             if dataset_kind == "classification":
                 # build_train/val_dataset emit endpoint pairs (start,end), NOT
@@ -634,6 +762,9 @@ class AdaptiveDatasetBuilder:
         Returns:
             Tuple of (start_states, end_states, labels)
         """
+        if self.candidate_mode == "suffix":
+            return self._suffix_pairs(self._suffix.train_trajectories())
+
         if self.candidate_mode == "intermediate":
             train, _val, _test = self._intermediate_split()
             if not train:
@@ -668,6 +799,9 @@ class AdaptiveDatasetBuilder:
         Returns:
             Tuple of (start_states, end_states, labels)
         """
+        if self.candidate_mode == "suffix":
+            return self._suffix_pairs(self._suffix.val_trajectories())
+
         if self.candidate_mode == "intermediate":
             _train, val, _test = self._intermediate_split()
             if not val:
@@ -702,6 +836,10 @@ class AdaptiveDatasetBuilder:
         Returns:
             Tuple of (start_states [N_val, dim], labels [N_val])
         """
+        if self.candidate_mode == "suffix":
+            starts, _ends, labels = self._suffix_pairs(self._suffix.val_trajectories())
+            return starts, labels
+
         if self.candidate_mode == "intermediate":
             _train, val, _test = self._intermediate_split()
             if not val:
@@ -776,7 +914,7 @@ class AdaptiveDatasetBuilder:
         Returns:
             labels [N] array
         """
-        if self.candidate_mode == "intermediate":
+        if self.candidate_mode in ("intermediate", "suffix"):
             return np.array(
                 [self.data_source.get_label(self.candidate_to_traj_row(cid)[0]) for cid in ids],
                 dtype=np.int64,
@@ -794,6 +932,10 @@ class AdaptiveDatasetBuilder:
         Returns:
             Tuple of (start_states [N, dim], labels [N])
         """
+        if self.candidate_mode == "suffix":
+            d = self.data_source.get_state_dim()
+            return np.zeros((0, d), dtype=np.float32), np.zeros(0, dtype=np.int64)
+
         if self.candidate_mode == "intermediate":
             _train, _val, test = self._intermediate_split()
             if not test:
@@ -849,6 +991,18 @@ class AdaptiveDatasetBuilder:
 
     def get_statistics(self) -> Dict:
         """Get current dataset statistics."""
+        if self.candidate_mode == "suffix":
+            st = self._suffix
+            trajs = st.traj_order
+            labels = self.data_source.get_labels(trajs) if trajs else np.zeros(0)
+            return {
+                'rollouts': st.n_picks,
+                'distinct_trajectories': len(trajs),
+                'val_trajectories': len(st.val_trajectories()),
+                'full_trajectories': int(st.full.sum()),
+                'pool_trajectories': self.max_train_idx,
+                'train_success_rate': float(np.mean(labels == 1)) if len(labels) else 0.0,
+            }
         train_stats = self.data_source.get_statistics(list(self.train_split))
 
         return {
@@ -862,6 +1016,14 @@ class AdaptiveDatasetBuilder:
     def save_state(self, filepath: str):
         """Save current state (indices and used set) to file."""
         import json
+        if self.candidate_mode == "suffix":
+            import os, tempfile
+            path = Path(filepath)
+            fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+            with os.fdopen(fd, "w") as f:
+                json.dump(self._suffix.to_dict(), f)
+            os.replace(tmp, path)
+            return
         state = {
             'train_indices': list(self.train_split),
             'used_indices': list(self.used_indices),
@@ -875,6 +1037,14 @@ class AdaptiveDatasetBuilder:
         import json
         with open(filepath, 'r') as f:
             state = json.load(f)
+
+        if self.candidate_mode == "suffix" or state.get("mode") == "suffix":
+            if self.candidate_mode != "suffix" or state.get("mode") != "suffix":
+                raise ValueError(
+                    f"state file mode {state.get('mode', 'start')!r} does not match "
+                    f"candidate_mode {self.candidate_mode!r}")
+            self._suffix.restore(state)
+            return
 
         self.train_split = DatasetSplit(state['train_indices'])
         self.max_train_idx = state['max_train_idx']

@@ -20,6 +20,7 @@ class TrajectoryPool:
         val_ratio: float = 0.1,
         test_ratio: float = 0.1,
         candidate_mode: str = "start",
+        seed: int = 42,
     ):
         cfg = TrajectoryDataSourceConfig(
             trajectories_dir=data_source_cfg.trajectories_dir,
@@ -42,7 +43,11 @@ class TrajectoryPool:
             val_ratio=val_ratio,
             test_ratio=test_ratio,
             candidate_mode=candidate_mode,
+            # Only suffix mode is seeded from the run; intermediate keeps its
+            # historical fixed split seed.
+            **({"seed": int(seed)} if candidate_mode == "suffix" else {}),
         )
+        self.candidate_mode = candidate_mode
 
     def initialize(self, initial_train_size: int, dataset_kind: str = "endpoint") -> dict[str, str]:
         self.dataset_builder.get_initial_training_set(initial_train_size)
@@ -55,11 +60,18 @@ class TrajectoryPool:
     ) -> tuple[np.ndarray, list[int]]:
         return self.dataset_builder.sample_candidates_without_marking(n, exclude=exclude)
 
+    def sample_uniform(self, n: int) -> tuple[np.ndarray, list[int]]:
+        """The uniform (1 - d2) share. Suffix mode takes trajectory starts in pool
+        order; the other modes keep their historical draw."""
+        if self.candidate_mode == "suffix":
+            return self.dataset_builder.sample_uniform_starts(n)
+        return self.dataset_builder.sample_candidates_without_marking(n)
+
     def mark_indices_as_used(self, indices: list[int]) -> None:
         self.dataset_builder.mark_indices_as_used(indices)
 
-    def add_to_training_balanced(self, indices: list[int]) -> None:
-        self.dataset_builder.add_to_training_balanced(indices)
+    def add_to_training_balanced(self, indices: list[int], source: str = "acquisition") -> None:
+        self.dataset_builder.add_to_training_balanced(indices, source=source)
 
     def build_all_datasets(self, dataset_kind: str = "endpoint") -> dict[str, str]:
         return self.dataset_builder.build_all_datasets(dataset_kind=dataset_kind)
@@ -84,4 +96,7 @@ class TrajectoryPool:
 
     @property
     def train_size(self) -> int:
+        """Rollouts spent. In suffix mode every pick is one rollout (D22a)."""
+        if self.candidate_mode == "suffix":
+            return self.dataset_builder._suffix.n_picks
         return len(self.dataset_builder.train_split)

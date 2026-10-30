@@ -54,7 +54,7 @@ gives a posterior mean m(x) and standard deviation s(x) of g. z = Φ⁻¹(1 − 
 
 | Part-X step | This implementation | Status |
 |---|---|---|
-| Input space S | The box from `system.per_dim_bounds()`, padded by a relative 1e-6 as in `partx/tree.py::build_root` | As published |
+| Input space S | The bounding box of the pool's start states, padded by a relative 1e-4. The pool's starts occupy a small part of `system.per_dim_bounds()` on every system but pendulum, and design points snapped to the latter would pile up on the edge of the data | Forced |
 | Initial samples | The shared initial set (pool indices 0..n−1, the same set every arm starts from) sits in the root as existing samples. Every system's initial set is at least n0, so Alg. 1 step 1 uses it as is | Adapted |
 | Root | Like cpslab: nBO EI steps on the root, then MCstep and Classify, before the main loop | As published |
 | Branching | Remaining regions (r, r+, r−) split into B = 2 equal halves. The split dimension is `perm[branch_dir mod d]`, where `perm` is one seeded permutation per run and a child's `branch_dir` is its parent's plus 1 (cpslab `singlereplication.py:64-65,109`). Children inherit the parent's samples that fall inside them | As published |
@@ -111,8 +111,9 @@ offers the logistic link.
   n training points. This is the analog of cpslab's `normalize_y`, which sets the mean from the
   data. The add-one smoothing keeps single-class regions finite: 30 failures out of 30 gives
   μ = −1.86. Fitting μ by maximum likelihood would send it to −∞ on single-class data.
-- Restart seeds derive from (run seed, iteration, region id, fit counter), so every fit is
-  reproducible regardless of process scheduling.
+- Restart seeds derive from (run seed, region id, number of samples in the fit). A given sample set
+  therefore always gets the same fit, which is what lets a resumed run replay exactly after its
+  model cache resets (§6.6).
 
 ### 5.3 Size cap
 
@@ -126,7 +127,8 @@ p̂(x) = Φ(m(x)/√(1 + s²(x))), using the GP of the leaf containing x, where 
 latent posterior of f. This is f itself, not the falsify-oriented g. Under `falsify: success`
 the readout negates the backend's mean back to f, so p̂ means the same thing under either setting
 of D2. A leaf with zero samples uses its nearest ancestor that
-has samples, refit on that ancestor's samples as of the snapshot.
+has samples, refit on that ancestor's samples as of the snapshot. An eval state outside S finds
+its leaf with the state clipped into S, but the GP is evaluated at the raw, unclipped state.
 
 ### 5.5 Interface
 
@@ -204,8 +206,7 @@ sample sets have not changed, and writes `epoch_XXX/`:
   - `sampling_mode: "partx_faithful"`,
   - `threshold_state` (λ* = 0.5, δ* = 0.1, as for `predictor=gp`),
   - `eval_metrics`,
-  - `acquisition.d2_indices`, the pool indices taken since the previous checkpoint, which
-    `acquired_true_p.py` reads,
+  - `acquisition.d2_indices`, the pool indices bought between this checkpoint and the next, as the engine records them,
   - `acquisition.diagnostics`: iteration, phase, a count of leaves by type, both falsification
     volumes, unspent budget, 'i' shortfalls, capped fits, and fits that hit a hyperparameter
     bound,
@@ -234,7 +235,7 @@ every cell.
 
 - State (the tree, per-leaf sample indices, used-mask, RNG state, counters, acquisition log and a
   config hash) is pickled atomically (temp file, then `os.replace`) to `output_dir/partx_state.pkl`
-  after every iteration and every checkpoint.
+  at every iteration boundary. A pickle taken mid-iteration would re-branch the same parents on resume.
 - On start, a matching state file resumes the run. A config-hash mismatch refuses to start.
 - An interrupted iteration replays from the saved RNG state. Epoch directories that already have
   both files are skipped.

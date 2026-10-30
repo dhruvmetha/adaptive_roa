@@ -76,7 +76,9 @@ amarel|amarelcpu)
   if [ "$WORLD" = amarel ]; then RES="--partition=gpu --gres=gpu:1 --cpus-per-task=4 --exclude=gpu029,gpu046"; NT=4
   else RES="--partition=main --cpus-per-task=8"; NT=8; fi
   FULL=$(git rev-parse "$COMMIT")
-  git branch -r --contains "$FULL" | grep -q . || { echo "$COMMIT is not on origin; push it first" >&2; exit 1; }
+  # On origin through a branch that contains it or a pushed tag that names it.
+  { git branch -r --contains "$FULL" | grep -q . || git ls-remote origin | grep -q "^$FULL"; } \
+    || { echo "$COMMIT is not on origin; push it first" >&2; exit 1; }
   # Amarel builds its own snapshot from the same commit, with the clone's .env (Amarel paths).
   ACODE=$(ssh -n -o BatchMode=yes $AM "cd $AWT && git fetch -q origin && git show $FULL:scripts/det_rerun/snapshot.sh | DET_WT=$AWT DET_CODE_ROOT=/home/st1122/det_rerun_code bash -s $FULL" | tail -1)
   [ -n "$ACODE" ] || { echo "Amarel snapshot of $COMMIT failed" >&2; exit 1; }

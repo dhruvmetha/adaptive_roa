@@ -59,9 +59,21 @@ def build_bayesian_mlp(
     n_members: int = 5,
     dropout: float = 0.0,
     activation: str = "relu",
+    prior_precision=None,
 ) -> Posterior:
-    """Build an MLP wrapped in the requested approximate weight posterior."""
+    """Build an MLP wrapped in the requested approximate weight posterior.
+
+    ``prior_precision`` applies to Laplace only. ``None`` (the default, and
+    every existing arm) keeps ``1 / prior_sigma^2``. A number fixes it.
+    ``"auto"`` selects it per fit by maximizing the Laplace evidence.
+    """
     kind = str(posterior)
+    if prior_precision is not None and kind != "laplace":
+        # Only Laplace reads it; on any other posterior it would be inert and the
+        # arm would be described with a prior it never used.
+        raise ValueError(
+            f"prior_precision={prior_precision!r} is set on a {kind!r} posterior; "
+            "only 'laplace' uses it (mfvi takes prior_sigma)")
 
     if kind == "mfvi":
         layers, last_hidden = _hidden_layers(
@@ -91,10 +103,19 @@ def build_bayesian_mlp(
         layers, last_hidden = _hidden_layers(
             input_dim, hidden_dims, activation, dropout, nn.Linear
         )
+        tune = isinstance(prior_precision, str) and prior_precision == "auto"
+        if prior_precision is None or tune:
+            delta = 1.0 / float(prior_sigma) ** 2
+        elif isinstance(prior_precision, str):
+            raise ValueError(
+                f"prior_precision must be a number or 'auto', got {prior_precision!r}")
+        else:
+            delta = float(prior_precision)
         return LastLayerLaplacePosterior(
             body=_Body(layers),
             head_layer=nn.Linear(last_hidden, int(output_dim)),
-            prior_precision=1.0 / float(prior_sigma) ** 2,
+            prior_precision=delta,
+            tune_prior_precision=tune,
         )
 
     raise ValueError(
@@ -130,6 +151,7 @@ def build_from_cfg(bnn_cfg, system, posterior_kind: str, output_dim: int = 1) ->
         n_members=int(cfg.get("n_members", 5)),
         dropout=float(cfg.get("dropout", 0.0)),
         activation=str(cfg.get("activation", "relu")),
+        prior_precision=cfg.get("prior_precision", None),
     )
 
 

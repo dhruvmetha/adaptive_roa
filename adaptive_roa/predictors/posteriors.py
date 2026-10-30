@@ -205,13 +205,25 @@ class LastLayerLaplacePosterior(Posterior):
     condition number is only sqrt(cond(H)).
     """
 
-    def __init__(self, body: nn.Module, head_layer: nn.Linear, prior_precision: float = 1.0):
+    def __init__(self, body: nn.Module, head_layer: nn.Linear, prior_precision: float = 1.0,
+                 tune_prior_precision: bool = False):
         super().__init__()
         self.body = body
         self.head_layer = head_layer
         self.prior_precision = float(prior_precision)
+        # Opt-in. False keeps every existing Laplace arm on its fixed
+        # 1/prior_sigma^2, bit for bit. True replaces it at fit time with the
+        # evidence maximizer (laplace_marglik.optimize_prior_precision).
+        self.tune_prior_precision = bool(tune_prior_precision)
+        self.fit_info: list[dict] = []
         self.register_buffer("_cov", torch.empty(0), persistent=False)
         self.register_buffer("_prec_chol", torch.empty(0), persistent=False)
+        # Block mode (fit_blocks): one precision factor per block of output
+        # rows. Rows in no block keep their MAP weights. Plain lists, not
+        # buffers: their count and shapes are unknown until fit, and they are
+        # saved explicitly through block_state().
+        self._block_rows: list[torch.Tensor] = []
+        self._block_chols: list[torch.Tensor] = []
 
     @property
     def posterior_covariance(self) -> torch.Tensor:
@@ -232,7 +244,96 @@ class LastLayerLaplacePosterior(Posterior):
 
     @property
     def is_fitted(self) -> bool:
-        return self._cov.numel() > 0 or self._prec_chol.numel() > 0
+        return self._cov.numel() > 0 or self._prec_chol.numel() > 0 or bool(self._block_chols)
+
+    def _map_weights(self) -> torch.Tensor:
+        """``[O, D+1]`` MAP weights with the bias as the last column."""
+        return torch.cat([self.head_layer.weight, self.head_layer.bias.unsqueeze(1)], dim=1)
+
+    def _select_prior(self, ggn: torch.Tensor, rows: torch.Tensor | None, name: str) -> float:
+        """Prior precision for one block: the evidence maximizer, or the fixed value."""
+        from adaptive_roa.predictors.laplace_marglik import optimize_prior_precision
+
+        if not self.tune_prior_precision:
+            self.fit_info.append({"block": name, "prior_precision": self.prior_precision,
+                                  "tuned": False})
+            return self.prior_precision
+        w = self._map_weights().detach()
+        if rows is not None:
+            w = w[rows.to(w.device)]
+        fit = optimize_prior_precision(ggn, w.to(ggn.device))
+        info = {"block": name, "tuned": True, **fit.as_dict()}
+        self.fit_info.append(info)
+        print(f"Laplace prior precision [{name}]: {fit.prior_precision:.6g} "
+              f"(effective params {fit.effective_params:.1f} of {fit.n_params}"
+              f"{', CLIPPED at the search bracket' if fit.clipped else ''})")
+        return fit.prior_precision
+
+    def fit_from_ggn(self, ggn: torch.Tensor) -> "LastLayerLaplacePosterior":
+        """Fit from a pre-accumulated data term ``G`` shared by every output row.
+
+        Same posterior as ``fit``, but ``G`` is built by the caller, which lets
+        it stream the training set through ``accumulate_ggn`` in chunks instead
+        of materializing every feature row at once.
+        """
+        self.fit_info = []
+        G = ggn.double()
+        delta = self._select_prior(G, None, "all")
+        if self.tune_prior_precision:
+            self.prior_precision = float(delta)
+        H = G + delta * torch.eye(G.shape[0], dtype=torch.float64, device=G.device)
+        self._prec_chol = torch.linalg.cholesky(0.5 * (H + H.T))
+        cov = torch.cholesky_inverse(self._prec_chol)
+        self._cov = 0.5 * (cov + cov.T)
+        self._block_rows, self._block_chols = [], []
+        return self
+
+    def fit_blocks(self, blocks) -> "LastLayerLaplacePosterior":
+        """Fit one Gaussian per block of output rows.
+
+        ``blocks`` is a sequence of ``(name, rows, ggn)``: ``rows`` indexes
+        output rows of the head layer, ``ggn`` is that block's ``[D, D]`` data
+        term. Each block's rows share ``(G_b + delta_b I)^-1`` as their row
+        covariance, blocks are independent, and rows in no block stay at MAP.
+        This is what a multi-part head needs when its parts have different
+        curvatures; see ``MixtureFinalStateHead.laplace_blocks``.
+        """
+        self.fit_info = []
+        rows_out, chols = [], []
+        seen: set[int] = set()
+        for name, rows, ggn in blocks:
+            rows = torch.as_tensor(rows, dtype=torch.long).flatten()
+            overlap = seen.intersection(rows.tolist())
+            if overlap:
+                raise ValueError(f"block {name!r} reuses output rows {sorted(overlap)[:5]}")
+            seen.update(rows.tolist())
+            G = ggn.double()
+            delta = self._select_prior(G, rows, name)
+            H = G + delta * torch.eye(G.shape[0], dtype=torch.float64, device=G.device)
+            rows_out.append(rows.cpu())
+            chols.append(torch.linalg.cholesky(0.5 * (H + H.T)))
+        n_out = int(self.head_layer.weight.shape[0])
+        if seen and max(seen) >= n_out:
+            raise ValueError(f"block rows reach {max(seen)} but the head has {n_out} outputs")
+        self._block_rows, self._block_chols = rows_out, chols
+        # A block-mode fit has no single covariance; clear the single-block
+        # buffers so a stale one cannot be sampled from.
+        self._cov = torch.empty(0, device=self._cov.device)
+        self._prec_chol = torch.empty(0, device=self._prec_chol.device)
+        return self
+
+    def block_state(self) -> dict:
+        """Everything block-mode sampling needs, for an explicit torch.save."""
+        return {
+            "rows": [r.cpu() for r in self._block_rows],
+            "prec_chol": [L.cpu() for L in self._block_chols],
+            "fit_info": list(self.fit_info),
+        }
+
+    def load_block_state(self, state: dict) -> None:
+        self._block_rows = [torch.as_tensor(r, dtype=torch.long) for r in state["rows"]]
+        self._block_chols = [torch.as_tensor(L) for L in state["prec_chol"]]
+        self.fit_info = list(state.get("fit_info", []))
 
     def fit(self, features: torch.Tensor, targets: torch.Tensor,
             task: str, sigma: float | None = None) -> "LastLayerLaplacePosterior":
@@ -262,6 +363,9 @@ class LastLayerLaplacePosterior(Posterior):
         # of range for that spread on the larger systems.
         phi64, lam64 = phi.double(), lam.double()
         H = torch.einsum("n,ni,nj->ij", lam64, phi64, phi64)
+        if self.tune_prior_precision:
+            self.fit_info = []
+            self.prior_precision = float(self._select_prior(H, None, "all"))
         H = H + self.prior_precision * torch.eye(
             phi.shape[1], dtype=torch.float64, device=phi.device)
         self._prec_chol = torch.linalg.cholesky(0.5 * (H + H.T))
@@ -270,6 +374,7 @@ class LastLayerLaplacePosterior(Posterior):
         # it reuses the factor instead of running a second unstable solve.
         cov = torch.cholesky_inverse(self._prec_chol)
         self._cov = 0.5 * (cov + cov.T)  # symmetrize away round-off
+        self._block_rows, self._block_chols = [], []
         return self
 
     def forward_sample(self, x, generator=None):
@@ -281,9 +386,27 @@ class LastLayerLaplacePosterior(Posterior):
             dim=1,
         )
         map_w = torch.cat([self.head_layer.weight, self.head_layer.bias.unsqueeze(1)], dim=1)
-        noise = self._weight_noise(map_w.shape[0], features.device, generator)
+        if self._block_chols:
+            noise = self._block_noise(map_w.shape, features.device, generator)
+        else:
+            noise = self._weight_noise(map_w.shape[0], features.device, generator)
         w = map_w + noise.to(map_w.dtype)
         return phi @ w.T
+
+    def _block_noise(self, shape, device, generator) -> torch.Tensor:
+        """Weight noise in block mode: each block's rows draw from its own factor."""
+        noise = torch.zeros(shape, dtype=torch.float64, device=device)
+        for i, (rows, L) in enumerate(zip(self._block_rows, self._block_chols)):
+            if L.device != torch.device(device) or rows.device != torch.device(device):
+                # The blocks are plain lists, so Module.to() does not move them.
+                # Move once and keep the moved copy: copying ~2 MB per block on
+                # every draw would dominate evaluation on a GPU.
+                L, rows = L.to(device=device), rows.to(device=device)
+                self._block_chols[i], self._block_rows[i] = L, rows
+            eps = torch.randn(int(rows.numel()), L.shape[0], generator=generator,
+                              device=device, dtype=L.dtype)
+            noise[rows] = torch.linalg.solve_triangular(L, eps, upper=False, left=False)
+        return noise
 
     def _weight_noise(self, rows: int, device, generator) -> torch.Tensor:
         """``[rows, D]`` of zero-mean noise whose rows have covariance Sigma."""
@@ -310,3 +433,21 @@ class LastLayerLaplacePosterior(Posterior):
         eps = torch.randn(rows, factor.shape[0], generator=generator,
                           device=device, dtype=factor.dtype)
         return eps @ factor.T
+
+
+def accumulate_ggn(acc: torch.Tensor | None, features: torch.Tensor,
+                   lam: torch.Tensor) -> torch.Tensor:
+    """Add one chunk's ``sum_n lam_n phi_n phi_n^T`` to ``acc`` (float64).
+
+    ``phi`` is ``features`` with a bias column, matching what
+    ``LastLayerLaplacePosterior`` samples against. Accumulating chunk by chunk
+    keeps memory at one chunk of features: the one-shot ``fit`` holds every
+    training row's features in float64 at once, which at quadrotor3d scale
+    (about 6M rows x 513) is about 25 GB.
+    """
+    phi = torch.cat([features.detach(),
+                     torch.ones(features.shape[0], 1, dtype=features.dtype,
+                                device=features.device)], dim=1).double()
+    term = (phi * lam.detach().double().view(-1, 1)).T @ phi
+    return term if acc is None else acc + term
+

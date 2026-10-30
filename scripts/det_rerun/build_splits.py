@@ -19,6 +19,7 @@ import json
 import os
 import time
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from pathlib import Path
 
@@ -81,9 +82,15 @@ def scan(root: Path, names, eval_keys: dict, k: int, float_keys: bool):
     matches = []
     arrays = []
     tdir = root / "trajectories"
-    for t, n in enumerate(names):
+
+    def read(n):
         with open(tdir / n) as f:
-            text = f.read()
+            return f.read()
+
+    # NFS latency, not CPU, bounds this loop; 16 reader threads keep requests in flight.
+    pool = ThreadPoolExecutor(max_workers=16)
+    texts = pool.map(read, names, chunksize=256)
+    for t, (n, text) in enumerate(zip(names, texts)):
         arrays.append(parse_rows(text))
         lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
         n_rows[t] = len(lines)
@@ -94,6 +101,7 @@ def scan(root: Path, names, eval_keys: dict, k: int, float_keys: bool):
                     matches.append((e, t, r))
         if (t + 1) % 50000 == 0:
             log(f"  scanned {t + 1}/{len(names)} trajectories, {len(matches)} matches")
+    pool.shutdown()
     return n_rows, np.array(matches, dtype=np.int64).reshape(-1, 3), arrays
 
 

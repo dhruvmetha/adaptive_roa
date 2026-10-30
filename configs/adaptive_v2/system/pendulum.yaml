@@ -19,7 +19,8 @@ shuffle_variant: 0
 #   system=pendulum_g1 controller=rl eval_variant=rl_to_lqr
 controller: lqr
 eval_variant: ${controller}
-dataset_name: pendulum/${controller}
+# Det-paper rerun: lqr_failset adds the two failure equilibria (scripts/det_rerun).
+dataset_name: pendulum/${controller}_failset
 dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
 eval_root: ${data_dir}/${noise_regime}/pendulum/${eval_variant}
 
@@ -29,13 +30,19 @@ attractor_radius: 0.1
 threshold:
   optimize_mode: joint
 
+# Pool, cal, val and test are disjoint by trajectory (splits_det_rerun/split_manifest.json).
+# The run seed picks the pool order, so it also picks the initial set.
 data_source:
-  trajectories_dir: ${dataset_root}/trajectories
-  shuffled_indices_file: ${dataset_root}/train_test_splits/shuffled_indices_${shuffle_variant}.txt
-  shuffled_labels_file: ${dataset_root}/train_test_splits/shuffled_labels_${shuffle_variant}.txt
-  eval_states_file: ${dataset_root}/eval_states.txt
-  cal_set_file: ${eval_root}/cal_set.txt
-  test_set_file: ${eval_root}/test_set.txt
+  split_dir: ${dataset_root}/splits_det_rerun
+  pool_format: npz
+  trajectories_dir: ${data_source.split_dir}/train.npz
+  shuffled_indices_file: ${data_source.split_dir}/pool_order_${seed}.txt
+  shuffled_labels_file: ${data_source.split_dir}/pool_labels_${seed}.txt
+  eval_states_file: ${data_source.split_dir}/test_set.txt
+  cal_set_file: ${data_source.split_dir}/cal_set.txt
+  val_set_file: ${data_source.split_dir}/val_set.txt
+  test_set_file: ${data_source.split_dir}/test_set.txt
+  timeout_intermediates: drop   # horizon_steps from splits_det_rerun/train_description.json
 
 initial_train_size: 100
 n_epochs: 19

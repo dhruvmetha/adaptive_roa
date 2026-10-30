@@ -15,15 +15,22 @@ attractor_radius: 0.3
 dataset_name: quadrotor2D_rl
 dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
 
+# Pool, cal, val and test are disjoint by trajectory (splits_det_rerun/split_manifest.json).
+# The run seed picks the pool order, so it also picks the initial set.
 data_source:
   base_dir: ${dataset_root}
-  trajectories_dir: ${data_source.base_dir}/trajectories
   train_test_splits_dir: ${data_source.base_dir}/train_test_splits
-  shuffled_indices_file: ${data_source.train_test_splits_dir}/shuffled_indices_${training_index}.txt
-  shuffled_labels_file: ${data_source.train_test_splits_dir}/shuffled_labels_${training_index}.txt
-  eval_states_file: ${data_source.base_dir}/eval_states.txt
-  cal_set_file: ${data_source.base_dir}/cal_set.txt
-  test_set_file: ${data_source.base_dir}/test_set.txt
+  split_dir: ${data_source.base_dir}/splits_det_rerun
+  pool_format: npz
+  trajectories_dir: ${data_source.split_dir}/train.npz
+  shuffled_indices_file: ${data_source.split_dir}/pool_order_${seed}.txt
+  shuffled_labels_file: ${data_source.split_dir}/pool_labels_${seed}.txt
+  eval_states_file: ${data_source.split_dir}/test_set.txt
+  cal_set_file: ${data_source.split_dir}/cal_set.txt
+  val_set_file: ${data_source.split_dir}/val_set.txt
+  test_set_file: ${data_source.split_dir}/test_set.txt
+  timeout_intermediates: drop
+  horizon_steps: 1200   # dataset_description max_steps; no det trajectory here times out
 
 initial_train_size: 2000
 samples_per_epoch: 500

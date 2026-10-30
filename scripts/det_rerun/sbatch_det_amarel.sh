@@ -1,14 +1,11 @@
 #!/bin/bash
 # Amarel job for one det-paper rerun cell, run from the commit's read-only snapshot
-# (DET_CODE, made on Amarel by snapshot.sh). launch.sh <name> amarel submits it.
-#   sbatch -J <name> --mem=<mem> --time=<wall> scripts/det_rerun/sbatch_det_amarel.sh <hydra overrides>
+# (DET_CODE, made on Amarel by snapshot.sh). launch.sh <name> amarel|amarelcpu submits
+# it and passes the partition: gpu (1 GPU, 4 CPUs) or main (CPU only, Part-X).
+#   sbatch -J <name> --mem=<mem> --time=<wall> --partition=... scripts/det_rerun/sbatch_det_amarel.sh <hydra overrides>
 # `general` preempts without requeue: a preempted cell resumes from its last epoch
 # (DET_SCRIPT=scripts/resume_adaptive.py, args --run-dir <dir>), never from 0.
 #SBATCH --account=general
-#SBATCH --partition=gpu
-#SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=4
-#SBATCH --exclude=gpu029,gpu046
 #SBATCH --output=/home/st1122/det_rerun_logs/%x_%j.out
 #SBATCH --error=/home/st1122/det_rerun_logs/%x_%j.err
 set -euo pipefail

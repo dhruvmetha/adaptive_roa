@@ -1,12 +1,13 @@
 #!/bin/bash
-# Resume a preempted or timed-out Amarel cell from its last banked epoch, from the
-# snapshot of the commit it was launched with (never from 0).
+# Resume a preempted or timed-out Amarel GPU cell from its last banked epoch, from the
+# snapshot of the commit it was launched with (never from 0). Part-X (amarelcpu) resumes
+# by rerunning its command on the same output dir, from partx_state.pkl.
 #   resume_amarel.sh <name> [walltime]
 set -euo pipefail
 export SSH_AUTH_SOCK=
 HERE=/common/home/st1122/Projects/adaptive_roa/slurm_logs/det_rerun
 EXP=/common/users/shared/pracsys/adaptive_roa_experiments/det_rerun
-AM=amarel.rutgers.edu; AEXP=/home/st1122/det_rerun_out
+AM=amarel.rutgers.edu; AEXP=/scratch/st1122/det_rerun_out
 NAME=$1; WALL=${2:-3-00:00:00}
 LAST=$(awk -F'\t' -v n="$NAME" '$1==n' "$HERE/launched.tsv" | tail -1)
 [ "$(cut -f2 <<< "$LAST")" = amarel ] || { echo "$NAME was not launched on Amarel" >&2; exit 1; }
@@ -19,7 +20,7 @@ ACODE=$(ssh -n -o BatchMode=yes $AM "ls -d /home/st1122/det_rerun_code/${COMMIT}
 ssh -n -o BatchMode=yes $AM "ls $ADIR/epoch_*/artifacts_v2.json" >/dev/null 2>&1 \
   || { echo "$NAME has no banked epoch on Amarel; launch it instead" >&2; exit 1; }
 JID=$(ssh -n -o BatchMode=yes $AM \
-  "cd $ACODE && sbatch --parsable -J $NAME --mem=$MEM --time=$WALL --export=ALL,ADAPTIVE_ROA_COMMIT=$COMMIT,DET_CODE=$ACODE,DET_SCRIPT=scripts/resume_adaptive.py scripts/det_rerun/sbatch_det_amarel.sh --run-dir $ADIR </dev/null" 2>/dev/null | grep -E '^[0-9]+$')
+  "cd $ACODE && sbatch --parsable -J $NAME --mem=$MEM --time=$WALL --partition=gpu --gres=gpu:1 --cpus-per-task=4 --exclude=gpu029,gpu046 --export=ALL,OMP_NUM_THREADS=4,ADAPTIVE_ROA_COMMIT=$COMMIT,DET_CODE=$ACODE,DET_SCRIPT=scripts/resume_adaptive.py scripts/det_rerun/sbatch_det_amarel.sh --run-dir $ADIR </dev/null" 2>/dev/null | grep -E '^[0-9]+$')
 [ -n "$JID" ] || { echo "Amarel sbatch failed for $NAME" >&2; exit 1; }
 printf '%s\tamarel\tgpu\t%s\t%s\t%s\t%s\n' "$NAME" "$JID" "$(date +%Y%m%d_%H%M)" "$HERE/amarel_logs/${NAME}_${JID}.out" "$COMMIT" >> "$HERE/launched.tsv"
 echo "$NAME resumed -> Amarel job $JID (commit $COMMIT)"

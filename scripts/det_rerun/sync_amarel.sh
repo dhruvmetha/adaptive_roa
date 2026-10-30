@@ -9,7 +9,7 @@ set -euo pipefail
 export SSH_AUTH_SOCK=
 HERE=/common/home/st1122/Projects/adaptive_roa/slurm_logs/det_rerun
 EXP=/common/users/shared/pracsys/adaptive_roa_experiments/det_rerun
-AM=amarel.rutgers.edu; AEXP=/home/st1122/det_rerun_out
+AM=amarel.rutgers.edu; AEXP=/scratch/st1122/det_rerun_out
 names=("$@")
 [ ${#names[@]} -gt 0 ] || mapfile -t names < <(awk -F'\t' '$2=="amarel"{print $1}' "$HERE/launched.tsv" | sort -u)
 for NAME in "${names[@]}"; do

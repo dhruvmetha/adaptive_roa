@@ -3,8 +3,8 @@
 #   launch.sh <name> ilab   <gres_type> [walltime]
 #   launch.sh <name> direct <host> <gpu_index>
 #   launch.sh <name> ilabcpu [walltime]            (Part-X: no GPU, no quota)
-#   launch.sh <name> amarel [walltime]             (gpu partition, preemptible; outputs
-#                                                   under /home/st1122/det_rerun_out, mirrored
+#   launch.sh <name> amarel|amarelcpu [walltime]   (gpu or main partition, preemptible; outputs
+#                                                   under /scratch/st1122/det_rerun_out, mirrored
 #                                                   to the iLab output dir by sync_amarel.sh;
 #                                                   resume a preempted cell with resume_amarel.sh)
 # Refuses a name already in launched.tsv or whose output dir has a banked epoch
@@ -26,8 +26,8 @@ if ls "$OUTDIR"/epoch_*/artifacts_v2.json >/dev/null 2>&1; then
   echo "$NAME already has banked epochs in $OUTDIR; resume it instead" >&2; exit 1
 fi
 EXP=/common/users/shared/pracsys/adaptive_roa_experiments/det_rerun
-AM=amarel.rutgers.edu; AWT=/home/st1122/Projects/adaptive_roa_det; AEXP=/home/st1122/det_rerun_out
-if [ "$WORLD" = amarel ] && ssh -n -o BatchMode=yes $AM "ls ${OUTDIR/#$EXP/$AEXP}/epoch_*/artifacts_v2.json" >/dev/null 2>&1; then
+AM=amarel.rutgers.edu; AWT=/home/st1122/Projects/adaptive_roa_det; AEXP=/scratch/st1122/det_rerun_out
+if [[ "$WORLD" == amarel* ]] && ssh -n -o BatchMode=yes $AM "ls ${OUTDIR/#$EXP/$AEXP}/epoch_*/artifacts_v2.json" >/dev/null 2>&1; then
   echo "$NAME already has banked epochs on Amarel; resume it with resume_amarel.sh" >&2; exit 1
 fi
 if grep -qP "^$NAME\t" "$HERE/launched.tsv" 2>/dev/null; then
@@ -71,8 +71,10 @@ direct)
   printf '%s\t%s\tgpu%s\t%s\t%s\t%s\t%s\n' "$HOST" "$PID" "$GPU" "$NAME" "$LOG" "$TS" "$SCRIPT $OV" >> /common/home/st1122/Projects/adaptive_roa/slurm_logs/direct_jobs.tsv
   printf '%s\tdirect\t%s:%s\t%s\t%s\t%s\t%s\n' "$NAME" "$HOST" "$GPU" "$PID" "$TS" "$LOG" "$COMMIT" >> "$HERE/launched.tsv"
   echo "$NAME -> $HOST gpu$GPU pid $PID session $SESS commit $COMMIT";;
-amarel)
+amarel|amarelcpu)
   WALL=${3:-3-00:00:00}
+  if [ "$WORLD" = amarel ]; then RES="--partition=gpu --gres=gpu:1 --cpus-per-task=4 --exclude=gpu029,gpu046"; NT=4
+  else RES="--partition=main --cpus-per-task=8"; NT=8; fi
   FULL=$(git rev-parse "$COMMIT")
   git branch -r --contains "$FULL" | grep -q . || { echo "$COMMIT is not on origin; push it first" >&2; exit 1; }
   # Amarel builds its own snapshot from the same commit, with the clone's .env (Amarel paths).
@@ -80,10 +82,10 @@ amarel)
   [ -n "$ACODE" ] || { echo "Amarel snapshot of $COMMIT failed" >&2; exit 1; }
   AOV=${OV//$EXP/$AEXP}
   JID=$(ssh -n -o BatchMode=yes $AM \
-    "mkdir -p /home/st1122/det_rerun_logs && cd $ACODE && sbatch --parsable -J $NAME --mem=$MEM --time=$WALL --export=ALL,ADAPTIVE_ROA_COMMIT=$COMMIT,DET_CODE=$ACODE,DET_SCRIPT=$SCRIPT scripts/det_rerun/sbatch_det_amarel.sh $AOV </dev/null" 2>/dev/null | grep -E '^[0-9]+$')
+    "mkdir -p /home/st1122/det_rerun_logs && cd $ACODE && sbatch --parsable -J $NAME --mem=$MEM --time=$WALL $RES --export=ALL,ADAPTIVE_ROA_COMMIT=$COMMIT,DET_CODE=$ACODE,DET_SCRIPT=$SCRIPT,OMP_NUM_THREADS=$NT scripts/det_rerun/sbatch_det_amarel.sh $AOV </dev/null" 2>/dev/null | grep -E '^[0-9]+$')
   [ -n "$JID" ] || { echo "Amarel sbatch failed for $NAME" >&2; exit 1; }
   LOG=$HERE/amarel_logs/${NAME}_${JID}.out      # the mirror sync_amarel.sh keeps
-  printf '%s\tamarel\tgpu\t%s\t%s\t%s\t%s\n' "$NAME" "$JID" "$TS" "$LOG" "$COMMIT" >> "$HERE/launched.tsv"
+  printf '%s\tamarel\t%s\t%s\t%s\t%s\t%s\n' "$NAME" "${RES%% *}" "$JID" "$TS" "$LOG" "$COMMIT" >> "$HERE/launched.tsv"
   echo "$NAME -> Amarel job $JID (mem $MEM, wall $WALL, commit $COMMIT, code $ACODE)";;
-*) echo "world must be ilab, direct, ilabcpu or amarel" >&2; exit 1;;
+*) echo "world must be ilab, direct, ilabcpu, amarel or amarelcpu" >&2; exit 1;;
 esac

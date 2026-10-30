@@ -37,3 +37,6 @@ partx_faithful:
   # evaluation as published. Taking a state retires the rest of its trajectory.
   # Needs ++data_source.timeout_intermediates=drop. Not combinable with trajectory_states.
   state_pool: false
+  # Lemma 1's alpha for the guarantees written per checkpoint (tracker C21). The
+  # paper never sets it.
+  guarantee_alpha: 0.05

@@ -23,6 +23,7 @@ from adaptive_roa.adaptive_v2.engine import _atomic_write_json, _convert_numpy
 from adaptive_roa.adaptive_v2.eval.full_roa import evaluate_full_roa_classifier
 from adaptive_roa.partx_faithful.algorithm import PartX, PartXConfig, derive_seed
 from adaptive_roa.partx_faithful.backends import backend_factory
+from adaptive_roa.partx_faithful.guarantees import snapshot_guarantees
 from adaptive_roa.partx_faithful.readout import PiecewiseHandle, PiecewiseModel
 from adaptive_roa.partx_faithful.region import RTYPES
 from adaptive_roa.partx_faithful.sampling import PoolSampler, StatePoolSampler, state_pool_arrays
@@ -69,13 +70,16 @@ def _git_commit() -> str:
 
 class CheckpointWriter:
     def __init__(self, *, output_dir, system, eval_states_file, attractor_radius, checkpoints,
-                 initial, model_factory, pcfg, extra, decision_rule: str = "one_sided"):
+                 initial, model_factory, pcfg, extra, decision_rule: str = "one_sided",
+                 guarantee_alpha: float = 0.05):
         self.out = Path(output_dir)
         self.system, self.eval_states_file = system, str(eval_states_file)
         self.attractor_radius = float(attractor_radius)
         self.checkpoints, self.initial = list(checkpoints), int(initial)
         self.model_factory, self.pcfg, self.extra = model_factory, pcfg, extra
         self.decision_rule = str(decision_rule)
+        # Part-X never fixes alpha for Lemma 1; the det paper uses 0.05 and says so.
+        self.guarantee_alpha = float(guarantee_alpha)
         self.next_e = 0
         self._cache: dict = {}
 
@@ -181,6 +185,11 @@ class CheckpointWriter:
             "n_capped_fits": int(px.n_capped), "n_at_bound_fits": int(px.n_at_bound),
             "done": bool(px.done),
         }
+        n_by_leaf = {r.rid: sum(s in allowed for s in r.samples) for r in leaves}
+        diag["guarantees"] = snapshot_guarantees(
+            leaves, models, n_by_leaf, px.root_volume, alpha=self.guarantee_alpha,
+            B=int(self.pcfg.B), R=int(self.pcfg.R), M=int(self.pcfg.M),
+            rng=np.random.default_rng(derive_seed(self.pcfg.seed, _SNAPSHOT_STAGE, e, 1)))
         if traj_on:
             # States in THIS snapshot: those of the rollouts the epoch may use.
             diag["n_traj_states"] = int(len(allowed) - px.n_init - n_new)
@@ -203,7 +212,8 @@ def run_partx_faithful(*, system, starts, labels, eval_states_file, output_dir, 
                        samples_per_epoch: int, n_epochs: int, pcfg: PartXConfig, gp_kwargs: dict,
                        falsify: str, attractor_radius: float, extra: dict,
                        decision_rule: str = "one_sided", trajectory=None,
-                       reuse_hyperparameters: bool = False, state_pool=None) -> dict:
+                       reuse_hyperparameters: bool = False, state_pool=None,
+                       guarantee_alpha: float = 0.05) -> dict:
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     starts = np.asarray(starts, dtype=float)
@@ -261,7 +271,8 @@ def run_partx_faithful(*, system, starts, labels, eval_states_file, output_dir, 
     writer = CheckpointWriter(output_dir=out, system=system, eval_states_file=eval_states_file,
                               attractor_radius=attractor_radius, checkpoints=checkpoints,
                               initial=initial, model_factory=factory, pcfg=pcfg,
-                              extra={**extra, "commit": _git_commit()}, decision_rule=decision_rule)
+                              extra={**extra, "commit": _git_commit()}, decision_rule=decision_rule,
+                              guarantee_alpha=guarantee_alpha)
     px.on_sample = writer.on_sample
     writer.on_sample(px)                     # epoch 0, and anything a crash left unwritten
     t0 = time.time()
@@ -346,7 +357,8 @@ def run_from_cfg(cfg) -> dict:
         extra=extra, decision_rule=str(cfg.get("decision_rule", "one_sided")),
         trajectory=PoolTrajectoryStates(ds) if traj_on else None,
         reuse_hyperparameters=bool(gp.get("reuse_hyperparameters", False)),
-        state_pool=_state_pool_from(ds) if state_on else None)
+        state_pool=_state_pool_from(ds) if state_on else None,
+        guarantee_alpha=float(cfg.partx_faithful.get("guarantee_alpha", 0.05)))
 
 
 def _state_pool_from(ds):

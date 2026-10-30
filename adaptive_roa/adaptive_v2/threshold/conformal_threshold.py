@@ -30,6 +30,10 @@ class ConformalThresholdBackend:
         self.fixed_lambda_star = float(cfg.fixed_lambda_star)
         self.fixed_delta_star = float(cfg.fixed_delta_star)
         self.use_p_invalid_veto = bool(cfg.use_p_invalid_veto)
+        # Objective weight and alpha. Defaults equal the literals the decoupling
+        # (6f7587d) hardcoded, so configs without the keys keep their objective.
+        self.w = float(cfg.get("w", 0.9))
+        self.alpha = float(cfg.get("alpha", 0.1))
         self.verbose = bool(cfg.verbose)
         self.system = system
         self.device = device
@@ -38,8 +42,8 @@ class ConformalThresholdBackend:
     def _build_conformal_config(self) -> ConformalConfig:
         return ConformalConfig(
             delta=self.delta,
-            w=0.9,
-            alpha=0.1,
+            w=self.w,
+            alpha=self.alpha,
             attractor_radius=self.attractor_radius,
             num_mc_samples=self.num_mc_samples,
             optimize_mode=self.optimize_mode,

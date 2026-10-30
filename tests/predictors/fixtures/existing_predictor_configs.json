@@ -1,0 +1,1602 @@
+{
+ "cartpole_pybullet/bnn_ens_reg_bald": {
+  "calibration.decision_rule": "two_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "final_state": {
+    "beta_nll": 0.5,
+    "hidden_dims": [
+     256,
+     512,
+     1024,
+     512,
+     256
+    ],
+    "lr": 0.001,
+    "max_epochs": 200,
+    "n_members": 5,
+    "patience": 20,
+    "posterior": "ensemble",
+    "prior_sigma": 1.0,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "bnn_ensemble_reg",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.final_state_trainer.FinalStateTrainer",
+   "type": "generative",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.posterior_endpoint_mc.PosteriorEndpointMCProbabilityBackend",
+   "attractor_radius": 0.2,
+   "chunk_size": 4096,
+   "n_posterior_samples": 64,
+   "num_mc_samples": 20,
+   "refine_invalids": false,
+   "refine_max_attempts": 5,
+   "refine_num_steps": 100,
+   "refine_t_max": 0.9,
+   "refine_t_min": 0.7,
+   "trajectory_checking": false
+  },
+  "threshold.decision_rule": "two_sided"
+ },
+ "cartpole_pybullet/bnn_ensemble": {
+  "calibration.decision_rule": "one_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "bnn": {
+    "hidden_dims": [
+     256,
+     512,
+     256
+    ],
+    "lr": 0.001,
+    "max_epochs": 200,
+    "n_marginal_samples": 64,
+    "n_members": 5,
+    "patience": 20,
+    "posterior": "ensemble",
+    "prior_sigma": 1.0,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "bnn_ensemble",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.bayesian_mlp_trainer.BayesianMLPTrainer",
+   "type": "classifier",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.classifier_prob.ClassifierProbabilityBackend",
+   "attractor_radius": 0.2
+  },
+  "threshold.decision_rule": "one_sided"
+ },
+ "cartpole_pybullet/bnn_ensemble_reg": {
+  "calibration.decision_rule": "two_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "final_state": {
+    "beta_nll": 0.5,
+    "hidden_dims": [
+     256,
+     512,
+     256
+    ],
+    "lr": 0.001,
+    "max_epochs": 200,
+    "n_members": 5,
+    "patience": 20,
+    "posterior": "ensemble",
+    "prior_sigma": 1.0,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "bnn_ensemble_reg",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.final_state_trainer.FinalStateTrainer",
+   "type": "generative",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.endpoint_mc.EndpointMCProbabilityBackend",
+   "attractor_radius": 0.2,
+   "num_mc_samples": 10,
+   "refine_invalids": false,
+   "refine_max_attempts": 5,
+   "refine_num_steps": 100,
+   "refine_t_max": 0.9,
+   "refine_t_min": 0.7,
+   "trajectory_checking": false
+  },
+  "threshold.decision_rule": "two_sided"
+ },
+ "cartpole_pybullet/bnn_laplace": {
+  "calibration.decision_rule": "one_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "bnn": {
+    "hidden_dims": [
+     256,
+     512,
+     256
+    ],
+    "lr": 0.001,
+    "max_epochs": 200,
+    "n_marginal_samples": 64,
+    "patience": 20,
+    "posterior": "laplace",
+    "prior_sigma": 1.0,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "bnn_laplace",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.bayesian_mlp_trainer.BayesianMLPTrainer",
+   "type": "classifier",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.classifier_prob.ClassifierProbabilityBackend",
+   "attractor_radius": 0.2
+  },
+  "threshold.decision_rule": "one_sided"
+ },
+ "cartpole_pybullet/bnn_laplace_reg": {
+  "calibration.decision_rule": "two_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "final_state": {
+    "beta_nll": 0.5,
+    "hidden_dims": [
+     256,
+     512,
+     256
+    ],
+    "lr": 0.001,
+    "max_epochs": 200,
+    "patience": 20,
+    "posterior": "laplace",
+    "prior_sigma": 1.0,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "bnn_laplace_reg",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.final_state_trainer.FinalStateTrainer",
+   "type": "generative",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.endpoint_mc.EndpointMCProbabilityBackend",
+   "attractor_radius": 0.2,
+   "num_mc_samples": 10,
+   "refine_invalids": false,
+   "refine_max_attempts": 5,
+   "refine_num_steps": 100,
+   "refine_t_max": 0.9,
+   "refine_t_min": 0.7,
+   "trajectory_checking": false
+  },
+  "threshold.decision_rule": "two_sided"
+ },
+ "cartpole_pybullet/bnn_mfvi": {
+  "calibration.decision_rule": "one_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "bnn": {
+    "hidden_dims": [
+     256,
+     512,
+     256
+    ],
+    "kl_weight": 1.0,
+    "lr": 0.001,
+    "max_epochs": 200,
+    "n_marginal_samples": 64,
+    "patience": 20,
+    "posterior": "mfvi",
+    "prior_sigma": 1.0,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "bnn_mfvi",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.bayesian_mlp_trainer.BayesianMLPTrainer",
+   "type": "classifier",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.classifier_prob.ClassifierProbabilityBackend",
+   "attractor_radius": 0.2
+  },
+  "threshold.decision_rule": "one_sided"
+ },
+ "cartpole_pybullet/bnn_mfvi_a1": {
+  "calibration.decision_rule": "one_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "bnn": {
+    "alpha": 1.0,
+    "alpha_n_samples": 50,
+    "hidden_dims": [
+     256,
+     512,
+     1024,
+     512,
+     256
+    ],
+    "kl_weight": 1.0,
+    "lr": 0.001,
+    "max_epochs": 200,
+    "n_marginal_samples": 64,
+    "patience": 20,
+    "pos_weight": 1.0,
+    "posterior": "mfvi",
+    "prior_sigma": 1.0,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "bnn_mfvi_a1",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.bayesian_mlp_trainer.BayesianMLPTrainer",
+   "type": "classifier",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.ensemble_prob.SampledPosteriorClassifierProbabilityBackend",
+   "attractor_radius": 0.2,
+   "n_posterior_samples": 64
+  },
+  "threshold.decision_rule": "one_sided"
+ },
+ "cartpole_pybullet/bnn_mfvi_reg": {
+  "calibration.decision_rule": "two_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "final_state": {
+    "beta_nll": 0.5,
+    "hidden_dims": [
+     256,
+     512,
+     256
+    ],
+    "kl_weight": 1.0,
+    "lr": 0.001,
+    "max_epochs": 200,
+    "patience": 20,
+    "posterior": "mfvi",
+    "prior_sigma": 1.0,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "bnn_mfvi_reg",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.final_state_trainer.FinalStateTrainer",
+   "type": "generative",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.endpoint_mc.EndpointMCProbabilityBackend",
+   "attractor_radius": 0.2,
+   "num_mc_samples": 10,
+   "refine_invalids": false,
+   "refine_max_attempts": 5,
+   "refine_num_steps": 100,
+   "refine_t_max": 0.9,
+   "refine_t_min": 0.7,
+   "trajectory_checking": false
+  },
+  "threshold.decision_rule": "two_sided"
+ },
+ "cartpole_pybullet/bnn_mfvi_reg_bald": {
+  "calibration.decision_rule": "two_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "final_state": {
+    "beta_nll": 0.5,
+    "hidden_dims": [
+     256,
+     512,
+     1024,
+     512,
+     256
+    ],
+    "kl_weight": 1.0,
+    "lr": 0.001,
+    "max_epochs": 200,
+    "patience": 20,
+    "posterior": "mfvi",
+    "prior_sigma": 1.0,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "bnn_mfvi_reg",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.final_state_trainer.FinalStateTrainer",
+   "type": "generative",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.posterior_endpoint_mc.PosteriorEndpointMCProbabilityBackend",
+   "attractor_radius": 0.2,
+   "chunk_size": 4096,
+   "n_posterior_samples": 64,
+   "num_mc_samples": 20,
+   "refine_invalids": false,
+   "refine_max_attempts": 5,
+   "refine_num_steps": 100,
+   "refine_t_max": 0.9,
+   "refine_t_min": 0.7,
+   "trajectory_checking": false
+  },
+  "threshold.decision_rule": "two_sided"
+ },
+ "cartpole_pybullet/classifier": {
+  "calibration.decision_rule": "one_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "classifier": {
+    "dropout": 0.0,
+    "hidden_dims": [
+     256,
+     512,
+     256
+    ],
+    "lr": 0.001,
+    "max_epochs": 200,
+    "patience": 20,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "mlp",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.classifier_trainer.ClassifierTrainer",
+   "type": "classifier",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.classifier_prob.ClassifierProbabilityBackend",
+   "attractor_radius": 0.2
+  },
+  "threshold.decision_rule": "one_sided"
+ },
+ "cartpole_pybullet/clf_ensemble": {
+  "calibration.decision_rule": "one_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "bnn": {
+    "hidden_dims": [
+     256,
+     512,
+     256
+    ],
+    "lr": 0.001,
+    "max_epochs": 200,
+    "n_marginal_samples": 64,
+    "n_members": 5,
+    "patience": 20,
+    "posterior": "ensemble",
+    "prior_sigma": 1.0,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "clf_ensemble",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.bayesian_mlp_trainer.BayesianMLPTrainer",
+   "type": "classifier",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.ensemble_prob.EnsembleClassifierProbabilityBackend",
+   "attractor_radius": 0.2
+  },
+  "threshold.decision_rule": "one_sided"
+ },
+ "cartpole_pybullet/fm_ensemble": {
+  "calibration.decision_rule": "two_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "ensemble": {
+    "n_members": 5
+   },
+   "flow_matching": {
+    "clamp_noise": false,
+    "latent_dim": 0,
+    "mae_val_frequency": 10,
+    "noise_scale": 1.0,
+    "num_integration_steps": 100,
+    "quat_loss_weight": 1.0,
+    "use_log_loss_weights": false,
+    "use_loss_weights": false,
+    "use_manifold": false,
+    "zero_latent": true
+   },
+   "lightning_trainer": {
+    "accelerator": "gpu",
+    "callbacks": [
+     {
+      "_target_": "lightning.pytorch.callbacks.ModelCheckpoint",
+      "auto_insert_metric_name": false,
+      "filename": "best-{epoch:02d}-{val_loss:.4f}",
+      "mode": "min",
+      "monitor": "val_loss",
+      "save_last": true,
+      "save_top_k": 1
+     },
+     {
+      "_target_": "lightning.pytorch.callbacks.EarlyStopping",
+      "min_delta": 0.0001,
+      "mode": "min",
+      "monitor": "val_loss",
+      "patience": 30,
+      "verbose": true
+     }
+    ],
+    "check_val_every_n_epoch": 1,
+    "devices": 1,
+    "enable_model_summary": true,
+    "enable_progress_bar": true,
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10,
+    "max_epochs": 200,
+    "precision": 32
+   },
+   "name": "fm_ensemble",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.ensemble_flow_matching_trainer.EnsembleFlowMatchingTrainer",
+   "type": "generative",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.ensemble_prob.EnsembleEndpointMCProbabilityBackend",
+   "attractor_radius": 0.2,
+   "num_mc_samples": 20
+  },
+  "threshold.decision_rule": "two_sided"
+ },
+ "cartpole_pybullet/fm_outcome": {
+  "calibration.decision_rule": "one_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "fm_outcome",
+   "outcome_fm": {
+    "activation": "relu",
+    "dropout": 0.0,
+    "forward_readout": "exact",
+    "hidden_dims": [
+     256,
+     512,
+     256
+    ],
+    "lr": 0.001,
+    "max_epochs": 200,
+    "num_ode_steps": 50,
+    "num_time_freqs": 4,
+    "patience": 20,
+    "weight_decay": 1e-05
+   },
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.outcome_fm_trainer.OutcomeFMTrainer",
+   "type": "classifier",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.outcome_fm.OutcomeFMProbabilityBackend",
+   "bisect_iters": 20,
+   "chunk_size": 4096,
+   "grid_size": 33,
+   "num_mc_samples": 100,
+   "num_ode_steps": 50,
+   "readout": "exact"
+  },
+  "threshold.decision_rule": "one_sided"
+ },
+ "cartpole_pybullet/fm_outcome_bald": {
+  "calibration.decision_rule": "one_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "ensemble": {
+    "n_members": 5
+   },
+   "lightning_trainer": {
+    "enable_progress_bar": false,
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "fm_outcome_ens",
+   "outcome_fm": {
+    "activation": "relu",
+    "dropout": 0.0,
+    "forward_readout": "exact",
+    "hidden_dims": [
+     256,
+     512,
+     1024,
+     512,
+     256
+    ],
+    "lr": 0.001,
+    "max_epochs": 200,
+    "num_ode_steps": 50,
+    "num_time_freqs": 4,
+    "patience": 20,
+    "weight_decay": 1e-05
+   },
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.ensemble_outcome_fm_trainer.EnsembleOutcomeFMTrainer",
+   "type": "classifier",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.outcome_fm_ensemble.EnsembleOutcomeFMProbabilityBackend",
+   "attractor_radius": 0.2,
+   "bisect_iters": 20,
+   "chunk_size": 4096,
+   "grid_size": 33,
+   "num_mc_samples": 100,
+   "num_ode_steps": 50,
+   "readout": "exact"
+  },
+  "threshold.decision_rule": "one_sided"
+ },
+ "cartpole_pybullet/generative": {
+  "calibration.decision_rule": "two_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "flow_matching": {
+    "clamp_noise": false,
+    "latent_dim": 0,
+    "mae_val_frequency": 10,
+    "noise_scale": 1.0,
+    "num_integration_steps": 100,
+    "quat_loss_weight": 1.0,
+    "use_log_loss_weights": false,
+    "use_loss_weights": false,
+    "use_manifold": false,
+    "zero_latent": true
+   },
+   "lightning_trainer": {
+    "accelerator": "gpu",
+    "callbacks": [
+     {
+      "_target_": "lightning.pytorch.callbacks.ModelCheckpoint",
+      "auto_insert_metric_name": false,
+      "filename": "best-{epoch:02d}-{val_loss:.4f}",
+      "mode": "min",
+      "monitor": "val_loss",
+      "save_last": true,
+      "save_top_k": 1
+     },
+     {
+      "_target_": "lightning.pytorch.callbacks.EarlyStopping",
+      "mode": "min",
+      "monitor": "val_loss",
+      "patience": 100,
+      "verbose": true
+     }
+    ],
+    "check_val_every_n_epoch": 1,
+    "devices": 1,
+    "enable_model_summary": true,
+    "enable_progress_bar": true,
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10,
+    "max_epochs": 1000,
+    "precision": 32
+   },
+   "name": "fm",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.flow_matching_trainer.FlowMatchingTrainer",
+   "type": "generative",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.endpoint_mc.EndpointMCProbabilityBackend",
+   "attractor_radius": 0.2,
+   "num_mc_samples": 10,
+   "refine_invalids": false,
+   "refine_max_attempts": 5,
+   "refine_num_steps": 100,
+   "refine_t_max": 0.9,
+   "refine_t_min": 0.7,
+   "trajectory_checking": false
+  },
+  "threshold.decision_rule": "two_sided"
+ },
+ "cartpole_pybullet/gp": {
+  "calibration.decision_rule": "one_sided",
+  "predictor": {
+   "gp": {
+    "kernel": "matern52",
+    "lr": 0.1,
+    "n_inducing": 128,
+    "n_iters": 300
+   },
+   "name": "gp",
+   "trainer_target": "adaptive_roa.partx.trainer.GPPredictorTrainer",
+   "type": "classifier"
+  },
+  "probability": {
+   "_target_": "adaptive_roa.partx.backend.GPProbabilityBackend",
+   "attractor_radius": 0.2
+  },
+  "threshold.decision_rule": "one_sided"
+ },
+ "cartpole_pybullet/gp_optdelta": {
+  "calibration.decision_rule": "one_sided",
+  "predictor": {
+   "gp": {
+    "kernel": "matern52",
+    "lr": 0.1,
+    "n_inducing": 128,
+    "n_iters": 300
+   },
+   "name": "gp_optdelta",
+   "trainer_target": "adaptive_roa.partx.trainer.GPPredictorTrainer",
+   "type": "classifier"
+  },
+  "probability": {
+   "_target_": "adaptive_roa.partx.backend.GPProbabilityBackend",
+   "attractor_radius": 0.2
+  },
+  "threshold.decision_rule": "one_sided"
+ },
+ "cartpole_pybullet/gp_reg": {
+  "calibration.decision_rule": "two_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "gp": {
+    "batch_size": 1024,
+    "eval_every": 10,
+    "kernel": "matern52",
+    "lr": 0.01,
+    "n_inducing": 128,
+    "n_iters": 300
+   },
+   "name": "gp_reg",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.gp_regressor_trainer.GPRegressorTrainer",
+   "type": "generative",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.endpoint_mc.EndpointMCProbabilityBackend",
+   "attractor_radius": 0.2,
+   "num_mc_samples": 10,
+   "refine_invalids": false,
+   "refine_max_attempts": 5,
+   "refine_num_steps": 100,
+   "refine_t_max": 0.9,
+   "refine_t_min": 0.7,
+   "trajectory_checking": false
+  },
+  "threshold.decision_rule": "two_sided"
+ },
+ "cartpole_pybullet/hmc": {
+  "calibration.decision_rule": "one_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "head": "outcome",
+   "hmc": {
+    "activation": "tanh",
+    "hidden_dims": [
+     50,
+     50
+    ],
+    "n_chains": 3,
+    "n_leapfrog": 20,
+    "n_samples": 200,
+    "n_warmup": 200,
+    "prior_sigma": 1.0,
+    "rhat_threshold": 1.1,
+    "strict_convergence": false
+   },
+   "name": "hmc",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.hmc_trainer.HMCTrainer",
+   "type": "classifier"
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.classifier_prob.ClassifierProbabilityBackend",
+   "attractor_radius": 0.2
+  },
+  "threshold.decision_rule": "one_sided"
+ },
+ "cartpole_pybullet/hmc_reg": {
+  "calibration.decision_rule": "two_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "head": "final_state",
+   "hmc": {
+    "activation": "tanh",
+    "hidden_dims": [
+     50,
+     50
+    ],
+    "n_chains": 3,
+    "n_leapfrog": 20,
+    "n_samples": 200,
+    "n_warmup": 200,
+    "prior_sigma": 1.0,
+    "rhat_threshold": 1.1,
+    "strict_convergence": false
+   },
+   "name": "hmc_reg",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.hmc_trainer.HMCTrainer",
+   "type": "generative"
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.endpoint_mc.EndpointMCProbabilityBackend",
+   "attractor_radius": 0.2,
+   "num_mc_samples": 10,
+   "refine_invalids": false,
+   "refine_max_attempts": 5,
+   "refine_num_steps": 100,
+   "refine_t_max": 0.9,
+   "refine_t_min": 0.7,
+   "trajectory_checking": false
+  },
+  "threshold.decision_rule": "two_sided"
+ },
+ "cartpole_pybullet/mlp_det": {
+  "calibration.decision_rule": "two_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "final_state": {
+    "beta_nll": 0.5,
+    "hidden_dims": [
+     256,
+     512,
+     256
+    ],
+    "lr": 0.001,
+    "max_epochs": 200,
+    "patience": 20,
+    "posterior": "deterministic",
+    "prior_sigma": 1.0,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "mlp_det",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.final_state_trainer.FinalStateTrainer",
+   "type": "generative",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.endpoint_mc.EndpointMCProbabilityBackend",
+   "attractor_radius": 0.2,
+   "num_mc_samples": 10,
+   "refine_invalids": false,
+   "refine_max_attempts": 5,
+   "refine_num_steps": 100,
+   "refine_t_max": 0.9,
+   "refine_t_min": 0.7,
+   "trajectory_checking": false
+  },
+  "threshold.decision_rule": "two_sided"
+ },
+ "quadrotor3d/bnn_ens_reg_bald": {
+  "calibration.decision_rule": "two_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "final_state": {
+    "beta_nll": 0.5,
+    "hidden_dims": [
+     512,
+     1024,
+     1024,
+     512
+    ],
+    "lr": 0.001,
+    "max_epochs": 200,
+    "n_members": 5,
+    "patience": 20,
+    "posterior": "ensemble",
+    "prior_sigma": 1.0,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "bnn_ensemble_reg",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.final_state_trainer.FinalStateTrainer",
+   "type": "generative",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.posterior_endpoint_mc.PosteriorEndpointMCProbabilityBackend",
+   "attractor_radius": 0.3,
+   "chunk_size": 4096,
+   "n_posterior_samples": 64,
+   "num_mc_samples": 20,
+   "refine_invalids": false,
+   "refine_max_attempts": 5,
+   "refine_num_steps": 100,
+   "refine_t_max": 0.9,
+   "refine_t_min": 0.7,
+   "trajectory_checking": false
+  },
+  "threshold.decision_rule": "two_sided"
+ },
+ "quadrotor3d/bnn_ensemble": {
+  "calibration.decision_rule": "one_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "bnn": {
+    "hidden_dims": [
+     256,
+     512,
+     256
+    ],
+    "lr": 0.001,
+    "max_epochs": 200,
+    "n_marginal_samples": 64,
+    "n_members": 5,
+    "patience": 20,
+    "posterior": "ensemble",
+    "prior_sigma": 1.0,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "bnn_ensemble",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.bayesian_mlp_trainer.BayesianMLPTrainer",
+   "type": "classifier",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.classifier_prob.ClassifierProbabilityBackend",
+   "attractor_radius": 0.3
+  },
+  "threshold.decision_rule": "one_sided"
+ },
+ "quadrotor3d/bnn_ensemble_reg": {
+  "calibration.decision_rule": "two_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "final_state": {
+    "beta_nll": 0.5,
+    "hidden_dims": [
+     256,
+     512,
+     256
+    ],
+    "lr": 0.001,
+    "max_epochs": 200,
+    "n_members": 5,
+    "patience": 20,
+    "posterior": "ensemble",
+    "prior_sigma": 1.0,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "bnn_ensemble_reg",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.final_state_trainer.FinalStateTrainer",
+   "type": "generative",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.endpoint_mc.EndpointMCProbabilityBackend",
+   "attractor_radius": 0.3,
+   "num_mc_samples": 10,
+   "refine_invalids": false,
+   "refine_max_attempts": 5,
+   "refine_num_steps": 100,
+   "refine_t_max": 0.9,
+   "refine_t_min": 0.7,
+   "trajectory_checking": false
+  },
+  "threshold.decision_rule": "two_sided"
+ },
+ "quadrotor3d/bnn_laplace": {
+  "calibration.decision_rule": "one_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "bnn": {
+    "hidden_dims": [
+     256,
+     512,
+     256
+    ],
+    "lr": 0.001,
+    "max_epochs": 200,
+    "n_marginal_samples": 64,
+    "patience": 20,
+    "posterior": "laplace",
+    "prior_sigma": 1.0,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "bnn_laplace",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.bayesian_mlp_trainer.BayesianMLPTrainer",
+   "type": "classifier",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.classifier_prob.ClassifierProbabilityBackend",
+   "attractor_radius": 0.3
+  },
+  "threshold.decision_rule": "one_sided"
+ },
+ "quadrotor3d/bnn_laplace_reg": {
+  "calibration.decision_rule": "two_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "final_state": {
+    "beta_nll": 0.5,
+    "hidden_dims": [
+     256,
+     512,
+     256
+    ],
+    "lr": 0.001,
+    "max_epochs": 200,
+    "patience": 20,
+    "posterior": "laplace",
+    "prior_sigma": 1.0,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "bnn_laplace_reg",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.final_state_trainer.FinalStateTrainer",
+   "type": "generative",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.endpoint_mc.EndpointMCProbabilityBackend",
+   "attractor_radius": 0.3,
+   "num_mc_samples": 10,
+   "refine_invalids": false,
+   "refine_max_attempts": 5,
+   "refine_num_steps": 100,
+   "refine_t_max": 0.9,
+   "refine_t_min": 0.7,
+   "trajectory_checking": false
+  },
+  "threshold.decision_rule": "two_sided"
+ },
+ "quadrotor3d/bnn_mfvi": {
+  "calibration.decision_rule": "one_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "bnn": {
+    "hidden_dims": [
+     256,
+     512,
+     256
+    ],
+    "kl_weight": 1.0,
+    "lr": 0.001,
+    "max_epochs": 200,
+    "n_marginal_samples": 64,
+    "patience": 20,
+    "posterior": "mfvi",
+    "prior_sigma": 1.0,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "bnn_mfvi",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.bayesian_mlp_trainer.BayesianMLPTrainer",
+   "type": "classifier",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.classifier_prob.ClassifierProbabilityBackend",
+   "attractor_radius": 0.3
+  },
+  "threshold.decision_rule": "one_sided"
+ },
+ "quadrotor3d/bnn_mfvi_a1": {
+  "calibration.decision_rule": "one_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "bnn": {
+    "alpha": 1.0,
+    "alpha_n_samples": 50,
+    "hidden_dims": [
+     512,
+     1024,
+     1024,
+     512
+    ],
+    "kl_weight": 1.0,
+    "lr": 0.001,
+    "max_epochs": 200,
+    "n_marginal_samples": 64,
+    "patience": 20,
+    "pos_weight": 1.0,
+    "posterior": "mfvi",
+    "prior_sigma": 1.0,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "bnn_mfvi_a1",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.bayesian_mlp_trainer.BayesianMLPTrainer",
+   "type": "classifier",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.ensemble_prob.SampledPosteriorClassifierProbabilityBackend",
+   "attractor_radius": 0.3,
+   "n_posterior_samples": 64
+  },
+  "threshold.decision_rule": "one_sided"
+ },
+ "quadrotor3d/bnn_mfvi_reg": {
+  "calibration.decision_rule": "two_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "final_state": {
+    "beta_nll": 0.5,
+    "hidden_dims": [
+     256,
+     512,
+     256
+    ],
+    "kl_weight": 1.0,
+    "lr": 0.001,
+    "max_epochs": 200,
+    "patience": 20,
+    "posterior": "mfvi",
+    "prior_sigma": 1.0,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "bnn_mfvi_reg",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.final_state_trainer.FinalStateTrainer",
+   "type": "generative",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.endpoint_mc.EndpointMCProbabilityBackend",
+   "attractor_radius": 0.3,
+   "num_mc_samples": 10,
+   "refine_invalids": false,
+   "refine_max_attempts": 5,
+   "refine_num_steps": 100,
+   "refine_t_max": 0.9,
+   "refine_t_min": 0.7,
+   "trajectory_checking": false
+  },
+  "threshold.decision_rule": "two_sided"
+ },
+ "quadrotor3d/bnn_mfvi_reg_bald": {
+  "calibration.decision_rule": "two_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "final_state": {
+    "beta_nll": 0.5,
+    "hidden_dims": [
+     512,
+     1024,
+     1024,
+     512
+    ],
+    "kl_weight": 1.0,
+    "lr": 0.001,
+    "max_epochs": 200,
+    "patience": 20,
+    "posterior": "mfvi",
+    "prior_sigma": 1.0,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "bnn_mfvi_reg",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.final_state_trainer.FinalStateTrainer",
+   "type": "generative",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.posterior_endpoint_mc.PosteriorEndpointMCProbabilityBackend",
+   "attractor_radius": 0.3,
+   "chunk_size": 4096,
+   "n_posterior_samples": 64,
+   "num_mc_samples": 20,
+   "refine_invalids": false,
+   "refine_max_attempts": 5,
+   "refine_num_steps": 100,
+   "refine_t_max": 0.9,
+   "refine_t_min": 0.7,
+   "trajectory_checking": false
+  },
+  "threshold.decision_rule": "two_sided"
+ },
+ "quadrotor3d/classifier": {
+  "calibration.decision_rule": "one_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "classifier": {
+    "dropout": 0.0,
+    "hidden_dims": [
+     256,
+     512,
+     256
+    ],
+    "lr": 0.001,
+    "max_epochs": 200,
+    "patience": 20,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "mlp",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.classifier_trainer.ClassifierTrainer",
+   "type": "classifier",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.classifier_prob.ClassifierProbabilityBackend",
+   "attractor_radius": 0.3
+  },
+  "threshold.decision_rule": "one_sided"
+ },
+ "quadrotor3d/clf_ensemble": {
+  "calibration.decision_rule": "one_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "bnn": {
+    "hidden_dims": [
+     256,
+     512,
+     256
+    ],
+    "lr": 0.001,
+    "max_epochs": 200,
+    "n_marginal_samples": 64,
+    "n_members": 5,
+    "patience": 20,
+    "posterior": "ensemble",
+    "prior_sigma": 1.0,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "clf_ensemble",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.bayesian_mlp_trainer.BayesianMLPTrainer",
+   "type": "classifier",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.ensemble_prob.EnsembleClassifierProbabilityBackend",
+   "attractor_radius": 0.3
+  },
+  "threshold.decision_rule": "one_sided"
+ },
+ "quadrotor3d/fm_ensemble": {
+  "calibration.decision_rule": "two_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "ensemble": {
+    "n_members": 5
+   },
+   "flow_matching": {
+    "clamp_noise": false,
+    "latent_dim": 0,
+    "mae_val_frequency": 10,
+    "noise_scale": 1.0,
+    "num_integration_steps": 100,
+    "quat_loss_weight": 1.0,
+    "use_log_loss_weights": false,
+    "use_loss_weights": false,
+    "use_manifold": false,
+    "zero_latent": true
+   },
+   "lightning_trainer": {
+    "accelerator": "gpu",
+    "callbacks": [
+     {
+      "_target_": "lightning.pytorch.callbacks.ModelCheckpoint",
+      "auto_insert_metric_name": false,
+      "filename": "best-{epoch:02d}-{val_loss:.4f}",
+      "mode": "min",
+      "monitor": "val_loss",
+      "save_last": true,
+      "save_top_k": 1
+     },
+     {
+      "_target_": "lightning.pytorch.callbacks.EarlyStopping",
+      "min_delta": 0.0001,
+      "mode": "min",
+      "monitor": "val_loss",
+      "patience": 30,
+      "verbose": true
+     }
+    ],
+    "check_val_every_n_epoch": 1,
+    "devices": 1,
+    "enable_model_summary": true,
+    "enable_progress_bar": true,
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10,
+    "max_epochs": 200,
+    "precision": 32
+   },
+   "name": "fm_ensemble",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.ensemble_flow_matching_trainer.EnsembleFlowMatchingTrainer",
+   "type": "generative",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.ensemble_prob.EnsembleEndpointMCProbabilityBackend",
+   "attractor_radius": 0.3,
+   "num_mc_samples": 20
+  },
+  "threshold.decision_rule": "two_sided"
+ },
+ "quadrotor3d/fm_outcome": {
+  "calibration.decision_rule": "one_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "fm_outcome",
+   "outcome_fm": {
+    "activation": "relu",
+    "dropout": 0.0,
+    "forward_readout": "exact",
+    "hidden_dims": [
+     256,
+     512,
+     256
+    ],
+    "lr": 0.001,
+    "max_epochs": 200,
+    "num_ode_steps": 50,
+    "num_time_freqs": 4,
+    "patience": 20,
+    "weight_decay": 1e-05
+   },
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.outcome_fm_trainer.OutcomeFMTrainer",
+   "type": "classifier",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.outcome_fm.OutcomeFMProbabilityBackend",
+   "bisect_iters": 20,
+   "chunk_size": 4096,
+   "grid_size": 33,
+   "num_mc_samples": 100,
+   "num_ode_steps": 50,
+   "readout": "exact"
+  },
+  "threshold.decision_rule": "one_sided"
+ },
+ "quadrotor3d/fm_outcome_bald": {
+  "calibration.decision_rule": "one_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "ensemble": {
+    "n_members": 5
+   },
+   "lightning_trainer": {
+    "enable_progress_bar": false,
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "fm_outcome_ens",
+   "outcome_fm": {
+    "activation": "relu",
+    "dropout": 0.0,
+    "forward_readout": "exact",
+    "hidden_dims": [
+     512,
+     1024,
+     1024,
+     512
+    ],
+    "lr": 0.001,
+    "max_epochs": 200,
+    "num_ode_steps": 50,
+    "num_time_freqs": 4,
+    "patience": 20,
+    "weight_decay": 1e-05
+   },
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.ensemble_outcome_fm_trainer.EnsembleOutcomeFMTrainer",
+   "type": "classifier",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.outcome_fm_ensemble.EnsembleOutcomeFMProbabilityBackend",
+   "attractor_radius": 0.3,
+   "bisect_iters": 20,
+   "chunk_size": 4096,
+   "grid_size": 33,
+   "num_mc_samples": 100,
+   "num_ode_steps": 50,
+   "readout": "exact"
+  },
+  "threshold.decision_rule": "one_sided"
+ },
+ "quadrotor3d/generative": {
+  "calibration.decision_rule": "two_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "flow_matching": {
+    "clamp_noise": false,
+    "latent_dim": 0,
+    "mae_val_frequency": 10,
+    "noise_scale": 1.0,
+    "num_integration_steps": 100,
+    "quat_loss_weight": 1.0,
+    "use_log_loss_weights": false,
+    "use_loss_weights": false,
+    "use_manifold": false,
+    "zero_latent": true
+   },
+   "lightning_trainer": {
+    "accelerator": "gpu",
+    "callbacks": [
+     {
+      "_target_": "lightning.pytorch.callbacks.ModelCheckpoint",
+      "auto_insert_metric_name": false,
+      "filename": "best-{epoch:02d}-{val_loss:.4f}",
+      "mode": "min",
+      "monitor": "val_loss",
+      "save_last": true,
+      "save_top_k": 1
+     },
+     {
+      "_target_": "lightning.pytorch.callbacks.EarlyStopping",
+      "mode": "min",
+      "monitor": "val_loss",
+      "patience": 100,
+      "verbose": true
+     }
+    ],
+    "check_val_every_n_epoch": 1,
+    "devices": 1,
+    "enable_model_summary": true,
+    "enable_progress_bar": true,
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10,
+    "max_epochs": 1000,
+    "precision": 32
+   },
+   "name": "fm",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.flow_matching_trainer.FlowMatchingTrainer",
+   "type": "generative",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.endpoint_mc.EndpointMCProbabilityBackend",
+   "attractor_radius": 0.3,
+   "num_mc_samples": 10,
+   "refine_invalids": false,
+   "refine_max_attempts": 5,
+   "refine_num_steps": 100,
+   "refine_t_max": 0.9,
+   "refine_t_min": 0.7,
+   "trajectory_checking": false
+  },
+  "threshold.decision_rule": "two_sided"
+ },
+ "quadrotor3d/gp": {
+  "calibration.decision_rule": "one_sided",
+  "predictor": {
+   "gp": {
+    "kernel": "matern52",
+    "lr": 0.1,
+    "n_inducing": 128,
+    "n_iters": 300
+   },
+   "name": "gp",
+   "trainer_target": "adaptive_roa.partx.trainer.GPPredictorTrainer",
+   "type": "classifier"
+  },
+  "probability": {
+   "_target_": "adaptive_roa.partx.backend.GPProbabilityBackend",
+   "attractor_radius": 0.3
+  },
+  "threshold.decision_rule": "one_sided"
+ },
+ "quadrotor3d/gp_optdelta": {
+  "calibration.decision_rule": "one_sided",
+  "predictor": {
+   "gp": {
+    "kernel": "matern52",
+    "lr": 0.1,
+    "n_inducing": 128,
+    "n_iters": 300
+   },
+   "name": "gp_optdelta",
+   "trainer_target": "adaptive_roa.partx.trainer.GPPredictorTrainer",
+   "type": "classifier"
+  },
+  "probability": {
+   "_target_": "adaptive_roa.partx.backend.GPProbabilityBackend",
+   "attractor_radius": 0.3
+  },
+  "threshold.decision_rule": "one_sided"
+ },
+ "quadrotor3d/gp_reg": {
+  "calibration.decision_rule": "two_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "gp": {
+    "batch_size": 1024,
+    "eval_every": 10,
+    "kernel": "matern52",
+    "lr": 0.01,
+    "n_inducing": 128,
+    "n_iters": 300
+   },
+   "name": "gp_reg",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.gp_regressor_trainer.GPRegressorTrainer",
+   "type": "generative",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.endpoint_mc.EndpointMCProbabilityBackend",
+   "attractor_radius": 0.3,
+   "num_mc_samples": 10,
+   "refine_invalids": false,
+   "refine_max_attempts": 5,
+   "refine_num_steps": 100,
+   "refine_t_max": 0.9,
+   "refine_t_min": 0.7,
+   "trajectory_checking": false
+  },
+  "threshold.decision_rule": "two_sided"
+ },
+ "quadrotor3d/hmc": {
+  "calibration.decision_rule": "one_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "head": "outcome",
+   "hmc": {
+    "activation": "tanh",
+    "hidden_dims": [
+     50,
+     50
+    ],
+    "n_chains": 3,
+    "n_leapfrog": 20,
+    "n_samples": 200,
+    "n_warmup": 200,
+    "prior_sigma": 1.0,
+    "rhat_threshold": 1.1,
+    "strict_convergence": false
+   },
+   "name": "hmc",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.hmc_trainer.HMCTrainer",
+   "type": "classifier"
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.classifier_prob.ClassifierProbabilityBackend",
+   "attractor_radius": 0.3
+  },
+  "threshold.decision_rule": "one_sided"
+ },
+ "quadrotor3d/hmc_reg": {
+  "calibration.decision_rule": "two_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "head": "final_state",
+   "hmc": {
+    "activation": "tanh",
+    "hidden_dims": [
+     50,
+     50
+    ],
+    "n_chains": 3,
+    "n_leapfrog": 20,
+    "n_samples": 200,
+    "n_warmup": 200,
+    "prior_sigma": 1.0,
+    "rhat_threshold": 1.1,
+    "strict_convergence": false
+   },
+   "name": "hmc_reg",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.hmc_trainer.HMCTrainer",
+   "type": "generative"
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.endpoint_mc.EndpointMCProbabilityBackend",
+   "attractor_radius": 0.3,
+   "num_mc_samples": 10,
+   "refine_invalids": false,
+   "refine_max_attempts": 5,
+   "refine_num_steps": 100,
+   "refine_t_max": 0.9,
+   "refine_t_min": 0.7,
+   "trajectory_checking": false
+  },
+  "threshold.decision_rule": "two_sided"
+ },
+ "quadrotor3d/mlp_det": {
+  "calibration.decision_rule": "two_sided",
+  "predictor": {
+   "batch_size": 1024,
+   "final_state": {
+    "beta_nll": 0.5,
+    "hidden_dims": [
+     256,
+     512,
+     256
+    ],
+    "lr": 0.001,
+    "max_epochs": 200,
+    "patience": 20,
+    "posterior": "deterministic",
+    "prior_sigma": 1.0,
+    "weight_decay": 1e-05
+   },
+   "lightning_trainer": {
+    "gradient_clip_val": 1.0,
+    "log_every_n_steps": 10
+   },
+   "name": "mlp_det",
+   "trainer_target": "adaptive_roa.adaptive_v2.trainers.final_state_trainer.FinalStateTrainer",
+   "type": "generative",
+   "val_batch_size": 2048
+  },
+  "probability": {
+   "_target_": "adaptive_roa.adaptive_v2.probability.endpoint_mc.EndpointMCProbabilityBackend",
+   "attractor_radius": 0.3,
+   "num_mc_samples": 10,
+   "refine_invalids": false,
+   "refine_max_attempts": 5,
+   "refine_num_steps": 100,
+   "refine_t_max": 0.9,
+   "refine_t_min": 0.7,
+   "trajectory_checking": false
+  },
+  "threshold.decision_rule": "two_sided"
+ }
+}

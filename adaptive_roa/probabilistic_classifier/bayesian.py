@@ -120,3 +120,18 @@ class EnsembleProbabilisticClassifier(BNNProbabilisticClassifier):
 class LaplaceProbabilisticClassifier(BNNProbabilisticClassifier):
     predictor_name = "bnn_laplace"
     posterior_kind = "laplace"
+
+
+# Deterministic-paper arms: the MLP classifier and its Laplace twin share one
+# trainer and one network, so they differ only in the posterior.
+@register_probabilistic_classifier
+class DetMLPClfProbabilisticClassifier(BNNProbabilisticClassifier):
+    predictor_name = "det_mlp_clf"
+    posterior_kind = "deterministic"
+
+
+@register_probabilistic_classifier
+class DetBNNClfProbabilisticClassifier(BNNProbabilisticClassifier):
+    predictor_name = "det_bnn_clf"
+    posterior_kind = "laplace"
+

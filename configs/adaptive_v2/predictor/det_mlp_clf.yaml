@@ -1,0 +1,39 @@
+# @package _global_
+# Deterministic-paper MLP classifier (tracker C13, rulings D10/D14).
+#
+# The point-estimate cell of the 2 x 2 {outcome, endpoint} x {MAP, Laplace}.
+# It trains through BayesianMLPTrainer with posterior=deterministic, the same
+# trainer, network, loss, and checkpoint rule as det_bnn_clf, so the two arms
+# differ only in the posterior. The older `classifier` arm differs from the BNN
+# arms in width and pos_weight as well, which confounds that comparison.
+#
+#   hidden_dims   per-system, from the authority every other arm reads.
+#   pos_weight    1.0. A sigmoid trained under class weight c estimates
+#                 cp/(cp+1-p), not p, and the stored probabilities are the
+#                 product this campaign analyses.
+#   n_marginal_samples  1: a deterministic posterior returns the same logit on
+#                 every draw, so more draws repeat one forward pass.
+defaults:
+  - /probability: classifier_prob
+threshold:
+  decision_rule: one_sided
+calibration:
+  decision_rule: one_sided
+predictor:
+  type: classifier
+  name: det_mlp_clf
+  trainer_target: adaptive_roa.adaptive_v2.trainers.bayesian_mlp_trainer.BayesianMLPTrainer
+  batch_size: 1024
+  val_batch_size: 2048
+  bnn:
+    posterior: deterministic
+    pos_weight: 1.0
+    hidden_dims: ${model_dims.mlp_hidden_dims}
+    lr: 1.0e-3
+    weight_decay: 1.0e-5
+    max_epochs: 200
+    patience: 20
+    n_marginal_samples: 1
+  lightning_trainer:
+    gradient_clip_val: 1.0
+    log_every_n_steps: 10

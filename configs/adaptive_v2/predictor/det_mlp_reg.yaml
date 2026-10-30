@@ -1,0 +1,36 @@
+# @package _global_
+# Deterministic-paper final-state MLP (tracker C13, rulings D10/D14).
+#
+# The point-estimate endpoint cell of the 2 x 2. Same trainer, network and head
+# as det_bnn_reg, which adds a Laplace posterior; a test asserts the configs
+# differ only in `posterior` and `prior_precision`.
+#
+#   head          mixture of 5 manifold-aware components (MixtureFinalStateHead).
+#                 One Gaussian per draw sits between the scattered failure
+#                 endpoints; GRAPE's single-Gaussian final-state BNN scored near
+#                 chance on deterministic cells. With the mixture this arm's
+#                 p(success) is graded, so entropy acquisition is meaningful.
+#   beta_nll 0.0  required by the mixture head (beta-NLL has no mixture form).
+#   adaptive use  allowed. The fixed-dataset refusal applies to `mlp_det` only.
+defaults:
+  - /probability: endpoint_mc
+predictor:
+  type: generative
+  name: det_mlp_reg
+  trainer_target: adaptive_roa.adaptive_v2.trainers.final_state_trainer.FinalStateTrainer
+  batch_size: 1024
+  val_batch_size: 2048
+  final_state:
+    posterior: deterministic
+    hidden_dims: ${model_dims.mlp_hidden_dims}
+    head:
+      kind: mixture
+      n_components: 5
+    beta_nll: 0.0
+    lr: 1.0e-3
+    weight_decay: 1.0e-5
+    max_epochs: 200
+    patience: 20
+  lightning_trainer:
+    gradient_clip_val: 1.0
+    log_every_n_steps: 10

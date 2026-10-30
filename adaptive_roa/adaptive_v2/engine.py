@@ -370,6 +370,7 @@ class AdaptiveEngine:
                 if fill_indices:
                     self.pool.mark_indices_as_used(fill_indices)
                     self.pool.add_to_training_balanced(fill_indices, source="uniform_fill")
+                acquisition.diagnostics["fill_indices"] = list(fill_indices)   # start mode keeps no pick log
                 print(f"Shortfall fill: {len(acquisition.d2_indices)} acquired of {n_d2_target}, "
                       f"{len(fill_indices)} uniform picks added")
 

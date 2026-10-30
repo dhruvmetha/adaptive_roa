@@ -11,6 +11,9 @@ output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio
 
 decision_rule: two_sided
 attractor_radius: 0.3
+# Collector horizon in control steps (dataset_description.json), read by
+# data_source.timeout_intermediates=drop through experiment/det_rerun.yaml.
+horizon_steps: 1200
 
 dataset_name: quadrotor2D_rl
 dataset_root: ${data_dir}/${noise_regime}/${dataset_name}

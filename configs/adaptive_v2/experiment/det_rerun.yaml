@@ -1,0 +1,37 @@
+# @package _global_
+# Deterministic-paper rerun protocol. Rulings live in
+# papers/det_paper/EXPERIMENT_TRACKER.md; IDs below refer to it.
+#
+# Usage: scripts/run_adaptive.py system=<det system> acquisition=<direct|ranked|entropy> \
+#            +experiment=det_rerun [acquisition.d2_ratio=0 for uniform arms]
+#
+# +experiment is composed last, so these values win over the predictor and
+# acquisition groups; CLI overrides still win over this file.
+
+# D06: one acquisition K for every signal. direct and ranked draw through the
+# probability backend's estimator; entropy draws its own samples. Ablation A-K1
+# moves this to 50 and 100.
+acquisition_mc_samples: 20
+
+probability:
+  num_mc_samples: ${acquisition_mc_samples}
+
+acquisition:
+  num_mc_samples: ${acquisition_mc_samples}
+  d2_ratio: 0.5            # D05; ablation A-D2 covers 0.75 and 1.0
+
+eval:
+  num_mc_samples_eval: 100
+
+# Eval-time q_hat is calibrated on the cal set by the calibration backend. Its
+# scores must come from the same K as the test-set scores they are compared
+# with; the default (10 against 100) breaks that.
+calibration:
+  num_mc_samples: ${eval.num_mc_samples_eval}
+
+adaptive_v2:
+  filter_confident_pairs: false   # D16: same training data for every head
+
+data_source:
+  timeout_intermediates: drop     # C15: a timeout contributes only (x_0, x_T)
+  horizon_steps: ${horizon_steps}

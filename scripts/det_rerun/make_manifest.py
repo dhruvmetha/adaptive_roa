@@ -62,9 +62,10 @@ def cells(seed: int):
                 yield {"name": name, "system": sk, "arm": arm, "mode": mode, "seed": seed,
                        "mem": ARM_MEM.get((arm, sk), mem), "priority": PRIORITY[sk], "overrides": " ".join(ov),
                        "script": "scripts/run_adaptive.py"}
-        # Part-X (P01, D09/D22c/C21/C23): faithful runner on the suffix state pool, CPU only.
+        # Part-X (P01, D09/C21): faithful runner on trajectory starts (D26 replaced the
+        # D22c state pool), CPU only.
         name = f"dr_{sk}_partx_builtin_s{seed}"
-        ov = [f"system={system}", "+experiment=det_rerun", f"seed={seed}", "partx_faithful.state_pool=true"]
+        ov = [f"system={system}", "+experiment=det_rerun", f"seed={seed}"]
         if step is not None:
             ov.append(f"samples_per_epoch={step}")
         ov.append(f"output_dir={EXP}/{sk}/{name}")
@@ -81,7 +82,7 @@ def ablation_cells(seed: int, signal: str):
     acq = MODES[signal][0]
     variants = [("d2_0.75", ["acquisition.d2_ratio=0.75"]), ("d2_1.0", ["acquisition.d2_ratio=1.0"]),
                 ("K50", ["acquisition_mc_samples=50"]), ("K100", ["acquisition_mc_samples=100"]),
-                ("startpool", ["candidate_mode=start"])]
+                ("suffixpool", ["candidate_mode=suffix"])]     # A-P: the D22 pool, ruled out by D26
     if signal in ("direct", "ranked"):   # entropy never reads lambda*/delta*, so A-W2 is moot
         variants += [(f"w{w}", [f"threshold.w={w}"]) for w in (0.5, 0.75, 0.95, 0.99)]
     for sk in ABLATION_SYSTEMS:

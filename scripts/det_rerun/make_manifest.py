@@ -18,12 +18,14 @@ EXP = os.environ.get("DET_RERUN_EXP", "/common/users/shared/pracsys/adaptive_roa
 
 # system key -> (hydra system, samples_per_epoch override or None, endpoint epochs, mem)
 SYSTEMS = {
-    "pen":    ("pendulum", None, [0, 5, 10], "24G"),
-    "cp":     ("cartpole_pybullet", None, [0, 5, 10], "24G"),
-    "q2d":    ("quadrotor2d", None, [0, 5, 10], "40G"),
-    "q3d30":  ("quadrotor3d", 2000, [0, 5, 10], "64G"),
-    "q3d60":  ("quadrotor3d", 5000, [0, 6, 10], "64G"),
-    "q3d110": ("quadrotor3d", 10000, [0, 5, 10], "80G"),
+    # mem is a first guess, not measured at full scale: read MaxRSS from the
+    # first jobs and adjust.
+    "pen":    ("pendulum", None, [0, 5, 10], "16G"),
+    "cp":     ("cartpole_pybullet", None, [0, 5, 10], "16G"),
+    "q2d":    ("quadrotor2d", None, [0, 5, 10], "32G"),
+    "q3d30":  ("quadrotor3d", 2000, [0, 5, 10], "48G"),
+    "q3d60":  ("quadrotor3d", 5000, [0, 6, 10], "48G"),
+    "q3d110": ("quadrotor3d", 10000, [0, 5, 10], "64G"),
 }
 # The shared uniform quad3d run (D24) also reports the epochs that land on the
 # other schedules' budgets: 20k, 30k, 40k and 60k.

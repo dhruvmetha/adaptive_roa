@@ -3,8 +3,10 @@
 
 A cell is DONE only when its final epoch's artifacts_v2.json exists, reports the
 final budget, and the prediction-store check passes. A cell short of its epochs
-whose log has not been written for STALE_MIN minutes shows as "stalled?": check
-its process before trusting "running". Usage: status.py [--check]
+whose logs (stdout and, for iLab, the sibling .err) have been silent for longer
+than 1.5x its last epoch, and at least STALE_MIN minutes, shows as "stalled?":
+check its process before trusting "running". Some trainers print nothing for a
+whole epoch, and epochs lengthen as the train set grows. Usage: status.py [--check]
 """
 from __future__ import annotations
 
@@ -42,9 +44,13 @@ def main():
             detail = f"epochs {len(arts)}/{n_ep}, budget {last.get('train_trajectories')}"
             state = "running" if len(arts) < n_ep else "finished"
             log = Path(launched[r["name"]][5]) if r["name"] in launched else None
-            if state == "running" and log and log.exists() and time.time() - log.stat().st_mtime > 60 * STALE_MIN:
-                state = "stalled?"
-                detail += f" | log silent {int((time.time() - log.stat().st_mtime) / 60)} min"
+            logs = [q for q in (log, log and log.with_suffix(".err")) if q and q.exists()]
+            if state == "running" and logs:
+                silent = time.time() - max(q.stat().st_mtime for q in logs)
+                last_epoch = (arts[-1].stat().st_mtime - arts[-2].stat().st_mtime) if len(arts) > 1 else 0.0
+                if silent > max(60 * STALE_MIN, 1.5 * last_epoch):
+                    state = "stalled?"
+                    detail += f" | logs silent {int(silent / 60)} min, last epoch {int(last_epoch / 60)} min"
             if state == "finished" and a.check:
                 from adaptive_roa.adaptive_v2.eval.store_check import check_run
                 problems = check_run(out)

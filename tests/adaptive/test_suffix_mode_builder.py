@@ -112,6 +112,18 @@ def test_pool_counts_every_pick_as_a_rollout(tmp_path):
     assert [i // MAX_ROWS for i in idx] == [8, 9, 10]
 
 
+def test_uniform_fill_skips_trajectories_picked_this_round(tmp_path):
+    # D25: the top-up after a short direct round must not land on a trajectory
+    # the same round already picked mid-flight.
+    root, _, _ = _pool_files(tmp_path)
+    pool = TrajectoryPool(OmegaConf.create(_ds_cfg(root)), str(tmp_path / "out"), val_ratio=0.2, test_ratio=0,
+                          candidate_mode="suffix", seed=3)
+    pool.initialize(8)
+    _, idx = pool.sample_uniform(3, exclude={9 * MAX_ROWS + 2})
+    assert [i // MAX_ROWS for i in idx] == [8, 10, 11]
+    assert all(i % MAX_ROWS == 0 for i in idx)
+
+
 def test_state_round_trip_rebuilds_identical_datasets(tmp_path):
     root, _, _ = _pool_files(tmp_path)
     a = _builder(tmp_path, root)

@@ -22,6 +22,9 @@ probability:
 acquisition:
   num_mc_samples: ${acquisition_mc_samples}
   d2_ratio: 0.5            # D05; ablation A-D2 covers 0.75 and 1.0
+  # D25: top up a round that direct leaves short with uniform starts, logged as
+  # "uniform_fill" in the pick log and n_d2_fill in the epoch results.
+  fill_shortfall: false
 
 eval:
   num_mc_samples_eval: 100

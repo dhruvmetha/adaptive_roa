@@ -39,7 +39,7 @@ CONFIG_DIR = str(Path(__file__).resolve().parents[2] / "configs/adaptive_v2")
 
 def _register_resolvers() -> None:
     """Register Hydra/OmegaConf resolvers used by the adaptive_v2 configs."""
-    from adaptive_roa.utils.env_config import get_net_id, get_exp_dir, get_shared_data_base
+    from adaptive_roa.utils.env_config import get_data_dir, get_net_id, get_exp_dir, get_shared_data_base
 
     for name, fn in [
         ("net_id", get_net_id),
@@ -50,9 +50,11 @@ def _register_resolvers() -> None:
             OmegaConf.register_new_resolver(name, (lambda f: (lambda d="": f() or d))(fn))
 
     if not OmegaConf.has_resolver("data_dir"):
+        # Registered once per process and seen by later test modules, so fall back to
+        # the .env value when DATA_DIR is not set.
         OmegaConf.register_new_resolver(
             "data_dir",
-            lambda d="": os.environ.get("DATA_DIR", d) or d,
+            lambda d="": os.environ.get("DATA_DIR") or get_data_dir() or d,
         )
 
 

@@ -40,3 +40,16 @@ def test_a_short_round_is_cut_at_the_stored_budget(tmp_path):
     r0, r1 = acquisition_profile(tmp_path)
     assert (r0["n_uniform"], r0["n_acquired"], r0["budget_after"]) == (1, 0, 3)
     assert (r1["n_uniform"], r1["n_acquired"], r1["budget_after"]) == (1, 1, 5)
+
+
+def test_start_mode_reads_the_rounds_from_artifacts(tmp_path):
+    _fake_run(tmp_path, [])
+    (tmp_path / "dataset_builder_state.json").write_text(json.dumps({"train_indices": [0, 1, 2, 3, 5]}))
+    for e, (budget, d1, d2) in enumerate(((2, [2], [5]), (4, [3], [4]))):
+        (tmp_path / f"epoch_{e:03d}").mkdir()
+        (tmp_path / f"epoch_{e:03d}" / "artifacts_v2.json").write_text(json.dumps(
+            {"train_trajectories": budget, "acquisition": {"d1_indices": d1, "d2_indices": d2}}))
+    r0, r1 = acquisition_profile(tmp_path)
+    assert (r0["n_uniform"], r0["n_acquired"], r0["budget_after"]) == (1, 1, 4)
+    assert r0["success_share_acquired"] == 1.0 and r0["acquired_at_start"] == 1.0   # trajectory 5 succeeds
+    assert (r1["n_acquired"], r1["success_share_acquired"], r1["budget_after"]) == (1, 0.0, 6)

@@ -7,7 +7,9 @@ trajectory already in training (each still cost a rollout, D22a).
 
 Rounds are cut at the budgets the epochs' artifacts record, since a direct round
 can fall short of samples_per_epoch (D25); without artifacts, every round is
-samples_per_epoch picks.
+samples_per_epoch picks. Suffix mode reads its pick log; start mode keeps no
+log, so its picks come from each epoch's d1/d2 indices in artifacts_v2.json
+(trajectory starts at their pool positions, after the initial 0..n0-1).
 """
 from __future__ import annotations
 
@@ -29,20 +31,27 @@ def _rounds(run: Path, n0: int, step: int, n_log: int) -> list[tuple[int, int]]:
     return list(zip(cuts[:-1], cuts[1:]))
 
 
+def _start_mode_log(run: Path, n0: int) -> list[tuple[int, int, str]]:
+    log = [(i, 0, "initial") for i in range(n0)]
+    for a in sorted(run.glob("epoch_*/artifacts_v2.json")):
+        acq = json.loads(a.read_text()).get("acquisition") or {}
+        log += [(int(t), 0, "uniform") for t in acq.get("d1_indices", [])]
+        log += [(int(t), 0, "acquisition") for t in acq.get("d2_indices", [])]
+    return log
+
+
 def acquisition_profile(run_dir) -> list[dict]:
     run = Path(run_dir)
     cfg = OmegaConf.load(run / "resolved_config.yaml")
     state = json.loads((run / "dataset_builder_state.json").read_text())
-    if state.get("mode") != "suffix":
-        raise ValueError(f"{run}: pick log needs candidate_mode=suffix")
+    n0, step = int(cfg.initial_train_size), int(cfg.samples_per_epoch)
+    log = state["pick_log"] if state.get("mode") == "suffix" else _start_mode_log(run, n0)
     ds = cfg.data_source
     with np.load(ds.trajectories_dir) as z:
         offsets = z["offsets"].astype(np.int64)
     ids = np.loadtxt(ds.shuffled_indices_file, dtype=np.int64)
     labels = np.loadtxt(ds.shuffled_labels_file, dtype=np.int64)
     lengths = np.diff(offsets)[ids]
-    n0, step = int(cfg.initial_train_size), int(cfg.samples_per_epoch)
-    log = state["pick_log"]
     seen = {t for t, _r, src in log[:n0]}
     rows = []
     for e, (start, end) in enumerate(_rounds(run, n0, step, len(log))):

@@ -55,7 +55,17 @@ def cells(seed: int):
                 ov.append("'prediction_store.endpoint_epochs=[" + ",".join(map(str, ep)) + "]'")
                 ov.append(f"output_dir={EXP}/{sk}/{name}")
                 yield {"name": name, "system": sk, "arm": arm, "mode": mode, "seed": seed,
-                       "mem": mem, "priority": PRIORITY[sk], "overrides": " ".join(ov)}
+                       "mem": mem, "priority": PRIORITY[sk], "overrides": " ".join(ov),
+                       "script": "scripts/run_adaptive.py"}
+        # Part-X (P01, D09/D22c/C21/C23): faithful runner on the suffix state pool, CPU only.
+        name = f"dr_{sk}_partx_builtin_s{seed}"
+        ov = [f"system={system}", "+experiment=det_rerun", f"seed={seed}", "partx_faithful.state_pool=true"]
+        if step is not None:
+            ov.append(f"samples_per_epoch={step}")
+        ov.append(f"output_dir={EXP}/{sk}/{name}")
+        yield {"name": name, "system": sk, "arm": "partx_faithful", "mode": "builtin", "seed": seed,
+               "mem": mem, "priority": PRIORITY[sk], "overrides": " ".join(ov),
+               "script": "scripts/run_partx_faithful.py"}
 
 
 def main():

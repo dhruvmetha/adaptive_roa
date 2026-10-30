@@ -29,6 +29,11 @@ acquisition:
 eval:
   num_mc_samples_eval: 100
 
+# D27: lambda*/delta* are fitted on val pairs (x_t, x_T) at the threshold
+# backend's K. "val_split" fits on data_source.val_set_file instead; pair it with
+# threshold.num_mc_samples=${eval.num_mc_samples_eval} to fit at the eval K.
+threshold_fit_set: pairs
+
 # Eval-time q_hat is calibrated on the cal set by the calibration backend. Its
 # scores must come from the same K as the test-set scores they are compared
 # with; the default (10 against 100) breaks that.

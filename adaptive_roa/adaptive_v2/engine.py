@@ -286,9 +286,16 @@ class AdaptiveEngine:
             threshold_consumers = {"ranked", "direct", "conformal", "partx"}
             needs_threshold = run_eval or acquisition_mode in threshold_consumers
             if needs_threshold:
-                X_val, y_val = sample_val_data_for_optimization(
-                    self.pool.dataset_builder,
-                )
+                if str(self.cfg.get("threshold_fit_set", "pairs")) == "val_split":
+                    # D27c: fit on the held-out val split, drawn like test, rather than
+                    # on val pairs, which are mostly mid-trajectory states.
+                    X_val, _, y_val = load_eval_states(
+                        self.cfg.data_source.val_set_file, max_rows=self.evaluator.max_eval_rows,
+                        state_dim=getattr(self.system, "state_dim", None))
+                else:
+                    X_val, y_val = sample_val_data_for_optimization(
+                        self.pool.dataset_builder,
+                    )
                 threshold_state = self.threshold_backend.optimize(X_val, y_val)
             else:
                 threshold_state = ThresholdState(

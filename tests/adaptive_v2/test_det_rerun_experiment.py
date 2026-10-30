@@ -60,6 +60,16 @@ def test_default_d2_and_uniform_override():
     assert cfg.acquisition.d2_ratio == 0
 
 
+def test_pending_rulings_default_to_the_runs_as_launched():
+    # D25 and D27 stay off until ruled, so a launch from this branch matches the running cells.
+    cfg = _compose("system=quadrotor2d", "acquisition=direct", "+experiment=det_rerun")
+    assert cfg.acquisition.fill_shortfall is False
+    assert cfg.threshold_fit_set == "pairs" and cfg.threshold.num_mc_samples == 10
+    cfg = _compose("system=quadrotor2d", "acquisition=direct", "+experiment=det_rerun",
+                   "threshold_fit_set=val_split", "threshold.num_mc_samples=${eval.num_mc_samples_eval}")
+    assert cfg.threshold_fit_set == "val_split" and cfg.threshold.num_mc_samples == 100
+
+
 @pytest.mark.parametrize("system", DET_SYSTEMS)
 def test_every_det_system_names_its_horizon(system):
     cfg = _compose(f"system={system}", "+experiment=det_rerun")

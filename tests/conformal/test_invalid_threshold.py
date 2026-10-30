@@ -95,7 +95,8 @@ def test_det_pendulum_decides_two_sided(predictor):
     cfg = _compose("system=pendulum", f"predictor={predictor}", "+experiment=det_rerun", "output_dir=/tmp/unused")
     assert cfg.decision_rule == "two_sided"
     assert cfg.threshold.decision_rule == "two_sided"
-    assert cfg.system.failure_radius == 0.15 and cfg.system.failure_theta == pytest.approx(2.0946)
+    assert cfg.attractor_radius == 0.1 and cfg.system.failure_radius == 0.1   # pendulum radius is 0.1, both balls
+    assert cfg.system.failure_theta == pytest.approx(2.0946)
 
 
 def test_det_pendulum_failure_attractors_label_failure():
@@ -104,6 +105,7 @@ def test_det_pendulum_failure_attractors_label_failure():
     data = "/common/users/shared/pracsys/genMoPlan/data_trajectories/deterministic/pendulum/lqr_failset"
     if not os.path.isdir(data):
         pytest.skip("pendulum failset dataset not mounted")
-    sysm = PendulumSystem(dataset_dir=data, failure_radius=0.15, failure_theta=2.0946)
-    ends = torch.tensor([[0.0, 0.0], [2.0946, 0.0], [-2.0946, 0.0], [1.0, 0.0]])
-    assert sysm.classify_attractor(ends, radius=0.1).tolist() == [1, -1, -1, 0]
+    sysm = PendulumSystem(dataset_dir=data, failure_radius=0.1, failure_theta=2.0946)
+    ends = torch.tensor([[0.0, 0.0], [2.0946, 0.0], [-2.0946, 0.0], [1.0, 0.0], [2.0946 + 0.12, 0.0]])
+    # 0.12 from a failure centre is outside the 0.1 ball: neither success nor failure
+    assert sysm.classify_attractor(ends, radius=0.1).tolist() == [1, -1, -1, 0, 0]

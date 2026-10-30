@@ -61,9 +61,10 @@ system:
   _target_: adaptive_roa.systems.pendulum.PendulumSystem
   dataset_dir: ${dataset_root}
   # Failure balls around the two equilibria where saturated torque balances
-  # gravity: label radius 0.05 plus the D12 buffer of 0.1. Success keeps
-  # attractor_radius 0.1 (label 0.075, kept at 0.1 by ruling).
-  failure_radius: 0.15
+  # gravity. Pendulum's attractor radius is 0.1 for success AND failure (user
+  # ruling; no extra buffer on pendulum). Dataset label radii are separate
+  # (0.075 success, 0.05 failure; scripts/det_rerun/build_pendulum_failset.py).
+  failure_radius: 0.1
   failure_theta: 2.0946   # measured over 4,915 settled endpoints, std 0.0013
 
 flow_matcher:

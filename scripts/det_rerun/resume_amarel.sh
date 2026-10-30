@@ -22,5 +22,5 @@ ssh -n -o BatchMode=yes $AM "ls $ADIR/epoch_*/artifacts_v2.json" >/dev/null 2>&1
 JID=$(ssh -n -o BatchMode=yes $AM \
   "cd $ACODE && sbatch --parsable -J $NAME --mem=$MEM --time=$WALL --partition=gpu --gres=gpu:1 --cpus-per-task=4 --exclude=gpu029,gpu046 --export=ALL,OMP_NUM_THREADS=4,ADAPTIVE_ROA_COMMIT=$COMMIT,DET_CODE=$ACODE,DET_SCRIPT=scripts/resume_adaptive.py scripts/det_rerun/sbatch_det_amarel.sh --run-dir $ADIR </dev/null" 2>/dev/null | grep -E '^[0-9]+$')
 [ -n "$JID" ] || { echo "Amarel sbatch failed for $NAME" >&2; exit 1; }
-printf '%s\tamarel\tgpu\t%s\t%s\t%s\t%s\n' "$NAME" "$JID" "$(date +%Y%m%d_%H%M)" "$HERE/amarel_logs/${NAME}_${JID}.out" "$COMMIT" >> "$HERE/launched.tsv"
+printf '%s\tamarel\t--partition=gpu\t%s\t%s\t%s\t%s\n' "$NAME" "$JID" "$(date +%Y%m%d_%H%M)" "$HERE/amarel_logs/${NAME}_${JID}.out" "$COMMIT" >> "$HERE/launched.tsv"
 echo "$NAME resumed -> Amarel job $JID (commit $COMMIT)"

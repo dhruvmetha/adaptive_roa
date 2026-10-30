@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Move queued Amarel cells onto free local cards, longest first, and order the rest.
+"""Move queued Amarel cells onto free local cards, longest first; run Amarel in short slots.
 
 Amarel gives this account low fairshare, so a cell can wait there for days while a
 direct-box or iLab card sits idle. Each run:
@@ -11,7 +11,14 @@ direct-box or iLab card sits idle. Each run:
   3. for each free card, longest cell first: confirms the Amarel job is still
      PENDING, cancels it, marks its registry row ~amarel_moved, and relaunches the
      cell there with launch.sh from the same commit;
-  4. sets `nice` on the cells left on Amarel so the long ones are considered first.
+  4. resumes every Amarel cell that timed out or was preempted short of its last
+     epoch, from its last banked epoch, in a fresh slot (a cell with no banked
+     epoch is launched again; nothing banked is ever discarded);
+  5. caps each PENDING Amarel cell's wall at its slot (SLOT) and sets `nice` so
+     short cells come first among ours: Amarel's backfill examines only 50 of a
+     user's jobs and fills gaps only with jobs that end before the top jobs'
+     reserved start, so short slots start and long runs advance slot by slot
+     (user ruling 2026-10-30).
 Prints the plan; acts only with --apply. Usage: rebalance.py [--apply] [--max-moves N]
 """
 from __future__ import annotations
@@ -48,7 +55,26 @@ def est_hours(name: str) -> float:
 
 
 def nice_for(hours: float) -> int:
-    return 0 if hours >= 8 else 50 if hours >= 2 else 100
+    return 0 if hours < 2 else 50 if hours < 8 else 100
+
+
+def slot(name: str) -> str:
+    """Wall for one Amarel slot: whole run for the small systems, a few epochs on quad3d."""
+    m = re.match(r"dr_([a-z0-9]+)_([a-z]+)_", name)
+    sk, arm = (m.group(1), m.group(2)) if m else ("", "")
+    if sk == "pen":
+        return "02:00:00"
+    if sk == "cp":
+        return "03:00:00"
+    if sk == "q2d" or arm == "bnnreg":
+        return "06:00:00"
+    return "04:00:00"
+
+
+def _secs(wall: str) -> int:
+    d, _, hms = wall.rpartition("-")
+    h, m, sec = (int(x) for x in (hms.split(":") + ["0", "0"])[:3])
+    return int(d or 0) * 86400 + h * 3600 + m * 60 + sec
 
 
 def sh(cmd: str, timeout: int = 300) -> str:
@@ -63,20 +89,20 @@ def amarel_pending() -> list[dict]:
         f = line.rstrip("\n").split("\t")
         if len(f) >= 7:
             latest[f[0]] = f
-    rows = [f for f in latest.values() if f[1] == "amarel" and f[2].startswith("--partition=gpu")]
+    rows = [f for f in latest.values() if f[1] == "amarel" and "~" not in f[0] and f[2] in ("--partition=gpu", "gpu")]
     if not rows:
         return []
     state = {}
-    for line in sh(f"ssh -n -o BatchMode=yes {AM} 'squeue -u st1122 -h -o \"%i %T %Q %y\"'").splitlines():
+    for line in sh(f"ssh -n -o BatchMode=yes {AM} 'squeue -u st1122 -h -o \"%i %T %Q %y %l\"'").splitlines():
         p = line.split()
-        if len(p) == 4:
-            state[p[0]] = (p[1], int(p[2]), int(p[3]))
+        if len(p) == 5:
+            state[p[0]] = (p[1], int(p[2]), int(p[3]), p[4])
     manifest = {r["name"]: r for r in csv.DictReader(open(HERE / "manifest.tsv"), delimiter="\t")}
     out = []
     for f in rows:
         st = state.get(f[3])
         if st and st[0] == "PENDING" and f[0] in manifest:
-            out.append({"name": f[0], "jid": f[3], "commit": f[6], "prio": st[1], "nice": st[2],
+            out.append({"name": f[0], "jid": f[3], "commit": f[6], "prio": st[1], "nice": st[2], "wall": st[3],
                         "mem": manifest[f[0]]["mem"], "order": int(manifest[f[0]]["priority"]),
                         "hours": est_hours(f[0])})
     return sorted(out, key=lambda c: (-c["hours"], c["order"], c["name"]))
@@ -133,11 +159,61 @@ def move(c: dict, card: tuple[str, str, str]) -> str:
     return f"moved {c['name']} (Amarel {c['jid']}, ~{c['hours']}h) -> {res}"
 
 
+def resume_finished_slots(apply: bool) -> list[str]:
+    """Cells whose latest Amarel job ended TIMEOUT / PREEMPTED / NODE_FAIL before the last epoch."""
+    latest = {}
+    for line in open(HERE / "launched.tsv"):
+        f = line.rstrip("\n").split("\t")
+        if len(f) >= 7:
+            latest[f[0]] = f
+    rows = {f[3]: f for f in latest.values() if f[1] == "amarel" and "~" not in f[0] and f[2] in ("--partition=gpu", "gpu")}
+    if not rows:
+        return []
+    ids = ",".join(rows)
+    st = {}
+    for line in sh(f"ssh -n -o BatchMode=yes {AM} 'sacct -X -n -P -j {ids} -o JobID,State'").splitlines():
+        jid, _, state = line.partition("|")
+        st[jid] = state.split()[0] if state else ""
+    manifest = {r["name"]: r for r in csv.DictReader(open(HERE / "manifest.tsv"), delimiter="\t")}
+    out = []
+    for jid, f in rows.items():
+        state = st.get(jid, "")
+        if state in ("FAILED", "OUT_OF_MEMORY"):
+            out.append(f"NEEDS A LOOK {f[0]}: Amarel job {jid} {state}")
+            continue
+        if state not in ("TIMEOUT", "PREEMPTED", "NODE_FAIL", "BOOT_FAIL", "DEADLINE"):
+            continue
+        ov = manifest[f[0]]["overrides"]
+        m = re.search(r"(?:^| )n_epochs=(\d+)", ov)
+        n_ep = int(m.group(1)) if m else 11
+        adir = re.search(r"output_dir=(\S+)", ov).group(1).replace(EXP, "/scratch/st1122/det_rerun_out")
+        banked = int(sh(f"ssh -n -o BatchMode=yes {AM} 'ls {adir}/epoch_*/artifacts_v2.json 2>/dev/null | wc -l'").strip() or 0)
+        if banked >= n_ep:
+            continue
+        if not apply:
+            out.append(f"would resume {f[0]} ({state}, {banked}/{n_ep} epochs)")
+            continue
+        if banked:
+            res = sh(f"bash {WT}/scripts/det_rerun/resume_amarel.sh {f[0]} {slot(f[0])} 2>&1 | tail -1", timeout=600)
+        else:   # died inside epoch 0: nothing banked, so start the cell again
+            lines = open(HERE / "launched.tsv").read().split("\n")
+            lines = [("\t".join([l.split("\t")[0] + "~noepoch"] + l.split("\t")[1:])
+                      if l.split("\t")[0] == f[0] else l) for l in lines]
+            tmp = HERE / "launched.tsv.tmp"
+            tmp.write_text("\n".join(lines)); os.replace(tmp, HERE / "launched.tsv")
+            res = sh(f"cd {WT} && DET_REF={f[6]} bash scripts/det_rerun/launch.sh {f[0]} amarel {slot(f[0])} 2>&1 | tail -1",
+                     timeout=900)
+        out.append(f"{state} {f[0]} at {banked}/{n_ep} epochs -> {res.strip()}")
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--max-moves", type=int, default=8)
     a = ap.parse_args()
+    for line in resume_finished_slots(a.apply):
+        print(line)
     pend = amarel_pending()
     print(f"{len(pend)} cells PENDING on Amarel; longest first:")
     for c in pend[:10]:
@@ -147,11 +223,17 @@ def main():
     for c, card in list(zip(pend, cards))[:a.max_moves]:
         print(("" if a.apply else "would move: ") + (move(c, card) if a.apply else f"{c['name']} -> {card}"))
     moved = {c["name"] for c, _ in list(zip(pend, cards))[:a.max_moves]} if a.apply else set()
-    renice = [c for c in pend if c["name"] not in moved and c["nice"] != nice_for(c["hours"])]
-    for c in renice:
-        if a.apply:
+    left = [c for c in pend if c["name"] not in moved]
+    renice = [c for c in left if c["nice"] != nice_for(c["hours"])]
+    rewall = [c for c in left if _secs(c["wall"]) > _secs(slot(c["name"]))]
+    if a.apply:
+        for c in renice:
             sh(f"ssh -n -o BatchMode=yes {AM} 'scontrol update jobid={c['jid']} nice={nice_for(c['hours'])}'")
-    print(f"{'set' if a.apply else 'would set'} nice on {len(renice)} Amarel cells (0 for >=8h, 50 for 2-8h, 100 below)")
+        for c in rewall:
+            sh(f"ssh -n -o BatchMode=yes {AM} 'scontrol update jobid={c['jid']} TimeLimit={slot(c['name'])}'")
+    verb = "set" if a.apply else "would set"
+    print(f"{verb} nice on {len(renice)} Amarel cells (short first: 0 below 2h, 50 for 2-8h, 100 above)")
+    print(f"{verb} the slot wall on {len(rewall)} Amarel cells (pen 2h, cp 3h, q2d and BNN regressor 6h, other quad3d 4h)")
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ never collapses to one. What varies across arms is only the WEIGHT posterior.
 from __future__ import annotations
 
 import glob
+import json
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +28,7 @@ from adaptive_roa.data.quadrotor2d_endpoint_data import Quadrotor2DEndpointDataM
 from adaptive_roa.data.quadrotor3d_endpoint_data import Quadrotor3DEndpointDataModule
 from adaptive_roa.predictors.bayesian_mlp import build_from_cfg
 from adaptive_roa.predictors.final_state_handle import FinalStateModelHandle
-from adaptive_roa.predictors.heads import FinalStateHead
+from adaptive_roa.predictors.heads import MixtureFinalStateHead, build_head
 from adaptive_roa.predictors.posteriors import EnsemblePosterior
 
 # Global prediction mode: endpoint data modules (start -> end pairs). Same map
@@ -277,7 +278,9 @@ class FinalStateTrainer:
         data_module = self._create_datamodule(dataset_files)
         n_train = len(data_module.train_dataset)
 
-        head = FinalStateHead(self.system, beta=self.beta_nll)
+        # build_head returns the single FinalStateHead for every config without a
+        # `head` block, i.e. every arm that existed before the mixture head.
+        head = build_head(self.system, fs)
 
         common = dict(
             system=self.system, head=head,
@@ -320,7 +323,12 @@ class FinalStateTrainer:
             # Reloads the best-val_nll checkpoint into `posterior` before returning.
             use_gpu, device = self._run_lightning(module, data_module, fs, ckpt_dir, "best")
 
-            if self.posterior_kind == "laplace":
+            if self.posterior_kind == "laplace" and (
+                    isinstance(head, MixtureFinalStateHead) or posterior.tune_prior_precision):
+                # Opt-in arms only (mixture head and/or evidence-tuned prior);
+                # every existing Laplace arm takes the branch below unchanged.
+                _fit_laplace_streamed(posterior, head, self.system, data_module, ckpt_dir)
+            elif self.posterior_kind == "laplace":
                 # Post-hoc GGN over the full training set, fitted AFTER the best
                 # checkpoint is back in memory: H^-1 is a curvature at a specific
                 # parameter vector, so pairing a last-epoch covariance with
@@ -463,3 +471,91 @@ def _full_dataset_tensors(dataset):
 
     batch = default_collate([dataset[i] for i in range(len(dataset))])
     return batch["start_state"].float(), batch["end_state"].float()
+
+
+# Rows per chunk when streaming the training set through the Laplace fit.
+_LAPLACE_CHUNK = 65536
+
+
+def _fit_laplace_streamed(posterior, head, system, data_module, ckpt_dir: Path) -> None:
+    """Post-hoc Laplace for the opt-in arms, one chunk of training rows at a time.
+
+    Same contract as the inline fit in ``FinalStateTrainer.fit``: it runs after
+    the best-val checkpoint is reloaded, at those MAP weights, and its result is
+    saved next to the checkpoint because the factors are non-persistent.
+
+    Single Gaussian head: identical posterior to the inline fit (RMS-residual
+    sigma over every distance entry, lam = 1/sigma^2), built from chunks.
+
+    Mixture head: block Laplace. The logits get one block with lam the mean
+    softmax Fisher diagonal; each component's LOCATION outputs get their own
+    block with lam_nm = r_nm / sigma_m^2 (EM-form GGN, responsibilities held
+    fixed); the SCALE outputs (log sigmas) stay at their MAP values. The scales
+    are left out on purpose: they already carry the fit's residual spread, and
+    a Gaussian-mean curvature applied to them would perturb widths by an amount
+    with no likelihood behind it.
+    """
+    from adaptive_roa.predictors.posteriors import accumulate_ggn
+
+    posterior.eval()
+    dev = next(posterior.parameters()).device
+    starts, ends = _full_training_tensors(data_module)
+    mixture = isinstance(head, MixtureFinalStateHead)
+    m = head.n_components if mixture else 0
+    g_main, g_comp = None, [None] * m
+    s_comp = torch.zeros(m, dtype=torch.float64)
+    c_comp = torch.zeros(m, dtype=torch.float64)
+    sq_sum, n_entries = 0.0, 0
+    with torch.no_grad():
+        for i in range(0, len(starts), _LAPLACE_CHUNK):
+            x = starts[i:i + _LAPLACE_CHUNK].to(dev)
+            y = ends[i:i + _LAPLACE_CHUNK].to(dev)
+            feats = posterior.body(system.embed_state_for_model(system.normalize_state(x)))
+            params = posterior.head_layer(feats)  # MAP outputs
+            if mixture:
+                st = head.laplace_chunk_stats(params, y)
+                g_main = accumulate_ggn(g_main, feats, st["logit_lam"])
+                for c in range(m):
+                    g_comp[c] = accumulate_ggn(g_comp[c], feats, st["resp"][:, c])
+                s_comp += (st["resp"] * st["sq_resid"]).sum(0).double().cpu()
+                c_comp += st["resp"].sum(0).double().cpu()
+            else:
+                resid = head.distance_per_component(
+                    system.normalize_state(head.mean(params)), system.normalize_state(y))
+                sq_sum += float(resid.double().pow(2).sum())
+                n_entries += resid.numel()
+                g_main = accumulate_ggn(g_main, feats, torch.ones(len(feats), device=dev))
+
+    record: dict = {"head": "mixture" if mixture else "gaussian", "n_rows": int(len(starts))}
+    if mixture:
+        layout = head.param_layout()
+        blocks = [("logits", layout["logits"], g_main)]
+        sigmas = []
+        for c in range(m):
+            mass = float(c_comp[c])
+            # An unused component has ~zero responsibility everywhere, so its
+            # block is prior-only whatever sigma is; 1.0 just avoids 0/0.
+            var = float(s_comp[c] / c_comp[c]) if mass > 1e-8 else 1.0
+            sigma = max(var, 0.0) ** 0.5
+            if sigma < 1e-3:
+                print(f"WARNING: mixture component {c} residual sigma {sigma:.3g} hit the "
+                      "1e-3 floor; its location block is set by the floor, not the fit.")
+                sigma = 1e-3
+            sigmas.append({"component": c, "sigma": sigma, "responsibility_mass": mass})
+            blocks.append((f"location_{c}", layout["locations"][c], g_comp[c] / sigma ** 2))
+        posterior.fit_blocks(blocks)
+        record["components"] = sigmas
+        torch.save(posterior.block_state(), ckpt_dir / "laplace_blocks.pt")
+    else:
+        sigma = max((sq_sum / max(n_entries, 1)) ** 0.5, 1e-3)
+        if sigma <= 1e-3:
+            print("WARNING: derived Laplace observation noise hit the 1e-3 floor; the "
+                  "posterior is set by the floor, not the fit.")
+        print(f"Laplace observation noise (normalized RMS residual): sigma={sigma:.6g}")
+        posterior.fit_from_ggn(g_main / sigma ** 2)
+        record["sigma"] = sigma
+        torch.save(posterior.posterior_covariance, ckpt_dir / "laplace_cov.pt")
+        torch.save(posterior.precision_cholesky, ckpt_dir / "laplace_prec_chol.pt")
+    record["blocks"] = posterior.fit_info
+    (ckpt_dir / "laplace_fit.json").write_text(json.dumps(record, indent=1))
+

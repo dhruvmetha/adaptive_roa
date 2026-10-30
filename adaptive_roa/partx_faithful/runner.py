@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import subprocess
 import time
 from collections import Counter
 from dataclasses import asdict
@@ -21,6 +20,7 @@ import numpy as np
 
 from adaptive_roa.adaptive_v2.engine import _atomic_write_json, _convert_numpy
 from adaptive_roa.adaptive_v2.eval.full_roa import evaluate_full_roa_classifier
+from adaptive_roa.benchmark.provenance import git_sha
 from adaptive_roa.partx_faithful.algorithm import PartX, PartXConfig, derive_seed
 from adaptive_roa.partx_faithful.backends import backend_factory
 from adaptive_roa.partx_faithful.guarantees import snapshot_guarantees
@@ -61,11 +61,8 @@ def snapshot_ids(px, n_new: int) -> set:
 
 
 def _git_commit() -> str:
-    try:
-        return subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=Path(__file__).resolve().parent,
-                              capture_output=True, text=True, check=True).stdout.strip()
-    except Exception:
-        return "unknown"
+    # The launcher's pin first: a snapshot launch has no .git to ask.
+    return git_sha() or "unknown"
 
 
 class CheckpointWriter:

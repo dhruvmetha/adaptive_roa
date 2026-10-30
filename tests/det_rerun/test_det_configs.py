@@ -18,12 +18,14 @@ pytestmark = pytest.mark.skipif(not os.path.isdir(f"{DATA}/deterministic"), reas
 
 
 def _register_resolvers():
-    from adaptive_roa.utils.env_config import get_exp_dir, get_net_id, get_shared_data_base
+    from adaptive_roa.utils.env_config import get_data_dir, get_exp_dir, get_net_id, get_shared_data_base
     for name, fn in [("net_id", get_net_id), ("exp_dir", get_exp_dir), ("shared_data_base", get_shared_data_base)]:
         if not OmegaConf.has_resolver(name):
             OmegaConf.register_new_resolver(name, (lambda f: (lambda d="": f() or d))(fn))
     if not OmegaConf.has_resolver("data_dir"):
-        OmegaConf.register_new_resolver("data_dir", lambda d="": os.environ.get("DATA_DIR", d) or d)
+        # Registered once per process and seen by later test modules, so fall back to
+        # the .env value once monkeypatch has removed DATA_DIR again.
+        OmegaConf.register_new_resolver("data_dir", lambda d="": os.environ.get("DATA_DIR") or get_data_dir() or d)
 
 
 def _compose(system, seed):

@@ -193,3 +193,10 @@ def test_a_pool_too_small_for_the_budget_leaves_the_rest_unspent(toy, tmp_path):
     assert tt[:2] == [60, 90] and tt[2] == tt[3] < 150      # D8: never topped up
     last = json.loads((out / "epoch_003" / "artifacts_v2.json").read_text())["acquisition"]["diagnostics"]
     assert last["done"] and last["unspent"] == 90 - (tt[3] - 60)
+
+
+def test_commit_comes_from_the_launch_pin(monkeypatch):
+    # A snapshot launch has no .git; the commit must still be the pinned one.
+    from adaptive_roa.partx_faithful import runner
+    monkeypatch.setenv("ADAPTIVE_ROA_COMMIT", "abc1234")
+    assert runner._git_commit() == "abc1234"

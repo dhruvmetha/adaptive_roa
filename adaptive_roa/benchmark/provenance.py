@@ -6,13 +6,29 @@ in the numbers. That detector needs each run to record its own commit.
 """
 from __future__ import annotations
 
+import os
 import subprocess
+from pathlib import Path
 
 import pandas as pd
 
+# The checkout this package was imported from. Running git from the process's
+# working directory recorded None whenever a job was launched elsewhere.
+PACKAGE_ROOT = Path(__file__).resolve().parents[2]
+COMMIT_ENV = "ADAPTIVE_ROA_COMMIT"
+
 
 def git_sha(repo_root=None) -> str | None:
-    """Short SHA of the working tree, or None if this is not a git checkout."""
+    """Short SHA of the working tree, or None if this is not a git checkout.
+
+    A launcher can pin the value through ADAPTIVE_ROA_COMMIT, for compute nodes
+    where git refuses the checkout. Otherwise git runs in ``repo_root``, or in
+    this package's own checkout when that is None.
+    """
+    if repo_root is None and os.environ.get(COMMIT_ENV):
+        return os.environ[COMMIT_ENV].strip()
+    if repo_root is None:
+        repo_root = PACKAGE_ROOT
     try:
         out = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],
@@ -26,6 +42,18 @@ def git_sha(repo_root=None) -> str | None:
         # which this function reports as None, never by raising.
         return None
     return out.stdout.strip() or None
+
+
+def git_dirty(repo_root=None) -> bool | None:
+    """True when the checkout has uncommitted changes to tracked files."""
+    try:
+        out = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            cwd=str(repo_root or PACKAGE_ROOT), capture_output=True, text=True, check=True,
+        )
+    except (subprocess.CalledProcessError, OSError):
+        return None
+    return bool(out.stdout.strip())
 
 
 def assert_post_fix(df: pd.DataFrame, fix_sha: str, repo_root=None) -> None:

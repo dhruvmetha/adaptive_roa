@@ -43,8 +43,14 @@ def check_run(run_dir: str | Path) -> list[str]:
     problems: list[str] = []
     hydra_cfg = run / ".hydra" / "config.yaml"
     if not hydra_cfg.exists():
-        return [f"{run}: no .hydra/config.yaml, so the decision rule and store settings are unknown"]
+        hydra_cfg = run / "resolved_config.yaml"
+    if not hydra_cfg.exists():
+        return [f"{run}: no .hydra/config.yaml or resolved_config.yaml, so the decision rule "
+                f"and store settings are unknown"]
     cfg = OmegaConf.load(hydra_cfg)
+    prov = run / "provenance.json"
+    if prov.exists() and json.loads(prov.read_text()).get("commit") is None:
+        problems.append(f"{run}: provenance.json records no commit")
     rule = str(cfg.get("decision_rule"))
     store = cfg.get("prediction_store", None)
     endpoint_epochs = {int(e) for e in (store.get("endpoint_epochs", []) if store else [])}

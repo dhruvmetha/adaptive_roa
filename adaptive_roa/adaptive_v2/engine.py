@@ -99,6 +99,7 @@ class AdaptiveEngine:
 
         self.output_dir = Path(cfg.output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self._write_provenance(cfg)
 
         self.pool = TrajectoryPool(
             data_source_cfg=cfg.data_source,
@@ -169,6 +170,30 @@ class AdaptiveEngine:
             dataset_files=dataset_files,
             n_existing_rows=n_existing_rows,
         )
+
+    def _write_provenance(self, cfg) -> None:
+        """Commit, host, GPU, job id and the fully resolved config, at start-up.
+
+        GRAPE's run dirs had no .hydra/ and recorded commit None; these two files
+        make a run self-describing whatever the launcher did.
+        """
+        import socket
+        from datetime import datetime, timezone
+        from adaptive_roa.benchmark.provenance import git_dirty
+        prov = {
+            "commit": git_sha(),
+            "dirty": git_dirty(),
+            "host": socket.gethostname(),
+            "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+            "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
+            "started_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
+        _atomic_write_json(self.output_dir / "provenance.json", prov, indent=2)
+        try:
+            text = OmegaConf.to_yaml(cfg, resolve=True)
+        except Exception as e:  # an unresolvable interpolation must not kill the run
+            text = f"# could not resolve: {e}\n" + OmegaConf.to_yaml(cfg)
+        (self.output_dir / "resolved_config.yaml").write_text(text)
 
     def _write_prediction_store(self, epoch_dir, model_handle, keep_endpoints: bool, threshold_fit) -> None:
         """Val, cal and threshold-fit predictions for this epoch (prediction_store.py)."""

@@ -58,10 +58,11 @@ def acquisition_profile(run_dir) -> list[dict]:
         batch = log[start:end]
         uni = [(t, r) for t, r, src in batch if src == "uniform"]
         acq = [(t, r) for t, r, src in batch if src == "acquisition"]
+        n_fill = sum(src == "uniform_fill" for _t, _r, src in batch)      # D25 top-up
         frac = [r / max(lengths[t] - 1, 1) for t, r in acq]
         rows.append({
             "run": run.name, "round": e, "budget_after": end,
-            "n_uniform": len(uni), "n_acquired": len(acq),
+            "n_uniform": len(uni), "n_acquired": len(acq), "n_fill": n_fill,
             "success_share_uniform": float(np.mean([labels[t] == 1 for t, _ in uni])) if uni else float("nan"),
             "success_share_acquired": float(np.mean([labels[t] == 1 for t, _ in acq])) if acq else float("nan"),
             "acquired_at_start": float(np.mean([r == 0 for _, r in acq])) if acq else float("nan"),

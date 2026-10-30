@@ -25,8 +25,9 @@ for NAME in "${names[@]}"; do
     echo "REFUSED $NAME: $OUT has files but no .amarel_mirror marker"; continue
   fi
   mkdir -p "$OUT" && touch "$OUT/.amarel_mirror"
-  rsync -a --delete --exclude .amarel_mirror "$AM:${OUT/#$EXP/$AEXP}/" "$OUT/" </dev/null \
-    && echo "synced $NAME" || echo "FAILED $NAME"
+  rc=0; rsync -a --delete --exclude .amarel_mirror "$AM:${OUT/#$EXP/$AEXP}/" "$OUT/" </dev/null 2>/dev/null || rc=$?
+  # 24: a running job replaced a checkpoint mid-copy; the next sync picks it up.
+  case $rc in 0|24) echo "synced $NAME";; *) echo "FAILED $NAME (rsync $rc)";; esac
 done
 mkdir -p "$HERE/amarel_logs"
 rsync -a "$AM:/home/st1122/det_rerun_logs/" "$HERE/amarel_logs/" </dev/null

@@ -37,6 +37,7 @@ def _start_mode_log(run: Path, n0: int) -> list[tuple[int, int, str]]:
         acq = json.loads(a.read_text()).get("acquisition") or {}
         log += [(int(t), 0, "uniform") for t in acq.get("d1_indices", [])]
         log += [(int(t), 0, "acquisition") for t in acq.get("d2_indices", [])]
+        log += [(int(t), 0, "uniform_fill") for t in (acq.get("diagnostics") or {}).get("fill_indices", [])]
     return log
 
 

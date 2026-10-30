@@ -13,3 +13,25 @@ defaults:
 system:
   _target_: adaptive_roa.systems.pendulum.PendulumG1System
   dataset_dir: ${dataset_root}
+  # pendulum.yaml now carries the det-paper failure balls; G1 has its own
+  # success/failure rule, so these stay unset.
+  failure_radius: null
+  failure_theta: null
+
+# pendulum.yaml moved to the det-paper rerun (failset dataset, npz splits, 10
+# iterations). G1 keeps the dataset, data source and schedule it had before.
+dataset_name: pendulum/${controller}
+data_source:
+  split_dir: null
+  pool_format: text
+  trajectories_dir: ${dataset_root}/trajectories
+  shuffled_indices_file: ${dataset_root}/train_test_splits/shuffled_indices_${shuffle_variant}.txt
+  shuffled_labels_file: ${dataset_root}/train_test_splits/shuffled_labels_${shuffle_variant}.txt
+  eval_states_file: ${dataset_root}/eval_states.txt
+  cal_set_file: ${eval_root}/cal_set.txt
+  val_set_file: null
+  test_set_file: ${eval_root}/test_set.txt
+  timeout_intermediates: keep
+initial_train_size: 100
+n_epochs: 19
+samples_per_epoch: 100

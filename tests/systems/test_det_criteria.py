@@ -127,3 +127,12 @@ def test_det_pendulum_and_quad_radii():
     assert pen.system.failure_radius == 0.15
     assert _compose("quadrotor2d").attractor_radius == 0.3
     assert _compose("quadrotor3d").attractor_radius == 0.15
+
+
+def test_pendulum_g1_keeps_its_pre_rerun_data_and_schedule():
+    cfg = _compose("pendulum_g1")
+    assert cfg.dataset_name == "pendulum/lqr"
+    assert cfg.data_source.pool_format == "text"
+    assert cfg.data_source.timeout_intermediates == "keep"
+    assert (cfg.initial_train_size, cfg.n_epochs, cfg.samples_per_epoch) == (100, 19, 100)
+    assert cfg.system.failure_radius is None and cfg.system.failure_theta is None

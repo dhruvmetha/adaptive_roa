@@ -320,7 +320,13 @@ class PendulumG1System(PendulumSystem):
     -1 (failure) otherwise; there is no separatrix/invalid class (0).
     """
 
-    def __init__(self, dataset_dir: str = None):
+    def __init__(self, dataset_dir: str = None, failure_radius: float | None = None,
+                 failure_theta: float | None = None):
+        # G1 replaces classify_attractor, so the failure balls never apply here;
+        # the arguments exist because pendulum.yaml's system block passes them.
+        if failure_radius is not None or failure_theta is not None:
+            raise ValueError("PendulumG1System classifies by G1 membership; leave failure_radius "
+                             "and failure_theta unset")
         super().__init__(dataset_dir=dataset_dir)
 
         spec = (self.dataset_info or {}).get("G1_handoff_region")

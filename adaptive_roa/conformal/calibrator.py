@@ -161,6 +161,20 @@ def nonconformity_scores_batch_two_sided(
     return scores
 
 
+def conformal_quantile(scores: np.ndarray, alpha: float) -> float:
+    """Split-conformal q_hat: the k-th smallest score, k = ceil((n+1)(1-alpha)).
+
+    Returns +inf when k > n, which includes an empty calibration set: no finite
+    threshold then guarantees 1 - alpha coverage, so every label stays in the set.
+    """
+    scores = np.asarray(scores, dtype=float).ravel()
+    n = scores.size
+    k = int(np.ceil((n + 1) * (1.0 - alpha)))
+    if k > n:
+        return float("inf")
+    return float(np.sort(scores)[k - 1])
+
+
 class Calibrator:
     """
     Calibrate conformal predictor and construct prediction sets.
@@ -303,12 +317,7 @@ class Calibrator:
             p_success, y_true, lambda_star, delta, p_failure
         )
 
-        # Compute the (1-α)(n+1)/n quantile
-        # This is the finite-sample correction for conformal prediction
-        quantile_level = (1 - alpha) * (n + 1) / n
-        quantile_level = min(quantile_level, 1.0)  # Cap at 1.0
-
-        q_hat = np.quantile(scores, quantile_level)
+        q_hat = conformal_quantile(scores, alpha)
 
         if verbose:
             # Label distribution
@@ -330,7 +339,7 @@ class Calibrator:
                 print(f"    p_failure: min={p_failure.min():.4f}, max={p_failure.max():.4f}, mean={p_failure.mean():.4f}")
             print(f"    Scores: min={scores.min():.4f}, max={scores.max():.4f}, mean={scores.mean():.4f}, median={np.median(scores):.4f}")
             print(f"    Score percentiles: 25%={np.percentile(scores, 25):.4f}, 50%={np.percentile(scores, 50):.4f}, 75%={np.percentile(scores, 75):.4f}, 90%={np.percentile(scores, 90):.4f}")
-            print(f"    Quantile level: (1-{alpha})*({n}+1)/{n} = {quantile_level:.4f}")
+            print(f"    Order statistic: k = ceil(({n}+1)(1-{alpha})) = {int(np.ceil((n + 1) * (1 - alpha)))}")
             print(f"    >>> q_hat = {q_hat:.4f}")
 
 
@@ -384,8 +393,7 @@ class Calibrator:
                 delta,
                 p_failure[success_mask] if p_failure is not None else None,
             )
-            quantile_level_s = min((1 - alpha) * (n_success + 1) / n_success, 1.0)
-            q_hat_success = float(np.quantile(scores_success, quantile_level_s))
+            q_hat_success = conformal_quantile(scores_success, alpha)
 
         if n_failure > 0:
             scores_failure = self.non_conformity_scores_batch(
@@ -395,8 +403,7 @@ class Calibrator:
                 delta,
                 p_failure[failure_mask] if p_failure is not None else None,
             )
-            quantile_level_f = min((1 - alpha) * (n_failure + 1) / n_failure, 1.0)
-            q_hat_failure = float(np.quantile(scores_failure, quantile_level_f))
+            q_hat_failure = conformal_quantile(scores_failure, alpha)
 
         info = {
             "n_success_cal": n_success,

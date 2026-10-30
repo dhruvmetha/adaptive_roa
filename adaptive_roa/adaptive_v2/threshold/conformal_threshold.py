@@ -9,6 +9,7 @@ import numpy as np
 from adaptive_roa.conformal import ConformalConfig, ConformalPredictor
 from adaptive_roa.conformal.estimator_factory import build_probability_estimator
 from adaptive_roa.adaptive_v2.types import ThresholdState
+from adaptive_roa.systems.criteria import optional_radius
 
 
 class ConformalThresholdBackend:
@@ -18,7 +19,7 @@ class ConformalThresholdBackend:
         self.predictor_type = str(cfg.predictor_type)
         self.decision_rule = str(cfg.decision_rule)
         self.delta = float(cfg.delta)
-        self.attractor_radius = float(cfg.attractor_radius)
+        self.attractor_radius = optional_radius(cfg.attractor_radius)
         self.num_mc_samples = int(cfg.num_mc_samples)
         self.optimize_mode = str(cfg.optimize_mode)
         self.optimize_objective = str(cfg.optimize_objective)

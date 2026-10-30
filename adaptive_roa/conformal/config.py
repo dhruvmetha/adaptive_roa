@@ -47,7 +47,7 @@ class ConformalConfig:
     mc_batch_size: int = 1024
 
     # Classification
-    attractor_radius: float = 0.2
+    attractor_radius: float | None = 0.2   # None: the system classifies with its own configured criteria
 
     # Optimization mode: "lambda" or "delta"
     optimize_mode: str = "lambda"
@@ -109,7 +109,8 @@ class ConformalConfig:
         assert 0 < self.alpha < 1, f"alpha must be in (0, 1), got {self.alpha}"
         assert self.num_mc_samples > 0, f"num_mc_samples must be positive, got {self.num_mc_samples}"
         assert self.mc_batch_size > 0, f"mc_batch_size must be positive, got {self.mc_batch_size}"
-        assert self.attractor_radius > 0, f"attractor_radius must be positive, got {self.attractor_radius}"
+        assert self.attractor_radius is None or self.attractor_radius > 0, \
+            f"attractor_radius must be positive or None, got {self.attractor_radius}"
         assert self.optimize_mode in ["lambda", "delta", "joint"], f"optimize_mode must be 'lambda', 'delta', or 'joint', got {self.optimize_mode}"
         assert self.decision_rule in ["one_sided", "two_sided"], f"decision_rule must be 'one_sided' or 'two_sided', got {self.decision_rule}"
         assert self.lambda_grid_size > 1, f"lambda_grid_size must be > 1, got {self.lambda_grid_size}"

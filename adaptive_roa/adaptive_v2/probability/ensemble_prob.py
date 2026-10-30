@@ -13,11 +13,12 @@ import numpy as np
 import torch
 
 from adaptive_roa.adaptive_v2.types import OutcomeProbabilities
+from adaptive_roa.systems.criteria import optional_radius
 
 
 class _EnsembleBackendBase:
     def __init__(self, cfg: Any, system: Any, device: str):
-        self.attractor_radius = float(cfg.attractor_radius)
+        self.attractor_radius = optional_radius(cfg.attractor_radius)
         self.system = system
         self.device = device
         self.model_handle: Any = None

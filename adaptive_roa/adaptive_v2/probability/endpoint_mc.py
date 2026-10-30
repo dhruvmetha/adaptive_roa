@@ -7,13 +7,14 @@ import numpy as np
 from adaptive_roa.conformal import ConformalConfig
 from adaptive_roa.conformal.probability_estimator import ProbabilityEstimator
 from adaptive_roa.adaptive_v2.types import OutcomeProbabilities
+from adaptive_roa.systems.criteria import optional_radius
 
 
 class EndpointMCProbabilityBackend:
     """Wraps ProbabilityEstimator (MC endpoint sampling) with the v2 interface."""
 
     def __init__(self, cfg: Any, system: Any, device: str):
-        self.attractor_radius = float(cfg.attractor_radius)
+        self.attractor_radius = optional_radius(cfg.attractor_radius)
         self.num_mc_samples = int(cfg.num_mc_samples)
         self.refine_invalids = bool(cfg.refine_invalids)
         self.refine_t_min = float(cfg.refine_t_min)

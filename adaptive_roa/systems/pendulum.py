@@ -7,6 +7,7 @@ import json
 import math
 from pathlib import Path
 from adaptive_roa.systems.base import DynamicalSystem, ManifoldComponent
+from adaptive_roa.systems.criteria import check_required, resolve_radius
 from adaptive_roa.utils.env_config import get_data_dir, get_noise_regime
 from typing import List, Dict, Tuple
 
@@ -22,7 +23,10 @@ class PendulumSystem(DynamicalSystem):
 
     def __init__(self, dataset_dir: str = None,
                  failure_radius: float | None = None,
-                 failure_theta: float | None = None):
+                 failure_theta: float | None = None,
+                 success_radius: float | None = None,
+                 goal: List[float] | None = None,
+                 require_criteria: bool = False):
         """
         Initialize Pendulum system
 
@@ -33,9 +37,20 @@ class PendulumSystem(DynamicalSystem):
                         passed to classify_attractor for every attractor, as before.
             failure_theta: |theta| of the two failure equilibria, where saturated
                         torque balances gravity. None keeps 2.1.
+            success_radius: radius of the success ball. Set, it is the only success
+                        radius: a different radius passed to classify_attractor raises
+                        (systems/criteria.py). None takes the passed radius, as before.
+            goal: centre of the success ball, [theta, theta_dot]. None keeps [0, 0].
+            require_criteria: refuse any criterion left to a class default (the det
+                        paper sets every one in configs/adaptive_v2/system/pendulum.yaml).
         """
+        if require_criteria:
+            check_required("pendulum", success_radius=success_radius, goal=goal,
+                           failure_radius=failure_radius, failure_theta=failure_theta)
         self.failure_radius = None if failure_radius is None else float(failure_radius)
         self.failure_theta = 2.1 if failure_theta is None else float(failure_theta)
+        self.success_radius = None if success_radius is None else float(success_radius)
+        self.goal = [0.0, 0.0] if goal is None else [float(g) for g in goal]
         if dataset_dir is None:
             dataset_dir = f"{get_data_dir()}/{get_noise_regime()}/pendulum_lqr_50k"
 
@@ -111,12 +126,12 @@ class PendulumSystem(DynamicalSystem):
             List of [θ, θ̇] attractor positions
         """
         return [
-            [0.0, 0.0],      # Bottom equilibrium (stable)
+            list(self.goal),  # Success equilibrium (config `goal`)
             [self.failure_theta, 0.0],    # Top-right equilibrium
             [-self.failure_theta, 0.0],   # Top-left equilibrium
         ]
     
-    def is_in_attractor(self, state: torch.Tensor, radius: float = 0.1) -> torch.Tensor:
+    def is_in_attractor(self, state: torch.Tensor, radius: float | None = None) -> torch.Tensor:
         """
         Check if states are within attractor basins using circular distance
 
@@ -146,6 +161,7 @@ class PendulumSystem(DynamicalSystem):
         distances = torch.sqrt(angle_diff**2 + vel_diff**2)  # [B, 3]
 
         # Check if any attractor is within radius
+        radius = resolve_radius(self.success_radius, radius, "pendulum", legacy_default=0.1)
         if self.failure_radius is None:
             return (distances < radius).any(dim=1)  # [B]
         return (distances < self._ball_radii(radius, state)).any(dim=1)
@@ -161,7 +177,7 @@ class PendulumSystem(DynamicalSystem):
                 f"failure radius {fr}, failure centres at +-{ft}")
         return torch.tensor([radius, fr, fr], dtype=state.dtype, device=state.device)
 
-    def classify_attractor(self, state: torch.Tensor, radius: float = 0.1) -> torch.Tensor:
+    def classify_attractor(self, state: torch.Tensor, radius: float | None = None) -> torch.Tensor:
         """
         Classify which attractor (if any) each state belongs to
 
@@ -175,6 +191,7 @@ class PendulumSystem(DynamicalSystem):
                -1: State in unstable top attractors [±2.1, 0.0] (FAILURE)
                 0: State in none of the attractors (SEPARATRIX)
         """
+        radius = resolve_radius(self.success_radius, radius, "pendulum", legacy_default=0.1)
         attractors = torch.tensor(self.attractors(), device=state.device, dtype=state.dtype)
 
         # Compute circular distance for angle (θ) and Euclidean for velocity (θ̇)

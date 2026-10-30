@@ -9,6 +9,7 @@ import numpy as np
 import json
 from pathlib import Path
 from adaptive_roa.systems.base import DynamicalSystem, ManifoldComponent
+from adaptive_roa.systems.criteria import check_required, resolve_radius
 from adaptive_roa.utils.env_config import get_data_dir, get_noise_regime
 from typing import List, Dict, Tuple
 
@@ -77,14 +78,35 @@ class Quadrotor2DSystem(DynamicalSystem):
     Goal: Hover at (0, 1, 0, 0, 0, 0)
     """
 
-    def __init__(self, dataset_dir: str = None):
+    # Failure bounds of predicted endpoints used when none are configured: the
+    # collector's termination thresholds moved inward (0.1 on positions and
+    # velocities, 0.5 on theta_dot). The det paper sets them in its system config.
+    _LEGACY_FAILURE_BOUNDS = {"x": 0.9, "z_min": 0.2, "z_max": 1.4, "x_dot": 0.9,
+                              "z_dot": 0.9, "theta_dot": 7.5}
+
+    def __init__(self, dataset_dir: str = None,
+                 success_radius: float | None = None,
+                 goal: List[float] | None = None,
+                 failure_bounds: dict | None = None,
+                 require_criteria: bool = False):
         """
         Initialize Quadrotor 2D system
 
         Args:
             dataset_dir: Path to dataset directory containing dataset_description.json.
                         If None, uses default path from environment.
+            success_radius: radius of the success ball around ``goal`` (theta wrapped).
+                        Set, it is the only success radius (systems/criteria.py).
+            goal: [x, z, theta, x_dot, z_dot, theta_dot]; None keeps the hover goal
+                        [0, 1, 0, 0, 0, 0].
+            failure_bounds: {x, z_min, z_max, x_dot, z_dot, theta_dot}; a predicted
+                        endpoint fails when |x| > x, z < z_min, z > z_max, |x_dot| >
+                        x_dot, |z_dot| > z_dot or |theta_dot| > theta_dot.
+            require_criteria: refuse any criterion left to a class default.
         """
+        if require_criteria:
+            check_required("quadrotor2d", success_radius=success_radius, goal=goal,
+                           failure_bounds=failure_bounds)
         if dataset_dir is None:
             dataset_dir = f"{get_data_dir()}/{get_noise_regime()}/quadrotor2D_rl"
 
@@ -99,9 +121,15 @@ class Quadrotor2DSystem(DynamicalSystem):
             )
         self._load_bounds_from_json(json_path)
 
-        # Goal state: hover at (x=0, z=1, θ=0, ẋ=0, ż=0, θ̇=0)
-        self.goal_state = np.array([0.0, 1.0, 0.0, 0.0, 0.0, 0.0])
-        self.success_threshold = 0.3
+        # Goal state: hover at (x=0, z=1, θ=0, ẋ=0, ż=0, θ̇=0) unless configured
+        self.goal_state = np.array([0.0, 1.0, 0.0, 0.0, 0.0, 0.0] if goal is None else [float(g) for g in goal])
+        self.success_radius = None if success_radius is None else float(success_radius)
+        fb = dict(self._LEGACY_FAILURE_BOUNDS)
+        if failure_bounds is not None:
+            if set(failure_bounds) != set(fb):
+                raise ValueError(f"failure_bounds needs exactly {sorted(fb)}, got {sorted(failure_bounds)}")
+            fb = {k: float(v) for k, v in dict(failure_bounds).items()}
+        self.failure_bounds = fb
 
         super().__init__()
 
@@ -194,7 +222,7 @@ class Quadrotor2DSystem(DynamicalSystem):
             [0.0, 1.0, 0.0, 0.0, 0.0, 0.0],  # Hover at z=1
         ]
 
-    def is_in_attractor(self, state, radius: float = 0.3):
+    def is_in_attractor(self, state, radius: float | None = None):
         """
         Check if states are within attractor basin (hovering at goal)
 
@@ -228,14 +256,14 @@ class Quadrotor2DSystem(DynamicalSystem):
         dist = torch.sqrt(
             torch.sum(euclidean_diff**2, dim=1) + angle_diff**2
         )
-        result = dist < radius
+        result = dist < resolve_radius(self.success_radius, radius, "quadrotor2d", legacy_default=0.3)
 
         if len(result) == 1:
             return result.item()
 
         return result
 
-    def classify_attractor(self, state: torch.Tensor, radius: float = 0.3) -> torch.Tensor:
+    def classify_attractor(self, state: torch.Tensor, radius: float | None = None) -> torch.Tensor:
         """
         Classify Quadrotor 2D states into three categories based on termination conditions
 
@@ -286,15 +314,16 @@ class Quadrotor2DSystem(DynamicalSystem):
 
         # Combined distance
         dist = torch.sqrt(torch.sum(euclidean_diff**2, dim=1) + angle_diff**2)
-        in_attractor = dist < radius
+        in_attractor = dist < resolve_radius(self.success_radius, radius, "quadrotor2d", legacy_default=0.3)
 
-        # FAILURE: Exceeded termination thresholds (with small margin for overshoot)
-        x_failed = torch.abs(x) > 0.9
-        z_low_failed = z < 0.2
-        z_high_failed = z > 1.4
-        x_dot_failed = torch.abs(x_dot) > 0.9
-        z_dot_failed = torch.abs(z_dot) > 0.9
-        theta_dot_failed = torch.abs(theta_dot) > 7.5
+        # FAILURE: beyond the configured failure bounds (self.failure_bounds)
+        fb = self.failure_bounds
+        x_failed = torch.abs(x) > fb["x"]
+        z_low_failed = z < fb["z_min"]
+        z_high_failed = z > fb["z_max"]
+        x_dot_failed = torch.abs(x_dot) > fb["x_dot"]
+        z_dot_failed = torch.abs(z_dot) > fb["z_dot"]
+        theta_dot_failed = torch.abs(theta_dot) > fb["theta_dot"]
         # theta has no termination threshold
 
         exceeded_thresholds = (x_failed | z_low_failed | z_high_failed |

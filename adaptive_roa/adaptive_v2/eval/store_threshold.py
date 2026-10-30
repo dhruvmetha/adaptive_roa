@@ -16,6 +16,7 @@ from omegaconf import OmegaConf
 
 from adaptive_roa.adaptive_v2.eval.store_score import score_epoch
 from adaptive_roa.conformal import ConformalConfig, ConformalPredictor
+from adaptive_roa.systems.criteria import optional_radius
 
 WS = (0.5, 0.75, 0.9, 0.95, 0.99)
 
@@ -24,7 +25,7 @@ def _config(threshold_cfg, w: float) -> ConformalConfig:
     t = threshold_cfg
     return ConformalConfig(
         delta=float(t["delta"]), w=float(w), alpha=float(t.get("alpha", 0.1)),
-        attractor_radius=float(t["attractor_radius"]), num_mc_samples=int(t["num_mc_samples"]),
+        attractor_radius=optional_radius(t["attractor_radius"]), num_mc_samples=int(t["num_mc_samples"]),
         optimize_mode=str(t["optimize_mode"]), optimize_objective=str(t["optimize_objective"]),
         target_f1=float(t["target_f1"]), decision_rule=str(t["decision_rule"]),
         lambda_grid_size=int(t["lambda_grid_size"]), delta_grid_size=int(t["delta_grid_size"]),

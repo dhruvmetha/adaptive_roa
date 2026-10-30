@@ -27,7 +27,9 @@ eval_root: ${data_dir}/${noise_regime}/pendulum/${eval_variant}
 # Two-sided (det paper): the lqr_failset failure attractors give p_failure its own
 # criterion, so failure is p_failure > 1 - lambda + delta, not "not success".
 decision_rule: two_sided
-attractor_radius: 0.1
+# The success radius has ONE source, system.success_radius below; this key only
+# points at it for the backends that pass a radius to classify_attractor.
+attractor_radius: ${system.success_radius}
 # Collector horizon in control steps (dataset_description.json), read by
 # data_source.timeout_intermediates=drop through experiment/det_rerun.yaml.
 horizon_steps: 502
@@ -60,10 +62,15 @@ flow_matching:
 system:
   _target_: adaptive_roa.systems.pendulum.PendulumSystem
   dataset_dir: ${dataset_root}
-  # Failure balls around the two equilibria where saturated torque balances
-  # gravity. Pendulum's attractor radius is 0.1 for success AND failure (user
-  # ruling; no extra buffer on pendulum). Dataset label radii are separate
+  # SUCCESS AND FAILURE CRITERIA: the single source (systems/criteria.py).
+  # A predicted endpoint (theta, theta_dot) succeeds within success_radius of
+  # goal and fails within failure_radius of (+-failure_theta, 0); distances use
+  # the wrapped angle. Pendulum's attractor radius is 0.1 for success AND failure
+  # (user ruling; no buffer on pendulum). Dataset label radii are separate
   # (0.075 success, 0.05 failure; scripts/det_rerun/build_pendulum_failset.py).
+  require_criteria: true
+  goal: [0.0, 0.0]
+  success_radius: 0.1
   failure_radius: 0.1
   failure_theta: 2.0946   # measured over 4,915 settled endpoints, std 0.0013
 

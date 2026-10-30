@@ -10,9 +10,9 @@ name: adaptive_quadrotor3d
 output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${acquisition.d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_adapt_iter_${n_epochs}_sampling_mode_${sampling_mode}_selection_${oc.select:acquisition.selection_rule,none}_exp_${exp_id}/${now:%Y-%m-%d_%H-%M-%S}
 
 decision_rule: two_sided
-# Label radius 0.05 (dataset_description.json) plus the D12 buffer of 0.1.
-# 0.3 since 32a5884; the det-paper rerun uses 0.15.
-attractor_radius: 0.15
+# The success radius has ONE source, system.success_radius below; this key only
+# points at it for the backends that pass a radius to classify_attractor.
+attractor_radius: ${system.success_radius}
 # Collector horizon in control steps (dataset_description.json), read by
 # data_source.timeout_intermediates=drop through experiment/det_rerun.yaml.
 horizon_steps: 100000
@@ -53,6 +53,16 @@ optimizer:
 system:
   _target_: adaptive_roa.systems.quadrotor3d.Quadrotor3DSystem
   dataset_dir: ${dataset_root}
+  # SUCCESS AND FAILURE CRITERIA: the single source (systems/criteria.py).
+  # A predicted endpoint (13-D: x y z, qw qx qy qz, x_dot y_dot z_dot, p q r)
+  # succeeds within success_radius of goal (L2): the dataset's 0.05 plus the D12
+  # buffer of 0.1. It fails beyond termination_thresholds: the collector's
+  # (|x| |y| 1.8, z 0.1 to 3.0, velocities 3.0, rates 24.0) moved inward by 0.1,
+  # and by 0.5 on rates.
+  require_criteria: true
+  goal: [0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  success_radius: 0.15
+  termination_thresholds: {x: 1.7, y: 1.7, z_min: 0.2, z_max: 2.9, vel: 2.9, rate: 23.5}
 
 flow_matcher:
   _target_: adaptive_roa.flow_matching.quadrotor_3d.latent_conditional.flow_matcher.Quadrotor3DLatentConditionalFlowMatcher

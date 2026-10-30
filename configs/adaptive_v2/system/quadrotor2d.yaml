@@ -10,7 +10,9 @@ name: adaptive_quadrotor2d
 output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${acquisition.d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_adapt_iter_${n_epochs}_sampling_mode_${sampling_mode}_selection_${oc.select:acquisition.selection_rule,none}_exp_${exp_id}/${now:%Y-%m-%d_%H-%M-%S}
 
 decision_rule: two_sided
-attractor_radius: 0.3
+# The success radius has ONE source, system.success_radius below; this key only
+# points at it for the backends that pass a radius to classify_attractor.
+attractor_radius: ${system.success_radius}
 # Collector horizon in control steps (dataset_description.json), read by
 # data_source.timeout_intermediates=drop through experiment/det_rerun.yaml.
 horizon_steps: 1200
@@ -48,6 +50,16 @@ flow_matching:
 system:
   _target_: adaptive_roa.systems.quadrotor2d.Quadrotor2DSystem
   dataset_dir: ${dataset_root}
+  # SUCCESS AND FAILURE CRITERIA: the single source (systems/criteria.py).
+  # A predicted endpoint (x, z, theta, x_dot, z_dot, theta_dot) succeeds within
+  # success_radius of goal (L2, theta wrapped): the dataset's 0.2 plus the D12
+  # buffer of 0.1. It fails beyond failure_bounds: the collector's termination
+  # thresholds (|x| 1.0, z 0.1 to 1.5, |x_dot| |z_dot| 1.0, |theta_dot| 8.0) moved
+  # inward by 0.1, and by 0.5 on theta_dot.
+  require_criteria: true
+  goal: [0.0, 1.0, 0.0, 0.0, 0.0, 0.0]
+  success_radius: 0.3
+  failure_bounds: {x: 0.9, z_min: 0.2, z_max: 1.4, x_dot: 0.9, z_dot: 0.9, theta_dot: 7.5}
 
 flow_matcher:
   _target_: adaptive_roa.flow_matching.quadrotor_2d.latent_conditional.flow_matcher.Quadrotor2DLatentConditionalFlowMatcher

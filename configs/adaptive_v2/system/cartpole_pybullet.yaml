@@ -10,7 +10,9 @@ name: adaptive_cartpole_pybullet
 output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${acquisition.d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_adapt_iter_${n_epochs}_sampling_mode_${sampling_mode}_selection_${oc.select:acquisition.selection_rule,none}_exp_${exp_id}/${now:%Y-%m-%d_%H-%M-%S}
 
 decision_rule: two_sided
-attractor_radius: 0.2
+# Cartpole success is a box (system.success_tolerances), not a ball, so there is
+# no radius: the backends pass None and the system uses its own criteria.
+attractor_radius: null
 # Collector horizon in control steps (dataset_description.json), read by
 # data_source.timeout_intermediates=drop through experiment/det_rerun.yaml.
 horizon_steps: 1000
@@ -48,11 +50,15 @@ flow_matching:
 system:
   _target_: adaptive_roa.systems.cartpole.CartPoleSystem
   dataset_dir: ${dataset_root}
+  # SUCCESS AND FAILURE CRITERIA: the single source (systems/criteria.py).
   # Collector criteria from dataset_description.json termination_conditions,
-  # plus the det-paper buffer (D12: 0.1 per channel). Success becomes this box,
-  # so attractor_radius no longer sets the cartpole success test. Without these
-  # keys the class gates failure at achieved_bounds, which reads every stored
-  # failure endpoint of this dataset as invalid (963f4e3).
+  # plus the det-paper buffer (D12: 0.1 per channel). A predicted endpoint
+  # succeeds when |state - goal| < tolerance + buffer on every channel (theta
+  # wrapped) and fails when |x|, |x_dot| or |theta_dot| exceeds its threshold
+  # minus the buffer. Without these keys the class gates failure at
+  # achieved_bounds, which reads every stored failure endpoint as invalid (963f4e3).
+  require_criteria: true
+  goal: [0.0, 0.0, 0.0, 0.0]
   failure_thresholds: {x: 6.0, x_dot: 5.0, theta_dot: 5.0}
   success_tolerances: {x: 0.01, theta: 0.05, x_dot: 0.05, theta_dot: 0.05}
   criteria_buffer: 0.1

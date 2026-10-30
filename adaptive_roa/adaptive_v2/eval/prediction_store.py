@@ -113,7 +113,7 @@ def write_split(
     labels, endpoints = mc_predict(model, system, X, num_mc_samples, attractor_radius,
                                    batch_size=batch_size, device=device, keep_rows=keep)
     np.savez(out / f"predictions_{split}.npz", true_labels=y,
-             attractor_radius=np.float64(attractor_radius), **counts_from_labels(labels))
+             attractor_radius=np.float64(np.nan if attractor_radius is None else attractor_radius), **counts_from_labels(labels))
     if endpoints is not None:
         np.savez(out / f"endpoints_{split}.npz", endpoints=endpoints, rows=keep)
 

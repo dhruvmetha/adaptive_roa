@@ -8,6 +8,7 @@ import numpy as np
 import json
 from pathlib import Path
 from adaptive_roa.systems.base import DynamicalSystem, ManifoldComponent
+from adaptive_roa.systems.criteria import check_required, resolve_radius
 from adaptive_roa.utils.env_config import get_shared_data_base, get_noise_regime
 from typing import List, Dict, Tuple
 
@@ -36,7 +37,9 @@ class Quadrotor3DSystem(DynamicalSystem):
     _DEFAULT_TERMINATION = {"x": 1.7, "y": 1.7, "z_min": 0.2, "z_max": 2.9,
                             "vel": 2.9, "rate": 23.5}
 
-    def __init__(self, dataset_dir: str = None, termination_thresholds=None):
+    def __init__(self, dataset_dir: str = None, termination_thresholds=None,
+                 success_radius: float | None = None, goal: List[float] | None = None,
+                 require_criteria: bool = False):
         """
         Initialize Quadrotor 3D system
 
@@ -47,7 +50,18 @@ class Quadrotor3DSystem(DynamicalSystem):
                         x, y, z_min, z_max, vel, rate giving the collector's wall
                         box. None keeps `_DEFAULT_TERMINATION`, i.e. the historical
                         lqr literals, so existing runs are unaffected.
+            success_radius: radius of the success ball around ``goal`` (13-D L2).
+                        Set, it is the only success radius (systems/criteria.py).
+            goal: 13-D goal [x, y, z, qw, qx, qy, qz, x_dot, y_dot, z_dot, p, q, r];
+                        None keeps hover at (0, 0, 1) with identity orientation.
+            require_criteria: refuse any criterion left to a class default.
         """
+        if require_criteria:
+            check_required("quadrotor3d", success_radius=success_radius, goal=goal,
+                           termination_thresholds=termination_thresholds)
+            if set(termination_thresholds) != set(self._DEFAULT_TERMINATION):
+                raise ValueError(f"quadrotor3d: require_criteria needs every termination threshold "
+                                 f"{sorted(self._DEFAULT_TERMINATION)}, got {sorted(termination_thresholds)}")
         t = dict(self._DEFAULT_TERMINATION)
         if termination_thresholds is not None:
             unknown = set(termination_thresholds) - set(t)
@@ -73,13 +87,16 @@ class Quadrotor3DSystem(DynamicalSystem):
             )
 
         # Goal state: hover at (0, 0, 1) with identity orientation
-        self.goal_position = np.array([0.0, 0.0, 1.0])
-        self.goal_quaternion = np.array([1.0, 0.0, 0.0, 0.0])  # Identity (qw, qx, qy, qz)
-        self.goal_linear_velocity = np.array([0.0, 0.0, 0.0])
-        self.goal_angular_velocity = np.array([0.0, 0.0, 0.0])
-
-        # Success threshold (Euclidean distance in state space)
-        self.success_threshold = 0.2
+        g = ([0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+             if goal is None else [float(v) for v in goal])
+        if len(g) != 13:
+            raise ValueError(f"quadrotor3d goal must be 13-D, got {len(g)}")
+        self.goal = g
+        self.goal_position = np.array(g[0:3])
+        self.goal_quaternion = np.array(g[3:7])  # (qw, qx, qy, qz)
+        self.goal_linear_velocity = np.array(g[7:10])
+        self.goal_angular_velocity = np.array(g[10:13])
+        self.success_radius = None if success_radius is None else float(success_radius)
 
         super().__init__()
 
@@ -180,10 +197,7 @@ class Quadrotor3DSystem(DynamicalSystem):
             List of 13D attractor states (quaternion representation)
         """
         return [
-            [0.0, 0.0, 1.0,    # Position (x, y, z)
-             1.0, 0.0, 0.0, 0.0,  # Quaternion (qw, qx, qy, qz) - identity
-             0.0, 0.0, 0.0,    # Linear velocity
-             0.0, 0.0, 0.0]    # Angular velocity
+            list(self.goal)    # config `goal` (default: hover at (0, 0, 1), identity, at rest)
         ]
 
     def attractor_euler(self) -> List[float]:
@@ -248,7 +262,7 @@ class Quadrotor3DSystem(DynamicalSystem):
 
         return torch.cat([pos, euler, vel], dim=1)
 
-    def is_in_attractor(self, state, radius: float = 0.3):
+    def is_in_attractor(self, state, radius: float | None = None):
         """
         Check if states are within attractor basin (hovering at goal)
 
@@ -272,7 +286,7 @@ class Quadrotor3DSystem(DynamicalSystem):
         goal = torch.tensor(self.attractors()[0], device=state.device, dtype=state.dtype)
         dist = torch.norm(state - goal.unsqueeze(0), dim=1)
 
-        result = dist < radius
+        result = dist < resolve_radius(self.success_radius, radius, "quadrotor3d", legacy_default=0.3)
 
         if len(result) == 1:
             return result.item()
@@ -306,7 +320,7 @@ class Quadrotor3DSystem(DynamicalSystem):
                 "z_min": 1.0 - t["z_min"], "z_max": t["z_max"] - 1.0,
                 "vel": t["vel"], "rate": t["rate"]}
 
-    def classify_attractor(self, state: torch.Tensor, radius: float = 0.3) -> torch.Tensor:
+    def classify_attractor(self, state: torch.Tensor, radius: float | None = None) -> torch.Tensor:
         """
         Classify Quadrotor 3D states into three categories based on termination conditions
 
@@ -338,6 +352,7 @@ class Quadrotor3DSystem(DynamicalSystem):
         # L2 distance in the raw 13-D quaternion state space (qw >= 0 canonicalized)
         goal = torch.tensor(self.attractors()[0], device=state.device, dtype=state.dtype)
         dist = torch.norm(state - goal.unsqueeze(0), dim=1)
+        radius = resolve_radius(self.success_radius, radius, "quadrotor3d", legacy_default=0.3)
         in_attractor = dist < radius
 
         # INVARIANT: every wall must stay clear of the attractor ball, measured

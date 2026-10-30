@@ -20,6 +20,7 @@ from adaptive_roa.conformal.calibrator import (
     nonconformity_scores_batch_two_sided,
 )
 from adaptive_roa.conformal.refinement import RefinementStats, refine_invalid_endpoints
+from adaptive_roa.systems.criteria import optional_radius
 
 
 def _classification_metrics_from_predictions(pred_labels: np.ndarray, y_true: np.ndarray) -> dict[str, Any]:
@@ -1455,7 +1456,7 @@ class FullROAEvaluator:
     def __init__(self, cfg: Any, system: Any, device: str):
         self.predictor_type = str(cfg.predictor_type)
         self.alpha_eval = float(cfg.alpha_eval)
-        self.attractor_radius = float(cfg.attractor_radius)
+        self.attractor_radius = optional_radius(cfg.attractor_radius)
         self.num_mc_samples_eval = int(cfg.num_mc_samples_eval)
         self.decision_rule = str(cfg.decision_rule)
         self.refine_invalids = bool(cfg.refine_invalids)

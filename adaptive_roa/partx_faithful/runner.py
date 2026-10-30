@@ -31,6 +31,7 @@ from adaptive_roa.partx_faithful.state import config_hash, load_state, save_stat
 from adaptive_roa.partx_faithful.volume import (classified_falsification_volume,
                                                 gp_quantile_falsification_volume,
                                                 remaining_plus_violating_volume)
+from adaptive_roa.systems.criteria import optional_radius
 
 FV_QUANTILES = (0.5, 0.05, 0.01)
 _SNAPSHOT_STAGE = 7        # seed slot for readout fits, separate from the algorithm's
@@ -71,7 +72,7 @@ class CheckpointWriter:
                  guarantee_alpha: float = 0.05):
         self.out = Path(output_dir)
         self.system, self.eval_states_file = system, str(eval_states_file)
-        self.attractor_radius = float(attractor_radius)
+        self.attractor_radius = optional_radius(attractor_radius)
         self.checkpoints, self.initial = list(checkpoints), int(initial)
         self.model_factory, self.pcfg, self.extra = model_factory, pcfg, extra
         self.decision_rule = str(decision_rule)
@@ -350,7 +351,7 @@ def run_from_cfg(cfg) -> dict:
         eval_states_file=cfg.data_source.test_set_file, output_dir=cfg.output_dir,
         initial=int(cfg.initial_train_size), samples_per_epoch=int(cfg.samples_per_epoch),
         n_epochs=int(cfg.n_epochs), pcfg=pcfg, gp_kwargs=gp_kwargs,
-        falsify=str(cfg.partx_faithful.falsify), attractor_radius=float(cfg.attractor_radius),
+        falsify=str(cfg.partx_faithful.falsify), attractor_radius=optional_radius(cfg.attractor_radius),
         extra=extra, decision_rule=str(cfg.get("decision_rule", "one_sided")),
         trajectory=PoolTrajectoryStates(ds) if traj_on else None,
         reuse_hyperparameters=bool(gp.get("reuse_hyperparameters", False)),

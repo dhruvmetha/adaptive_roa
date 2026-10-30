@@ -27,7 +27,8 @@ class CartPoleSystem(DynamicalSystem):
                  angle_limit: float | None = None,
                  failure_thresholds: dict | None = None,
                  success_tolerances: dict | None = None,
-                 criteria_buffer: float = 0.0):
+                 criteria_buffer: float = 0.0,
+                 require_criteria: bool = False):
         """
         Initialize CartPole system
 
@@ -60,7 +61,14 @@ class CartPoleSystem(DynamicalSystem):
             criteria_buffer: margin added to both criteria to absorb final-state
                   prediction error (det paper D12). Only read when one of the two
                   criteria above is set.
+            require_criteria: refuse any criterion left to a class default. With the
+                  success box configured, a radius passed to classify_attractor is an
+                  error: the box is the only success test (systems/criteria.py).
         """
+        if require_criteria:
+            from adaptive_roa.systems.criteria import check_required
+            check_required("cartpole", goal=goal, failure_thresholds=failure_thresholds,
+                           success_tolerances=success_tolerances)
         if dataset_dir is None:
             dataset_dir = f"{get_data_dir()}/{get_noise_regime()}/cartpole_pybullet"
 
@@ -224,7 +232,7 @@ class CartPoleSystem(DynamicalSystem):
         """
         return [list(self.goal)]
     
-    def is_in_attractor(self, state, radius: float = 1.0):
+    def is_in_attractor(self, state, radius: float | None = None):
         """
         Check if states are within attractor basins (balanced CartPole)
 
@@ -245,6 +253,11 @@ class CartPoleSystem(DynamicalSystem):
         if state.dim() == 1:
             state = state.unsqueeze(0)
 
+        if self.success_tolerances is not None:
+            # One success test: the configured box, exactly as classify_attractor.
+            return self.classify_attractor(state, radius) == 1
+        radius = 1.0 if radius is None else radius   # legacy L2 ball
+
         # Distances are measured from self.goal, NOT the origin.
         g = torch.as_tensor(self.goal, dtype=state.dtype, device=state.device)
         euclidean_diff = state[:, [0, 2, 3]] - g[[0, 2, 3]]
@@ -262,7 +275,7 @@ class CartPoleSystem(DynamicalSystem):
 
         return result
 
-    def classify_attractor(self, state: torch.Tensor, radius: float = 0.1) -> torch.Tensor:
+    def classify_attractor(self, state: torch.Tensor, radius: float | None = None) -> torch.Tensor:
         """
         Classify CartPole states into three categories based on termination conditions
 
@@ -305,10 +318,15 @@ class CartPoleSystem(DynamicalSystem):
         angle_diff = torch.atan2(torch.sin(dth), torch.cos(dth))
 
         if self.success_tolerances is None:
-            # Combined distance
+            # Combined distance (legacy L2 ball; 0.1 when no radius is passed)
             dist = torch.sqrt(torch.sum(euclidean_diff**2, dim=1) + angle_diff**2)
-            in_attractor = dist < radius
+            in_attractor = dist < (0.1 if radius is None else radius)
         else:
+            if radius is not None:
+                raise ValueError(
+                    f"cartpole: classify_attractor was passed radius {radius}, but success is the "
+                    f"configured box (success_tolerances); set attractor_radius: null in the system "
+                    f"config so the criteria keep one source")
             t = self.success_tolerances
             tol = torch.tensor([t["x"], t["theta"], t["x_dot"], t["theta_dot"]],
                                dtype=state.dtype, device=state.device) + self.criteria_buffer

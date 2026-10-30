@@ -49,17 +49,17 @@ def test_cartpole_default_still_gates_at_the_achieved_maximum():
 @needs_cartpole
 def test_cartpole_det_criteria_use_collector_thresholds_minus_buffer():
     sys = CartPoleSystem(dataset_dir=str(CARTPOLE_DIR), **DET_CARTPOLE)
-    assert _label(sys, [0.0, 0.0, 4.95, 0.0], 0.2) == -1
-    assert _label(sys, [0.0, 0.0, 4.85, 0.0], 0.2) == 0
-    assert _label(sys, [5.95, 0.0, 0.0, 0.0], 0.2) == -1
+    assert _label(sys, [0.0, 0.0, 4.95, 0.0], None) == -1
+    assert _label(sys, [0.0, 0.0, 4.85, 0.0], None) == 0
+    assert _label(sys, [5.95, 0.0, 0.0, 0.0], None) == -1
 
 
 @needs_cartpole
 def test_cartpole_det_success_is_the_buffered_box():
     sys = CartPoleSystem(dataset_dir=str(CARTPOLE_DIR), **DET_CARTPOLE)
-    assert _label(sys, [0.10, 0.14, 0.14, -0.14], 0.2) == 1
-    assert _label(sys, [0.12, 0.0, 0.0, 0.0], 0.2) == 0
-    assert _label(sys, [0.0, 2 * np.pi + 0.1, 0.0, 0.0], 0.2) == 1   # theta wraps
+    assert _label(sys, [0.10, 0.14, 0.14, -0.14], None) == 1
+    assert _label(sys, [0.12, 0.0, 0.0, 0.0], None) == 0
+    assert _label(sys, [0.0, 2 * np.pi + 0.1, 0.0, 0.0], None) == 1   # theta wraps
 
 
 @needs_cartpole
@@ -67,7 +67,7 @@ def test_cartpole_det_criteria_reproduce_every_stored_test_label():
     import pandas as pd
     t = pd.read_csv(CARTPOLE_DIR / "test_set.txt", header=None).values
     sys = CartPoleSystem(dataset_dir=str(CARTPOLE_DIR), **DET_CARTPOLE)
-    pred = sys.classify_attractor(torch.tensor(t[:, 4:8], dtype=torch.float32), radius=0.2).numpy()
+    pred = sys.classify_attractor(torch.tensor(t[:, 4:8], dtype=torch.float32), radius=None).numpy()
     y = t[:, 8].astype(int)
     assert np.all(pred[y == 0] == -1)
     assert np.all(pred[y == 1] == 1)
@@ -89,9 +89,10 @@ def test_pendulum_default_uses_one_radius_for_every_attractor():
 
 @needs_pendulum
 def test_pendulum_failure_radius_and_centre_from_config():
-    sys = PendulumSystem(dataset_dir=str(PENDULUM_DIR), failure_radius=0.15, failure_theta=2.0957)
-    assert _label(sys, [2.0957 + 0.12, 0.0], 0.1) == -1
-    assert _label(sys, [-2.0957, 0.14], 0.1) == -1
+    sys = PendulumSystem(dataset_dir=str(PENDULUM_DIR), failure_radius=0.1, failure_theta=2.0957)
+    assert _label(sys, [2.0957 + 0.09, 0.0], 0.1) == -1
+    assert _label(sys, [2.0957 + 0.12, 0.0], 0.1) == 0       # outside the 0.1 failure ball
+    assert _label(sys, [-2.0957, 0.09], 0.1) == -1
     assert _label(sys, [0.09, 0.0], 0.1) == 1
     assert _label(sys, [0.12, 0.0], 0.1) == 0
 
@@ -122,11 +123,14 @@ def test_grape_cartpole_config_does_not():
 
 
 def test_det_pendulum_and_quad_radii():
+    # Pendulum's attractor radius is 0.1 for success and failure (user ruling).
     pen = _compose("pendulum")
-    assert pen.attractor_radius == 0.1
-    assert pen.system.failure_radius == 0.15
-    assert _compose("quadrotor2d").attractor_radius == 0.3
-    assert _compose("quadrotor3d").attractor_radius == 0.15
+    assert pen.attractor_radius == pen.system.success_radius == 0.1
+    assert pen.system.failure_radius == 0.1
+    for name, r in (("quadrotor2d", 0.3), ("quadrotor3d", 0.15)):
+        cfg = _compose(name)
+        assert cfg.attractor_radius == cfg.system.success_radius == r
+    assert _compose("cartpole_pybullet").attractor_radius is None   # success is the box
 
 
 def test_pendulum_g1_keeps_its_pre_rerun_data_and_schedule():

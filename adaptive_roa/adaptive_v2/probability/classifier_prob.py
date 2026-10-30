@@ -7,13 +7,14 @@ import numpy as np
 from adaptive_roa.conformal import ConformalConfig
 from adaptive_roa.conformal.classifier_probability_estimator import ClassifierProbabilityEstimator
 from adaptive_roa.adaptive_v2.types import OutcomeProbabilities
+from adaptive_roa.systems.criteria import optional_radius
 
 
 class ClassifierProbabilityBackend:
     """Probability backend using a discriminative classifier (single forward pass)."""
 
     def __init__(self, cfg: Any, system: Any, device: str):
-        self.attractor_radius = float(cfg.attractor_radius)
+        self.attractor_radius = optional_radius(cfg.attractor_radius)
         self.system = system
         self.device = device
         self.model_handle: Any = None

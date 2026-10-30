@@ -18,14 +18,14 @@ EXP = os.environ.get("DET_RERUN_EXP", "/common/users/shared/pracsys/adaptive_roa
 
 # system key -> (hydra system, samples_per_epoch override or None, endpoint epochs, mem)
 SYSTEMS = {
-    # mem is a first guess, not measured at full scale: read MaxRSS from the
-    # first jobs and adjust.
-    "pen":    ("pendulum", None, [0, 5, 10], "16G"),
-    "cp":     ("cartpole_pybullet", None, [0, 5, 10], "16G"),
-    "q2d":    ("quadrotor2d", None, [0, 5, 10], "32G"),
-    "q3d30":  ("quadrotor3d", 2000, [0, 5, 10], "48G"),
-    "q3d60":  ("quadrotor3d", 5000, [0, 6, 10], "48G"),
-    "q3d110": ("quadrotor3d", 10000, [0, 5, 10], "64G"),
+    # mem from measured MaxRSS (2026-10-30): quad2d FM peaked at 4.1G over a full
+    # run, quad3d FM at 9.1G halfway through the 110k schedule. About 2.5-3x headroom.
+    "pen":    ("pendulum", None, [0, 5, 10], "8G"),
+    "cp":     ("cartpole_pybullet", None, [0, 5, 10], "8G"),
+    "q2d":    ("quadrotor2d", None, [0, 5, 10], "12G"),
+    "q3d30":  ("quadrotor3d", 2000, [0, 5, 10], "16G"),
+    "q3d60":  ("quadrotor3d", 5000, [0, 6, 10], "20G"),
+    "q3d110": ("quadrotor3d", 10000, [0, 5, 10], "24G"),
 }
 # The shared uniform quad3d run (D24) also reports the epochs that land on the
 # other schedules' budgets: 20k, 30k, 40k and 60k.

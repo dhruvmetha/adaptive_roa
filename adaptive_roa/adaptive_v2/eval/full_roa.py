@@ -11,6 +11,7 @@ import numpy as np
 import torch
 
 from adaptive_roa.adaptive.data_source import load_eval_states
+from adaptive_roa.conformal.decision import invalid_threshold as default_invalid_threshold, tie
 from adaptive_roa.adaptive_v2.eval.prediction_store import endpoint_test_rows
 from adaptive_roa.adaptive_v2.eval.system_hooks import resolve_system_hook
 from adaptive_roa.adaptive_v2.types import ThresholdState
@@ -343,9 +344,15 @@ def _predict_lambda_delta(
     Defaults to False so deterministic systems -- where three outcomes are real --
     and runs already in flight are unaffected.
     """
-    success_thresh = float(lambda_star + delta)
-    failure_thresh = float(lambda_star - delta)
-    effective_invalid_threshold = failure_thresh if invalid_threshold is None else float(invalid_threshold)
+    # Invalid threshold max(λ, 1-λ) - δ: under the two-sided rule it flags only
+    # states that would otherwise be outcome-uncertain (conformal/decision.py).
+    # Probabilities and thresholds are rounded so exact ties compare as ties.
+    p_success, p_failure, p_invalid = tie(p_success), tie(p_failure), tie(p_invalid)
+    success_thresh = float(tie(lambda_star + delta))
+    failure_thresh = float(tie(lambda_star - delta))
+    failure_thresh_pf = float(tie(1.0 - lambda_star + delta))
+    effective_invalid_threshold = (default_invalid_threshold(lambda_star, delta) if invalid_threshold is None
+                                   else float(invalid_threshold))
 
     pred = np.full(len(p_success), -1, dtype=np.int8)
     # Not `p_invalid >= threshold` short-circuited by folding p_invalid to zero:
@@ -359,13 +366,13 @@ def _predict_lambda_delta(
     pred[(p_success > success_thresh) & non_invalid] = 1
 
     if decision_rule == "two_sided":
-        failure_mask = ((1.0 - p_failure) < failure_thresh) & non_invalid
+        failure_mask = (p_failure > failure_thresh_pf) & non_invalid
     else:
         failure_mask = (p_success < failure_thresh) & non_invalid
     pred[failure_mask] = 0
 
     if decision_rule == "two_sided":
-        both = (p_success > success_thresh) & ((1.0 - p_failure) < failure_thresh) & non_invalid
+        both = (p_success > success_thresh) & (p_failure > failure_thresh_pf) & non_invalid
         pred[both] = -1
 
     return pred, {
@@ -469,7 +476,8 @@ def _predict_qhat_prediction_sets(
     invalid_threshold: float | None,
 ) -> tuple[np.ndarray, dict[str, Any]]:
     n = len(p_success)
-    effective_invalid_threshold = float((lambda_star - delta) if invalid_threshold is None else invalid_threshold)
+    effective_invalid_threshold = float(default_invalid_threshold(lambda_star, delta) if invalid_threshold is None
+                                        else invalid_threshold)
 
     if decision_rule == "two_sided":
         score_success = nonconformity_scores_batch_two_sided(
@@ -550,7 +558,8 @@ def _predict_qhat_multi_class(
             - "skip": unknown never in set
     """
     n = len(p_success)
-    effective_invalid_threshold = float((lambda_star - delta) if invalid_threshold is None else invalid_threshold)
+    effective_invalid_threshold = float(default_invalid_threshold(lambda_star, delta) if invalid_threshold is None
+                                        else invalid_threshold)
 
     if decision_rule == "two_sided":
         score_success = nonconformity_scores_batch_two_sided(

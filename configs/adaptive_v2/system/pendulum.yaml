@@ -24,7 +24,9 @@ dataset_name: pendulum/${controller}_failset
 dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
 eval_root: ${data_dir}/${noise_regime}/pendulum/${eval_variant}
 
-decision_rule: one_sided
+# Two-sided (det paper): the lqr_failset failure attractors give p_failure its own
+# criterion, so failure is p_failure > 1 - lambda + delta, not "not success".
+decision_rule: two_sided
 attractor_radius: 0.1
 # Collector horizon in control steps (dataset_description.json), read by
 # data_source.timeout_intermediates=drop through experiment/det_rerun.yaml.

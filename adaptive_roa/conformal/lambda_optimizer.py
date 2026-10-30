@@ -10,12 +10,14 @@ Decision rules:
 - "one_sided": Uses only p_success (default, for pendulum/mountain car)
 - "two_sided": Uses both p_success and p_failure (for CartPole)
 
-Points with high p_invalid (>= λ-δ) are treated as UNKNOWN, matching
-the evaluation logic in full_roa.py.
+Points with high p_invalid (>= max(λ, 1-λ) - δ, see conformal/decision.py) are
+treated as UNKNOWN, matching the evaluation logic in full_roa.py. Probabilities and
+thresholds are compared after rounding (decision.tie), so exact ties are ties.
 """
 import numpy as np
 from typing import Tuple, Optional
 from adaptive_roa.conformal.config import ConformalConfig
+from adaptive_roa.conformal.decision import invalid_threshold, tie
 
 
 # =============================================================================
@@ -28,30 +30,34 @@ def apply_one_sided_rule(
     lambda_star: float,
     delta: float,
     p_invalid: Optional[np.ndarray] = None,
+    prerounded: bool = False,
 ) -> np.ndarray:
     """
     One-sided decision rule using only p_success.
 
-    - UNKNOWN if p_invalid >= λ - δ
+    - UNKNOWN if p_invalid >= max(λ, 1-λ) - δ
     - SUCCESS if p_success > λ + δ
     - FAILURE if p_success < λ - δ
     - UNKNOWN otherwise
 
-    Used for systems where failure is simply "not success" (pendulum, mountain car).
+    Used where failure is simply "not success" (the classifiers, whose p_invalid is
+    0, and mountain car). The det-paper pendulum is two-sided (failure attractors).
     """
     n = len(p_success)
     pred = np.zeros(n)
-
-    failure_thresh = lambda_star - delta
+    if not prerounded:      # the grid search rounds once for every (λ, δ)
+        p_success = tie(p_success)
+        p_invalid = None if p_invalid is None else tie(p_invalid)
+    failure_thresh = float(tie(lambda_star - delta))
 
     # Mark high-invalid points as UNKNOWN first
     if p_invalid is not None:
-        invalid_mask = p_invalid >= failure_thresh
+        invalid_mask = p_invalid >= invalid_threshold(lambda_star, delta)
     else:
         invalid_mask = np.zeros(n, dtype=bool)
 
     non_invalid = ~invalid_mask
-    pred[(p_success > lambda_star + delta) & non_invalid] = 1
+    pred[(p_success > float(tie(lambda_star + delta))) & non_invalid] = 1
     pred[(p_success < failure_thresh) & non_invalid] = -1
     return pred
 
@@ -62,32 +68,38 @@ def apply_two_sided_rule(
     lambda_star: float,
     delta: float,
     p_invalid: Optional[np.ndarray] = None,
+    prerounded: bool = False,
 ) -> np.ndarray:
     """
     Two-sided decision rule using both p_success and p_failure.
 
-    - UNKNOWN if p_invalid >= λ - δ
+    - UNKNOWN if p_invalid >= max(λ, 1-λ) - δ  (only ever a state that would
+      otherwise be UNKNOWN; see conformal/decision.py)
     - SUCCESS if p_success > λ + δ
-    - FAILURE if (1 - p_failure) < λ - δ  (equivalently p_failure > 1 - (λ - δ))
+    - FAILURE if p_failure > 1 - λ + δ  (equivalently (1 - p_failure) < λ - δ)
     - UNKNOWN otherwise
 
-    Used for systems with explicit failure conditions (CartPole).
+    Used for systems with explicit failure conditions (pendulum with its failure
+    attractors, cartpole, quadrotors).
     """
     n = len(p_success)
     pred = np.zeros(n)
+    if not prerounded:      # the grid search rounds once for every (λ, δ)
+        p_success, p_failure = tie(p_success), tie(p_failure)
+        p_invalid = None if p_invalid is None else tie(p_invalid)
 
-    success_thresh = lambda_star + delta
-    failure_thresh = lambda_star - delta
+    success_thresh = float(tie(lambda_star + delta))
+    failure_thresh_pf = float(tie(1.0 - lambda_star + delta))
 
     # Mark high-invalid points as UNKNOWN first
     if p_invalid is not None:
-        invalid_mask = p_invalid >= failure_thresh
+        invalid_mask = p_invalid >= invalid_threshold(lambda_star, delta)
     else:
         invalid_mask = np.zeros(n, dtype=bool)
 
     non_invalid = ~invalid_mask
     pred[(p_success > success_thresh) & non_invalid] = 1
-    pred[((1.0 - p_failure) < failure_thresh) & non_invalid] = -1
+    pred[(p_failure > failure_thresh_pf) & non_invalid] = -1
 
     return pred
 
@@ -242,6 +254,9 @@ class LambdaOptimizer:
         For each λ in [δ, 1-δ], computes the loss and returns the λ
         that minimizes it.
         """
+        # Rounded once here; the rules then compare ties exactly (conformal/decision.py).
+        p_success, p_failure = tie(p_success), tie(p_failure)
+        p_invalid = None if p_invalid is None else tie(p_invalid)
         delta = self.config.delta
         grid_size = self.config.lambda_grid_size
         decision_rule = self.config.decision_rule
@@ -267,9 +282,9 @@ class LambdaOptimizer:
 
         for lam in lambdas:
             if decision_rule == "two_sided":
-                predictions = apply_two_sided_rule(p_success, p_failure, lam, delta, p_invalid)
+                predictions = apply_two_sided_rule(p_success, p_failure, lam, delta, p_invalid, prerounded=True)
             else:
-                predictions = apply_one_sided_rule(p_success, p_failure, lam, delta, p_invalid)
+                predictions = apply_one_sided_rule(p_success, p_failure, lam, delta, p_invalid, prerounded=True)
 
             loss, error_term, unknown_rate = self._compute_loss(predictions, y_true, n_samples)
 
@@ -310,6 +325,9 @@ class LambdaOptimizer:
         For each δ in [delta_min, delta_max], computes the loss and returns
         the δ that minimizes it.
         """
+        # Rounded once here; the rules then compare ties exactly (conformal/decision.py).
+        p_success, p_failure = tie(p_success), tie(p_failure)
+        p_invalid = None if p_invalid is None else tie(p_invalid)
         lam = 0.5
         grid_size = self.config.delta_grid_size
         delta_min = self.config.delta_min
@@ -337,9 +355,9 @@ class LambdaOptimizer:
 
         for delta in deltas:
             if decision_rule == "two_sided":
-                predictions = apply_two_sided_rule(p_success, p_failure, lam, delta, p_invalid)
+                predictions = apply_two_sided_rule(p_success, p_failure, lam, delta, p_invalid, prerounded=True)
             else:
-                predictions = apply_one_sided_rule(p_success, p_failure, lam, delta, p_invalid)
+                predictions = apply_one_sided_rule(p_success, p_failure, lam, delta, p_invalid, prerounded=True)
 
             loss, error_term, unknown_rate = self._compute_loss(predictions, y_true, n_samples)
 
@@ -384,6 +402,9 @@ class LambdaOptimizer:
         Searches over all valid (λ, δ) pairs where λ-δ > 0 and λ+δ < 1.
         Uses lambda_grid_size × delta_grid_size evaluations.
         """
+        # Rounded once here; the rules then compare ties exactly (conformal/decision.py).
+        p_success, p_failure = tie(p_success), tie(p_failure)
+        p_invalid = None if p_invalid is None else tie(p_invalid)
         lambda_grid_size = self.config.lambda_grid_size
         delta_grid_size = self.config.delta_grid_size
         delta_min = self.config.delta_min
@@ -425,9 +446,9 @@ class LambdaOptimizer:
                 n_evaluated += 1
 
                 if decision_rule == "two_sided":
-                    predictions = apply_two_sided_rule(p_success, p_failure, lam, delta, p_invalid)
+                    predictions = apply_two_sided_rule(p_success, p_failure, lam, delta, p_invalid, prerounded=True)
                 else:
-                    predictions = apply_one_sided_rule(p_success, p_failure, lam, delta, p_invalid)
+                    predictions = apply_one_sided_rule(p_success, p_failure, lam, delta, p_invalid, prerounded=True)
 
                 loss, error_term, unknown_rate = self._compute_loss(predictions, y_true, n_samples)
                 loss_grid[i, j] = loss

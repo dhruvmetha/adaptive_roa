@@ -5,7 +5,7 @@ Two protocols, both computed so the paper can state the one it uses:
 - "all": what the code does today. calibrate_qhat scores every cal point, and
   coverage is the share of all test points whose true label is in the set.
 - "filtered": what the manuscript states. Cal and test points with
-  p_invalid >= the invalid threshold are excluded from both calibration and
+  p_invalid >= the invalid threshold (max(lambda, 1 - lambda) - delta) are excluded from both calibration and
   coverage, and the retained fractions are reported.
 
 Both reuse the run's frozen lambda*, delta*, decision rule and the stored cal
@@ -20,6 +20,7 @@ import numpy as np
 from omegaconf import OmegaConf
 
 from adaptive_roa.adaptive_v2.eval.full_roa import _predict_lambda_delta, _predict_qhat_prediction_sets
+from adaptive_roa.conformal.decision import invalid_threshold
 from adaptive_roa.conformal.calibrator import (
     conformal_quantile,
     nonconformity_scores_batch_one_sided,
@@ -45,7 +46,7 @@ def _scores(p_s, p_f, y, lam, delta, rule):
 
 def sweep(cal, test, lam, delta, rule, inv_thr, alphas=ALPHAS) -> list[dict]:
     """cal and test are (p_success, p_failure, p_invalid, y) tuples, y in {-1, 1}."""
-    thr = float((lam - delta) if inv_thr is None else inv_thr)
+    thr = float(invalid_threshold(lam, delta) if inv_thr is None else inv_thr)
     pc_s, pc_f, pc_i, yc = cal
     pt_s, pt_f, pt_i, yt = test
     keep_c, keep_t = pc_i < thr, pt_i < thr

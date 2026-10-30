@@ -359,6 +359,21 @@ class AdaptiveEngine:
                 self.pool.mark_indices_as_used(acquisition.d2_indices)
                 self.pool.add_to_training_balanced(acquisition.d2_indices, source="acquisition")
 
+            # D25: a strategy that found fewer than n_d2_target picks (direct takes
+            # only candidates its rule marks uncertain) is topped up with uniform
+            # picks, so every arm spends its budget. Off unless configured.
+            fill_indices: list[int] = []
+            n_short = n_d2_target - len(acquisition.d2_indices)
+            if need_d2_acquisition and n_short > 0 and bool(self.cfg.acquisition.get("fill_shortfall", False)):
+                _, fill_indices = self.pool.sample_uniform(
+                    n_short, exclude=set(d1_indices) | set(acquisition.d2_indices))
+                if fill_indices:
+                    self.pool.mark_indices_as_used(fill_indices)
+                    self.pool.add_to_training_balanced(fill_indices, source="uniform_fill")
+                acquisition.diagnostics["fill_indices"] = list(fill_indices)   # start mode keeps no pick log
+                print(f"Shortfall fill: {len(acquisition.d2_indices)} acquired of {n_d2_target}, "
+                      f"{len(fill_indices)} uniform picks added")
+
             q_hat_eval = None
             n_cal_eval = 0
             cal_file = self.cfg.data_source.get("cal_set_file", None)
@@ -436,6 +451,7 @@ class AdaptiveEngine:
                 "sampling_mode": acquisition_mode,
                 "n_d1_added": int(len(d1_indices)),
                 "n_d2_added": int(len(acquisition.d2_indices)),
+                "n_d2_fill": int(len(fill_indices)),
                 "n_d2_uncertain": int(len(acquisition.d2_indices) - acquisition.n_invalid_added),
                 "n_d2_invalid": int(acquisition.n_invalid_added),
                 "n_discarded_certain": int(acquisition.n_certain_discarded),

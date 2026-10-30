@@ -22,6 +22,11 @@ probability:
 acquisition:
   num_mc_samples: ${acquisition_mc_samples}
   d2_ratio: 0.5            # D05; ablation A-D2 covers 0.75 and 1.0
+  # D25 (ruled 2026-10-30): a round that direct leaves short is topped up with
+  # uniform starts, logged as "uniform_fill" (pick log, or the round's diagnostics
+  # in start mode) and n_d2_fill in the epoch results. A variation of the direct
+  # rule; reported as "direct with uniform top-up".
+  fill_shortfall: true
 
 eval:
   num_mc_samples_eval: 100
@@ -35,10 +40,11 @@ calibration:
 adaptive_v2:
   filter_confident_pairs: false   # D16: same training data for every head
 
-# D22: acquisition over intermediate states. A pick of (trajectory, row) adds the
-# suffix from that row; an earlier pick of the same trajectory replaces it. The
-# uniform share draws trajectory starts in pool order; every pick is one rollout.
-candidate_mode: suffix
+# D26 (ruled 2026-10-30, replacing D22): acquisition candidates are trajectory
+# starts only; the uniform share takes the next starts in pool order. The suffix
+# pool (candidate_mode=suffix) is ablation A-P. test_ratio 0: test states come
+# from the disjoint test file (D15).
+candidate_mode: start
 test_ratio: 0
 
 data_source:

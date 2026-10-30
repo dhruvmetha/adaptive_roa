@@ -53,3 +53,14 @@ def test_start_mode_reads_the_rounds_from_artifacts(tmp_path):
     assert (r0["n_uniform"], r0["n_acquired"], r0["budget_after"]) == (1, 1, 4)
     assert r0["success_share_acquired"] == 1.0 and r0["acquired_at_start"] == 1.0   # trajectory 5 succeeds
     assert (r1["n_acquired"], r1["success_share_acquired"], r1["budget_after"]) == (1, 0.0, 6)
+
+
+def test_start_mode_counts_the_d25_fill(tmp_path):
+    _fake_run(tmp_path, [])
+    (tmp_path / "dataset_builder_state.json").write_text(json.dumps({"train_indices": []}))
+    (tmp_path / "epoch_000").mkdir()
+    (tmp_path / "epoch_000" / "artifacts_v2.json").write_text(json.dumps(
+        {"train_trajectories": 2, "acquisition": {"d1_indices": [2], "d2_indices": [],
+                                                  "diagnostics": {"fill_indices": [3]}}}))
+    (r0,) = acquisition_profile(tmp_path)
+    assert (r0["n_uniform"], r0["n_acquired"], r0["n_fill"], r0["budget_after"]) == (1, 0, 1, 4)

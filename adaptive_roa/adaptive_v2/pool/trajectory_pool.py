@@ -60,12 +60,13 @@ class TrajectoryPool:
     ) -> tuple[np.ndarray, list[int]]:
         return self.dataset_builder.sample_candidates_without_marking(n, exclude=exclude)
 
-    def sample_uniform(self, n: int) -> tuple[np.ndarray, list[int]]:
+    def sample_uniform(self, n: int, exclude: set[int] | None = None) -> tuple[np.ndarray, list[int]]:
         """The uniform (1 - d2) share. Suffix mode takes trajectory starts in pool
-        order; the other modes keep their historical draw."""
+        order, skipping the trajectories of the candidates in ``exclude``; the
+        other modes keep their historical draw."""
         if self.candidate_mode == "suffix":
-            return self.dataset_builder.sample_uniform_starts(n)
-        return self.dataset_builder.sample_candidates_without_marking(n)
+            return self.dataset_builder.sample_uniform_starts(n, exclude=exclude)
+        return self.dataset_builder.sample_candidates_without_marking(n, exclude=exclude)
 
     def mark_indices_as_used(self, indices: list[int]) -> None:
         self.dataset_builder.mark_indices_as_used(indices)

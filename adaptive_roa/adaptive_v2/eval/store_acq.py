@@ -37,6 +37,7 @@ def _start_mode_log(run: Path, n0: int) -> list[tuple[int, int, str]]:
         acq = json.loads(a.read_text()).get("acquisition") or {}
         log += [(int(t), 0, "uniform") for t in acq.get("d1_indices", [])]
         log += [(int(t), 0, "acquisition") for t in acq.get("d2_indices", [])]
+        log += [(int(t), 0, "uniform_fill") for t in (acq.get("diagnostics") or {}).get("fill_indices", [])]
     return log
 
 
@@ -58,10 +59,11 @@ def acquisition_profile(run_dir) -> list[dict]:
         batch = log[start:end]
         uni = [(t, r) for t, r, src in batch if src == "uniform"]
         acq = [(t, r) for t, r, src in batch if src == "acquisition"]
+        n_fill = sum(src == "uniform_fill" for _t, _r, src in batch)      # D25 top-up
         frac = [r / max(lengths[t] - 1, 1) for t, r in acq]
         rows.append({
             "run": run.name, "round": e, "budget_after": end,
-            "n_uniform": len(uni), "n_acquired": len(acq),
+            "n_uniform": len(uni), "n_acquired": len(acq), "n_fill": n_fill,
             "success_share_uniform": float(np.mean([labels[t] == 1 for t, _ in uni])) if uni else float("nan"),
             "success_share_acquired": float(np.mean([labels[t] == 1 for t, _ in acq])) if acq else float("nan"),
             "acquired_at_start": float(np.mean([r == 0 for _, r in acq])) if acq else float("nan"),

@@ -27,6 +27,9 @@ SYSTEMS = {
     "q3d60":  ("quadrotor3d", 5000, [0, 6, 10], "20G"),
     "q3d110": ("quadrotor3d", 10000, [0, 5, 10], "24G"),
 }
+# The BNN regressor's RSS grows with the train set (quad3d 110k: 7.5G at 20k,
+# 10.6G at 30k, about 0.3G per 1,000 trajectories), so its quad3d cells ask for more.
+ARM_MEM = {("det_bnn_reg", "q3d30"): "24G", ("det_bnn_reg", "q3d60"): "32G", ("det_bnn_reg", "q3d110"): "48G"}
 # The shared uniform quad3d run (D24) also reports the epochs that land on the
 # other schedules' budgets: 20k, 30k, 40k and 60k.
 Q3D_UNIFORM_EPOCHS = [0, 1, 2, 3, 5, 10]
@@ -57,7 +60,7 @@ def cells(seed: int):
                 ov.append("'prediction_store.endpoint_epochs=[" + ",".join(map(str, ep)) + "]'")
                 ov.append(f"output_dir={EXP}/{sk}/{name}")
                 yield {"name": name, "system": sk, "arm": arm, "mode": mode, "seed": seed,
-                       "mem": mem, "priority": PRIORITY[sk], "overrides": " ".join(ov),
+                       "mem": ARM_MEM.get((arm, sk), mem), "priority": PRIORITY[sk], "overrides": " ".join(ov),
                        "script": "scripts/run_adaptive.py"}
         # Part-X (P01, D09/D22c/C21/C23): faithful runner on the suffix state pool, CPU only.
         name = f"dr_{sk}_partx_builtin_s{seed}"

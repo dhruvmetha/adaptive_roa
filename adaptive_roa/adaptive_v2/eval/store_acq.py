@@ -4,6 +4,10 @@ Per round: how many picks came from the uniform share and from the acquisition
 score, the success share of each, where along their trajectories the acquired
 picks sit (row / (length - 1); 0 is a start), and how many picks landed on a
 trajectory already in training (each still cost a rollout, D22a).
+
+Rounds are cut at the budgets the epochs' artifacts record, since a direct round
+can fall short of samples_per_epoch (D25); without artifacts, every round is
+samples_per_epoch picks.
 """
 from __future__ import annotations
 
@@ -12,6 +16,17 @@ from pathlib import Path
 
 import numpy as np
 from omegaconf import OmegaConf
+
+
+def _rounds(run: Path, n0: int, step: int, n_log: int) -> list[tuple[int, int]]:
+    budgets = [int(json.loads(a.read_text())["train_trajectories"])
+               for a in sorted(run.glob("epoch_*/artifacts_v2.json"))]
+    if not budgets or budgets[0] != n0:
+        return [(s, min(s + step, n_log)) for s in range(n0, n_log, step)]
+    cuts = [b for b in budgets if b <= n_log]
+    if cuts[-1] < n_log:
+        cuts.append(n_log)          # picks made after the last stored epoch
+    return list(zip(cuts[:-1], cuts[1:]))
 
 
 def acquisition_profile(run_dir) -> list[dict]:
@@ -30,13 +45,13 @@ def acquisition_profile(run_dir) -> list[dict]:
     log = state["pick_log"]
     seen = {t for t, _r, src in log[:n0]}
     rows = []
-    for e, start in enumerate(range(n0, len(log), step)):
-        batch = log[start:start + step]
+    for e, (start, end) in enumerate(_rounds(run, n0, step, len(log))):
+        batch = log[start:end]
         uni = [(t, r) for t, r, src in batch if src == "uniform"]
         acq = [(t, r) for t, r, src in batch if src == "acquisition"]
         frac = [r / max(lengths[t] - 1, 1) for t, r in acq]
         rows.append({
-            "run": run.name, "round": e, "budget_after": n0 + (e + 1) * step,
+            "run": run.name, "round": e, "budget_after": end,
             "n_uniform": len(uni), "n_acquired": len(acq),
             "success_share_uniform": float(np.mean([labels[t] == 1 for t, _ in uni])) if uni else float("nan"),
             "success_share_acquired": float(np.mean([labels[t] == 1 for t, _ in acq])) if acq else float("nan"),

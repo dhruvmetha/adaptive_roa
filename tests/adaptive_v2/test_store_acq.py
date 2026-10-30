@@ -7,7 +7,7 @@ from omegaconf import OmegaConf
 from adaptive_roa.adaptive_v2.eval.store_acq import acquisition_profile
 
 
-def test_rounds_split_uniform_and_acquired_picks(tmp_path):
+def _fake_run(tmp_path, log):
     lengths = np.array([5, 9, 3, 7, 11, 4])
     offsets = np.concatenate([[0], np.cumsum(lengths)])
     np.savez(tmp_path / "train.npz", offsets=offsets, states=np.zeros((offsets[-1], 2)))
@@ -18,10 +18,25 @@ def test_rounds_split_uniform_and_acquired_picks(tmp_path):
         "data_source": {"trajectories_dir": str(tmp_path / "train.npz"),
                         "shuffled_indices_file": str(tmp_path / "order.txt"),
                         "shuffled_labels_file": str(tmp_path / "labels.txt")}}), tmp_path / "resolved_config.yaml")
-    log = [[0, 0, "initial"], [1, 0, "initial"], [2, 0, "uniform"], [3, 3, "acquisition"],
-           [4, 0, "uniform"], [1, 0, "acquisition"]]
     (tmp_path / "dataset_builder_state.json").write_text(json.dumps({"mode": "suffix", "pick_log": log}))
+
+
+def test_rounds_split_uniform_and_acquired_picks(tmp_path):
+    _fake_run(tmp_path, [[0, 0, "initial"], [1, 0, "initial"], [2, 0, "uniform"], [3, 3, "acquisition"],
+                         [4, 0, "uniform"], [1, 0, "acquisition"]])
     r0, r1 = acquisition_profile(tmp_path)
     assert (r0["n_uniform"], r0["n_acquired"], r0["success_share_acquired"]) == (1, 1, 1.0)
     assert r0["acquired_row_fraction_mean"] == 3 / 6
     assert r1["picks_on_seen_trajectories"] == 1       # trajectory 1 again
+
+
+def test_a_short_round_is_cut_at_the_stored_budget(tmp_path):
+    # Round 0 acquired nothing (direct found no uncertain candidate), so it holds one pick, not two.
+    _fake_run(tmp_path, [[0, 0, "initial"], [1, 0, "initial"], [2, 0, "uniform"],
+                         [4, 0, "uniform"], [3, 1, "acquisition"]])
+    for e, budget in enumerate((2, 3)):
+        (tmp_path / f"epoch_{e:03d}").mkdir()
+        (tmp_path / f"epoch_{e:03d}" / "artifacts_v2.json").write_text(json.dumps({"train_trajectories": budget}))
+    r0, r1 = acquisition_profile(tmp_path)
+    assert (r0["n_uniform"], r0["n_acquired"], r0["budget_after"]) == (1, 0, 3)
+    assert (r1["n_uniform"], r1["n_acquired"], r1["budget_after"]) == (1, 1, 5)

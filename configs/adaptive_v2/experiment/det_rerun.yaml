@@ -41,3 +41,14 @@ test_ratio: 0
 data_source:
   timeout_intermediates: drop     # C15: a timeout contributes only (x_0, x_T)
   horizon_steps: ${horizon_steps}
+
+# Prediction store (tracker section 9): val/cal outcome counts and the
+# threshold-fit probabilities every epoch; all K endpoints on test (a fixed
+# seed-0 subsample of at most endpoint_test_rows), val and cal at the reporting
+# epochs. Reporting epochs are initial, middle, final; override per schedule
+# (quad3d 60k: [0, 6, 10]; the shared 110k uniform run adds the epochs that
+# land on 20k, 30k and 40k, D24).
+prediction_store:
+  enabled: true
+  endpoint_epochs: [0, 5, 10]
+  endpoint_test_rows: 100000

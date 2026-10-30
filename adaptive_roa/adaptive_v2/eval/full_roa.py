@@ -11,6 +11,7 @@ import numpy as np
 import torch
 
 from adaptive_roa.adaptive.data_source import load_eval_states
+from adaptive_roa.adaptive_v2.eval.prediction_store import endpoint_test_rows
 from adaptive_roa.adaptive_v2.eval.system_hooks import resolve_system_hook
 from adaptive_roa.adaptive_v2.types import ThresholdState
 from adaptive_roa.conformal.calibrator import (
@@ -685,8 +686,14 @@ def evaluate_full_roa_fast(
     refine_max_attempts: int = 5,
     mc_cache: "MCCache | None" = None,
     max_eval_rows: int | None = None,
+    store_endpoints: bool = False,
+    endpoint_rows_cap: int | None = None,
 ) -> dict[str, Any]:
     """Fast batched full-ROA evaluation with v2-compatible outputs.
+
+    ``store_endpoints``: with ``output_dir``, also write every generated
+    endpoint for a fixed set of test rows to ``endpoints_test.npz`` (all rows, or
+    a seed-0 subsample of ``endpoint_rows_cap``); see prediction_store.py.
 
     If ``mc_cache`` is provided, the expensive GPU MC sampling loop is skipped
     entirely and predictions are derived from cached endpoints/labels.  When
@@ -783,6 +790,11 @@ def evaluate_full_roa_fast(
         mc_labels = np.zeros((n_total, num_mc_samples), dtype=np.int8)
         pred_sum = np.zeros((n_total, X_all.shape[1]), dtype=np.float64)
         mc_errors = np.full((n_total, num_mc_samples), np.nan, dtype=np.float32)
+        if store_endpoints:
+            _keep = endpoint_test_rows(n_total, endpoint_rows_cap)
+            _slot = np.full(n_total, -1, dtype=np.int64)
+            _slot[_keep] = np.arange(len(_keep))
+            kept_endpoints = np.zeros((len(_keep), num_mc_samples, X_all.shape[1]), dtype=np.float32)
 
         cumulative_rstats = RefinementStats(
             per_attempt_resolved=[0] * refine_max_attempts
@@ -854,6 +866,12 @@ def evaluate_full_roa_fast(
                             lab_np = lab.cpu().numpy()
                             for j, s_idx in enumerate(chunk):
                                 mc_labels[batch_start:batch_end, s_idx] = lab_np[:, j]
+                            if store_endpoints:
+                                _loc = np.flatnonzero(_slot[batch_start:batch_end] >= 0)
+                                if _loc.size:
+                                    _pv = pr.view(B, t, -1)[_loc].cpu().numpy()
+                                    for j, s_idx in enumerate(chunk):
+                                        kept_endpoints[_slot[batch_start:batch_end][_loc], s_idx] = _pv[:, j]
                             pred_sum[batch_start:batch_end] += (
                                 pr.view(B, t, -1).sum(dim=1).cpu().numpy())
                             pbar.update(t)
@@ -883,6 +901,10 @@ def evaluate_full_roa_fast(
                     mc_labels[batch_start:batch_end, sample_idx] = labels
                     pred_np = pred.cpu().numpy()
                     pred_sum[batch_start:batch_end] += pred_np
+                    if store_endpoints:
+                        _loc = np.flatnonzero(_slot[batch_start:batch_end] >= 0)
+                        if _loc.size:
+                            kept_endpoints[_slot[batch_start:batch_end][_loc], sample_idx] = pred_np[_loc]
 
                     if batch_actual is not None:
                         if hasattr(flow_matcher, "distance_manifold"):
@@ -1218,6 +1240,10 @@ def evaluate_full_roa_fast(
             delta=delta,
             attractor_radius=attractor_radius,
         )
+        if store_endpoints:
+            if mc_cache is not None:
+                raise ValueError("store_endpoints needs the MC loop; it cannot read endpoints from mc_cache")
+            np.savez(str(out / "endpoints_test.npz"), endpoints=kept_endpoints, rows=_keep)
 
         hook.maybe_plot(
             start_states=X_all,
@@ -1489,4 +1515,6 @@ class FullROAEvaluator:
             refine_max_attempts=self.refine_max_attempts,
             max_eval_rows=epoch_context.get("max_eval_rows", self.max_eval_rows),
             binary_outcomes=epoch_context.get("binary_outcomes", self.binary_outcomes),
+            store_endpoints=bool(epoch_context.get("store_endpoints", False)),
+            endpoint_rows_cap=epoch_context.get("endpoint_rows_cap", None),
         )

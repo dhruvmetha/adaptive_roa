@@ -72,6 +72,11 @@ class ConformalThresholdBackend:
             probability_estimator=estimator,
         )
 
+    @property
+    def last_fit(self) -> dict | None:
+        """States, labels and probabilities of the most recent threshold fit."""
+        return getattr(self.predictor, "last_threshold_fit", None)
+
     def optimize(self, X_train: np.ndarray, y_train: np.ndarray) -> ThresholdState:
         if self.predictor is None:
             raise RuntimeError("Threshold backend used before bind_model")

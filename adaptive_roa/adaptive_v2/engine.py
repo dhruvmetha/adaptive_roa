@@ -170,6 +170,27 @@ class AdaptiveEngine:
             n_existing_rows=n_existing_rows,
         )
 
+    def _write_prediction_store(self, epoch_dir, model_handle, keep_endpoints: bool, threshold_fit) -> None:
+        """Val, cal and threshold-fit predictions for this epoch (prediction_store.py)."""
+        from adaptive_roa.adaptive_v2.eval import prediction_store as ps
+        ds = self.cfg.data_source
+        for split, key in (("val", "val_set_file"), ("cal", "cal_set_file")):
+            path = ds.get(key, None)
+            if not path:
+                raise ValueError(f"prediction_store is enabled but data_source.{key} is not set")
+            X, _, y = load_eval_states(path, max_rows=self.evaluator.max_eval_rows,
+                                       state_dim=getattr(self.system, "state_dim", None))
+            ps.write_split_states_once(self.output_dir, split, X, y)
+            ps.write_split(
+                epoch_dir, split, X, y,
+                predictor_type=self.predictor_type, model=model_handle, system=self.system,
+                num_mc_samples=self.evaluator.num_mc_samples_eval,
+                attractor_radius=self.evaluator.attractor_radius,
+                batch_size=int(self.cfg.get("val_batch_size", 2048)), device=self.device,
+                keep_endpoints=keep_endpoints,
+            )
+        ps.write_threshold_fit(epoch_dir, threshold_fit)
+
     def _run_loop(
         self,
         start_epoch: int,
@@ -329,6 +350,10 @@ class AdaptiveEngine:
 
             threshold_state.q_hat_eval = q_hat_eval
 
+            store_cfg = self.cfg.get("prediction_store", None)
+            store_on = bool(store_cfg is not None and store_cfg.get("enabled", False))
+            store_endpoints_now = store_on and epoch in [int(e) for e in store_cfg.get("endpoint_epochs", [])]
+
             if not run_eval:
                 full_roa_metrics: dict[str, Any] = {"skipped": True}
             else:
@@ -339,8 +364,15 @@ class AdaptiveEngine:
                         "eval_states_file": self.cfg.data_source.test_set_file,
                         "batch_size": int(self.cfg.get("val_batch_size", 2048)),
                         "output_dir": str(epoch_output_dir),
+                        "store_endpoints": store_endpoints_now,
+                        "endpoint_rows_cap": store_cfg.get("endpoint_test_rows", None) if store_on else None,
                     },
                 )
+                if store_on:
+                    self._write_prediction_store(
+                        epoch_output_dir, model_handle, store_endpoints_now,
+                        threshold_fit=self.threshold_backend.last_fit if needs_threshold else None,
+                    )
             full_roa_metrics["q_hat_training"] = float(q_hat) if q_hat is not None else None
             full_roa_metrics["q_hat_eval"] = float(q_hat_eval) if q_hat_eval is not None else None
             full_roa_metrics["n_cal_eval"] = int(n_cal_eval)

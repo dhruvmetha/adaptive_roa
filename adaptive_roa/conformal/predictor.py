@@ -107,6 +107,9 @@ class ConformalPredictor:
         # Convert to numpy if needed
         if isinstance(y_val, torch.Tensor):
             y_val = y_val.cpu().numpy()
+        # What the optimizer fit on, kept for the prediction store (None when the
+        # thresholds are fixed and nothing is estimated).
+        self.last_threshold_fit = None
 
         optimize_mode = self.config.optimize_mode
         decision_rule = self.config.decision_rule
@@ -138,6 +141,12 @@ class ConformalPredictor:
             if verbose:
                 print(f"\n[1/2] Estimating probabilities for val data ({self.config.num_mc_samples} MC samples)...")
             p_success, p_failure, p_invalid = self.prob_estimator.estimate(X_val)
+            self.last_threshold_fit = {
+                "states": X_val.cpu().numpy() if isinstance(X_val, torch.Tensor) else np.asarray(X_val),
+                "labels": np.asarray(y_val),
+                "p_success": p_success, "p_failure": p_failure, "p_invalid": p_invalid,
+                "num_mc_samples": int(self.config.num_mc_samples),
+            }
 
             # Step 2: Dispatch based on optimize_objective
             if optimize_objective == "f1":

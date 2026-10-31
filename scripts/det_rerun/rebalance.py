@@ -287,6 +287,22 @@ def move(c: dict, card: tuple[str, str, str]) -> str:
     return f"moved {c['name']} (Amarel {c['jid']}, ~{c['hours']}h) -> {res}"
 
 
+def execute(plan, cands, ilab_mem) -> list[dict]:
+    """Run the planned moves. A cell that started on its own in the meantime returns
+    "skip"; its card goes to the next candidate instead of idling until the next run."""
+    done, tried = [], {c["name"] for c, _ in plan}
+    while plan:
+        freed = []
+        for c, card in plan:
+            res = move(c, card)
+            print(res)
+            (freed.append(card) if res.startswith("skip") else done.append(c))
+        rest = [c for c in cands if c["name"] not in tried]
+        plan = plan_moves(rest, freed, ilab_mem, len(freed)) if freed else []
+        tried |= {c["name"] for c, _ in plan}
+    return done
+
+
 def move_from_ilab(c: dict, card: tuple[str, str, str]) -> str:
     """A cell PENDING on iLab goes to a direct card: resumed from its banked epochs, or
     launched if it has none."""
@@ -390,9 +406,13 @@ def main():
     print(f"free cards: {cards}" + (f"; iLab node has {ilab_mem}G unreserved" if ilab_mem else ""))
     cands = sorted(pend + ipend, key=lambda c: (not is_fm(c["name"]), -c["hours"], c["order"], c["name"]))
     plan = plan_moves(cands, cards, ilab_mem, a.max_moves)
-    for c, card in plan:
-        print(("" if a.apply else "would move: ") + (move(c, card) if a.apply else f"{c['name']} -> {card}"))
-    moved = {c["name"] for c, _ in plan} if a.apply else set()
+    if a.apply:
+        done = execute(plan, cands, ilab_mem)
+    else:
+        for c, card in plan:
+            print(f"would move: {c['name']} -> {card}")
+        done = []
+    moved = {c["name"] for c in done}
     left = [c for c in pend if c["name"] not in moved]
     renice = [c for c in left if c["nice"] != nice_for(c["name"], c["hours"])]
     rewall = [c for c in left if _secs(c["wall"]) > _secs(slot(c["name"]))]

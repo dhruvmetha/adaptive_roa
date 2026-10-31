@@ -139,3 +139,19 @@ def test_cells_pending_on_ilab_go_only_to_direct_cards():
     pend = [{"name": "ilab_cell", "mem": "12G", "world": "ilab"}, {"name": "amarel_cell", "mem": "12G"}]
     plan = rebalance.plan_moves(pend, [("ilab", "a4000", ""), ("direct", "westeros", "4")], 40, 8)
     assert [(c["name"], card[0]) for c, card in plan] == [("amarel_cell", "ilab"), ("ilab_cell", "direct")]
+
+
+def test_a_skipped_move_hands_its_card_to_the_next_candidate(monkeypatch):
+    # 2026-10-31 12:3x: q3d110 mlpreg uniform started on Amarel between the plan and the
+    # move, and arrakis gpu4 idled for a cycle.
+    cands = [{"name": n, "mem": "20G"} for n in ("started_meanwhile", "next", "after")]
+    calls = []
+
+    def fake_move(c, card):
+        calls.append((c["name"], card[2]))
+        return f"skip {c['name']}: no longer PENDING" if c["name"] == "started_meanwhile" else f"moved {c['name']}"
+
+    monkeypatch.setattr(rebalance, "move", fake_move)
+    plan = rebalance.plan_moves(cands, [("direct", "arrakis", "4")], 0, 8)
+    done = rebalance.execute(plan, cands, 0)
+    assert calls == [("started_meanwhile", "4"), ("next", "4")] and [c["name"] for c in done] == ["next"]

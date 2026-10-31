@@ -121,6 +121,27 @@ def ilab_home_node() -> str | None:
     return next(iter(nodes)) if len(nodes) == 1 else None
 
 
+# Cards other users' jobs also run on, cleared by the user for one det cell each
+# (2026-10-30). The scan rejects them as busy; each counts as free while no det cell's
+# tmux session is placed on it.
+SHARED_CARDS = [("arrakis", "3"), ("arrakis", "4")]
+
+
+def shared_free() -> list[tuple[str, str, str]]:
+    placed = {}
+    for line in open(HERE / "launched.tsv"):
+        f = line.rstrip("\n").split("\t")
+        if len(f) >= 7 and f[1] == "direct":
+            placed[f[2]] = f[0].split("~")[0]
+    out = []
+    for host, gpu in SHARED_CARDS:
+        name = placed.get(f"{host}:{gpu}")
+        if name and sh(f"ssh -n -o BatchMode=yes {host}.cs.rutgers.edu 'tmux has-session -t gpu_{name} 2>/dev/null && echo up'").strip() == "up":
+            continue
+        out.append(("direct", host, gpu))
+    return out
+
+
 def free_cards(mem_gb: int) -> list[tuple[str, str, str]]:
     """(world, host_or_gres, gpu) per free card from the VIABLE block of a fresh scan."""
     txt = sh(f"{GPU_FREE} --fit 4 {mem_gb}", timeout=600)
@@ -140,6 +161,7 @@ def free_cards(mem_gb: int) -> list[tuple[str, str, str]]:
         elif host in ("westeros", "arrakis", "perception"):
             for g in re.findall(r"gpu(\d+) \(", line):
                 cards.append(("direct", "1spring-303-desktop-10" if host == "perception" else host, g))
+    cards += [c for c in shared_free() if c not in cards]
     # The association allows one iLab node at a time: the home node, else the roomiest.
     return cards + (max(ilab.values(), key=len) if ilab else [])
 

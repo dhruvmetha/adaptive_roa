@@ -234,9 +234,9 @@ class DispersionAcquisitionStrategy:
             float | None: Spearman rho, or None when it is undefined (fewer than
                 two finite candidates, or either series is constant)
         """
-        radius = getattr(probability_backend, "attractor_radius", None)
-        if radius is None:
+        if not hasattr(probability_backend, "attractor_radius"):
             return None
+        radius = probability_backend.attractor_radius   # None: the system's own criteria
 
         M, K, D = endpoints.shape
         success_counts = np.zeros(M, dtype=np.float64)

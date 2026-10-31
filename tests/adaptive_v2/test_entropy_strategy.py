@@ -162,3 +162,40 @@ def test_passes_exclude_through():
         pool=pool, probability_backend=_FakeBackend(np.stack([_cloud(2), _cloud(1)]), system),
         threshold_backend=None, threshold_state=_ts(), target_count=1, exclude={7})
     assert pool.last_exclude == {7}
+
+
+class _BoxSystem(_FakeSystem):
+    """A system whose success test is its own box, not a ball: radius must stay None."""
+
+    def classify_attractor(self, state, radius=None):
+        assert radius is None, "a box system takes no radius"
+        return super().classify_attractor(state, radius=0.2)
+
+
+def test_runs_with_a_box_success_test_and_no_radius():
+    # Det cartpole: attractor_radius is null because the system's success
+    # tolerances box is the one source of its criteria (dr_cp_fm_entropy died here).
+    system = _BoxSystem()
+    clouds = np.stack([_cloud(4), _cloud(2), _cloud(0), _cloud(3)])
+    pool = _FakePool(np.array([[0.0, 0.0], [0.5, 0.0], [1.0, 0.0], [1.5, 0.0]]))
+    backend = _FakeBackend(clouds, system)
+    backend.attractor_radius = None
+
+    r = EntropyAcquisitionStrategy(_cfg(selection_rule="greedy")).select(
+        pool=pool, probability_backend=backend, threshold_backend=None,
+        threshold_state=_ts(), target_count=1)
+
+    assert r.d2_indices == [101]
+
+
+def test_still_rejects_a_backend_without_the_radius_attribute():
+    class _Bare:
+        system = _FakeSystem()
+
+        def sample_endpoints(self, start_states, num_samples, verbose=True):
+            raise AssertionError("not reached")
+
+    with pytest.raises(RuntimeError, match="attractor_radius"):
+        EntropyAcquisitionStrategy(_cfg()).select(
+            pool=_FakePool(np.zeros((2, 2))), probability_backend=_Bare(), threshold_backend=None,
+            threshold_state=_ts(), target_count=1)

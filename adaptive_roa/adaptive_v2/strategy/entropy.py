@@ -72,10 +72,13 @@ class EntropyAcquisitionStrategy:
             return self._skip("target_count_zero")
 
         system = getattr(probability_backend, "system", None)
+        # None is a valid radius: a system whose success test is not a ball
+        # (det cartpole's tolerance box) classifies from its own criteria.
+        has_radius = hasattr(probability_backend, "attractor_radius")
         radius = getattr(probability_backend, "attractor_radius", None)
         has_cloud = hasattr(probability_backend, "sample_endpoints")
         has_estimate = hasattr(probability_backend, "estimate")
-        if system is None or radius is None or not (has_cloud or has_estimate):
+        if system is None or not has_radius or not (has_cloud or has_estimate):
             raise RuntimeError(
                 "EntropyAcquisitionStrategy needs a probability backend exposing "
                 "system, attractor_radius and either sample_endpoints() or "

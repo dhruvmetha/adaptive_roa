@@ -2,7 +2,7 @@
 
 The move cancelled a PENDING Amarel resume, then launch.sh refused the cell for its
 banked epochs, leaving it with no job. A cell banked on Amarel now resumes on a direct
-card through resume_direct.sh, and is not cancelled at all when the card is on iLab.
+or iLab card through resume_direct.sh or resume_ilab.sh, never from 0.
 """
 import sys
 from pathlib import Path
@@ -55,10 +55,11 @@ def test_banked_cell_resumes_on_a_direct_card(fake):
     assert "2 banked" in res
 
 
-def test_banked_cell_is_not_cancelled_for_an_ilab_card(fake):
+def test_banked_cell_resumes_on_an_ilab_card(fake):
     fake.banked = 2
-    res = rebalance.move(_cell(), ("ilab", "a4000", ""))
-    assert res.startswith("skip") and not any("scancel" in c for c in fake.calls)
+    rebalance.move(_cell(), ("ilab", "a4000", ""))
+    assert any("resume_ilab.sh dr_q3d60_fm_direct_s99512 04:00:00 a4000" in c for c in fake.calls)
+    assert not any("launch.sh" in c for c in fake.calls)
 
 
 def test_fresh_cell_launches(fake):

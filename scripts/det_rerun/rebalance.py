@@ -64,8 +64,11 @@ def is_fm(name: str) -> bool:
 def nice_for(name: str, hours: float) -> int:
     """FM first, then longest first (user ruling 2026-10-30: prioritize longer jobs). Every
     job already runs in a slot of at most 6h, so a long cell's slot backfills almost as
-    readily as a short cell's; ordering short first starved quad3d behind pen and cp."""
-    return 0 if is_fm(name) else 10 if hours >= 8 else 50 if hours >= 2 else 100
+    readily as a short cell's; ordering short first starved quad3d behind pen and cp.
+    The steps are wide because Amarel adds priority for queue age: at a 10-point step a
+    resume of an FM cell, resubmitted after its slot, fell behind non-FM jobs that had
+    waited longer (2026-10-31, priority 26 vs 39). Users cannot set nice below 0."""
+    return 0 if is_fm(name) else 30 if hours >= 8 else 60 if hours >= 2 else 100
 
 
 def slot(name: str) -> str:
@@ -399,7 +402,7 @@ def main():
         for c in rewall:
             sh(f"ssh -n -o BatchMode=yes {AM} 'scontrol update jobid={c['jid']} TimeLimit={slot(c['name'])}'")
     verb = "set" if a.apply else "would set"
-    print(f"{verb} nice on {len(renice)} Amarel cells (FM 0, then longest first: 10 above 8h, 50 for 2-8h, 100 below 2h)")
+    print(f"{verb} nice on {len(renice)} Amarel cells (FM 0, then longest first: 30 above 8h, 60 for 2-8h, 100 below 2h)")
     print(f"{verb} the slot wall on {len(rewall)} Amarel cells (pen 2h, cp 3h, q2d and BNN regressor 6h, other quad3d 4h)")
 
 

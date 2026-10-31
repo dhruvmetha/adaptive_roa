@@ -167,9 +167,17 @@ def free_cards(mem_gb: int) -> list[tuple[str, str, str]]:
 
 
 def move(c: dict, card: tuple[str, str, str]) -> str:
+    """Cancel a PENDING Amarel cell and start it on a local card. A queued resume (banked
+    epochs on Amarel) continues from them on a direct card and is never moved to iLab."""
     world, where, gpu = card
     if sh(f"ssh -n -o BatchMode=yes {AM} 'squeue -h -j {c['jid']} -o %T'").strip() != "PENDING":
         return f"skip {c['name']}: no longer PENDING"
+    out = re.search(r"output_dir=(\S+)", next(r["overrides"] for r in csv.DictReader(
+        open(HERE / "manifest.tsv"), delimiter="\t") if r["name"] == c["name"])).group(1)
+    adir = out.replace(EXP, "/scratch/st1122/det_rerun_out")
+    banked = int(sh(f"ssh -n -o BatchMode=yes {AM} 'ls {adir}/epoch_*/artifacts_v2.json 2>/dev/null | wc -l'").strip() or 0)
+    if banked and world != "direct":
+        return f"skip {c['name']}: {banked} banked epochs on Amarel, resumable only on a direct card"
     sh(f"ssh -n -o BatchMode=yes {AM} 'scancel {c['jid']}'")
     st = sh(f"ssh -n -o BatchMode=yes {AM} 'sacct -j {c['jid']} -X -n -o State'").strip()
     if not st.startswith("CANCELLED"):
@@ -179,8 +187,9 @@ def move(c: dict, card: tuple[str, str, str]) -> str:
               if l.split("\t")[0] == c["name"] else l) for l in lines]
     tmp = HERE / "launched.tsv.tmp"
     tmp.write_text("\n".join(lines)); os.replace(tmp, HERE / "launched.tsv")
-    out = re.search(r"output_dir=(\S+)", next(r["overrides"] for r in csv.DictReader(
-        open(HERE / "manifest.tsv"), delimiter="\t") if r["name"] == c["name"])).group(1)
+    if banked:
+        res = sh(f"bash {WT}/scripts/det_rerun/resume_direct.sh {c['name']} {where} {gpu} 2>&1 | tail -1", timeout=900).strip()
+        return f"moved {c['name']} (Amarel {c['jid']}, {banked} banked, ~{c['hours']}h) -> {res}"
     marker = Path(out) / ".amarel_mirror"
     if marker.exists() and len(list(Path(out).iterdir())) == 1:
         marker.unlink()

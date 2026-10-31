@@ -128,14 +128,98 @@ def plot(setting: str, cells: dict, path: Path) -> None:
     plt.close(fig)
 
 
+# One adaptive regime for every method: FM's best (user ruling 2026-10-31). Chosen by
+# mean KL over adaptive iterations, ranked within each setting and averaged over the six
+# settings on 2026-10-31 14:5x: ranked 1.83, entropy 2.00, direct 2.17 (a narrow margin).
+COMPARE_REGIME = "ranked"
+COMPARE_LINES = [("fm_det", COMPARE_REGIME, "FM (ours), ranked", "#2a78d6", "-", 2.6),
+                 ("fm_det", "uniform", "FM (ours), uniform", "#2a78d6", "--", 1.8),
+                 ("det_mlp_clf", COMPARE_REGIME, "MLP classifier, ranked", "#eb6834", "-", 1.4),
+                 ("det_bnn_clf", COMPARE_REGIME, "BNN classifier, ranked", "#1baf7a", "-", 1.4),
+                 ("det_mlp_reg", COMPARE_REGIME, "MLP final-state, ranked", "#eda100", "-", 1.4),
+                 ("det_bnn_reg", COMPARE_REGIME, "BNN final-state, ranked", "#e87ba4", "-", 1.4),
+                 ("partx_faithful", "builtin", "Part-X", "#6250d6", "-", 1.4)]
+
+
+def plot_compare(data: dict, path: Path) -> None:
+    """All settings in one figure: rows are settings, columns metrics, one line per method."""
+    fig, axes = plt.subplots(len(SETTINGS), len(METRICS), figsize=(24, 19), squeeze=False)
+    for i, s in enumerate(SETTINGS):
+        for j, mlabel in enumerate(METRICS):
+            ax = axes[i][j]
+            inner, px = [], None
+            for arm, mode, _, color, ls, lw in COMPARE_LINES:
+                if (arm, mode) not in data[s]:
+                    continue
+                xs, ys, fin = data[s][(arm, mode)]
+                ax.plot(xs, ys[j], color=color, ls=ls, lw=lw, marker="o", ms=3.2,
+                        mfc=color if fin else "white", mew=1.0, zorder=3 if arm == "fm_det" else 2)
+                vals = [v for v in ys[j] if v is not None and math.isfinite(v)]
+                if arm == "partx_faithful":
+                    px = vals
+                else:
+                    inner += vals
+            if j == 0:
+                ax.set_yscale("log")
+            # Scale to the learned methods; Part-X is drawn but labelled when it falls outside.
+            if inner:
+                lo, hi = min(inner), max(inner)
+                if j == 0:
+                    lo, hi = lo / 1.15, hi * 1.15
+                else:
+                    pad = 0.06 * (hi - lo or abs(hi) or 1.0)
+                    lo, hi = lo - pad, hi + pad
+                ax.set_ylim(lo, hi)
+                if px and (max(px) > hi or min(px) < lo):
+                    med = sorted(px)[len(px) // 2]
+                    ax.text(0.98, 0.95 if med > hi else 0.05, f"Part-X off scale (median {med:.3g})",
+                            transform=ax.transAxes, ha="right", va="top" if med > hi else "bottom",
+                            fontsize=7.5, color="#6250d6")
+            ax.grid(True, color=GRID, lw=0.6)
+            ax.tick_params(colors=MUTED, labelsize=8)
+            for sp in ax.spines.values():
+                sp.set_color(GRID)
+            if i == 0:
+                ax.set_title(mlabel + (" (log scale)" if j == 0 else ""), fontsize=12, color=INK)
+            if j == 0:
+                ax.set_ylabel(TITLES[s], fontsize=10, color=INK)
+            if i == len(SETTINGS) - 1 or j == 0:
+                ax.set_xlabel("training trajectories (k)", fontsize=8, color=MUTED)
+    handles = [Line2D([], [], color=c, ls=ls, lw=lw, marker="o", ms=4, label=lab)
+               for _, _, lab, c, ls, lw in COMPARE_LINES]
+    handles += [Line2D([], [], color=MUTED, lw=1.2, marker="o", mfc="white", ms=5, label="hollow: still running")]
+    fig.legend(handles=handles, loc="upper center", ncol=4, frameon=False, fontsize=11, bbox_to_anchor=(0.5, 0.975))
+    fig.suptitle("FM (ours) against each baseline on one adaptive regime (ranked, FM's best by KL); "
+                 "FM uniform for reference (seed 99512)", fontsize=14, color=INK, y=0.997)
+    fig.text(0.5, 0.004, "q3d30 and q3d60 uniform: the q3d110 uniform cell cut at the budget. KL = KL(true outcome || "
+             "predicted p_success), the log score for deterministic labels. FPR and FNR over committed states.",
+             ha="center", fontsize=9, color=MUTED)
+    fig.tight_layout(rect=(0, 0.012, 1, 0.94))
+    fig.savefig(path, dpi=150, facecolor="#fcfcfb")
+    plt.close(fig)
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--all", action="store_true", help="re-render every setting")
+    ap.add_argument("--all", action="store_true", help="re-render every figure")
+    ap.add_argument("--compare", action="store_true", help="only the one-regime comparison figure")
     a = ap.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     state_f = OUT / ".progress_state.json"
     state = json.loads(state_f.read_text()) if state_f.exists() else {}
     data = load()
+    if a.compare:
+        keys = {(arm, mode) for arm, mode, *_ in COMPARE_LINES}
+        sub = {s: {k: v for k, v in data[s].items() if k in keys} for s in SETTINGS}
+        h = hashlib.sha1(json.dumps(sorted((s, str(k), v) for s in SETTINGS for k, v in sub[s].items()),
+                                    default=str).encode()).hexdigest()
+        path = OUT / f"compare_{COMPARE_REGIME}.png"
+        if a.all or state.get("compare") != h or not path.exists():
+            plot_compare(data, path)
+            state["compare"] = h
+            state_f.write_text(json.dumps(state))
+            print(path)
+        return
     changed = []
     for s in SETTINGS:
         h = hashlib.sha1(json.dumps(sorted((str(k), v) for k, v in data[s].items()), default=str).encode()).hexdigest()

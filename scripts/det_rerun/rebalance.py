@@ -14,11 +14,9 @@ direct-box or iLab card sits idle. Each run:
   4. resumes every Amarel cell that timed out or was preempted short of its last
      epoch, from its last banked epoch, in a fresh slot (a cell with no banked
      epoch is launched again; nothing banked is ever discarded);
-  5. caps each PENDING Amarel cell's wall at its slot (SLOT) and sets `nice` so
-     short cells come first among ours: Amarel's backfill examines only 50 of a
-     user's jobs and fills gaps only with jobs that end before the top jobs'
-     reserved start, so short slots start and long runs advance slot by slot
-     (user ruling 2026-10-30).
+  5. caps each PENDING Amarel cell's wall at its slot (SLOT), so every job is short
+     enough for backfill and long runs advance slot by slot, and sets `nice` so FM
+     cells come first, then the longest (user rulings 2026-10-30).
 FM cells go first everywhere (user ruling 2026-10-30: FM runs are the slowest).
 iLab placements also run in slots and are resumed the same way; with no job of
 this account on iLab, the VIABLE node with the most free cards is used.
@@ -62,8 +60,10 @@ def is_fm(name: str) -> bool:
 
 
 def nice_for(name: str, hours: float) -> int:
-    """FM first, then short before long (backfill takes short jobs)."""
-    return 0 if is_fm(name) else 10 if hours < 2 else 50 if hours < 8 else 100
+    """FM first, then longest first (user ruling 2026-10-30: prioritize longer jobs). Every
+    job already runs in a slot of at most 6h, so a long cell's slot backfills almost as
+    readily as a short cell's; ordering short first starved quad3d behind pen and cp."""
+    return 0 if is_fm(name) else 10 if hours >= 8 else 50 if hours >= 2 else 100
 
 
 def slot(name: str) -> str:
@@ -311,7 +311,7 @@ def main():
         for c in rewall:
             sh(f"ssh -n -o BatchMode=yes {AM} 'scontrol update jobid={c['jid']} TimeLimit={slot(c['name'])}'")
     verb = "set" if a.apply else "would set"
-    print(f"{verb} nice on {len(renice)} Amarel cells (FM 0, then short first: 10 below 2h, 50 for 2-8h, 100 above)")
+    print(f"{verb} nice on {len(renice)} Amarel cells (FM 0, then longest first: 10 above 8h, 50 for 2-8h, 100 below 2h)")
     print(f"{verb} the slot wall on {len(rewall)} Amarel cells (pen 2h, cp 3h, q2d and BNN regressor 6h, other quad3d 4h)")
 
 

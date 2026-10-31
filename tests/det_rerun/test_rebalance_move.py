@@ -85,3 +85,11 @@ def test_direct_cards_take_cells_in_order_and_max_moves_caps():
     pend = [_c("big", 48), _c("a", 12), _c("b", 8)]
     plan = rebalance.plan_moves(pend, [("direct", "westeros", "1"), ("direct", "westeros", "2")], 0, 1)
     assert [(c["name"], card[2]) for c, card in plan] == [("big", "1")]
+
+
+def test_nice_puts_fm_first_then_longest():
+    n = rebalance.nice_for
+    fm, q3d110_bnnreg, q3d30_mlpreg, cp_mlpclf = (
+        n("dr_cp_fm_direct_s99512", 1.2), n("dr_q3d110_bnnreg_direct_s99512", 30),
+        n("dr_q3d30_mlpreg_direct_s99512", 5), n("dr_cp_mlpclf_direct_s99512", 0.4))
+    assert fm < q3d110_bnnreg < q3d30_mlpreg < cp_mlpclf

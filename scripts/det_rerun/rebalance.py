@@ -142,12 +142,13 @@ def shared_free() -> list[tuple[str, str, str]]:
     return out
 
 
-def free_cards(mem_gb: int) -> list[tuple[str, str, str]]:
-    """(world, host_or_gres, gpu) per free card from the VIABLE block of a fresh scan."""
+def free_cards(mem_gb: int) -> tuple[list[tuple[str, str, str]], int]:
+    """(world, host_or_gres, gpu) per free card from the VIABLE block of a fresh scan, and
+    the iLab node's unreserved host memory in GB, which the cards placed there share."""
     txt = sh(f"{GPU_FREE} --fit 4 {mem_gb}", timeout=600)
     block = txt.split("VIABLE", 1)[1].split("REJECTED", 1)[0] if "VIABLE" in txt else ""
     home = ilab_home_node()
-    cards, ilab = [], {}
+    cards, ilab, ilab_mem = [], {}, {}
     for line in block.splitlines():
         line = line.strip()
         if not line:
@@ -158,12 +159,38 @@ def free_cards(mem_gb: int) -> list[tuple[str, str, str]]:
             m = re.search(r"(\d+)/\d+ free.*--gres=gpu:([\w]+):1", line)
             if m and (home is None or node == home):
                 ilab[node] = [("ilab", m.group(2), "")] * int(m.group(1))
+                h = re.search(r"(\d+)G host", line)
+                ilab_mem[node] = int(h.group(1)) if h else 0
         elif host in ("westeros", "arrakis", "perception"):
             for g in re.findall(r"gpu(\d+) \(", line):
                 cards.append(("direct", "1spring-303-desktop-10" if host == "perception" else host, g))
     cards += [c for c in shared_free() if c not in cards]
     # The association allows one iLab node at a time: the home node, else the roomiest.
-    return cards + (max(ilab.values(), key=len) if ilab else [])
+    if not ilab:
+        return cards, 0
+    node = max(ilab, key=lambda n: len(ilab[n]))
+    return cards + ilab[node], ilab_mem[node]
+
+
+def plan_moves(pend: list[dict], cards: list[tuple[str, str, str]], ilab_mem: int,
+               max_moves: int) -> list[tuple[dict, tuple[str, str, str]]]:
+    """Each card takes the first cell, in priority order, that fits it. Cells on iLab share
+    the node's unreserved memory, so one that would not fit what is left waits on Amarel
+    rather than queueing on iLab behind the one-node association limit."""
+    plan, left = [], list(pend)
+    for card in cards:
+        for c in left:
+            mem = int(c["mem"].rstrip("G"))
+            if card[0] == "ilab" and mem > ilab_mem:
+                continue
+            plan.append((c, card))
+            left.remove(c)
+            if card[0] == "ilab":
+                ilab_mem -= mem
+            break
+        if len(plan) == max_moves:
+            break
+    return plan
 
 
 def move(c: dict, card: tuple[str, str, str]) -> str:
@@ -269,11 +296,12 @@ def main():
     print(f"{len(pend)} cells PENDING on Amarel; FM first, then longest:")
     for c in pend[:10]:
         print(f"  {c['name']:36s} ~{c['hours']:>4}h  job {c['jid']}  nice {c['nice']}")
-    cards = free_cards(max([int(c["mem"].rstrip("G")) for c in pend[:a.max_moves]] or [16]))
-    print(f"free cards: {cards}")
-    for c, card in list(zip(pend, cards))[:a.max_moves]:
+    cards, ilab_mem = free_cards(min([int(c["mem"].rstrip("G")) for c in pend] or [16]))
+    print(f"free cards: {cards}" + (f"; iLab node has {ilab_mem}G unreserved" if ilab_mem else ""))
+    plan = plan_moves(pend, cards, ilab_mem, a.max_moves)
+    for c, card in plan:
         print(("" if a.apply else "would move: ") + (move(c, card) if a.apply else f"{c['name']} -> {card}"))
-    moved = {c["name"] for c, _ in list(zip(pend, cards))[:a.max_moves]} if a.apply else set()
+    moved = {c["name"] for c, _ in plan} if a.apply else set()
     left = [c for c in pend if c["name"] not in moved]
     renice = [c for c in left if c["nice"] != nice_for(c["name"], c["hours"])]
     rewall = [c for c in left if _secs(c["wall"]) > _secs(slot(c["name"]))]

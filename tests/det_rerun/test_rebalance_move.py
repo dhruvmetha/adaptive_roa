@@ -67,3 +67,21 @@ def test_fresh_cell_launches(fake):
     rebalance.move(_cell(), ("direct", "westeros", "1"))
     assert any("launch.sh dr_q3d60_fm_direct_s99512 direct westeros 1" in c for c in fake.calls)
     assert not any("resume_direct.sh" in c for c in fake.calls)
+
+
+def _c(name, mem):
+    return {"name": name, "mem": f"{mem}G"}
+
+
+def test_ilab_cards_share_the_nodes_free_memory():
+    # rlab4 2026-10-30 23:3x: 4 cards listed free, 80G unreserved; a 48G cell after
+    # 12+12+8 queued on iLab with AssocGrpNodeLimit instead of starting.
+    pend = [_c("a", 12), _c("b", 12), _c("c", 8), _c("big", 48), _c("d", 8)]
+    plan = rebalance.plan_moves(pend, [("ilab", "a4000", "")] * 4, 40, 8)
+    assert [c["name"] for c, _ in plan] == ["a", "b", "c", "d"]   # big would not fit the 8G left
+
+
+def test_direct_cards_take_cells_in_order_and_max_moves_caps():
+    pend = [_c("big", 48), _c("a", 12), _c("b", 8)]
+    plan = rebalance.plan_moves(pend, [("direct", "westeros", "1"), ("direct", "westeros", "2")], 0, 1)
+    assert [(c["name"], card[2]) for c, card in plan] == [("big", "1")]

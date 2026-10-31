@@ -18,8 +18,10 @@ direct-box or iLab card sits idle. Each run:
      enough for backfill and long runs advance slot by slot, and sets `nice` so FM
      cells come first, then the longest (user rulings 2026-10-30).
 FM cells go first everywhere (user ruling 2026-10-30: FM runs are the slowest).
-iLab placements also run in slots and are resumed the same way; with no job of
-this account on iLab, the VIABLE node with the most free cards is used.
+iLab placements run with the full ILAB_WALL instead: iLab never preempts, a placement
+starts on a card that is already free, and every slot end handed the card to another
+user's queued job (2026-10-31). With no job of this account on iLab, the VIABLE node
+with the most free cards is used.
 Prints the plan; acts only with --apply. Usage: rebalance.py [--apply] [--max-moves N]
 """
 from __future__ import annotations
@@ -77,6 +79,14 @@ def slot(name: str) -> str:
     if sk == "q2d" or arm == "bnnreg":
         return "06:00:00"
     return "04:00:00"
+
+
+ILAB_WALL = "3-00:00:00"
+
+
+def wall_for(world: str, name: str) -> str:
+    """Amarel runs in slots (backfill, preemption); iLab keeps the card for the whole run."""
+    return ILAB_WALL if world == "ilab" else slot(name)
 
 
 def _secs(wall: str) -> int:
@@ -213,14 +223,14 @@ def move(c: dict, card: tuple[str, str, str]) -> str:
     tmp = HERE / "launched.tsv.tmp"
     tmp.write_text("\n".join(lines)); os.replace(tmp, HERE / "launched.tsv")
     if banked:
-        script = (f"resume_ilab.sh {c['name']} {slot(c['name'])} {where}" if world == "ilab"
+        script = (f"resume_ilab.sh {c['name']} {ILAB_WALL} {where}" if world == "ilab"
                   else f"resume_direct.sh {c['name']} {where} {gpu}")
         res = sh(f"bash {WT}/scripts/det_rerun/{script} 2>&1 | tail -1", timeout=900).strip()
         return f"moved {c['name']} (Amarel {c['jid']}, {banked} banked, ~{c['hours']}h) -> {res}"
     marker = Path(out) / ".amarel_mirror"
     if marker.exists() and len(list(Path(out).iterdir())) == 1:
         marker.unlink()
-    args = f"{c['name']} ilab {where} {slot(c['name'])}" if world == "ilab" else f"{c['name']} direct {where} {gpu}"
+    args = f"{c['name']} ilab {where} {ILAB_WALL}" if world == "ilab" else f"{c['name']} direct {where} {gpu}"
     res = sh(f"cd {WT} && DET_REF={c['commit']} bash scripts/det_rerun/launch.sh {args} 2>&1 | tail -1",
              timeout=900).strip()
     return f"moved {c['name']} (Amarel {c['jid']}, ~{c['hours']}h) -> {res}"
@@ -271,7 +281,7 @@ def resume_finished_slots(apply: bool) -> list[str]:
             continue
         if banked:
             script = "resume_amarel.sh" if f[1] == "amarel" else "resume_ilab.sh"
-            res = sh(f"bash {WT}/scripts/det_rerun/{script} {f[0]} {slot(f[0])} 2>&1 | tail -1", timeout=600)
+            res = sh(f"bash {WT}/scripts/det_rerun/{script} {f[0]} {wall_for(f[1], f[0])} 2>&1 | tail -1", timeout=600)
         else:   # died inside epoch 0: nothing banked, so start the cell again
             lines = open(HERE / "launched.tsv").read().split("\n")
             lines = [("\t".join([l.split("\t")[0] + "~noepoch"] + l.split("\t")[1:])
@@ -279,7 +289,7 @@ def resume_finished_slots(apply: bool) -> list[str]:
             tmp = HERE / "launched.tsv.tmp"
             tmp.write_text("\n".join(lines)); os.replace(tmp, HERE / "launched.tsv")
             where = "amarel" if f[1] == "amarel" else f"ilab {f[2]}"
-            res = sh(f"cd {WT} && DET_REF={f[6]} bash scripts/det_rerun/launch.sh {f[0]} {where} {slot(f[0])} 2>&1 | tail -1",
+            res = sh(f"cd {WT} && DET_REF={f[6]} bash scripts/det_rerun/launch.sh {f[0]} {where} {wall_for(f[1], f[0])} 2>&1 | tail -1",
                      timeout=900)
         out.append(f"{state} {f[0]} at {banked}/{n_ep} epochs -> {res.strip()}")
     return out

@@ -58,7 +58,7 @@ def test_banked_cell_resumes_on_a_direct_card(fake):
 def test_banked_cell_resumes_on_an_ilab_card(fake):
     fake.banked = 2
     rebalance.move(_cell(), ("ilab", "a4000", ""))
-    assert any("resume_ilab.sh dr_q3d60_fm_direct_s99512 04:00:00 a4000" in c for c in fake.calls)
+    assert any("resume_ilab.sh dr_q3d60_fm_direct_s99512 3-00:00:00 a4000" in c for c in fake.calls)
     assert not any("launch.sh" in c for c in fake.calls)
 
 
@@ -93,3 +93,10 @@ def test_nice_puts_fm_first_then_longest():
         n("dr_cp_fm_direct_s99512", 1.2), n("dr_q3d110_bnnreg_direct_s99512", 30),
         n("dr_q3d30_mlpreg_direct_s99512", 5), n("dr_cp_mlpclf_direct_s99512", 0.4))
     assert fm < q3d110_bnnreg < q3d30_mlpreg < cp_mlpclf
+
+
+def test_ilab_runs_keep_their_card_for_the_whole_run(fake):
+    fake.banked = 0
+    rebalance.move(_cell(), ("ilab", "a4000", ""))
+    assert any("launch.sh dr_q3d60_fm_direct_s99512 ilab a4000 3-00:00:00" in c for c in fake.calls)
+    assert rebalance.wall_for("amarel", "dr_q3d60_fm_direct_s99512") == "04:00:00"

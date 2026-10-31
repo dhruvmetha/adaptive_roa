@@ -179,7 +179,18 @@ def free_cards(mem_gb: int) -> tuple[list[tuple[str, str, str]], int]:
     if not ilab:
         return cards, 0
     node = max(ilab, key=lambda n: len(ilab[n]))
-    return cards + ilab[node], ilab_mem[node]
+    # Our own PENDING iLab jobs already wait for these cards and this memory; a card
+    # SLURM holds back would otherwise pull one more cell off Amarel every run.
+    n_pend, mem_pend = ilab_pending()
+    return cards + ilab[node][n_pend:], max(0, ilab_mem[node] - mem_pend)
+
+
+def ilab_pending() -> tuple[int, int]:
+    """Count and total memory (GB) of this account's PENDING iLab jobs."""
+    mems = [m for m in sh("ssh -n -o BatchMode=yes ilab1.cs.rutgers.edu "
+                          "'squeue -u st1122 -h -t PD -o %m'").split() if m]
+    gb = [int(m[:-1]) // (1024 if m.endswith("M") else 1) for m in mems if m[-1] in "GM" and m[:-1].isdigit()]
+    return len(mems), sum(gb)
 
 
 def plan_moves(pend: list[dict], cards: list[tuple[str, str, str]], ilab_mem: int,

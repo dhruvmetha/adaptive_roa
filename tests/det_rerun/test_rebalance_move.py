@@ -100,3 +100,20 @@ def test_ilab_runs_keep_their_card_for_the_whole_run(fake):
     rebalance.move(_cell(), ("ilab", "a4000", ""))
     assert any("launch.sh dr_q3d60_fm_direct_s99512 ilab a4000 3-00:00:00" in c for c in fake.calls)
     assert rebalance.wall_for("amarel", "dr_q3d60_fm_direct_s99512") == "04:00:00"
+
+
+def test_free_ilab_cards_discount_our_own_pending_jobs(monkeypatch):
+    scan = ("VIABLE\n  ilab/rlab4    a4000 16GB, 2/8 free, 30G host; quota ...; --gres=gpu:a4000:1\n"
+            "  westeros      gpu4 (11GB idle)   host RAM 399G\nREJECTED\n")
+    def sh(cmd, timeout=300):
+        if "gpu-free" in cmd:
+            return scan
+        if "-t R -o %N" in cmd:
+            return "rlab4\n"
+        if "-t PD -o %m" in cmd:
+            return "12G\n"
+        return ""
+    monkeypatch.setattr(rebalance, "sh", sh)
+    monkeypatch.setattr(rebalance, "shared_free", lambda: [])
+    cards, mem = rebalance.free_cards(8)
+    assert cards == [("direct", "westeros", "4"), ("ilab", "a4000", "")] and mem == 18

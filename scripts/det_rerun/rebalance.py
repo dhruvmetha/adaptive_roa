@@ -126,6 +126,38 @@ def amarel_pending() -> list[dict]:
     return sorted(out, key=lambda c: (not is_fm(c["name"]), -c["hours"], c["order"], c["name"]))
 
 
+def ilab_pending_cells() -> list[dict]:
+    """Cells whose latest registry row is an iLab job still PENDING: a free direct card
+    takes them too (rlab4 can hold a queued job for days behind the one-node limit)."""
+    latest = {}
+    for line in open(HERE / "launched.tsv"):
+        f = line.rstrip("\n").split("\t")
+        if len(f) >= 7:
+            latest[f[0]] = f
+    rows = {f[3]: f for f in latest.values() if f[1] == "ilab" and "~" not in f[0]}
+    if not rows:
+        return []
+    pend = set(sh("ssh -n -o BatchMode=yes ilab1.cs.rutgers.edu 'squeue -u st1122 -h -t PD -o %i'").split())
+    manifest = {r["name"]: r for r in csv.DictReader(open(HERE / "manifest.tsv"), delimiter="\t")}
+    return [{"name": f[0], "jid": jid, "commit": f[6], "world": "ilab", "mem": manifest[f[0]]["mem"],
+             "order": int(manifest[f[0]]["priority"]), "hours": est_hours(f[0])}
+            for jid, f in rows.items() if jid in pend and f[0] in manifest]
+
+
+def ilab_starts_now(gres: str, mem_gb: int, home: str | None, now=None) -> bool:
+    """Ask SLURM whether a job of this shape would start on our node right away. The
+    scan can list a card SLURM will not give out (core binding, a held job); then a
+    placement only queues behind the one-node limit."""
+    import datetime as dt
+    txt = sh("ssh -n -o BatchMode=yes ilab1.cs.rutgers.edu 'cd /tmp && sbatch --test-only "
+             f"--gres=gpu:{gres}:1 --mem={mem_gb}G -t 1:00:00 --exclude=ilab3,ilab4 --wrap=hostname 2>&1'")
+    m = re.search(r"to start at (\S+) .*on nodes (\S+)", txt)
+    if not m:
+        return False
+    start = dt.datetime.fromisoformat(m.group(1))
+    return (home is None or m.group(2) == home) and start <= (now or dt.datetime.now()) + dt.timedelta(minutes=2)
+
+
 def ilab_home_node() -> str | None:
     nodes = {n for n in sh("ssh -n -o BatchMode=yes ilab1.cs.rutgers.edu 'squeue -u st1122 -h -t R -o %N'").split() if n}
     return next(iter(nodes)) if len(nodes) == 1 else None
@@ -182,7 +214,10 @@ def free_cards(mem_gb: int) -> tuple[list[tuple[str, str, str]], int]:
     # Our own PENDING iLab jobs already wait for these cards and this memory; a card
     # SLURM holds back would otherwise pull one more cell off Amarel every run.
     n_pend, mem_pend = ilab_pending()
-    return cards + ilab[node][n_pend:], max(0, ilab_mem[node] - mem_pend)
+    free = ilab[node][n_pend:]
+    if free and not ilab_starts_now(free[0][1], mem_gb, home):
+        free = []
+    return cards + free, max(0, ilab_mem[node] - mem_pend)
 
 
 def ilab_pending() -> tuple[int, int]:
@@ -202,7 +237,7 @@ def plan_moves(pend: list[dict], cards: list[tuple[str, str, str]], ilab_mem: in
     for card in cards:
         for c in left:
             mem = int(c["mem"].rstrip("G"))
-            if card[0] == "ilab" and mem > ilab_mem:
+            if card[0] == "ilab" and (mem > ilab_mem or c.get("world") == "ilab"):
                 continue
             plan.append((c, card))
             left.remove(c)
@@ -218,6 +253,8 @@ def move(c: dict, card: tuple[str, str, str]) -> str:
     """Cancel a PENDING Amarel cell and start it on a local card. A queued resume (banked
     epochs on Amarel) continues from them there, never from 0."""
     world, where, gpu = card
+    if c.get("world") == "ilab":
+        return move_from_ilab(c, card)
     if sh(f"ssh -n -o BatchMode=yes {AM} 'squeue -h -j {c['jid']} -o %T'").strip() != "PENDING":
         return f"skip {c['name']}: no longer PENDING"
     out = re.search(r"output_dir=(\S+)", next(r["overrides"] for r in csv.DictReader(
@@ -245,6 +282,32 @@ def move(c: dict, card: tuple[str, str, str]) -> str:
     res = sh(f"cd {WT} && DET_REF={c['commit']} bash scripts/det_rerun/launch.sh {args} 2>&1 | tail -1",
              timeout=900).strip()
     return f"moved {c['name']} (Amarel {c['jid']}, ~{c['hours']}h) -> {res}"
+
+
+def move_from_ilab(c: dict, card: tuple[str, str, str]) -> str:
+    """A cell PENDING on iLab goes to a direct card: resumed from its banked epochs, or
+    launched if it has none."""
+    _, where, gpu = card
+    il = "ssh -n -o BatchMode=yes ilab1.cs.rutgers.edu"
+    if sh(f"{il} 'squeue -h -j {c['jid']} -o %T'").strip() != "PENDING":
+        return f"skip {c['name']}: no longer PENDING on iLab"
+    sh(f"{il} 'scancel {c['jid']}'")
+    st = sh(f"{il} 'sacct -j {c['jid']} -X -n -o State'").strip()
+    if not st.startswith("CANCELLED"):
+        return f"FAILED to cancel {c['name']} (iLab {c['jid']}: {st}); left as is"
+    lines = open(HERE / "launched.tsv").read().split("\n")
+    lines = [("\t".join([l.split("\t")[0] + "~ilab_moved"] + l.split("\t")[1:])
+              if l.split("\t")[0] == c["name"] else l) for l in lines]
+    tmp = HERE / "launched.tsv.tmp"
+    tmp.write_text("\n".join(lines)); os.replace(tmp, HERE / "launched.tsv")
+    out = re.search(r"output_dir=(\S+)", next(r["overrides"] for r in csv.DictReader(
+        open(HERE / "manifest.tsv"), delimiter="\t") if r["name"] == c["name"])).group(1)
+    if list(Path(out).glob("epoch_*/artifacts_v2.json")):
+        res = sh(f"bash {WT}/scripts/det_rerun/resume_direct.sh {c['name']} {where} {gpu} 2>&1 | tail -1", timeout=900)
+    else:
+        res = sh(f"cd {WT} && DET_REF={c['commit']} bash scripts/det_rerun/launch.sh {c['name']} direct {where} {gpu} "
+                 "2>&1 | tail -1", timeout=900)
+    return f"moved {c['name']} (iLab {c['jid']}, ~{c['hours']}h) -> {res.strip()}"
 
 
 def resume_finished_slots(apply: bool) -> list[str]:
@@ -317,9 +380,13 @@ def main():
     print(f"{len(pend)} cells PENDING on Amarel; FM first, then longest:")
     for c in pend[:10]:
         print(f"  {c['name']:36s} ~{c['hours']:>4}h  job {c['jid']}  nice {c['nice']}")
+    ipend = ilab_pending_cells()
+    if ipend:
+        print(f"{len(ipend)} cells PENDING on iLab (a direct card takes them too)")
     cards, ilab_mem = free_cards(min([int(c["mem"].rstrip("G")) for c in pend] or [16]))
     print(f"free cards: {cards}" + (f"; iLab node has {ilab_mem}G unreserved" if ilab_mem else ""))
-    plan = plan_moves(pend, cards, ilab_mem, a.max_moves)
+    cands = sorted(pend + ipend, key=lambda c: (not is_fm(c["name"]), -c["hours"], c["order"], c["name"]))
+    plan = plan_moves(cands, cards, ilab_mem, a.max_moves)
     for c, card in plan:
         print(("" if a.apply else "would move: ") + (move(c, card) if a.apply else f"{c['name']} -> {card}"))
     moved = {c["name"] for c, _ in plan} if a.apply else set()

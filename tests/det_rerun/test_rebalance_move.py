@@ -112,8 +112,30 @@ def test_free_ilab_cards_discount_our_own_pending_jobs(monkeypatch):
             return "rlab4\n"
         if "-t PD -o %m" in cmd:
             return "12G\n"
+        if "--test-only" in cmd:
+            import datetime as dt
+            return f"Job 1 to start at {dt.datetime.now().isoformat(timespec='seconds')} a using 2 processors on nodes rlab4"
         return ""
     monkeypatch.setattr(rebalance, "sh", sh)
     monkeypatch.setattr(rebalance, "shared_free", lambda: [])
     cards, mem = rebalance.free_cards(8)
     assert cards == [("direct", "westeros", "4"), ("ilab", "a4000", "")] and mem == 18
+
+
+def test_ilab_card_used_only_when_slurm_would_start_it_now(monkeypatch):
+    # rlab4 2026-10-31 08:2x: scan listed 1 card and 14G free, but a 4G test job was
+    # predicted to start on rlab3 on Nov 4.
+    import datetime as dt
+    now = dt.datetime(2026, 10, 31, 8, 25)
+    for txt, ok in [("Job 9 to start at 2026-11-04T11:32:49 a using 2 processors on nodes rlab3 in partition unlimited", False),
+                    ("Job 9 to start at 2026-10-31T08:25:30 a using 2 processors on nodes rlab4 in partition unlimited", True),
+                    ("Job 9 to start at 2026-10-31T08:25:30 a using 2 processors on nodes rlab3 in partition unlimited", False),
+                    ("allocation failure", False)]:
+        monkeypatch.setattr(rebalance, "sh", lambda cmd, timeout=300, t=txt: t)
+        assert rebalance.ilab_starts_now("a4000", 12, "rlab4", now=now) is ok, txt
+
+
+def test_cells_pending_on_ilab_go_only_to_direct_cards():
+    pend = [{"name": "ilab_cell", "mem": "12G", "world": "ilab"}, {"name": "amarel_cell", "mem": "12G"}]
+    plan = rebalance.plan_moves(pend, [("ilab", "a4000", ""), ("direct", "westeros", "4")], 40, 8)
+    assert [(c["name"], card[0]) for c, card in plan] == [("amarel_cell", "ilab"), ("ilab_cell", "direct")]

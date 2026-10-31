@@ -1,0 +1,153 @@
+#!/usr/bin/env python
+"""Per-setting progress plots of the det-paper rerun, read from each cell's epoch artifacts.
+
+One figure per setting (system x total trajectory budget): rows are predictors (and
+Part-X), columns are metrics, lines are acquisition strategies, x is the training
+trajectory count. Cells still running are drawn dashed. q3d30 and q3d60 have no
+uniform cell of their own; their uniform line is the q3d110 uniform cell cut at the
+setting's budget (same seed, initial batch and eval set).
+
+Metrics, all on the held-out eval grid with the run's lambda*/delta* rule:
+  KL      KL(true outcome || predicted p_success) in nats. Labels are deterministic,
+          so this equals the log score (mean negative log-likelihood).
+  F1      success F1 over committed (non-abstained) states
+  Unc %   invalid + outcome-uncertain share of all states
+  Invalid %, Outcome-unc %   the two parts of Unc %
+  FPR, FNR   over committed states: fp / (fp + tn), fn / (fn + tp)
+
+Writes progress_<setting>.png under OUT and prints the settings whose data changed
+since the last run (state in OUT/.progress_state.json).  Usage: plot_progress.py [--all]
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import glob
+import hashlib
+import json
+import math
+import re
+from pathlib import Path
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib.lines import Line2D  # noqa: E402
+
+HERE = Path("/common/home/st1122/Projects/adaptive_roa/slurm_logs/det_rerun")
+OUT = HERE / "plots"
+SETTINGS = ["pen", "cp", "q2d", "q3d30", "q3d60", "q3d110"]
+TITLES = {"pen": "Pendulum", "cp": "Cartpole", "q2d": "Quadrotor 2D", "q3d30": "Quadrotor 3D, 30k budget",
+          "q3d60": "Quadrotor 3D, 60k budget", "q3d110": "Quadrotor 3D, 110k budget"}
+ROWS = [("fm_det", "FM (ours)"), ("det_mlp_clf", "MLP classifier"), ("det_bnn_clf", "BNN classifier"),
+        ("det_mlp_reg", "MLP final-state"), ("det_bnn_reg", "BNN final-state"), ("partx_faithful", "Part-X")]
+ACQ = [("uniform", "uniform", "#2a78d6", "o"), ("direct", "direct (uniform top-up)", "#eb6834", "s"),
+       ("ranked", "ranked", "#1baf7a", "^"), ("entropy", "entropy", "#eda100", "D"),
+       ("builtin", "Part-X built-in", "#6250d6", "v")]
+METRICS = ["KL (nats)", "F1", "Unc %", "Invalid %", "Outcome-unc %", "FPR", "FNR"]
+INK, MUTED, GRID = "#0b0b0b", "#52514e", "#e4e3df"
+
+
+def _rate(a, b):
+    return a / (a + b) if (a + b) else math.nan
+
+
+def metrics(art: dict) -> list[float]:
+    m = art.get("eval_metrics") or {}
+    ld, tf = m.get("lambda_delta") or {}, m.get("threshold_free") or {}
+    tp, tn, fp, fn = (ld.get(k, 0) for k in ("tp", "tn", "fp", "fn"))
+    inv, unc = ld.get("invalid_pct", math.nan), ld.get("uncertain_pct", math.nan)
+    return [tf.get("log_score", math.nan), ld.get("f1", math.nan), 100 * (inv + unc), 100 * inv, 100 * unc,
+            _rate(fp, tn), _rate(fn, tp)]
+
+
+def load() -> dict:
+    """{setting: {(arm, mode): (xs, [metric series], finished)}}"""
+    rows = [r for r in csv.DictReader(open(HERE / "manifest.tsv"), delimiter="\t")
+            if r["name"].startswith("dr_") and "startpool" not in r["name"]]
+    data = {s: {} for s in SETTINGS}
+    for r in rows:
+        out = re.search(r"output_dir=(\S+)", r["overrides"]).group(1)
+        m = re.search(r"(?:^| )n_epochs=(\d+)", r["overrides"])
+        n_ep = int(m.group(1)) if m else 11
+        arts = []
+        for p in sorted(glob.glob(f"{out}/epoch_*/artifacts_v2.json")):
+            try:
+                arts.append(json.load(open(p)))
+            except (OSError, json.JSONDecodeError):
+                break      # an artifact mid-write: plot up to the last complete one
+        if not arts or r["system"] not in data:
+            continue
+        xs = [a["train_trajectories"] / 1000 for a in arts]
+        ys = list(zip(*[metrics(a) for a in arts]))
+        data[r["system"]][(r["arm"], r["mode"])] = (xs, ys, len(arts) >= n_ep)
+    for s, cap in (("q3d30", 30), ("q3d60", 60)):
+        u = {k: v for k, v in data["q3d110"].items() if k[1] == "uniform"}
+        for (arm, mode), (xs, ys, fin) in u.items():
+            keep = [i for i, x in enumerate(xs) if x <= cap + 1e-9]
+            if keep:
+                data[s][(arm, mode)] = ([xs[i] for i in keep], [[y[i] for i in keep] for y in ys],
+                                        fin or xs[-1] >= cap)
+    return data
+
+
+def plot(setting: str, cells: dict, path: Path) -> None:
+    fig, axes = plt.subplots(len(ROWS), len(METRICS), figsize=(22, 15), sharex=True, squeeze=False)
+    n_done = sum(1 for v in cells.values() if v[2])
+    for i, (arm, rlabel) in enumerate(ROWS):
+        for j, mlabel in enumerate(METRICS):
+            ax = axes[i][j]
+            for mode, _, color, marker in ACQ:
+                if (arm, mode) not in cells:
+                    continue
+                xs, ys, fin = cells[(arm, mode)]
+                ax.plot(xs, ys[j], color=color, lw=1.5, ls="-" if fin else "--", marker=marker, ms=3.5,
+                        mfc=color if fin else "white", mew=1.0)
+            ax.grid(True, color=GRID, lw=0.6)
+            ax.tick_params(colors=MUTED, labelsize=8)
+            for sp in ax.spines.values():
+                sp.set_color(GRID)
+            if i == 0:
+                ax.set_title(mlabel, fontsize=11, color=INK)
+            if j == 0:
+                ax.set_ylabel(rlabel, fontsize=10, color=INK)
+            if i == len(ROWS) - 1:
+                ax.set_xlabel("training trajectories (k)", fontsize=9, color=MUTED)
+    handles = [Line2D([], [], color=c, marker=mk, lw=1.5, ms=5, label=lab) for _, lab, c, mk in ACQ]
+    handles += [Line2D([], [], color=MUTED, lw=1.5, ls="--", marker="o", mfc="white", ms=5, label="still running")]
+    fig.legend(handles=handles, loc="upper center", ncol=len(handles), frameon=False, fontsize=10,
+               bbox_to_anchor=(0.5, 0.965))
+    note = ("uniform line is the q3d110 uniform cell cut at this budget; " if setting in ("q3d30", "q3d60") else "")
+    fig.suptitle(f"{TITLES[setting]}: {n_done} of {len(cells)} cells finished (seed 99512)", fontsize=14,
+                 color=INK, y=0.995)
+    fig.text(0.5, 0.005, note + "KL = KL(true outcome || predicted p_success), equal to the log score for "
+             "deterministic labels; FPR and FNR over committed states", ha="center", fontsize=9, color=MUTED)
+    fig.tight_layout(rect=(0, 0.015, 1, 0.95))
+    fig.savefig(path, dpi=150, facecolor="#fcfcfb")
+    plt.close(fig)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--all", action="store_true", help="re-render every setting")
+    a = ap.parse_args()
+    OUT.mkdir(parents=True, exist_ok=True)
+    state_f = OUT / ".progress_state.json"
+    state = json.loads(state_f.read_text()) if state_f.exists() else {}
+    data = load()
+    changed = []
+    for s in SETTINGS:
+        h = hashlib.sha1(json.dumps(sorted((str(k), v) for k, v in data[s].items()), default=str).encode()).hexdigest()
+        path = OUT / f"progress_{s}.png"
+        if a.all or state.get(s) != h or not path.exists():
+            plot(s, data[s], path)
+            state[s] = h
+            changed.append(str(path))
+    state_f.write_text(json.dumps(state))
+    for p in changed:
+        print(p)
+
+
+if __name__ == "__main__":
+    main()

@@ -30,6 +30,13 @@ acquisition:
 
 eval:
   num_mc_samples_eval: 100
+  # The det protocol always scores three outcomes: success, failure, and neither (the D12
+  # criteria). null would infer two-outcome scoring from eval_success_prob.npz, which the
+  # stochastic tree's zero-noise levels ship, and fold every "neither" endpoint into
+  # failure. Found 2026-11-01: PPO quad3d cells run on iLab and the direct boxes (which
+  # read the shared tree) reported 0% invalid, while the same cells on Amarel (staged
+  # copies without that file) scored three ways.
+  binary_outcomes: false
 
 # Eval-time q_hat is calibrated on the cal set by the calibration backend. Its
 # scores must come from the same K as the test-set scores they are compared
@@ -39,6 +46,7 @@ calibration:
 
 adaptive_v2:
   filter_confident_pairs: false   # D16: same training data for every head
+
 
 # D26 (ruled 2026-10-30, replacing D22): acquisition candidates are trajectory
 # starts only; the uniform share takes the next starts in pool order. The suffix

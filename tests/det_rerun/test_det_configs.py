@@ -91,3 +91,17 @@ def test_npz_pool_matches_text_trajectories(system, monkeypatch):
         lines = (text_dir / row_names[src.rollout_ids[k]]).read_text().splitlines()
         expect = np.array([[float(v) for v in ln.split(",")] for ln in lines if ln.strip()], dtype=np.float32)
         assert np.array_equal(src.load_trajectory(k), expect), f"{system} pool index {k}"
+
+
+@pytest.mark.parametrize("system", ["quadrotor3d_rl", "cartpole_ppo", "quadrotor2d_corridor0"])
+def test_det_rerun_scores_three_outcomes_on_stochastic_tree_data(system, monkeypatch):
+    """These zero-noise sets ship eval_success_prob.npz, which the system reads as two-outcome
+    data; the det protocol must override that so 'neither' endpoints stay invalid."""
+    import hydra
+    monkeypatch.setenv("DATA_DIR", DATA)
+    _register_resolvers()
+    with initialize_config_dir(version_base=None, config_dir=CONFIG_DIR):
+        cfg = compose(config_name="default", overrides=[f"system={system}", "predictor=fm_det", "seed=99512",
+                                                         "+experiment=det_rerun", "output_dir=/tmp/unused"])
+    assert cfg.eval.binary_outcomes is False
+    assert hydra.utils.instantiate(cfg.system).binary_outcomes is True   # why the override is needed

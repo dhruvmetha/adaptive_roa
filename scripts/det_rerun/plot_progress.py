@@ -63,6 +63,24 @@ def metrics(art: dict) -> list[float]:
             _rate(fp, tn), _rate(fn, tp)]
 
 
+ENDPOINT_ARMS = {"fm_det", "det_mlp_reg", "det_bnn_reg"}
+# Settings whose dataset sits in the stochastic tree, beside an eval_success_prob.npz.
+NPZ_TREE_SETTINGS = {"q3drl40", "q3drl100", "cpppo", "q2dc"}
+
+
+def folded(epoch_dir: Path) -> bool:
+    """True when an endpoint arm's test metrics were scored two-way (invalid folded into
+    failure): every p_invalid is 0 and p_success + p_failure is 1. Runs launched before
+    det_rerun.yaml forced eval.binary_outcomes false did this wherever they read the
+    shared stochastic tree."""
+    f = epoch_dir / "full_roa_per_point.npz"
+    if not f.exists():
+        return False
+    import numpy as np
+    d = np.load(f)
+    return bool(d["p_invalid"].max() == 0 and np.allclose(d["p_success"] + d["p_failure"], 1.0))
+
+
 def load() -> dict:
     """{setting: {(arm, mode): (xs, [metric series], finished)}}"""
     rows = [r for r in csv.DictReader(open(HERE / "manifest.tsv"), delimiter="\t")
@@ -74,6 +92,8 @@ def load() -> dict:
         n_ep = int(m.group(1)) if m else 11
         arts = []
         for p in sorted(glob.glob(f"{out}/epoch_*/artifacts_v2.json")):
+            if r["arm"] in ENDPOINT_ARMS and r["system"] in NPZ_TREE_SETTINGS and folded(Path(p).parent):
+                continue   # test metrics scored two-way by mistake; left out until re-scored
             try:
                 arts.append(json.load(open(p)))
             except (OSError, json.JSONDecodeError):

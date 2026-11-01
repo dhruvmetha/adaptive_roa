@@ -56,3 +56,15 @@ def test_own_uniform_cell_wins_over_the_cut_110k_run():
     out = mod.fill_shared_uniform(data)
     assert out["q3d30"][("fm_det", "uniform")] == own                       # its own cell
     assert out["q3d30"][("det_mlp_clf", "uniform")][0] == [10.0, 20.0, 30.0]  # cut until it banks
+
+
+def test_folded_epochs_are_detected(tmp_path):
+    import numpy as np
+    spec = importlib.util.spec_from_file_location("pp3", ROOT / "scripts/det_rerun/plot_progress.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    ps = np.array([0.2, 0.9, 0.0])
+    np.savez(tmp_path / "full_roa_per_point.npz", p_success=ps, p_failure=1 - ps, p_invalid=np.zeros(3))
+    assert mod.folded(tmp_path)
+    np.savez(tmp_path / "full_roa_per_point.npz", p_success=ps, p_failure=1 - ps - 0.1, p_invalid=np.full(3, 0.1))
+    assert not mod.folded(tmp_path)

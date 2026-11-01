@@ -115,8 +115,10 @@ def main() -> None:
     if a.epochs:
         epochs = [int(e) for e in a.epochs.split(",")]
     else:
+        # An existing rescored_ternary/epoch_NNN dir means done or in progress (another pass
+        # creates it before evaluating), so two passes walking the runs never repeat an epoch.
         epochs = [int(p.name[-3:]) for p in sorted(a.run_dir.glob("epoch_*"))
-                  if is_folded(p) and not (a.run_dir / "rescored_ternary" / p.name / "artifacts_v2.json").exists()]
+                  if is_folded(p) and not (a.run_dir / "rescored_ternary" / p.name).exists()]
     for e in epochs:
         r = rescore(a.run_dir, e, a.device, a.max_rows)
         print(f"{a.run_dir.name} epoch {e:03d}: invalid {100 * r['invalid_pct']:.1f}%  "

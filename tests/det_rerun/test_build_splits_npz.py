@@ -140,3 +140,26 @@ def test_grid_eval_drops_timeouts_and_uses_refly_finals(tmp_path):
 def test_grid_eval_refuses_a_refly_that_disagrees(tmp_path):
     _, res = _run_grid(tmp_path, bad_label=True)
     assert res.returncode != 0 and "disagrees with 1 stored labels" in res.stderr
+
+
+def test_grid_eval_can_drop_disagreeing_rows(tmp_path):
+    ds = "stochastic/quadrotor2D/corridor_sine_ambient/rl/baseline"
+    root, refly = tmp_path / ds, tmp_path / "refly" / "q2d"
+    _write_grid_dataset(root, refly, bad_label=True)
+    # q2d states are 6-D; widen the synthetic 4-D files to the q2d layout.
+    tr = dict(np.load(root / "train.npz"))
+    pad = lambda a: np.concatenate([a, np.zeros((len(a), 2), a.dtype)], 1)
+    np.savez(root / "train.npz", **{**tr, "states": pad(tr["states"]), "starts": pad(tr["starts"])})
+    lines = [ln.split(",") for ln in (root / "eval_states.txt").read_text().split()]
+    (root / "eval_states.txt").write_text("\n".join(",".join(v[:4] + ["0.000000", "0.000000", v[4]]) for v in lines) + "\n")
+    sh = dict(np.load(refly / "shard_000.npz"))
+    np.savez(refly / "shard_000.npz", **{**sh, "final": pad(sh["final"])})
+    env = dict(os.environ, DATA_DIR=str(tmp_path), DET_REFLY_DIR=str(tmp_path / "refly"), PYTHONPATH=str(REPO))
+    res = subprocess.run([sys.executable, str(SCRIPT), "--system", "quad2d_corridor0", "--sizes",
+                          "pool=60,cal=5,val=5,test=30"], env=env, capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr
+    man = json.loads((root / "splits_det_rerun" / "split_manifest.json").read_text())
+    assert man["scan"]["eval_rows_dropped_refly_label_disagreement"] == 1
+    kept = {ln.split(",")[0] for s in ("cal", "val", "test")
+            for ln in (root / "splits_det_rerun" / f"{s}_set.txt").read_text().split()}
+    assert lines[0][0] not in kept

@@ -50,6 +50,13 @@ SYSTEMS = {
     "cartpole_ppo": dict(dir="stochastic/cartpole/gaussian_signal/safe_explorer_ppo/baseline", k=4,
                          sizes=dict(pool=116242, cal=2000, val=2000, test=112603), horizon=150,
                          eval="refly", refly="cartpole"),
+    # The quad2d corridor family's zero-noise level. Its re-fly reproduced every stored label
+    # but 154 of 489,789 (0.03%, 74 one way and 80 the other, all long flights near the
+    # boundary: median 256 steps against 5), so those states are dropped rather than trusted
+    # either way. test is capped near the det quad2d test size (169,789) for eval cost.
+    "quad2d_corridor0": dict(dir="stochastic/quadrotor2D/corridor_sine_ambient/rl/baseline", k=6,
+                             sizes=dict(pool=500000, cal=10000, val=10000, test=170000), horizon=1200,
+                             eval="refly", refly="q2d", drop_disagreements=True),
 }
 
 
@@ -121,8 +128,9 @@ def _fps_sources(root, spec, states, offsets, labels, timeout, usable, eval_line
     return pool, keep, tid[keep], fstates, finals, eval_label, stats, lambda r: np.unique(tid[r])
 
 
-def load_refly(path: Path, n_rows: int):
-    """The eval re-fly's shards, ordered by eval row; refuses a partial or disagreeing re-fly."""
+def load_refly(path: Path, n_rows: int, allow_disagreements: bool = False):
+    """The eval re-fly's shards, ordered by eval row; refuses a partial re-fly, and a disagreeing
+    one unless ``allow_disagreements`` (the caller then drops those rows)."""
     files = sorted(path.glob("shard_*.npz"))
     d = {key: np.concatenate([np.load(f)[key] for f in files]) for key in
          ("index", "stored_label", "success", "terminated", "final")}
@@ -131,7 +139,7 @@ def load_refly(path: Path, n_rows: int):
     if not np.array_equal(d["index"], np.arange(n_rows)):
         raise SystemExit(f"re-fly in {path} covers {len(d['index'])} rows, not all {n_rows}")
     bad = int(np.sum(d["success"] != d["stored_label"]))
-    if bad:
+    if bad and not allow_disagreements:
         raise SystemExit(f"re-fly in {path} disagrees with {bad} stored labels")
     return d
 
@@ -139,15 +147,17 @@ def load_refly(path: Path, n_rows: int):
 def _refly_sources(spec, n, usable, eval_lines, text):
     """Eval states flown on their own (a grid): every train flight may be pool; a flight that
     timed out in the re-fly is dropped from the eval rows."""
-    rf = load_refly(REFLY / spec["refly"], len(eval_lines))
+    rf = load_refly(REFLY / spec["refly"], len(eval_lines), spec.get("drop_disagreements", False))
     stored = np.array([float(ln.rsplit(",", 1)[1]) for ln in eval_lines])
     eval_label = (stored >= 0.5).astype(int)
     tparts = partition_ids(usable, {"pool": min(spec["sizes"]["pool"], len(usable))}, rest="eval",
                            seed=PARTITION_SEED)
     pool = np.sort(tparts["pool"])
-    keep = np.where(rf["terminated"] == 1)[0]
-    stats = {"eval_rows": len(eval_lines), "eval_rows_timed_out_in_refly": int(len(eval_lines) - len(keep)),
-             "refly_label_agreement": 1.0}
+    agree = rf["success"] == rf["stored_label"]
+    keep = np.where((rf["terminated"] == 1) & agree)[0]
+    stats = {"eval_rows": len(eval_lines), "eval_rows_timed_out_in_refly": int(np.sum(rf["terminated"] == 0)),
+             "eval_rows_dropped_refly_label_disagreement": int(np.sum(~agree)),
+             "refly_label_agreement": float(agree.mean())}
     fstates = text.astype(np.float32)
     return pool, keep, keep, fstates, rf["final"], eval_label, stats, lambda r: np.zeros(0, dtype=np.int64)
 

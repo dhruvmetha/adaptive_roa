@@ -76,6 +76,14 @@ def test_cartpole_refuses_ball_and_box_together():
                        success_tolerances={"x": 0.01, "theta": 0.05, "x_dot": 0.05, "theta_dot": 0.05})
 
 
+def test_quadrotor2d_corridor0():
+    cfg, s = _system("quadrotor2d_corridor0")
+    assert cfg.system.require_criteria and cfg.attractor_radius == s.success_radius == 0.3
+    assert s.failure_bounds == {"x": 0.9, "z_min": 0.2, "z_max": 1.4, "x_dot": 0.9, "z_dot": 0.9, "theta_dot": 7.5}
+    assert cfg.initial_train_size == 2000 and cfg.samples_per_epoch == 1300 and cfg.n_epochs == 11
+    assert cfg.data_source.split_dir.endswith("corridor_sine_ambient/rl/baseline/splits_det_rerun")
+
+
 def test_quadrotor2d():
     cfg, s = _system("quadrotor2d")
     assert cfg.system.require_criteria and cfg.attractor_radius == s.success_radius == 0.3

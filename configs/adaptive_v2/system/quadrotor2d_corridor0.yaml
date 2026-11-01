@@ -1,0 +1,88 @@
+# @package _global_
+#
+# Deterministic quad2d under the same safe_explorer_ppo policy as `quadrotor2d`, from the
+# stochastic tree's corridor family at zero noise: quadrotor2D/corridor_sine_ambient/rl/baseline
+# (f_max 0, ambient 0; verified deterministic). 500,000 off-lattice random starts flown once,
+# 8.4% success; eval is the same 489,789-state grid as the det set, re-flown in this plant.
+# Same box, goal and success ball as `quadrotor2d`, so the D12 criteria are identical.
+#
+# No timeouts (checked 2026-11-01): every train flight ends in the 0.2 ball or past a wall
+# (longest 702 of 1200 steps), and a re-fly of all 489,789 eval states with the collector's
+# own build() (scripts/det_rerun/eval_refly/q2d_refly.py) found every one terminating,
+# longest 716 steps. It reproduced all but 154 stored labels (0.03%, both directions, long
+# boundary flights); the split builder drops those rows.
+#
+# Splits (D15): scripts/det_rerun/build_splits_npz.py --system quad2d_corridor0. The eval
+# grid is flown apart from the train starts, so every train flight is pool; cal 10,000,
+# val 10,000, test 170,000 (near the det quad2d test size); no eval state equals a pool row.
+#
+# Schedule (user, 2026-11-01): 2,000 + 10 x 1,300 = 15,000. In the stochastic campaign on
+# this dataset FM-BALD's F1 at p >= 0.5 levels off near 0.89 from about 5,600 while uniform
+# FM is at 0.71 at 8,000 and still rising.
+
+defaults:
+  - _base
+  - /model/system_dims: quadrotor2d
+  - /prediction_mode: global
+  - _self_
+
+name: adaptive_quadrotor2d_corridor0
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${acquisition.d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_adapt_iter_${n_epochs}_sampling_mode_${sampling_mode}_selection_${oc.select:acquisition.selection_rule,none}_exp_${exp_id}/${now:%Y-%m-%d_%H-%M-%S}
+
+decision_rule: two_sided
+# The success radius has ONE source, system.success_radius below; this key only
+# points at it for the backends that pass a radius to classify_attractor.
+attractor_radius: ${system.success_radius}
+# Collector horizon in control steps (dataset_description.json), read by
+# data_source.timeout_intermediates=drop through experiment/det_rerun.yaml.
+horizon_steps: 1200
+
+noise_regime: stochastic
+dataset_name: quadrotor2D/corridor_sine_ambient/rl/baseline
+dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
+
+# Pool, cal, val and test are disjoint by trajectory (splits_det_rerun/split_manifest.json).
+# The run seed picks the pool order, so it also picks the initial set.
+data_source:
+  base_dir: ${dataset_root}
+  split_dir: ${data_source.base_dir}/splits_det_rerun
+  pool_format: npz
+  trajectories_dir: ${data_source.split_dir}/train.npz
+  shuffled_indices_file: ${data_source.split_dir}/pool_order_${seed}.txt
+  shuffled_labels_file: ${data_source.split_dir}/pool_labels_${seed}.txt
+  eval_states_file: ${data_source.split_dir}/test_set.txt
+  cal_set_file: ${data_source.split_dir}/cal_set.txt
+  val_set_file: ${data_source.split_dir}/val_set.txt
+  test_set_file: ${data_source.split_dir}/test_set.txt
+  timeout_intermediates: drop
+  horizon_steps: 1200   # no flight reaches it
+
+initial_train_size: 2000
+samples_per_epoch: 1300
+n_epochs: 11            # epoch 0 + 10 adaptive iterations (det paper D03)
+
+flow_matching:
+  clamp_noise: false
+
+system:
+  _target_: adaptive_roa.systems.quadrotor2d.Quadrotor2DSystem
+  dataset_dir: ${dataset_root}
+  # SUCCESS AND FAILURE CRITERIA: the single source (systems/criteria.py).
+  # A predicted endpoint (x, z, theta, x_dot, z_dot, theta_dot) succeeds within
+  # success_radius of goal (L2, theta wrapped): the dataset's 0.2 plus the D12
+  # buffer of 0.1. It fails beyond failure_bounds: the collector's termination
+  # thresholds (|x| 1.0, z 0.1 to 1.5, |x_dot| |z_dot| 1.0, |theta_dot| 8.0) moved
+  # inward by 0.1, and by 0.5 on theta_dot.
+  require_criteria: true
+  goal: [0.0, 1.0, 0.0, 0.0, 0.0, 0.0]
+  success_radius: 0.3
+  failure_bounds: {x: 0.9, z_min: 0.2, z_max: 1.4, x_dot: 0.9, z_dot: 0.9, theta_dot: 7.5}
+
+flow_matcher:
+  _target_: adaptive_roa.flow_matching.quadrotor_2d.latent_conditional.flow_matcher.Quadrotor2DLatentConditionalFlowMatcher
+
+flow_matcher_local:
+  _target_: adaptive_roa.flow_matching.quadrotor_2d.trajectory.flow_matcher.Quadrotor2DTrajectoryFlowMatcher
+
+adaptive_v2:
+  system_name: quadrotor2d

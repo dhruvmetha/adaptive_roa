@@ -139,16 +139,27 @@ COMPARE_LINES = [("fm_det", COMPARE_REGIME, "FM (ours), ranked", "#2a78d6", "-",
                  ("det_mlp_reg", COMPARE_REGIME, "MLP final-state, ranked", "#eda100", "-", 1.4),
                  ("det_bnn_reg", COMPARE_REGIME, "BNN final-state, ranked", "#e87ba4", "-", 1.4),
                  ("partx_faithful", "builtin", "Part-X", "#6250d6", "-", 1.4)]
+COMPARE_TITLE = ("FM (ours) against each baseline on one adaptive regime (ranked, FM's best by KL); "
+                 "FM uniform for reference (seed 99512)")
+# FM alone across acquisition regimes, colours as in the per-setting progress figures.
+FM_REGIME_LINES = [("fm_det", "uniform", "FM, uniform (non-adaptive)", "#2a78d6", "--", 1.8),
+                   ("fm_det", "direct", "FM, direct (uniform top-up)", "#eb6834", "-", 1.6),
+                   ("fm_det", "ranked", "FM, ranked", "#1baf7a", "-", 2.2),
+                   ("fm_det", "entropy", "FM, entropy", "#eda100", "-", 1.6)]
+FM_REGIME_TITLE = "FM (ours): adaptive acquisition regimes against non-adaptive uniform (seed 99512)"
+# --compare renders both; the user wants the pair on every update (2026-11-01).
+COMPARE_FIGURES = [("compare", f"compare_{COMPARE_REGIME}.png", COMPARE_LINES, COMPARE_TITLE),
+                   ("compare_fm_regimes", "compare_fm_regimes.png", FM_REGIME_LINES, FM_REGIME_TITLE)]
 
 
-def plot_compare(data: dict, path: Path) -> None:
-    """All settings in one figure: rows are settings, columns metrics, one line per method."""
+def plot_compare(data: dict, path: Path, lines=COMPARE_LINES, title=COMPARE_TITLE) -> None:
+    """All settings in one figure: rows are settings, columns metrics, one line per entry of `lines`."""
     fig, axes = plt.subplots(len(SETTINGS), len(METRICS), figsize=(24, 19), squeeze=False)
     for i, s in enumerate(SETTINGS):
         for j, mlabel in enumerate(METRICS):
             ax = axes[i][j]
             inner, px = [], None
-            for arm, mode, _, color, ls, lw in COMPARE_LINES:
+            for arm, mode, _, color, ls, lw in lines:
                 if (arm, mode) not in data[s]:
                     continue
                 xs, ys, fin = data[s][(arm, mode)]
@@ -186,11 +197,10 @@ def plot_compare(data: dict, path: Path) -> None:
             if i == len(SETTINGS) - 1 or j == 0:
                 ax.set_xlabel("training trajectories (k)", fontsize=8, color=MUTED)
     handles = [Line2D([], [], color=c, ls=ls, lw=lw, marker="o", ms=4, label=lab)
-               for _, _, lab, c, ls, lw in COMPARE_LINES]
+               for _, _, lab, c, ls, lw in lines]
     handles += [Line2D([], [], color=MUTED, lw=1.2, marker="o", mfc="white", ms=5, label="hollow: still running")]
     fig.legend(handles=handles, loc="upper center", ncol=4, frameon=False, fontsize=11, bbox_to_anchor=(0.5, 0.975))
-    fig.suptitle("FM (ours) against each baseline on one adaptive regime (ranked, FM's best by KL); "
-                 "FM uniform for reference (seed 99512)", fontsize=14, color=INK, y=0.997)
+    fig.suptitle(title, fontsize=14, color=INK, y=0.997)
     fig.text(0.5, 0.004, "q3d30 and q3d60 uniform: the q3d110 uniform cell cut at the budget. KL = KL(true outcome || "
              "predicted p_success), the log score for deterministic labels. FPR and FNR over committed states.",
              ha="center", fontsize=9, color=MUTED)
@@ -202,23 +212,28 @@ def plot_compare(data: dict, path: Path) -> None:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--all", action="store_true", help="re-render every figure")
-    ap.add_argument("--compare", action="store_true", help="only the one-regime comparison figure")
+    ap.add_argument("--compare", action="store_true",
+                    help="only the two comparison figures (methods on one regime; FM across regimes)")
     a = ap.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     state_f = OUT / ".progress_state.json"
     state = json.loads(state_f.read_text()) if state_f.exists() else {}
     data = load()
     if a.compare:
-        keys = {(arm, mode) for arm, mode, *_ in COMPARE_LINES}
-        sub = {s: {k: v for k, v in data[s].items() if k in keys} for s in SETTINGS}
-        h = hashlib.sha1(json.dumps(sorted((s, str(k), v) for s in SETTINGS for k, v in sub[s].items()),
-                                    default=str).encode()).hexdigest()
-        path = OUT / f"compare_{COMPARE_REGIME}.png"
-        if a.all or state.get("compare") != h or not path.exists():
-            plot_compare(data, path)
-            state["compare"] = h
+        hashes, stale = {}, False
+        for key, name, lines, _ in COMPARE_FIGURES:
+            keys = {(arm, mode) for arm, mode, *_ in lines}
+            sub = {s: {k: v for k, v in data[s].items() if k in keys} for s in SETTINGS}
+            hashes[key] = hashlib.sha1(json.dumps(sorted((s, str(k), v) for s in SETTINGS for k, v in sub[s].items()),
+                                                  default=str).encode()).hexdigest()
+            stale |= state.get(key) != hashes[key] or not (OUT / name).exists()
+        if a.all or stale:       # either changed: re-render and print both, so they go out as a pair
+            for key, name, lines, title in COMPARE_FIGURES:
+                plot_compare(data, OUT / name, lines, title)
+                state[key] = hashes[key]
             state_f.write_text(json.dumps(state))
-            print(path)
+            for _, name, _, _ in COMPARE_FIGURES:
+                print(OUT / name)
         return
     changed = []
     for s in SETTINGS:

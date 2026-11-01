@@ -93,7 +93,11 @@ def load() -> dict:
         arts = []
         for p in sorted(glob.glob(f"{out}/epoch_*/artifacts_v2.json")):
             if r["arm"] in ENDPOINT_ARMS and r["system"] in NPZ_TREE_SETTINGS and folded(Path(p).parent):
-                continue   # test metrics scored two-way by mistake; left out until re-scored
+                # Test metrics scored two-way by mistake: use the three-way re-score
+                # (rescore_ternary.py) if it exists, else leave the epoch out.
+                p = Path(out) / "rescored_ternary" / Path(p).parent.name / "artifacts_v2.json"
+                if not p.exists():
+                    continue
             try:
                 arts.append(json.load(open(p)))
             except (OSError, json.JSONDecodeError):

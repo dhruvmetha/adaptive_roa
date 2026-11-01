@@ -68,3 +68,32 @@ def test_folded_epochs_are_detected(tmp_path):
     assert mod.folded(tmp_path)
     np.savez(tmp_path / "full_roa_per_point.npz", p_success=ps, p_failure=1 - ps - 0.1, p_invalid=np.full(3, 0.1))
     assert not mod.folded(tmp_path)
+
+
+def test_folded_epoch_reads_the_rescored_artifact(tmp_path, monkeypatch):
+    import json
+    import numpy as np
+    spec = importlib.util.spec_from_file_location("pp4", ROOT / "scripts/det_rerun/plot_progress.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    run = tmp_path / "q3drl40" / "dr_q3drl40_fm_ranked_s99512"
+    art = lambda inv: {"train_trajectories": 10000, "eval_metrics": {
+        "lambda_delta": {"tp": 1, "tn": 1, "fp": 0, "fn": 0, "f1": 1.0, "invalid_pct": inv, "uncertain_pct": 0.0},
+        "threshold_free": {"log_score": 0.1}}}
+    for e, folded_ in ((0, True), (1, True), (2, False)):
+        d = run / f"epoch_{e:03d}"
+        d.mkdir(parents=True)
+        (d / "artifacts_v2.json").write_text(json.dumps(art(0.0 if folded_ else 0.2)))
+        ps = np.array([0.3, 0.7])
+        pi = np.zeros(2) if folded_ else np.full(2, 0.1)
+        np.savez(d / "full_roa_per_point.npz", p_success=ps, p_failure=1 - ps - pi, p_invalid=pi)
+    resc = run / "rescored_ternary" / "epoch_000"
+    resc.mkdir(parents=True)
+    (resc / "artifacts_v2.json").write_text(json.dumps(art(0.15)))
+    (tmp_path / "manifest.tsv").write_text(
+        "name\tsystem\tarm\tmode\tseed\tmem\tpriority\toverrides\tscript\n"
+        f"dr_q3drl40_fm_ranked_s99512\tq3drl40\tfm_det\tranked\t99512\t16G\t1\toutput_dir={run}\tscripts/run_adaptive.py\n")
+    monkeypatch.setattr(mod, "HERE", tmp_path)
+    xs, ys, fin = mod.load()["q3drl40"][("fm_det", "ranked")]
+    assert len(xs) == 2                                 # epoch 1 folded, not re-scored: left out
+    assert [round(v, 2) for v in ys[3]] == [15.0, 20.0]  # invalid %: re-scored epoch 0, then epoch 2

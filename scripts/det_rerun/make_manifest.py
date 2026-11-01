@@ -40,7 +40,9 @@ SYSTEMS = {
 # 10.6G at 30k, about 0.3G per 1,000 trajectories), so its quad3d cells ask for more.
 ARM_MEM = {("det_bnn_reg", "q3d30"): "24G", ("det_bnn_reg", "q3d60"): "32G", ("det_bnn_reg", "q3d110"): "48G",
            ("det_bnn_reg", "q3drl40"): "24G", ("det_bnn_reg", "q3drl100"): "32G"}
-# The shared uniform quad3d run (D24) also reports the epochs that land on the
+# D24 (one uniform run per arm read at 30k and 60k) is withdrawn (user, 2026-11-01): the
+# 110k run's 10k steps leave the 30k and 60k rows with 3 and 6 uniform points, so every
+# schedule now has its own uniform cells. The 110k uniform run still reports the epochs that land on the
 # other schedules' budgets: 20k, 30k, 40k and 60k.
 Q3D_UNIFORM_EPOCHS = [0, 1, 2, 3, 5, 10]
 
@@ -57,8 +59,6 @@ def cells(seed: int):
     for sk, (system, step, epochs, mem) in SYSTEMS.items():
         for arm in ARMS:
             for mode, (acq, extra) in MODES.items():
-                if mode == "uniform" and sk in ("q3d30", "q3d60"):
-                    continue          # read from the q3d110 uniform run (D24)
                 ep = Q3D_UNIFORM_EPOCHS if (mode == "uniform" and sk == "q3d110") else epochs
                 name = f"dr_{sk}_{SHORT[arm]}_{mode}_s{seed}"
                 ov = [f"system={system}", f"predictor={arm}", f"acquisition={acq}",

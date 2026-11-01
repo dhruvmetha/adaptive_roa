@@ -83,9 +83,17 @@ def load() -> dict:
         xs = [a["train_trajectories"] / 1000 for a in arts]
         ys = list(zip(*[metrics(a) for a in arts]))
         data[r["system"]][(r["arm"], r["mode"])] = (xs, ys, len(arts) >= n_ep)
+    return fill_shared_uniform(data)
+
+
+def fill_shared_uniform(data: dict) -> dict:
+    """q3d30 / q3d60 uniform from the q3d110 uniform run cut at the budget, only where the
+    schedule's own uniform cell has not banked an epoch yet (D24 withdrawn 2026-11-01)."""
     for s, cap in (("q3d30", 30), ("q3d60", 60)):
         u = {k: v for k, v in data["q3d110"].items() if k[1] == "uniform"}
         for (arm, mode), (xs, ys, fin) in u.items():
+            if (arm, mode) in data[s]:
+                continue
             keep = [i for i, x in enumerate(xs) if x <= cap + 1e-9]
             if keep:
                 data[s][(arm, mode)] = ([xs[i] for i in keep], [[y[i] for i in keep] for y in ys],
@@ -119,7 +127,8 @@ def plot(setting: str, cells: dict, path: Path) -> None:
     handles += [Line2D([], [], color=MUTED, lw=1.5, ls="--", marker="o", mfc="white", ms=5, label="still running")]
     fig.legend(handles=handles, loc="upper center", ncol=len(handles), frameon=False, fontsize=10,
                bbox_to_anchor=(0.5, 0.965))
-    note = ("uniform line is the q3d110 uniform cell cut at this budget; " if setting in ("q3d30", "q3d60") else "")
+    note = ("uniform lines without their own cell yet are the q3d110 uniform cell cut at this budget; "
+            if setting in ("q3d30", "q3d60") else "")
     fig.suptitle(f"{TITLES[setting]}: {n_done} of {len(cells)} cells finished (seed 99512)", fontsize=14,
                  color=INK, y=0.995)
     fig.text(0.5, 0.005, note + "KL = KL(true outcome || predicted p_success), equal to the log score for "
@@ -202,7 +211,7 @@ def plot_compare(data: dict, path: Path, lines=COMPARE_LINES, title=COMPARE_TITL
     handles += [Line2D([], [], color=MUTED, lw=1.2, marker="o", mfc="white", ms=5, label="hollow: still running")]
     fig.legend(handles=handles, loc="upper center", ncol=4, frameon=False, fontsize=11, bbox_to_anchor=(0.5, 0.975))
     fig.suptitle(title, fontsize=14, color=INK, y=0.997)
-    fig.text(0.5, 0.004, "q3d30 and q3d60 uniform: the q3d110 uniform cell cut at the budget. KL = KL(true outcome || "
+    fig.text(0.5, 0.004, "q3d30 and q3d60 uniform: their own cells once banked, until then the q3d110 uniform cell cut at the budget. KL = KL(true outcome || "
              "predicted p_success), the log score for deterministic labels. FPR and FNR over committed states.",
              ha="center", fontsize=9, color=MUTED)
     fig.tight_layout(rect=(0, 0.012, 1, 0.94))

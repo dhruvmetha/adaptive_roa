@@ -41,3 +41,18 @@ def test_change_in_one_figure_reprints_the_pair(pp, capsys, tmp_path):
     data["q2d"][("fm_det", "entropy")] = (xs, ys, False)
     mod.main()
     assert len(capsys.readouterr().out.split()) == 2
+
+
+def test_own_uniform_cell_wins_over_the_cut_110k_run():
+    spec = importlib.util.spec_from_file_location("pp2", ROOT / "scripts/det_rerun/plot_progress.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    long = ([10.0, 20.0, 30.0, 40.0], [[1.0, 2.0, 3.0, 4.0]], True)
+    own = ([10.0, 12.0, 14.0], [[9.0, 8.0, 7.0]], False)
+    data = {s: {} for s in mod.SETTINGS}
+    data["q3d110"][("fm_det", "uniform")] = long
+    data["q3d110"][("det_mlp_clf", "uniform")] = long
+    data["q3d30"][("fm_det", "uniform")] = own
+    out = mod.fill_shared_uniform(data)
+    assert out["q3d30"][("fm_det", "uniform")] == own                       # its own cell
+    assert out["q3d30"][("det_mlp_clf", "uniform")][0] == [10.0, 20.0, 30.0]  # cut until it banks

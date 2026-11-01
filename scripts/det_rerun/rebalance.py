@@ -46,6 +46,9 @@ EST_HOURS = {
     "q3d110": {"bnnreg": 30, "fm": 20, "mlpreg": 18, "bnnclf": 6, "mlpclf": 3},
     "q3d60": {"bnnreg": 18, "fm": 12, "mlpreg": 10, "bnnclf": 4, "mlpclf": 2},
     "q3d30": {"bnnreg": 9, "fm": 7, "mlpreg": 5, "bnnclf": 2, "mlpclf": 1},
+    # PPO quad3d: about 24 stored rows per flight against LQR's 55, so roughly 0.4x per trajectory.
+    "q3drl100": {"bnnreg": 12, "fm": 8, "mlpreg": 7, "bnnclf": 2.5, "mlpclf": 1.2},
+    "q3drl40": {"bnnreg": 4, "fm": 3, "mlpreg": 2.5, "bnnclf": 1, "mlpclf": 0.5},
     "q2d": {"bnnreg": 2.5, "fm": 3.5, "mlpreg": 2, "bnnclf": 0.6, "mlpclf": 0.5},
     "cp": {"bnnreg": 0.6, "fm": 1.2, "mlpreg": 0.5, "bnnclf": 0.4, "mlpclf": 0.4},
     "pen": {"bnnreg": 0.5, "fm": 0.8, "mlpreg": 0.4, "bnnclf": 0.3, "mlpclf": 0.3},

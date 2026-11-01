@@ -37,9 +37,10 @@ from matplotlib.lines import Line2D  # noqa: E402
 
 HERE = Path("/common/home/st1122/Projects/adaptive_roa/slurm_logs/det_rerun")
 OUT = HERE / "plots"
-SETTINGS = ["pen", "cp", "q2d", "q3d30", "q3d60", "q3d110"]
+SETTINGS = ["pen", "cp", "q2d", "q3d30", "q3d60", "q3d110", "q3drl40", "q3drl100"]
 TITLES = {"pen": "Pendulum", "cp": "Cartpole", "q2d": "Quadrotor 2D", "q3d30": "Quadrotor 3D, 30k budget",
-          "q3d60": "Quadrotor 3D, 60k budget", "q3d110": "Quadrotor 3D, 110k budget"}
+          "q3d60": "Quadrotor 3D, 60k budget", "q3d110": "Quadrotor 3D, 110k budget",
+          "q3drl40": "Quadrotor 3D RL, 40k budget", "q3drl100": "Quadrotor 3D RL, 100k budget"}
 ROWS = [("fm_det", "FM (ours)"), ("det_mlp_clf", "MLP classifier"), ("det_bnn_clf", "BNN classifier"),
         ("det_mlp_reg", "MLP final-state"), ("det_bnn_reg", "BNN final-state"), ("partx_faithful", "Part-X")]
 ACQ = [("uniform", "uniform", "#2a78d6", "o"), ("direct", "direct (uniform top-up)", "#eb6834", "s"),
@@ -154,7 +155,7 @@ COMPARE_FIGURES = [("compare", f"compare_{COMPARE_REGIME}.png", COMPARE_LINES, C
 
 def plot_compare(data: dict, path: Path, lines=COMPARE_LINES, title=COMPARE_TITLE) -> None:
     """All settings in one figure: rows are settings, columns metrics, one line per entry of `lines`."""
-    fig, axes = plt.subplots(len(SETTINGS), len(METRICS), figsize=(24, 19), squeeze=False)
+    fig, axes = plt.subplots(len(SETTINGS), len(METRICS), figsize=(24, 3.2 * len(SETTINGS)), squeeze=False)
     for i, s in enumerate(SETTINGS):
         for j, mlabel in enumerate(METRICS):
             ax = axes[i][j]

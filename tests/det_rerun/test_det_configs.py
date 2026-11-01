@@ -47,6 +47,30 @@ def test_paths_exist_and_differ_by_seed(system, monkeypatch):
     assert pools[0] != pools[1] != pools[2], "the seed must change the pool order"
 
 
+def test_quadrotor3d_rl_splits(monkeypatch):
+    """PPO quad3d: split files exist, pool rows are the source flights' rows, no eval row is a pool state."""
+    import json
+    import numpy as np
+    monkeypatch.setenv("DATA_DIR", DATA)
+    ds = _compose("quadrotor3d_rl", SEEDS[0]).data_source
+    for key in ("shuffled_indices_file", "shuffled_labels_file", "cal_set_file", "val_set_file", "test_set_file"):
+        assert Path(ds[key]).is_file(), f"{key} -> {ds[key]}"
+    split = Path(ds.split_dir)
+    man = json.loads((split / "split_manifest.json").read_text())
+    assert man["scan"]["kept_eval_states_equal_to_a_pool_row"] == 0
+    pool = np.load(split / "train.npz")
+    src = np.load(Path(ds.base_dir) / "train.npz", mmap_mode="r")
+    names = (split / "npz_row_names.txt").read_text().split()
+    for k in (0, 1, len(names) // 2, len(names) - 1):
+        t = int(names[k].split("_")[1].split(".")[0])
+        mine = pool["states"][pool["offsets"][k]:pool["offsets"][k + 1]]
+        assert np.array_equal(mine, src["states"][src["offsets"][t]:src["offsets"][t + 1]])
+        assert int(pool["labels"][k]) == int(src["labels"][t])
+    for f in ("cal_set_file", "test_set_file"):
+        first = Path(ds[f]).read_text().split("\n", 1)[0].split(",")
+        assert len(first) == 27 and first[-1] in ("0", "1")
+
+
 @pytest.mark.parametrize("system", SYSTEMS)
 def test_npz_pool_matches_text_trajectories(system, monkeypatch):
     import numpy as np

@@ -77,6 +77,18 @@ def test_quadrotor3d():
         s.classify_attractor(pts, 0.3)
 
 
+def test_quadrotor3d_rl():
+    cfg, s = _system("quadrotor3d_rl")
+    assert cfg.system.require_criteria and cfg.attractor_radius == s.success_radius == 0.15
+    assert s.termination_thresholds == {"x": 1.7, "y": 1.7, "z_min": 0.2, "z_max": 2.9, "vel": 1.9, "rate": 7.5}
+    goal = torch.tensor(s.goal)
+    pts = torch.stack([goal + torch.eye(13)[0] * 0.14, goal + torch.eye(13)[0] * 0.16,
+                       goal + torch.eye(13)[1] * 1.75, goal + torch.eye(13)[8] * 1.95,
+                       goal + torch.eye(13)[12] * 7.6])
+    assert s.classify_attractor(pts, cfg.attractor_radius).tolist() == [1, 0, -1, -1, -1]
+    assert cfg.initial_train_size == 10000 and cfg.samples_per_epoch == 3000 and cfg.horizon_steps == 1000
+
+
 def test_require_criteria_refuses_class_defaults():
     from adaptive_roa.systems.pendulum import PendulumSystem
     from adaptive_roa.systems.quadrotor2d import Quadrotor2DSystem

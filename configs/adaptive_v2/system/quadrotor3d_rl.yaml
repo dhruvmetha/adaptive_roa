@@ -1,0 +1,93 @@
+# @package _global_
+#
+# Deterministic 3D quadrotor under the PPO policy (det-paper rerun, second quad3d system).
+# Dataset: the stochastic tree's zero-noise level, ppo_1500K/f_0.00: no disturbance of
+# any kind, one flight per start, 1,500,000 flights, 6.68% success. It is the
+# deterministic level of the stochastic paper's spatial quad (`quadrotor3d_ppo_stoch`
+# with +controller=ppo_1500K noise_level=f_0.00).
+#
+# No timeouts anywhere (checked 2026-11-01): every train flight and every eval rollout
+# ends inside the 0.05 ball or out of bounds, at most 344 of the 1000-step horizon.
+#
+# Schedules (user, 2026-11-01): 10,000 + 10 x 3,000 = 40,000 here, and a 100k variant
+# with samples_per_epoch=9000. In the stochastic campaigns on this dataset, FM-BALD's
+# F1 at p >= 0.5 levels off near 0.84 from about 19k while uniform FM and the baselines
+# keep climbing to 40k; 15k (that campaign's budget) was chosen for KL.
+#
+# NOT the LQR quad3d (`quadrotor3d`): different controller, start box (walls equal the
+# start box on all nine terminable channels), plant rate (50 Hz, 1000-step horizon) and
+# eval states. Never pool the two.
+#
+# Splits (D15): scripts/det_rerun/build_splits_npz.py --system quad3d_rl. Eval states are
+# a farthest-point sample of rows along flights (47% starts); eval_fps.npz records each
+# one's source flight, so pool flights are excluded exactly. 600,000 pool flights;
+# cal 10,000, val 10,000, test 240,001 rows, split by source flight
+# (splits_det_rerun/split_manifest.json).
+
+defaults:
+  - _base
+  - /model/system_dims: quadrotor3d
+  - /prediction_mode: global
+  - _self_
+
+name: adaptive_quadrotor3d_rl
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${acquisition.d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_adapt_iter_${n_epochs}_sampling_mode_${sampling_mode}_selection_${oc.select:acquisition.selection_rule,none}_exp_${exp_id}/${now:%Y-%m-%d_%H-%M-%S}
+
+decision_rule: two_sided
+# The success radius has ONE source, system.success_radius below.
+attractor_radius: ${system.success_radius}
+# Collector horizon in control steps (dataset_description.json "horizon"); no flight reached it.
+horizon_steps: 1000
+
+use_log_loss_weights: true
+
+noise_regime: stochastic
+dataset_name: quadrotor3D/corridor_sine_ambient/ppo_1500K/f_0.00
+dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
+
+data_source:
+  base_dir: ${dataset_root}
+  split_dir: ${data_source.base_dir}/splits_det_rerun
+  pool_format: npz
+  trajectories_dir: ${data_source.split_dir}/train.npz
+  shuffled_indices_file: ${data_source.split_dir}/pool_order_${seed}.txt
+  shuffled_labels_file: ${data_source.split_dir}/pool_labels_${seed}.txt
+  eval_states_file: ${data_source.split_dir}/test_set.txt
+  cal_set_file: ${data_source.split_dir}/cal_set.txt
+  val_set_file: ${data_source.split_dir}/val_set.txt
+  test_set_file: ${data_source.split_dir}/test_set.txt
+  timeout_intermediates: drop
+  horizon_steps: 1000
+
+initial_train_size: 10000
+n_epochs: 11            # epoch 0 + 10 adaptive iterations (det paper D03)
+samples_per_epoch: 3000   # 40k schedule; the 100k variant uses 9000
+
+flow_matching:
+  clamp_noise: false
+  quat_loss_weight: ${quat_loss_weight}
+
+optimizer:
+  lr: 5e-4
+
+system:
+  _target_: adaptive_roa.systems.quadrotor3d.Quadrotor3DSystem
+  dataset_dir: ${dataset_root}
+  # SUCCESS AND FAILURE CRITERIA (D12): the dataset's 0.05 success ball plus the 0.1
+  # buffer, and the collector's walls (dataset_description.json termination_thresholds:
+  # |x| |y| 1.8, z 0.1 to 3.0, velocities 2.0, rates 8.0) moved inward by 0.1, and by
+  # 0.5 on rates, as on LQR quad3d. A terminal row is inside 0.05 (entry cut) or at a
+  # wall 1.17+ away, so the buffered ball adds no ground-truth ambiguity.
+  require_criteria: true
+  goal: [0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  success_radius: 0.15
+  termination_thresholds: {x: 1.7, y: 1.7, z_min: 0.2, z_max: 2.9, vel: 1.9, rate: 7.5}
+
+flow_matcher:
+  _target_: adaptive_roa.flow_matching.quadrotor_3d.latent_conditional.flow_matcher.Quadrotor3DLatentConditionalFlowMatcher
+
+flow_matcher_local:
+  _target_: adaptive_roa.flow_matching.quadrotor_3d.trajectory.flow_matcher.Quadrotor3DTrajectoryFlowMatcher
+
+adaptive_v2:
+  system_name: quadrotor3d

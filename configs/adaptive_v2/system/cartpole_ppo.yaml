@@ -1,0 +1,91 @@
+# @package _global_
+#
+# Deterministic cartpole under the safe_explorer_ppo policy (det-paper rerun, second
+# cartpole system). Dataset: the stochastic tree's zero-noise level,
+# cartpole/gaussian_signal/safe_explorer_ppo/baseline: 116,242 random starts flown
+# once, 20.0% success; eval is a 116,603-state grid (cell centres) flown once.
+#
+# NOT the LQR cartpole (`cartpole_pybullet`): a policy at 15 Hz, goal x = 0.7 (the
+# policy parks at 0.696), and a closed box: start box = kill box, |x| and |x_dot| 3,
+# |theta| 0.48, |theta_dot| 3.
+#
+# No timeouts (checked 2026-11-01): every train flight ends in the success ball or
+# past a wall (longest 142 of 150 steps), and a re-fly of all 116,603 eval states
+# (scripts/det_rerun/eval_refly/cp_rl_refly.py, which reproduces stored train flights
+# row for row) found every one terminating, longest 144 steps, labels identical.
+#
+# Splits (D15): scripts/det_rerun/build_splits_npz.py --system cartpole_ppo. The eval
+# grid is flown apart from the train starts, so every train flight is pool; cal 2,000,
+# val 2,000, test 112,603; no eval state equals a stored pool row. End states in the
+# split files come from the re-fly.
+#
+# Schedule (user, 2026-11-01): 500 + 10 x 250 = 3,000. In the stochastic campaign on
+# this dataset FM-BALD's F1 at p >= 0.5 reaches 0.90 at 2,000 and is still rising.
+
+defaults:
+  - _base
+  - /model/system_dims: cartpole_pybullet
+  - /prediction_mode: global
+  - _self_
+
+name: adaptive_cartpole_ppo
+output_dir: ${exp_dir}/${name}/outputs/training_index_${training_index}_d2_ratio_${acquisition.d2_ratio}_warm_start_${warm_start}_manifold_${use_manifold}_adapt_iter_${n_epochs}_sampling_mode_${sampling_mode}_selection_${oc.select:acquisition.selection_rule,none}_exp_${exp_id}/${now:%Y-%m-%d_%H-%M-%S}
+
+decision_rule: two_sided
+# The success test is a ball here (system.success_radius); this key only points at it.
+attractor_radius: ${system.success_radius}
+# Collector horizon in control steps (10 s at 15 Hz).
+horizon_steps: 150
+
+threshold:
+  optimize_mode: joint
+
+noise_regime: stochastic
+dataset_name: cartpole/gaussian_signal/safe_explorer_ppo/baseline
+dataset_root: ${data_dir}/${noise_regime}/${dataset_name}
+
+data_source:
+  base_dir: ${dataset_root}
+  split_dir: ${data_source.base_dir}/splits_det_rerun
+  pool_format: npz
+  trajectories_dir: ${data_source.split_dir}/train.npz
+  shuffled_indices_file: ${data_source.split_dir}/pool_order_${seed}.txt
+  shuffled_labels_file: ${data_source.split_dir}/pool_labels_${seed}.txt
+  eval_states_file: ${data_source.split_dir}/test_set.txt
+  cal_set_file: ${data_source.split_dir}/cal_set.txt
+  val_set_file: ${data_source.split_dir}/val_set.txt
+  test_set_file: ${data_source.split_dir}/test_set.txt
+  timeout_intermediates: drop
+  horizon_steps: 150
+
+initial_train_size: 500
+n_epochs: 11            # epoch 0 + 10 adaptive iterations (det paper D03)
+samples_per_epoch: 250
+
+flow_matching:
+  clamp_noise: false
+
+system:
+  _target_: adaptive_roa.systems.cartpole.CartPoleSystem
+  dataset_dir: ${dataset_root}
+  # SUCCESS AND FAILURE CRITERIA (D12). The dataset labels success as first entry
+  # into an L2 ball of radius 0.05 over the 4-D state (theta wrapped) around the goal;
+  # with the 0.1 buffer that is 0.15. Failure is the collector's walls, |x| 3,
+  # |x_dot| 3, |theta| 0.48, |theta_dot| 3, each moved inward by the 0.1 buffer.
+  # A terminal row is inside 0.05 or past a wall, so the buffers add no ground-truth
+  # ambiguity. angle_limit 0.48 normalises theta by this policy's wall, not pi.
+  require_criteria: true
+  goal: [0.7, 0.0, 0.0, 0.0]
+  angle_limit: 0.48
+  success_radius: 0.15
+  failure_thresholds: {x: 3.0, x_dot: 3.0, theta: 0.48, theta_dot: 3.0}
+  criteria_buffer: 0.1
+
+flow_matcher:
+  _target_: adaptive_roa.flow_matching.cartpole.latent_conditional.flow_matcher.CartPoleLatentConditionalFlowMatcher
+
+flow_matcher_local:
+  _target_: adaptive_roa.flow_matching.cartpole.trajectory.flow_matcher.CartPoleTrajectoryFlowMatcher
+
+adaptive_v2:
+  system_name: cartpole_pybullet

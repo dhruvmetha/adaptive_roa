@@ -54,6 +54,28 @@ def test_cartpole():
         s.classify_attractor(pts, 0.2)
 
 
+def test_cartpole_ppo():
+    cfg, s = _system("cartpole_ppo")
+    assert cfg.system.require_criteria and cfg.attractor_radius == s.success_radius == 0.15
+    assert s.goal == [0.7, 0.0, 0.0, 0.0] and s.criteria_buffer == 0.1
+    pts = torch.tensor([[0.80, 0.05, 0.05, 0.05],   # ||(0.1, 0.05, 0.05, 0.05)|| = 0.13 < 0.15: success
+                        [0.86, 0.0, 0.0, 0.0],      # 0.16 from the goal, inside the walls: neither
+                        [0.0, 0.40, 0.0, 0.0],      # |theta| > 0.48 - 0.1: failure (pole angle wall)
+                        [2.95, 0.0, 0.0, 0.0],      # |x| > 3.0 - 0.1: failure
+                        [0.0, 0.0, 0.0, 2.95]])     # |theta_dot| > 3.0 - 0.1: failure
+    assert s.classify_attractor(pts, cfg.attractor_radius).tolist() == [1, 0, -1, -1, -1]
+    with pytest.raises(ValueError, match="one source"):
+        s.classify_attractor(pts, 0.2)
+    assert cfg.initial_train_size == 500 and cfg.samples_per_epoch == 250 and cfg.horizon_steps == 150
+
+
+def test_cartpole_refuses_ball_and_box_together():
+    from adaptive_roa.systems.cartpole import CartPoleSystem
+    with pytest.raises(ValueError, match="configure one"):
+        CartPoleSystem(dataset_dir=f"{DATA}/deterministic/cartpole_pybullet", success_radius=0.15,
+                       success_tolerances={"x": 0.01, "theta": 0.05, "x_dot": 0.05, "theta_dot": 0.05})
+
+
 def test_quadrotor2d():
     cfg, s = _system("quadrotor2d")
     assert cfg.system.require_criteria and cfg.attractor_radius == s.success_radius == 0.3

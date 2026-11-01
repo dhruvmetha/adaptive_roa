@@ -89,3 +89,54 @@ def test_refuses_to_overwrite(tmp_path):
     again = subprocess.run([sys.executable, str(SCRIPT), "--system", "quad3d_rl", "--sizes", "pool=40,cal=6,val=6,test=10"],
                            env=env, capture_output=True, text=True)
     assert again.returncode != 0 and "refusing to overwrite" in again.stderr
+
+
+def _write_grid_dataset(root: Path, refly: Path, n_flights=60, n_eval=50, timed_out=(), bad_label=False):
+    rng = np.random.default_rng(2)
+    root.mkdir(parents=True)
+    lens = rng.integers(2, 6, size=n_flights)
+    offsets = np.concatenate([[0], np.cumsum(lens)]).astype(np.int64)
+    states = rng.uniform(-1, 1, size=(offsets[-1], 4)).astype(np.float32)
+    labels = (np.arange(n_flights) % 3 == 0).astype(np.uint8)
+    np.savez(root / "train.npz", states=states, offsets=offsets, starts=states[offsets[:-1]].astype(np.float64),
+             labels=labels)
+    grid = rng.uniform(-1, 1, size=(n_eval, 4))
+    lab = (np.arange(n_eval) % 4 == 0).astype(int)
+    (root / "eval_states.txt").write_text("\n".join(",".join(f"{v:.6f}" for v in g) + f",{l:.4f}"
+                                                    for g, l in zip(grid, lab)) + "\n")
+    refly.mkdir(parents=True)
+    term = np.ones(n_eval, np.uint8)
+    term[list(timed_out)] = 0
+    succ = lab.astype(np.uint8).copy()
+    if bad_label:
+        succ[0] ^= 1
+    np.savez(refly / "shard_000.npz", index=np.arange(n_eval), stored_label=lab.astype(np.uint8), success=succ,
+             terminated=term, final=rng.uniform(-1, 1, size=(n_eval, 4)))
+
+
+def _run_grid(tmp_path, **kw):
+    ds = "stochastic/cartpole/gaussian_signal/safe_explorer_ppo/baseline"
+    root, refly = tmp_path / ds, tmp_path / "refly" / "cartpole"
+    _write_grid_dataset(root, refly, **kw)
+    env = dict(os.environ, DATA_DIR=str(tmp_path), DET_REFLY_DIR=str(tmp_path / "refly"), PYTHONPATH=str(REPO))
+    res = subprocess.run([sys.executable, str(SCRIPT), "--system", "cartpole_ppo", "--sizes",
+                          "pool=60,cal=5,val=5,test=30"], env=env, capture_output=True, text=True)
+    return root, res
+
+
+def test_grid_eval_drops_timeouts_and_uses_refly_finals(tmp_path):
+    root, res = _run_grid(tmp_path, timed_out=(3, 7))
+    assert res.returncode == 0, res.stderr
+    out = root / "splits_det_rerun"
+    man = json.loads((out / "split_manifest.json").read_text())
+    assert man["scan"]["eval_rows_timed_out_in_refly"] == 2 and man["pool_trajectories"]["n"] == 60
+    rows = [ln for split in ("cal", "val", "test") for ln in (out / f"{split}_set.txt").read_text().split()]
+    assert len(rows) == len(set(rows)) == 40 and all(len(r.split(",")) == 9 for r in rows)
+    starts = {",".join(r.split(",")[:4]) for r in rows}
+    lines = (root / "eval_states.txt").read_text().split()
+    assert not starts & {",".join(lines[i].split(",")[:4]) for i in (3, 7)}
+
+
+def test_grid_eval_refuses_a_refly_that_disagrees(tmp_path):
+    _, res = _run_grid(tmp_path, bad_label=True)
+    assert res.returncode != 0 and "disagrees with 1 stored labels" in res.stderr

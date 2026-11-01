@@ -31,6 +31,8 @@ SYSTEMS = {
     # PPO flights store about 24 rows against LQR's 55, so memory sits below q3d110's.
     "q3drl40":  ("quadrotor3d_rl", None, [0, 5, 10], "16G"),
     "q3drl100": ("quadrotor3d_rl", 9000, [0, 5, 10], "24G"),
+    # PPO cartpole, the stochastic tree's zero-noise level (user, 2026-11-01): 500 + 10 x 250.
+    "cpppo": ("cartpole_ppo", None, [0, 5, 10], "8G"),
 }
 # The BNN regressor's RSS grows with the train set (quad3d 110k: 7.5G at 20k,
 # 10.6G at 30k, about 0.3G per 1,000 trajectories), so its quad3d cells ask for more.
@@ -46,7 +48,7 @@ SHORT = {"fm_det": "fm", "det_mlp_clf": "mlpclf", "det_bnn_clf": "bnnclf",
 MODES = {"uniform": ("direct", ["acquisition.d2_ratio=0"]),
          "direct": ("direct", []), "ranked": ("ranked", []), "entropy": ("entropy", [])}
 # Lower runs first: quad2d and quad3d separate the signals; longest schedules first.
-PRIORITY = {"q3d110": 0, "q3d60": 1, "q3d30": 2, "q2d": 3, "cp": 4, "pen": 5, "q3drl100": 0, "q3drl40": 1}
+PRIORITY = {"q3d110": 0, "q3d60": 1, "q3d30": 2, "q2d": 3, "cp": 4, "pen": 5, "q3drl100": 0, "q3drl40": 1, "cpppo": 4}
 
 
 def cells(seed: int):

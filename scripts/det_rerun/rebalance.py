@@ -49,6 +49,7 @@ EST_HOURS = {
     # PPO quad3d: about 24 stored rows per flight against LQR's 55, so roughly 0.4x per trajectory.
     "q3drl100": {"bnnreg": 12, "fm": 8, "mlpreg": 7, "bnnclf": 2.5, "mlpclf": 1.2},
     "q3drl40": {"bnnreg": 4, "fm": 3, "mlpreg": 2.5, "bnnclf": 1, "mlpclf": 0.5},
+    "cpppo": {"bnnreg": 1.5, "fm": 3, "mlpreg": 1.2, "bnnclf": 1, "mlpclf": 1},
     "q2d": {"bnnreg": 2.5, "fm": 3.5, "mlpreg": 2, "bnnclf": 0.6, "mlpclf": 0.5},
     "cp": {"bnnreg": 0.6, "fm": 1.2, "mlpreg": 0.5, "bnnclf": 0.4, "mlpclf": 0.4},
     "pen": {"bnnreg": 0.5, "fm": 0.8, "mlpreg": 0.4, "bnnclf": 0.3, "mlpclf": 0.3},
@@ -80,7 +81,7 @@ def slot(name: str) -> str:
     sk, arm = (m.group(1), m.group(2)) if m else ("", "")
     if sk == "pen":
         return "02:00:00"
-    if sk == "cp":
+    if sk in ("cp", "cpppo"):
         return "03:00:00"
     if sk == "q2d" or arm == "bnnreg":
         return "06:00:00"

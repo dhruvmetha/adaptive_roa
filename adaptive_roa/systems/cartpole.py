@@ -28,7 +28,8 @@ class CartPoleSystem(DynamicalSystem):
                  failure_thresholds: dict | None = None,
                  success_tolerances: dict | None = None,
                  criteria_buffer: float = 0.0,
-                 require_criteria: bool = False):
+                 require_criteria: bool = False,
+                 success_radius: float | None = None):
         """
         Initialize CartPole system
 
@@ -47,8 +48,10 @@ class CartPoleSystem(DynamicalSystem):
                   there would compress the entire usable angular range into +-0.153
                   of the normalised space.
             failure_thresholds: the collector's termination thresholds,
-                  {"x", "x_dot", "theta_dot"}. A state fails when a channel exceeds
-                  its threshold minus ``criteria_buffer``. None keeps the gate at the
+                  {"x", "x_dot", "theta_dot"}, plus an optional "theta" for a
+                  collector that terminates on pole angle (the safe_explorer_ppo set
+                  stops at |theta| >= 0.48; wrapped |theta| is tested). A state fails
+                  when a channel exceeds its threshold minus ``criteria_buffer``. None keeps the gate at the
                   largest value any stored trajectory reached (``achieved_bounds``),
                   which the stochastic sets need. On the deterministic LQR set that
                   gate reads every true failure endpoint as invalid, because the last
@@ -64,11 +67,19 @@ class CartPoleSystem(DynamicalSystem):
             require_criteria: refuse any criterion left to a class default. With the
                   success box configured, a radius passed to classify_attractor is an
                   error: the box is the only success test (systems/criteria.py).
+            success_radius: an L2 ball (theta wrapped) around ``goal`` as the success
+                  test instead of the box, for collectors that label by a ball (the
+                  safe_explorer_ppo set: 0.05). Give the buffered radius; a radius
+                  passed to classify_attractor must match it. Exclusive with
+                  ``success_tolerances``.
         """
+        if success_radius is not None and success_tolerances is not None:
+            raise ValueError("cartpole: success_radius (ball) and success_tolerances (box) are two "
+                             "success tests; configure one")
         if require_criteria:
             from adaptive_roa.systems.criteria import check_required
             check_required("cartpole", goal=goal, failure_thresholds=failure_thresholds,
-                           success_tolerances=success_tolerances)
+                           success_test=success_tolerances if success_radius is None else success_radius)
         if dataset_dir is None:
             dataset_dir = f"{get_data_dir()}/{get_noise_regime()}/cartpole_pybullet"
 
@@ -79,7 +90,11 @@ class CartPoleSystem(DynamicalSystem):
             raise ValueError(f"cartpole goal must be 4-D [x, theta, x_dot, theta_dot], got {self.goal}")
         self._angle_limit_override = None if angle_limit is None else float(angle_limit)
         self.failure_thresholds = None if failure_thresholds is None else {
-            k: float(failure_thresholds[k]) for k in ("x", "x_dot", "theta_dot")}
+            k: float(failure_thresholds[k]) for k in ("x", "x_dot", "theta_dot", "theta")
+            if k in failure_thresholds}
+        if self.failure_thresholds is not None and set(self.failure_thresholds) < {"x", "x_dot", "theta_dot"}:
+            raise ValueError(f"cartpole failure_thresholds need x, x_dot and theta_dot, got {sorted(failure_thresholds)}")
+        self.success_radius = None if success_radius is None else float(success_radius)
         self.success_tolerances = None if success_tolerances is None else {
             k: float(success_tolerances[k]) for k in ("x", "theta", "x_dot", "theta_dot")}
         self.criteria_buffer = float(criteria_buffer)
@@ -146,12 +161,13 @@ class CartPoleSystem(DynamicalSystem):
 
     def _check_criteria_disjoint(self):
         """Refuse a buffered success box that reaches the buffered failure walls."""
-        if self.failure_thresholds is None or self.success_tolerances is None:
+        if self.failure_thresholds is None or (self.success_tolerances is None and self.success_radius is None):
             return
         b = self.criteria_buffer
         goal = dict(zip(("x", "theta", "x_dot", "theta_dot"), self.goal))
         for k, thr in self.failure_thresholds.items():
-            reach = abs(goal[k]) + self.success_tolerances[k] + b
+            reach = abs(goal[k]) + (self.success_radius if self.success_tolerances is None
+                                    else self.success_tolerances[k] + b)
             if reach >= thr - b:
                 raise ValueError(
                     f"cartpole success and failure sets intersect on {k}: the buffered "
@@ -318,9 +334,10 @@ class CartPoleSystem(DynamicalSystem):
         angle_diff = torch.atan2(torch.sin(dth), torch.cos(dth))
 
         if self.success_tolerances is None:
-            # Combined distance (legacy L2 ball; 0.1 when no radius is passed)
+            # Combined distance: the configured ball, else the legacy ball (0.1 when no radius is passed)
+            from adaptive_roa.systems.criteria import resolve_radius
             dist = torch.sqrt(torch.sum(euclidean_diff**2, dim=1) + angle_diff**2)
-            in_attractor = dist < (0.1 if radius is None else radius)
+            in_attractor = dist < resolve_radius(self.success_radius, radius, "cartpole", legacy_default=0.1)
         else:
             if radius is not None:
                 raise ValueError(
@@ -354,9 +371,11 @@ class CartPoleSystem(DynamicalSystem):
             x_failed = torch.abs(x) > f["x"] - b
             x_dot_failed = torch.abs(x_dot) > f["x_dot"] - b
             theta_dot_failed = torch.abs(theta_dot) > f["theta_dot"] - b
-        # Note: theta has no termination threshold (inf)
-
         exceeded_thresholds = x_failed | x_dot_failed | theta_dot_failed
+        # theta has no threshold on the LQR set (it may swing fully); the PPO set terminates on it.
+        if self.failure_thresholds is not None and "theta" in self.failure_thresholds:
+            wrapped = torch.atan2(torch.sin(theta), torch.cos(theta))
+            exceeded_thresholds = exceeded_thresholds | (wrapped.abs() > self.failure_thresholds["theta"] - self.criteria_buffer)
 
         # Three-way classification:
         # - If in attractor → SUCCESS (1)

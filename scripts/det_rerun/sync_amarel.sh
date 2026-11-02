@@ -14,12 +14,16 @@ names=("$@")
 # Rows renamed <name>~... (moved off Amarel, superseded) are history, not cells to sync.
 [ ${#names[@]} -gt 0 ] || mapfile -t names < <(awk -F'\t' '$2=="amarel" && $1 !~ /~/ {print $1}' "$HERE/launched.tsv" | sort -u)
 present=$(ssh -n -o BatchMode=yes $AM "cd $AEXP 2>/dev/null && ls -d */*" || true)   # cells started on Amarel
+active=$(ssh -n -o BatchMode=yes $AM "squeue -u st1122 -h -o %j" || true)              # cells with a live job
 for NAME in "${names[@]}"; do
   last=$(awk -F'\t' -v n="$NAME" '$1==n{w=$2} END{print w}' "$HERE/launched.tsv")
   [ "$last" = amarel ] || { echo "skip $NAME: last launch is not on Amarel ($last)"; continue; }
   OUT=$(awk -F'\t' -v n="$NAME" 'NR>1 && $1==n {print $8}' "$HERE/manifest.tsv" | grep -o 'output_dir=[^ ]*' | cut -d= -f2 || true)
   [[ "$OUT" == "$EXP"/* && "$OUT" != *[[:space:]]* ]] || { echo "skip $NAME: bad output dir '$OUT'"; continue; }
   [ -n "$OUT" ] || { echo "skip $NAME: no manifest row"; continue; }
+  # Finished and fully mirrored (final_results.json is written last), with no live job:
+  # nothing left to pull, so skip the rsync. Re-syncing ~100 such cells pushed a cycle past 10 min.
+  if [ -f "$OUT/final_results.json" ] && ! grep -qx "$NAME" <<< "$active"; then continue; fi
   grep -qx "${OUT#$EXP/}" <<< "$present" || { echo "waiting $NAME (not started on Amarel)"; continue; }
   if [ -d "$OUT" ] && [ ! -f "$OUT/.amarel_mirror" ] && [ -n "$(ls -A "$OUT")" ]; then
     echo "REFUSED $NAME: $OUT has files but no .amarel_mirror marker"; continue

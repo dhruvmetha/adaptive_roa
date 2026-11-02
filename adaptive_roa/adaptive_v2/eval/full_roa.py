@@ -385,6 +385,52 @@ def _predict_lambda_delta(
     }
 
 
+def _fpr_cap_npz_keys(taus, alpha_s) -> dict[str, Any]:
+    """Thresholds saved beside the per-point probabilities, for fpr_cap arms only."""
+    if taus is None:
+        return {}
+    return {"tau_s": float(taus[0]), "tau_f": float(taus[1]), "tau_inv": float(taus[2]),
+            "alpha_s": np.float64(np.nan if alpha_s is None else alpha_s)}
+
+
+def _predict_fpr_cap(
+    p_success: np.ndarray,
+    p_failure: np.ndarray,
+    p_invalid: np.ndarray,
+    taus: tuple[float, float, float],
+    alpha_s: float | None = None,
+    binary_outcomes: bool = False,
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """The FPR-capped rule (eval/fpr_cap.py) in place of lambda/delta (threshold=fpr_cap).
+
+    Extras keep the lambda/delta keys, holding the converted values, so every
+    reader of the ``lambda_delta`` block still finds them; ``rule`` says which
+    rule produced the labels. Under binary outcomes no state is labelled invalid,
+    as in _predict_lambda_delta.
+    """
+    from adaptive_roa.adaptive_v2.eval import fpr_cap
+
+    ts, tf, ti = (float(t) for t in taus)
+    pred = fpr_cap.predict(p_success, p_failure, p_invalid, ts, tf, ti)
+    n_both = int(np.sum(fpr_cap.both_fire(p_success, p_failure, p_invalid, ts, tf, ti)))
+    if binary_outcomes:
+        pred[pred == -2] = -1
+    lam, dl = fpr_cap.to_lambda_delta(ts, tf)
+    return pred, {
+        "rule": "fpr_cap",
+        "tau_s": ts, "tau_f": tf, "tau_inv": ti,
+        "alpha_s": None if alpha_s is None else float(alpha_s),
+        "lambda_star": float(lam),
+        "delta": float(dl),
+        "success_threshold": float(tie(ts)),
+        "failure_threshold": float(tie(1.0 - tf)),
+        "failure_threshold_pf": float(tie(tf)),
+        "invalid_threshold": float(tie(ti)),
+        "invalid_veto": float(tie(1.0 - min(ts, tf))),
+        "n_both_fire": n_both,
+    }
+
+
 def _predict_fixed_threshold(
     p_success: np.ndarray,
     p_failure: np.ndarray,
@@ -698,8 +744,15 @@ def evaluate_full_roa_fast(
     max_eval_rows: int | None = None,
     store_endpoints: bool = False,
     endpoint_rows_cap: int | None = None,
+    fpr_cap_taus: tuple[float, float, float] | None = None,
+    fpr_cap_alpha_s: float | None = None,
 ) -> dict[str, Any]:
     """Fast batched full-ROA evaluation with v2-compatible outputs.
+
+    ``fpr_cap_taus``: (tau_s, tau_f, tau_inv) from threshold=fpr_cap. The primary
+    labels (the ``lambda_delta`` and ``conservative_lambda_delta`` blocks and the
+    region partitions) then come from eval/fpr_cap.py's rule, and lambda_star /
+    delta are the converted values. None keeps the lambda/delta rule.
 
     ``store_endpoints``: with ``output_dir``, also write every generated
     endpoint for a fixed set of test rows to ``endpoints_test.npz`` (all rows, or
@@ -764,6 +817,9 @@ def evaluate_full_roa_fast(
                   f"K={num_mc_samples} MC samples, batch={batch_size}{refine_str}")
         print(f"  [Full ROA] λ*={lambda_star:.4f}, δ={delta:.4f}, "
               f"q_hat={q_hat_str}, rule={effective_rule}")
+        if fpr_cap_taus is not None:
+            print(f"  [Full ROA] labels from the fpr_cap rule: tau_s={fpr_cap_taus[0]}, "
+                  f"tau_f={fpr_cap_taus[1]}, tau_inv={fpr_cap_taus[2]} (λ*/δ above are converted)")
 
     # ── Use cache if available ───────────────────────────────────────────
     if mc_cache is not None:
@@ -972,16 +1028,22 @@ def evaluate_full_roa_fast(
         p_failure = p_failure + p_invalid
         p_invalid = np.zeros_like(p_invalid)
 
-    pred_conformal, conformal_extras = _predict_lambda_delta(
-        p_success,
-        p_failure,
-        p_invalid,
-        lambda_star=float(lambda_star),
-        delta=float(delta),
-        decision_rule=effective_rule,
-        invalid_threshold=invalid_threshold,
-        binary_outcomes=effective_binary,
-    )
+    if fpr_cap_taus is not None:
+        pred_conformal, conformal_extras = _predict_fpr_cap(
+            p_success, p_failure, p_invalid, fpr_cap_taus, fpr_cap_alpha_s,
+            binary_outcomes=effective_binary,
+        )
+    else:
+        pred_conformal, conformal_extras = _predict_lambda_delta(
+            p_success,
+            p_failure,
+            p_invalid,
+            lambda_star=float(lambda_star),
+            delta=float(delta),
+            decision_rule=effective_rule,
+            invalid_threshold=invalid_threshold,
+            binary_outcomes=effective_binary,
+        )
     metrics_conformal = _classification_metrics_from_predictions(pred_conformal, y_all)
     metrics_conformal.update(conformal_extras)
 
@@ -1249,6 +1311,7 @@ def evaluate_full_roa_fast(
             lambda_star=lambda_star,
             delta=delta,
             attractor_radius=attractor_radius,
+            **_fpr_cap_npz_keys(fpr_cap_taus, fpr_cap_alpha_s),
         )
         if store_endpoints:
             if mc_cache is not None:
@@ -1296,8 +1359,12 @@ def evaluate_full_roa_classifier(
     invalid_threshold: float | None = None,
     decision_rule: str | None = None,
     binary_outcomes: bool | None = None,
+    fpr_cap_taus: tuple[float, float, float] | None = None,
+    fpr_cap_alpha_s: float | None = None,
 ) -> dict[str, Any]:
     """Full-ROA evaluation for a discriminative classifier (single forward pass).
+
+    ``fpr_cap_taus``: as in evaluate_full_roa_fast.
 
     Reuses the model-agnostic threshold/metric helpers; produces the same
     top-level metric keys as ``evaluate_full_roa_fast`` so downstream artifact
@@ -1343,11 +1410,17 @@ def evaluate_full_roa_classifier(
     p_failure = 1.0 - p_success
     p_invalid = np.zeros_like(p_success)
 
-    pred_conformal, conformal_extras = _predict_lambda_delta(
-        p_success, p_failure, p_invalid, float(lambda_star), float(delta),
-        decision_rule=effective_rule, invalid_threshold=invalid_threshold,
-        binary_outcomes=effective_binary,
-    )
+    if fpr_cap_taus is not None:
+        pred_conformal, conformal_extras = _predict_fpr_cap(
+            p_success, p_failure, p_invalid, fpr_cap_taus, fpr_cap_alpha_s,
+            binary_outcomes=effective_binary,
+        )
+    else:
+        pred_conformal, conformal_extras = _predict_lambda_delta(
+            p_success, p_failure, p_invalid, float(lambda_star), float(delta),
+            decision_rule=effective_rule, invalid_threshold=invalid_threshold,
+            binary_outcomes=effective_binary,
+        )
     metrics_conformal = _classification_metrics_from_predictions(pred_conformal, y_all)
     metrics_conformal.update(conformal_extras)
 
@@ -1426,6 +1499,7 @@ def evaluate_full_roa_classifier(
             start_states=X_all, p_success=p_success, p_failure=p_failure,
             p_invalid=p_invalid, true_labels=y_all, lambda_star=lambda_star,
             delta=delta, attractor_radius=attractor_radius,
+            **_fpr_cap_npz_keys(fpr_cap_taus, fpr_cap_alpha_s),
         )
         if hook is not None:
             hook.maybe_plot(
@@ -1486,6 +1560,12 @@ class FullROAEvaluator:
         threshold_state: ThresholdState,
         epoch_context: dict[str, Any],
     ) -> dict[str, Any]:
+        # threshold=fpr_cap: label with the tau rule. Passed only when set, so every
+        # lambda/delta call is the call it was.
+        tau_kwargs = {}
+        if getattr(threshold_state, "tau_s", None) is not None:
+            tau_kwargs = {"fpr_cap_taus": (threshold_state.tau_s, threshold_state.tau_f, threshold_state.tau_inv),
+                          "fpr_cap_alpha_s": threshold_state.alpha_s}
         if self.predictor_type == "classifier":
             return evaluate_full_roa_classifier(
                 classifier=model_handle,
@@ -1501,6 +1581,7 @@ class FullROAEvaluator:
                 invalid_threshold=epoch_context.get("invalid_threshold", None),
                 decision_rule=epoch_context.get("decision_rule", self.decision_rule),
                 binary_outcomes=epoch_context.get("binary_outcomes", self.binary_outcomes),
+                **tau_kwargs,
             )
         return evaluate_full_roa_fast(
             flow_matcher=model_handle,
@@ -1527,4 +1608,5 @@ class FullROAEvaluator:
             binary_outcomes=epoch_context.get("binary_outcomes", self.binary_outcomes),
             store_endpoints=bool(epoch_context.get("store_endpoints", False)),
             endpoint_rows_cap=epoch_context.get("endpoint_rows_cap", None),
+            **tau_kwargs,
         )

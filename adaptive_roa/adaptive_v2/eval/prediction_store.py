@@ -118,6 +118,80 @@ def write_split(
         np.savez(out / f"endpoints_{split}.npz", endpoints=endpoints, rows=keep)
 
 
+def predict_split(
+    X: np.ndarray,
+    y: np.ndarray,
+    *,
+    predictor_type: str,
+    model: Any,
+    system: Any,
+    num_mc_samples: int,
+    attractor_radius: float,
+    batch_size: int = 2048,
+    device: str = "cpu",
+    keep_endpoints: bool = False,
+) -> dict[str, Any]:
+    """The predictions write_split would store, held in memory (threshold=fpr_cap).
+
+    The fpr_cap backend fits on the val split before acquisition, and the engine
+    writes the same prediction to the store later with write_split_prediction, so
+    the split costs one set of model calls. A classifier gives p_success (float32,
+    the stored value); an endpoint model gives labels [N, K] and, when asked, the
+    endpoints [N, K, d].
+    """
+    y = np.asarray(y).astype(np.int8)
+    if predictor_type == "classifier":
+        from adaptive_roa.conformal.classifier_probability_estimator import (
+            ClassifierProbabilityEstimator,
+        )
+        est = ClassifierProbabilityEstimator(model, system, None, device)
+        p_success, _pf, _pi = est.estimate(np.asarray(X, dtype=np.float32))
+        return {"states": X, "true_labels": y, "p_success": np.asarray(p_success, dtype=np.float32)}
+    keep = np.arange(len(X)) if keep_endpoints else None
+    labels, endpoints = mc_predict(model, system, X, num_mc_samples, attractor_radius,
+                                   batch_size=batch_size, device=device, keep_rows=keep)
+    return {"states": X, "true_labels": y, "labels": labels, "endpoints": endpoints, "rows": keep,
+            "attractor_radius": attractor_radius}
+
+
+def fit_probabilities(prediction: dict[str, Any], k: int):
+    """(p_s, p_f, p_inv, K) over the first k draws of a predict_split result.
+
+    A classifier's stored probability is used as is (K None), so a post-hoc fit on
+    predictions_val.npz sees exactly what the in-loop fit saw.
+    """
+    if "p_success" in prediction:
+        ps = np.asarray(prediction["p_success"], dtype=np.float64)
+        return ps, 1.0 - ps, np.zeros_like(ps), None
+    labels = prediction["labels"]
+    if labels.shape[1] < k:
+        raise ValueError(f"the fit needs {k} draws per state; the prediction has {labels.shape[1]}")
+    c = counts_from_labels(labels[:, :k])
+    return c["n_success"] / k, c["n_failure"] / k, c["n_invalid"] / k, int(k)
+
+
+def write_split_prediction(epoch_dir: str | Path, split: str, prediction: dict[str, Any],
+                           sub_k: int | None = None) -> None:
+    """write_split's files from a predict_split result; plus n_*_k<sub_k> over the first sub_k draws."""
+    out = Path(epoch_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    y = prediction["true_labels"]
+    if "p_success" in prediction:
+        np.savez(out / f"predictions_{split}.npz", p_success=prediction["p_success"], true_labels=y)
+        return
+    labels = prediction["labels"]
+    extra = {}
+    if sub_k:
+        c = counts_from_labels(labels[:, :int(sub_k)])
+        extra = {f"n_success_k{int(sub_k)}": c["n_success"], f"n_failure_k{int(sub_k)}": c["n_failure"]}
+    radius = prediction.get("attractor_radius")
+    np.savez(out / f"predictions_{split}.npz", true_labels=y,
+             attractor_radius=np.float64(np.nan if radius is None else radius),
+             **counts_from_labels(labels), **extra)
+    if prediction.get("endpoints") is not None:
+        np.savez(out / f"endpoints_{split}.npz", endpoints=prediction["endpoints"], rows=prediction["rows"])
+
+
 def write_split_states_once(run_dir: str | Path, split: str, X: np.ndarray, y: np.ndarray) -> None:
     """States and labels of a fixed split, written on first use only."""
     path = Path(run_dir) / f"prediction_store_states_{split}.npz"

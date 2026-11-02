@@ -82,8 +82,8 @@ def extend(row: dict, setting: str, source: str, launched: Path, dry_run: bool =
     banked = sorted(src.glob("epoch_*/artifacts_v2.json"))
     if len(banked) != SOURCE_EPOCHS or not (src / "final_results.json").exists():
         raise SystemExit(f"{src_name}: not finished ({len(banked)}/{SOURCE_EPOCHS} epochs banked)")
-    if (src / ".amarel_mirror").exists():
-        raise SystemExit(f"{src_name}: still an Amarel mirror; sync it before copying")
+    # A finished Amarel cell's mirror is complete (final_results.json is written last); the
+    # copy drops the .amarel_mirror marker, so sync_amarel.sh never overwrites it.
     commit = source_commit(launched, src_name)
     if dry_run:
         return f"{row['name']}: would copy {src} at commit {commit}"

@@ -85,6 +85,17 @@ def test_extend_copies_patches_and_registers(tmp_path):
     assert len(launched.read_text().splitlines()) == n
 
 
+def test_finished_amarel_mirror_copies_without_its_marker(tmp_path):
+    ec = _load("extend_cells")
+    src = _source(tmp_path)
+    (src / ".amarel_mirror").write_text("")
+    launched = tmp_path / "launched.tsv"
+    launched.write_text("dr_q3drl100_fm_ranked_s99512\tamarel\t--partition=gpu\t63400000\t20261101_0000\tlog\t45dc0ce\n")
+    row, out = _row(tmp_path)
+    ec.extend(row, "q3drl200", "q3drl100", launched)
+    assert not (out / ".amarel_mirror").exists() and (src / ".amarel_mirror").exists()
+
+
 def test_extend_refuses_an_unfinished_source(tmp_path):
     ec = _load("extend_cells")
     _source(tmp_path, n_banked=10)

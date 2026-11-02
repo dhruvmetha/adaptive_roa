@@ -340,5 +340,5 @@ def test_one_fprcap_epoch_runs_writes_taus_and_acquires_with_them(pred, acq, tmp
     else:
         assert z.files == ["p_success", "true_labels"]
         (row,) = fpr_cap.score_run(out, [0.005])
-    assert (row["tau_s"], row["tau_f"], row["tau_inv"]) == taus
+    assert (row["tau_s"], row["tau_f"], row["tau_inv"]) == taus and row["matches_run"] is True
     assert (out / "epoch_000" / "predictions_thrfit.npz").exists()

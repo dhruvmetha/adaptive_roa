@@ -309,8 +309,12 @@ def test_score_run_rows_match_a_direct_fit(tmp_path):
         assert r["success_recovery"] == np.sum((pred == 1) & (y == 1)) / np.sum(y == 1)
         assert r["fpr_all_failures"] == np.sum((pred == 1) & (y != 1)) / np.sum(y != 1)
         assert r["val_k"] == 100 and r["run_tau_s"] == 0.6
+    assert "matches_run" not in rows[0] and "matches_run" in rows[1]   # only at the run's own cap
     rows20 = fpr_cap.score_run(run, (0.005,), fit_k=20)
     assert rows20[0]["val_k"] == 20
+    f20 = fpr_cap.fit(np.rint(val[0] * 20) / 20, np.rint(val[1] * 20) / 20,
+                      1 - np.rint(val[0] * 20) / 20 - np.rint(val[1] * 20) / 20, val[3], [0.005])[0.005]
+    assert rows20[0]["tau_s"] == f20["tau_s"] and rows20[0]["tau_f"] == f20["tau_f"]
 
 
 def test_score_runs_cli_writes_the_fprcap_csv(tmp_path, monkeypatch):

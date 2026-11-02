@@ -225,13 +225,14 @@ def load_val(npz, fit_k: int | None = None):
         return ps, 1.0 - ps, np.zeros_like(ps), y, None
     if fit_k is None:
         k = int(z["num_mc_samples"])
-        n_s, n_f = z["n_success"].astype(int), z["n_failure"].astype(int)
+        n_s, n_f, n_i = (z[n].astype(int) for n in ("n_success", "n_failure", "n_invalid"))
     else:
         k = int(fit_k)
         if f"n_success_k{k}" not in z.files:
             raise KeyError(f"no n_success_k{k} in the val store")
         n_s, n_f = z[f"n_success_k{k}"].astype(int), z[f"n_failure_k{k}"].astype(int)
-    return n_s / k, n_f / k, (k - n_s - n_f) / k, y, k
+        n_i = k - n_s - n_f
+    return n_s / k, n_f / k, n_i / k, y, k
 
 
 def score_run(run_dir, alphas: Iterable[float] = POSTHOC_ALPHAS, epochs: Iterable[int] | None = None,
@@ -242,7 +243,9 @@ def score_run(run_dir, alphas: Iterable[float] = POSTHOC_ALPHAS, epochs: Iterabl
     Reads every epoch that has both predictions_val.npz and full_roa_per_point.npz.
     The fit uses all stored val draws unless ``fit_k`` names a stored subsample. When
     the epoch's artifacts record thresholds (an fpr_cap arm), the row carries them as
-    run_tau_* for comparison.
+    run_tau_*, and at the run's own cap ``matches_run`` says whether the refit gave
+    them back. That check is meaningful at the run's fit K (``fit_k=20``) or for a
+    classifier, whose stored probability is what the loop fit on.
     """
     run = Path(run_dir)
     keep = None if epochs is None else {int(e) for e in epochs}
@@ -284,5 +287,8 @@ def score_run(run_dir, alphas: Iterable[float] = POSTHOC_ALPHAS, epochs: Iterabl
             if thr.get("tau_s") is not None:
                 row.update(run_alpha_s=thr.get("alpha_s"), run_tau_s=thr.get("tau_s"),
                            run_tau_f=thr.get("tau_f"), run_tau_inv=thr.get("tau_inv"))
+                if thr.get("alpha_s") is not None and abs(float(thr["alpha_s"]) - a_s) < 1e-12:
+                    row["matches_run"] = bool((r["tau_s"], r["tau_f"], r["tau_inv"])
+                                              == (thr["tau_s"], thr["tau_f"], thr["tau_inv"]))
             rows.append(row)
     return rows

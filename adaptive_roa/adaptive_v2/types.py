@@ -27,6 +27,22 @@ class ThresholdState:
     q_hat_eval: float | None = None
     q_hat_success_eval: float | None = None
     q_hat_failure_eval: float | None = None
+    # FPR-capped rule (threshold=fpr_cap, adaptive_v2/eval/fpr_cap.py). None on every
+    # other backend. When set, lambda_star/delta_star hold the converted values for
+    # logging only, and delta_star can be negative.
+    tau_s: float | None = None
+    tau_f: float | None = None
+    tau_inv: float | None = None
+    alpha_s: float | None = None
+
+    TAU_FIELDS = ("tau_s", "tau_f", "tau_inv", "alpha_s")
+
+    @property
+    def taus(self) -> tuple[float, float, float] | None:
+        """(tau_s, tau_f, tau_inv), or None when the state carries lambda/delta only."""
+        if self.tau_s is None:
+            return None
+        return float(self.tau_s), float(self.tau_f), float(self.tau_inv)
 
 
 @dataclass

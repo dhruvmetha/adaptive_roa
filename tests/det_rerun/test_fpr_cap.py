@@ -289,7 +289,7 @@ def _write_run(root: Path, taus=None):
     np.savez(ep / "full_roa_per_point.npz", p_success=ts_, p_failure=tf_, p_invalid=ti_, true_labels=ty)
     thr = {"lambda_star": 0.5, "delta_star": 0.1}
     if taus is not None:
-        thr.update(tau_s=taus[0], tau_f=taus[1], tau_inv=taus[2], alpha_s=0.005)
+        thr.update(tau_s=taus[0], tau_f=taus[1], tau_inv=taus[2], alpha_s=0.01)
     (ep / "artifacts_v2.json").write_text(json.dumps({"epoch": 0, "train_trajectories": 100,
                                                       "threshold_state": thr}))
     return run, (vs, vf, vi, vy), (ts_, tf_, ti_, ty)
@@ -309,11 +309,11 @@ def test_score_run_rows_match_a_direct_fit(tmp_path):
         assert r["success_recovery"] == np.sum((pred == 1) & (y == 1)) / np.sum(y == 1)
         assert r["fpr_all_failures"] == np.sum((pred == 1) & (y != 1)) / np.sum(y != 1)
         assert r["val_k"] == 100 and r["run_tau_s"] == 0.6
-    assert "matches_run" not in rows[0] and "matches_run" in rows[1]   # only at the run's own cap
-    rows20 = fpr_cap.score_run(run, (0.005,), fit_k=20)
+    assert "matches_run" not in rows[0] and "matches_run" in rows[2]   # only at the run's own cap
+    rows20 = fpr_cap.score_run(run, (0.01,), fit_k=20)
     assert rows20[0]["val_k"] == 20
     f20 = fpr_cap.fit(np.rint(val[0] * 20) / 20, np.rint(val[1] * 20) / 20,
-                      1 - np.rint(val[0] * 20) / 20 - np.rint(val[1] * 20) / 20, val[3], [0.005])[0.005]
+                      1 - np.rint(val[0] * 20) / 20 - np.rint(val[1] * 20) / 20, val[3], [0.01])[0.01]
     assert rows20[0]["tau_s"] == f20["tau_s"] and rows20[0]["tau_f"] == f20["tau_f"]
 
 

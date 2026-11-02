@@ -13,7 +13,7 @@ threshold:
   _target_: adaptive_roa.adaptive_v2.threshold.fpr_cap_threshold.FprCapThresholdBackend
   predictor_type: ${predictor.type}
   decision_rule: ${decision_rule}     # logged only; the tau rule reads p_s, p_f and p_inv
-  alpha_s: 0.005
+  alpha_s: 0.01                      # the det rerun's loop cap
   alpha_f: 0.05
   tau_s_min: 0.5
   fit_mc_samples: 20

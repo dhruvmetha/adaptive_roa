@@ -14,10 +14,12 @@ defaults:
   - override /threshold: fpr_cap
   - _self_
 
-# The loop's one cap, for the per-epoch fit, acquisition and the in-run evaluation.
-# threshold.fit_mc_samples stays at fpr_cap.yaml's 20, the acquisition K.
+# The loop's one cap, for the per-epoch fit, acquisition and the in-run evaluation:
+# 1% (user, 2026-11-02). Fit at the first 20 of the 100 val draws (fpr_cap.yaml's
+# fit_mc_samples, the acquisition K), 0.5% leaves the quad3D final-state arms with
+# no success label. The post-hoc scorer still reports 0.25%, 0.5% and 1%.
 threshold:
-  alpha_s: 0.005
+  alpha_s: 0.01
 
 acquisition:
   rule: tau

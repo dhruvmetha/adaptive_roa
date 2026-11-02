@@ -72,12 +72,13 @@ def test_existing_det_rerun_cell_resolves_to_lambda_delta(acq):
 def test_fprcap_experiment_composes(pred, acq):
     cfg = _compose("system=pendulum", f"predictor={pred}", f"acquisition={acq}", "+experiment=det_rerun_fprcap")
     assert cfg.threshold._target_.endswith("fpr_cap_threshold.FprCapThresholdBackend")
-    assert cfg.threshold.alpha_s == 0.005 and cfg.threshold.fit_mc_samples == 20
+    assert cfg.threshold.alpha_s == 0.01 and cfg.threshold.fit_mc_samples == 20
     assert cfg.acquisition.rule == "tau"
     assert cfg.acquisition.num_mc_samples == 20 and cfg.eval.num_mc_samples_eval == 100
     assert cfg.acquisition.fill_shortfall is True and cfg.prediction_store.enabled is True
     raw = OmegaConf.to_container(cfg, resolve=False)["output_dir"]
     assert "${acquisition.rule}" in raw and "${threshold.alpha_s}" in raw
+    assert f"_rule_tau_alpha_s_0.01_d2_" in str(cfg.output_dir)      # the loop cap is 1%
     for knob in ("${predictor.name}", "${sampling_mode}", "${acquisition.d2_ratio}", "${seed}"):
         assert knob in raw
 
@@ -92,7 +93,7 @@ def test_fprcap_output_dir_never_matches_a_det_rerun_dir():
 def test_strategies_refuse_a_mismatched_rule():
     from adaptive_roa.adaptive_v2.strategy.direct import taus_for_rule
     ld = ThresholdState(lambda_star=0.5, delta_star=0.1)
-    tau = ThresholdState(lambda_star=0.3, delta_star=-0.1, tau_s=0.5, tau_f=0.3, tau_inv=1.01, alpha_s=0.005)
+    tau = ThresholdState(lambda_star=0.3, delta_star=-0.1, tau_s=0.5, tau_f=0.3, tau_inv=1.01, alpha_s=0.01)
     assert taus_for_rule("lambda_delta", ld) is None
     assert taus_for_rule("tau", tau) == (0.5, 0.3, 1.01)
     with pytest.raises(ValueError):
@@ -131,9 +132,9 @@ def test_unset_taus_leave_the_artifact_payload_as_it_was():
     _drop_unset_taus(d)
     assert list(d) == ["lambda_star", "delta_star", "q_hat", "q_hat_eval", "q_hat_success_eval",
                        "q_hat_failure_eval"]
-    d = asdict(ThresholdState(lambda_star=0.3, delta_star=-0.1, tau_s=0.5, tau_f=0.3, tau_inv=0.9, alpha_s=0.005))
+    d = asdict(ThresholdState(lambda_star=0.3, delta_star=-0.1, tau_s=0.5, tau_f=0.3, tau_inv=0.9, alpha_s=0.01))
     _drop_unset_taus(d)
-    assert d["tau_s"] == 0.5 and d["alpha_s"] == 0.005
+    assert d["tau_s"] == 0.5 and d["alpha_s"] == 0.01
 
 
 class _Clf:
@@ -174,7 +175,7 @@ def test_classifier_eval_labels_with_the_tau_rule(tmp_path):
     ev = FullROAEvaluator(cfg, Sys(), "cpu")
     ts, tf, ti = 0.7, 0.2, 1.01               # tau_s + tau_f < 1: both can fire, delta < 0
     lam, dl = fpr_cap.to_lambda_delta(ts, tf)
-    state = ThresholdState(lambda_star=lam, delta_star=dl, tau_s=ts, tau_f=tf, tau_inv=ti, alpha_s=0.005)
+    state = ThresholdState(lambda_star=lam, delta_star=dl, tau_s=ts, tau_f=tf, tau_inv=ti, alpha_s=0.01)
     out = tmp_path / "ep"
     m = ev.evaluate_epoch(_Clf(), state, {"eval_states_file": str(f), "output_dir": str(out), "verbose": False})
     p = torch.sigmoid(4.0 * torch.from_numpy(X[:, 0])).to(torch.float64).numpy()
@@ -221,7 +222,7 @@ def test_eval_q_hat_runs_on_a_negative_converted_delta():
                                                 probability_estimator=Est())
         q = cb.calibrate_eval(np.arange(500)[:, None], y,
                               ThresholdState(lambda_star=lam, delta_star=dl, tau_s=0.5, tau_f=0.16,
-                                             tau_inv=0.9, alpha_s=0.005))
+                                             tau_inv=0.9, alpha_s=0.01))
         assert np.isfinite(q)
         pred, _ = _predict_qhat_prediction_sets(p, 1 - p, np.zeros(500), y, lam, dl, q, rule, None)
         assert pred.shape == (500,)
@@ -249,7 +250,7 @@ def test_store_check_replays_the_tau_rule(tmp_path):
     ld.update(lambda_star=lam, delta=dl)
     art = {"epoch": 0, "eval_metrics": {"lambda_delta": ld},
            "threshold_state": {"lambda_star": lam, "delta_star": dl, "tau_s": taus[0], "tau_f": taus[1],
-                               "tau_inv": taus[2], "alpha_s": 0.005}}
+                               "tau_inv": taus[2], "alpha_s": 0.01}}
     (ep / "artifacts_v2.json").write_text(json.dumps(art))
     assert check_run(run) == []
     del art["threshold_state"]["tau_s"]                      # replayed as lambda/delta, the counts differ
@@ -303,7 +304,7 @@ def test_one_fprcap_epoch_runs_writes_taus_and_acquires_with_them(pred, acq, tmp
     art = json.loads((ep / "artifacts_v2.json").read_text())
     thr = art["threshold_state"]
     taus = (thr["tau_s"], thr["tau_f"], thr["tau_inv"])
-    assert thr["alpha_s"] == 0.005 and thr["tau_s"] >= 0.5
+    assert thr["alpha_s"] == 0.01 and thr["tau_s"] >= 0.5
     assert thr["tau_s"] in fpr_cap.GRID and thr["tau_f"] in fpr_cap.GRID
     assert np.isclose(thr["lambda_star"], (1 + taus[0] - taus[1]) / 2)
     assert np.isclose(thr["delta_star"], (taus[0] + taus[1] - 1) / 2)
@@ -336,9 +337,9 @@ def test_one_fprcap_epoch_runs_writes_taus_and_acquires_with_them(pred, acq, tmp
                         for s in range(20)], 1)
         assert np.array_equal(z["n_success_k20"], (lab == 1).sum(1))
         assert np.array_equal(z["n_failure_k20"], (lab == -1).sum(1))
-        (row,) = fpr_cap.score_run(out, [0.005], fit_k=20)
+        (row,) = fpr_cap.score_run(out, [0.01], fit_k=20)
     else:
         assert z.files == ["p_success", "true_labels"]
-        (row,) = fpr_cap.score_run(out, [0.005])
+        (row,) = fpr_cap.score_run(out, [0.01])
     assert (row["tau_s"], row["tau_f"], row["tau_inv"]) == taus and row["matches_run"] is True
     assert (out / "epoch_000" / "predictions_thrfit.npz").exists()

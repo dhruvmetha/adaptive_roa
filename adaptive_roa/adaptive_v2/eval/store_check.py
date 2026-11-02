@@ -80,11 +80,21 @@ def check_run(run_dir: str | Path) -> list[str]:
             problems.append(f"{ep_dir.name}: missing full_roa_per_point.npz")
             continue
         pp = np.load(pp_path)
-        pred, _ = _predict_lambda_delta(
-            pp["p_success"], pp["p_failure"], pp["p_invalid"],
-            float(ld["lambda_star"]), float(ld["delta"]), rule,
-            ld.get("invalid_threshold"),
-        )
+        ts_state = art.get("threshold_state") or {}
+        if ts_state.get("tau_s") is not None:
+            # threshold=fpr_cap: the epoch was labelled with the tau rule, not lambda/delta.
+            from adaptive_roa.adaptive_v2.eval import fpr_cap
+            pred = fpr_cap.predict(pp["p_success"], pp["p_failure"], pp["p_invalid"],
+                                   float(ts_state["tau_s"]), float(ts_state["tau_f"]),
+                                   float(ts_state["tau_inv"]))
+            if bool(cfg.get("eval", {}).get("binary_outcomes", False)):
+                pred[pred == -2] = -1
+        else:
+            pred, _ = _predict_lambda_delta(
+                pp["p_success"], pp["p_failure"], pp["p_invalid"],
+                float(ld["lambda_star"]), float(ld["delta"]), rule,
+                ld.get("invalid_threshold"),
+            )
         got = _classification_metrics_from_predictions(pred, pp["true_labels"])
         diff = {k: (got[k], ld[k]) for k in COUNT_KEYS if got[k] != ld[k]}
         if diff:

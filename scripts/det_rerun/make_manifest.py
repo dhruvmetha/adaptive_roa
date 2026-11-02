@@ -130,14 +130,43 @@ def ablation_cells(seed: int, signal: str):
                    "script": "scripts/run_adaptive.py"}
 
 
+# Idea 6 (better-thresh-opt spec change_spec_idea6.md; user, 2026-11-02): FPR-capped
+# thresholds replace lambda*/delta* in direct and ranked acquisition and the in-run
+# evaluation, at a 1% success cap. New cells only, in their own dirs. The quad3d
+# families run their 200k schedules only; their 110k/100k numbers are epochs 0-10.
+FPRCAP_SYSTEMS = ("pen", "cp", "q2d", "q2dc", "cpppo", "q3d30", "q3d60", "q3d200", "q3drl40", "q3drl200")
+FPRCAP_TAG = "fprcap1pct"
+
+
+def fprcap_cells(seed: int):
+    for sk in FPRCAP_SYSTEMS:
+        system, step, epochs, mem = SYSTEMS[sk]
+        for arm in ARMS:
+            for mode in ("direct", "ranked"):
+                name = f"dr_{sk}_{SHORT[arm]}_{mode}_{FPRCAP_TAG}_s{seed}"
+                ov = [f"system={system}", f"predictor={arm}", f"acquisition={mode}",
+                      "+experiment=det_rerun_fprcap", f"seed={seed}"]
+                if step is not None:
+                    ov.append(f"samples_per_epoch={step}")
+                if sk in N_EPOCHS:
+                    ov.append(f"n_epochs={N_EPOCHS[sk]}")
+                ov.append("'prediction_store.endpoint_epochs=[" + ",".join(map(str, epochs)) + "]'")
+                ov.append(f"output_dir={EXP}/{sk}/{name}")
+                yield {"name": name, "system": sk, "arm": arm, "mode": f"{mode}_{FPRCAP_TAG}", "seed": seed,
+                       "mem": ARM_MEM.get((arm, sk), mem), "priority": PRIORITY[sk], "overrides": " ".join(ov),
+                       "script": "scripts/run_adaptive.py"}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed", type=int, required=True)
     ap.add_argument("--ablations", choices=["direct", "ranked", "entropy"], default=None,
                     help="append the ablation cells for the D08 signal instead of the main matrix")
+    ap.add_argument("--fprcap", action="store_true", help="append the Idea 6 FPR-capped cells instead of the main matrix")
     ap.add_argument("--out", default="/common/home/st1122/Projects/adaptive_roa/slurm_logs/det_rerun/manifest.tsv")
     a = ap.parse_args()
-    source = ablation_cells(a.seed, a.ablations) if a.ablations else cells(a.seed)
+    source = (ablation_cells(a.seed, a.ablations) if a.ablations else fprcap_cells(a.seed) if a.fprcap
+              else cells(a.seed))
     rows = sorted(source, key=lambda r: (r["priority"], r["name"]))
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)

@@ -126,3 +126,17 @@ def test_q3d200_amarel_slots_hold_a_whole_epoch():
     assert rb.slot("dr_q3d200_fm_ranked_s99512") == "12:00:00"
     assert rb.slot("dr_q3d200_mlpclf_ranked_s99512") == "04:00:00"
     assert rb.slot("dr_q3d110_fm_ranked_s99512") == "04:00:00"          # other settings unchanged
+
+
+def test_fprcap_cells_are_100_new_dirs_on_the_existing_schedules():
+    mm = _load("make_manifest")
+    rows = list(mm.fprcap_cells(99512))
+    assert len(rows) == 100 and len({r["name"] for r in rows}) == 100
+    main = {r["name"]: r for r in mm.cells(99512)}
+    for r in rows:
+        assert r["name"] not in main and "fprcap1pct" in r["name"] and f"/{r['system']}/{r['name']}" in r["overrides"]
+        assert "+experiment=det_rerun_fprcap" in r["overrides"] and r["mode"] in ("direct_fprcap1pct", "ranked_fprcap1pct")
+        twin = main[r["name"].replace("_fprcap1pct", "")]       # same schedule as the lambda/delta cell
+        strip = lambda ov: [o for o in ov.split() if not o.startswith(("output_dir=", "+experiment="))]
+        assert strip(r["overrides"]) == strip(twin["overrides"]) and r["mem"] == twin["mem"]
+    assert {r["system"] for r in rows} == set(mm.FPRCAP_SYSTEMS) and "q3d110" not in mm.FPRCAP_SYSTEMS

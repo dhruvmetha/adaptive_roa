@@ -1,0 +1,20 @@
+# @package _global_
+# FPR-capped thresholds (det rerun, Idea 6; adaptive_roa/adaptive_v2/eval/fpr_cap.py).
+#
+# Each epoch fits (tau_s, tau_f, tau_inv) on the val split (data_source.val_set_file),
+# not on the threshold-fit pairs, at the first fit_mc_samples of the draws the
+# prediction store makes there; a classifier's probability is used as is. The fit
+# maximizes (TP + TN) / N on val subject to FP / N_fail <= alpha_s and
+# FN / N_succ <= alpha_f, with tau_s >= tau_s_min.
+#
+# Pair it with acquisition.rule=tau: direct and ranked refuse lambda/delta thresholds
+# converted from these, since delta is negative when tau_s + tau_f < 1.
+threshold:
+  _target_: adaptive_roa.adaptive_v2.threshold.fpr_cap_threshold.FprCapThresholdBackend
+  predictor_type: ${predictor.type}
+  decision_rule: ${decision_rule}     # logged only; the tau rule reads p_s, p_f and p_inv
+  alpha_s: 0.005
+  alpha_f: 0.05
+  tau_s_min: 0.5
+  fit_mc_samples: 20
+  verbose: true

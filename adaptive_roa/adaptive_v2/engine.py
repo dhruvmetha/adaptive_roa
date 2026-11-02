@@ -78,6 +78,17 @@ def _atomic_write_json(path: Path, obj: Any, **kwargs) -> None:
         raise
 
 
+def _drop_unset_taus(threshold_state: Any) -> None:
+    """Remove the fpr_cap fields from a serialized ThresholdState when they are unset.
+
+    Keeps artifacts_v2.json of every lambda/delta arm exactly as it was before the
+    fields existed.
+    """
+    if isinstance(threshold_state, dict) and threshold_state.get("tau_s") is None:
+        for k in ThresholdState.TAU_FIELDS:
+            threshold_state.pop(k, None)
+
+
 class AdaptiveEngine:
     """Decision-complete adaptive loop used by the unified run script."""
 
@@ -195,14 +206,60 @@ class AdaptiveEngine:
             text = f"# could not resolve: {e}\n" + OmegaConf.to_yaml(cfg)
         (self.output_dir / "resolved_config.yaml").write_text(text)
 
-    def _write_prediction_store(self, epoch_dir, model_handle, keep_endpoints: bool, threshold_fit) -> None:
-        """Val, cal and threshold-fit predictions for this epoch (prediction_store.py)."""
+    def _predict_val_split(self, model_handle, num_mc_samples: int, keep_endpoints: bool) -> dict[str, Any]:
+        """Predict data_source.val_set_file once, for a backend that fits there (threshold=fpr_cap)."""
+        from adaptive_roa.adaptive_v2.eval import prediction_store as ps
+        path = self.cfg.data_source.get("val_set_file", None)
+        if not path:
+            raise ValueError("the threshold backend fits on the val split, but data_source.val_set_file is not set")
+        X, _, y = load_eval_states(path, max_rows=self.evaluator.max_eval_rows,
+                                   state_dim=getattr(self.system, "state_dim", None))
+        return ps.predict_split(
+            X, y, predictor_type=self.predictor_type, model=model_handle, system=self.system,
+            num_mc_samples=num_mc_samples, attractor_radius=self.evaluator.attractor_radius,
+            batch_size=int(self.cfg.get("val_batch_size", 2048)), device=self.device,
+            keep_endpoints=keep_endpoints,
+        )
+
+    def _fit_on_val_split(self, model_handle, store_val: bool, keep_endpoints: bool):
+        """Threshold fit on the val split, before acquisition (threshold=fpr_cap).
+
+        Predicts the split at the eval K when the prediction store writes it this
+        epoch (so the store reuses this prediction), otherwise at the fit K only.
+        The fit reads the first fit_mc_samples draws. Returns (state, prediction).
+        """
+        from adaptive_roa.adaptive_v2.eval import prediction_store as ps
+        k_fit = int(self.threshold_backend.fit_mc_samples)
+        k_eval = int(self.evaluator.num_mc_samples_eval)
+        n_draws = k_eval if store_val else k_fit
+        if self.predictor_type != "classifier" and n_draws < k_fit:
+            raise ValueError(f"threshold.fit_mc_samples={k_fit} exceeds eval.num_mc_samples_eval={k_eval}; "
+                             f"the fit reads the first {k_fit} of the stored val draws")
+        pred = self._predict_val_split(model_handle, n_draws, keep_endpoints=store_val and keep_endpoints)
+        p_s, p_f, p_i, k = ps.fit_probabilities(pred, k_fit)
+        state = self.threshold_backend.optimize_val(pred["states"], pred["true_labels"], p_s, p_f, p_i, k)
+        return state, pred
+
+    def _write_prediction_store(self, epoch_dir, model_handle, keep_endpoints: bool, threshold_fit,
+                                val_prediction: dict[str, Any] | None = None) -> None:
+        """Val, cal and threshold-fit predictions for this epoch (prediction_store.py).
+
+        ``val_prediction``: the val split already predicted for the threshold fit
+        (threshold=fpr_cap). It is written as is, with the fit-K counts beside the
+        full-K ones, instead of predicting the split again.
+        """
         from adaptive_roa.adaptive_v2.eval import prediction_store as ps
         ds = self.cfg.data_source
         for split, key in (("val", "val_set_file"), ("cal", "cal_set_file")):
             path = ds.get(key, None)
             if not path:
                 raise ValueError(f"prediction_store is enabled but data_source.{key} is not set")
+            if split == "val" and val_prediction is not None:
+                ps.write_split_states_once(self.output_dir, split, val_prediction["states"],
+                                           val_prediction["true_labels"])
+                ps.write_split_prediction(epoch_dir, split, val_prediction,
+                                          sub_k=int(self.threshold_backend.fit_mc_samples))
+                continue
             X, _, y = load_eval_states(path, max_rows=self.evaluator.max_eval_rows,
                                        state_dim=getattr(self.system, "state_dim", None))
             ps.write_split_states_once(self.output_dir, split, X, y)
@@ -285,7 +342,20 @@ class AdaptiveEngine:
             # a fact about who happens to read the variable.
             threshold_consumers = {"ranked", "direct", "conformal", "partx"}
             needs_threshold = run_eval or acquisition_mode in threshold_consumers
-            if needs_threshold:
+
+            store_cfg = self.cfg.get("prediction_store", None)
+            store_on = bool(store_cfg is not None and store_cfg.get("enabled", False))
+            store_endpoints_now = store_on and epoch in [int(e) for e in store_cfg.get("endpoint_epochs", [])]
+
+            # threshold=fpr_cap fits on the val split, predicted here rather than after
+            # evaluation; the store below reuses that prediction. This moves those
+            # model calls ahead of acquisition, so it shifts the RNG stream for those
+            # arms only. Every other backend keeps the order below unchanged.
+            val_prediction = None
+            if needs_threshold and getattr(self.threshold_backend, "fit_split", None) == "val":
+                threshold_state, val_prediction = self._fit_on_val_split(
+                    model_handle, store_val=run_eval and store_on, keep_endpoints=store_endpoints_now)
+            elif needs_threshold:
                 X_val, y_val = sample_val_data_for_optimization(
                     self.pool.dataset_builder,
                 )
@@ -390,10 +460,6 @@ class AdaptiveEngine:
 
             threshold_state.q_hat_eval = q_hat_eval
 
-            store_cfg = self.cfg.get("prediction_store", None)
-            store_on = bool(store_cfg is not None and store_cfg.get("enabled", False))
-            store_endpoints_now = store_on and epoch in [int(e) for e in store_cfg.get("endpoint_epochs", [])]
-
             if not run_eval:
                 full_roa_metrics: dict[str, Any] = {"skipped": True}
             else:
@@ -412,6 +478,7 @@ class AdaptiveEngine:
                     self._write_prediction_store(
                         epoch_output_dir, model_handle, store_endpoints_now,
                         threshold_fit=self.threshold_backend.last_fit if needs_threshold else None,
+                        val_prediction=val_prediction,
                     )
             full_roa_metrics["q_hat_training"] = float(q_hat) if q_hat is not None else None
             full_roa_metrics["q_hat_eval"] = float(q_hat_eval) if q_hat_eval is not None else None
@@ -472,6 +539,8 @@ class AdaptiveEngine:
                 "full_roa": full_roa_metrics,
                 "filter_diagnostics": _convert_numpy(filter_diagnostics.__dict__) if filter_diagnostics else None,
             }
+            if getattr(threshold_state, "tau_s", None) is not None:      # threshold=fpr_cap only
+                epoch_result.update({k: getattr(threshold_state, k) for k in ThresholdState.TAU_FIELDS})
             epoch_results.append(epoch_result)
 
             conformal_state = None
@@ -502,8 +571,9 @@ class AdaptiveEngine:
                     "commit": git_sha(),
                 },
             )
-            _atomic_write_json(epoch_output_dir / "artifacts_v2.json",
-                                _convert_numpy(epoch_artifacts.__dict__), indent=2)
+            artifacts_payload = _convert_numpy(epoch_artifacts.__dict__)
+            _drop_unset_taus(artifacts_payload.get("threshold_state"))
+            _atomic_write_json(epoch_output_dir / "artifacts_v2.json", artifacts_payload, indent=2)
 
             hydra_src = self.output_dir / ".hydra"
             if hydra_src.exists():

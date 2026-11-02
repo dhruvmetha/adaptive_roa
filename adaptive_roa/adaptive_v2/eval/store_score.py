@@ -21,6 +21,7 @@ import numpy as np
 from omegaconf import OmegaConf
 
 from adaptive_roa.adaptive_v2.eval.full_roa import _predict_lambda_delta
+from adaptive_roa.adaptive_v2.eval.run_kind import require_lambda_delta
 
 LOG_EPS = 1e-3
 
@@ -140,6 +141,7 @@ def score_run(run_dir: str | Path, thresholds: str = "run") -> list[dict]:
     with the run's threshold settings, and scores test with the refit rule."""
     if thresholds not in ("run", "val"):
         raise ValueError(f"thresholds must be 'run' or 'val', not {thresholds!r}")
+    require_lambda_delta(run_dir, f"store_score.score_run({thresholds})")
     run = Path(run_dir)
     cfg_path = run / "resolved_config.yaml"
     cfg = OmegaConf.load(cfg_path if cfg_path.exists() else run / ".hydra" / "config.yaml")

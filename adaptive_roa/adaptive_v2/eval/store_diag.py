@@ -18,6 +18,7 @@ from omegaconf import OmegaConf
 
 from adaptive_roa.adaptive_v2.eval.full_roa import _predict_lambda_delta
 from adaptive_roa.adaptive_v2.eval.store_score import _auroc
+from adaptive_roa.adaptive_v2.eval.run_kind import require_lambda_delta
 
 
 def diagnose(p_s, p_f, p_i, y, lam, delta, rule, inv_thr) -> dict:
@@ -43,6 +44,7 @@ def diagnose(p_s, p_f, p_i, y, lam, delta, rule, inv_thr) -> dict:
 
 def diagnose_run(run_dir) -> list[dict]:
     run = Path(run_dir)
+    require_lambda_delta(run, "store_diag.diagnose_run")
     cfg = OmegaConf.load(run / "resolved_config.yaml")
     rows = []
     for art_path in sorted(run.glob("epoch_*/artifacts_v2.json")):

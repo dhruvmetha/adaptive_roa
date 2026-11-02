@@ -14,6 +14,7 @@ import numpy as np
 from omegaconf import OmegaConf
 
 from adaptive_roa.adaptive_v2.eval.full_roa import _predict_lambda_delta
+from adaptive_roa.adaptive_v2.eval.run_kind import require_lambda_delta
 
 SUCCESS, FAILURE, ABSTAIN = 1, 0, -1
 
@@ -38,6 +39,7 @@ def shares(dec, y01) -> dict:
 def decision_maps(run_dir, epochs=None, dims=(0, 1)) -> list[dict]:
     """One entry per stored epoch (or per epoch in `epochs`), oldest first."""
     run = Path(run_dir)
+    require_lambda_delta(run, "store_boundary.decision_maps")
     cfg = OmegaConf.load(run / "resolved_config.yaml")
     rule = str(cfg.decision_rule)
     out = []

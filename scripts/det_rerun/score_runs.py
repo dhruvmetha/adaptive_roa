@@ -16,6 +16,7 @@ from pathlib import Path
 
 from adaptive_roa.adaptive_v2.eval.fpr_cap import POSTHOC_ALPHAS
 from adaptive_roa.adaptive_v2.eval.fpr_cap import score_run as fpr_cap_score_run
+from adaptive_roa.adaptive_v2.eval.run_kind import uses_tau_rule
 from adaptive_roa.adaptive_v2.eval.store_score import score_run
 
 ROOT = "/common/users/shared/pracsys/adaptive_roa_experiments/det_rerun"
@@ -42,6 +43,9 @@ def main():
     for run in sorted(Path(a.root).glob("*/dr_*")):
         if (run / "partx_state.pkl").exists():
             continue                      # Part-X: scored by its own readout
+        if a.thresholds != "fprcap" and uses_tau_rule(run):
+            print(f"skip {run.name}: FPR-capped tau rule, not lambda*/delta* (use --thresholds fprcap)")
+            continue
         try:
             if a.thresholds == "fprcap":
                 rows += [{"system": run.parent.name, "thresholds": "fprcap", **r}

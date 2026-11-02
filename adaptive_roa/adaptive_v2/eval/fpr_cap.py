@@ -284,6 +284,12 @@ def score_run(run_dir, alphas: Iterable[float] = POSTHOC_ALPHAS, epochs: Iterabl
                 **split_metrics(pred, ty),
                 "n_both_fire": int(np.sum(both_fire(ts_, tf_, ti_, r["tau_s"], r["tau_f"], r["tau_inv"]))),
             }
+            # tau_s = tau_f = off commits nothing. The tied veto then calls every state
+            # invalid, which a table would show as 100% invalid; report "no commits" and
+            # leave the uncertain/invalid split blank instead.
+            row["no_commits"] = bool(r["tau_s"] > 1.0 and r["tau_f"] > 1.0)
+            if row["no_commits"]:
+                row["abstain_uncertain"] = row["abstain_invalid"] = float("nan")
             if thr.get("tau_s") is not None:
                 row.update(run_alpha_s=thr.get("alpha_s"), run_tau_s=thr.get("tau_s"),
                            run_tau_f=thr.get("tau_f"), run_tau_inv=thr.get("tau_inv"))

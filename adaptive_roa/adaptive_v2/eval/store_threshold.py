@@ -17,6 +17,7 @@ from omegaconf import OmegaConf
 from adaptive_roa.adaptive_v2.eval.store_score import score_epoch
 from adaptive_roa.conformal import ConformalConfig, ConformalPredictor
 from adaptive_roa.systems.criteria import optional_radius
+from adaptive_roa.adaptive_v2.eval.run_kind import require_lambda_delta
 
 WS = (0.5, 0.75, 0.9, 0.95, 0.99)
 
@@ -44,6 +45,7 @@ def refit(threshold_cfg, w: float, p_s, p_f, p_i, y) -> tuple[float, float]:
 
 def refit_run(run_dir, ws=WS) -> list[dict]:
     run = Path(run_dir)
+    require_lambda_delta(run, "store_threshold.refit_run")
     cfg = OmegaConf.load(run / "resolved_config.yaml")
     tcfg = OmegaConf.to_container(cfg.threshold, resolve=True)
     run_w = float(tcfg.get("w", 0.9))

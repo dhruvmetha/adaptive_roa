@@ -13,6 +13,7 @@ import io
 from multiprocessing import Pool
 from pathlib import Path
 
+from adaptive_roa.adaptive_v2.eval.run_kind import uses_tau_rule
 from adaptive_roa.adaptive_v2.eval.store_threshold import refit_run
 
 ROOT = "/common/users/shared/pracsys/adaptive_roa_experiments/det_rerun"
@@ -33,6 +34,10 @@ def main():
     ap.add_argument("--jobs", type=int, default=8)
     a = ap.parse_args()
     runs = [r for r in sorted(Path(a.root).glob("*/dr_*")) if not (r / "partx_state.pkl").exists()]
+    tau = [r for r in runs if uses_tau_rule(r)]          # lambda/delta refits only
+    runs = [r for r in runs if r not in tau]
+    if tau:
+        print(f"skip {len(tau)} FPR-capped tau-rule runs (no lambda*/delta* to refit)")
     with Pool(max(1, min(a.jobs, len(runs)))) as pool:
         results = pool.map(_one, runs, chunksize=1)
     rows = [row for got, _ in results for row in got]

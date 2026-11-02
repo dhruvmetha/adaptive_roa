@@ -14,6 +14,7 @@ import numpy as np
 from omegaconf import OmegaConf
 
 from adaptive_roa.adaptive_v2.eval.store_score import score_epoch
+from adaptive_roa.adaptive_v2.eval.run_kind import require_lambda_delta
 
 KS = (5, 10, 20, 50)
 
@@ -31,6 +32,7 @@ def subsample_counts(n_s, n_f, n_i, k_new: int, rng):
 
 def k_check_run(run_dir, ks=KS, seed: int = 0) -> list[dict]:
     run = Path(run_dir)
+    require_lambda_delta(run, "store_k.k_check_run")
     cfg = OmegaConf.load(run / "resolved_config.yaml")
     rule = str(cfg.decision_rule)
     k_eval = int(cfg.eval.num_mc_samples_eval)

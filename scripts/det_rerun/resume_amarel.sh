@@ -2,6 +2,7 @@
 # Resume a preempted or timed-out Amarel GPU cell from its last banked epoch, from the
 # snapshot of the commit it was launched with (never from 0). Part-X (amarelcpu) resumes
 # by rerunning its command on the same output dir, from partx_state.pkl.
+# A copied cell (extend_cells.py) is pushed to Amarel and marked as a mirror on its first run.
 #   resume_amarel.sh <name> [walltime]
 set -euo pipefail
 export SSH_AUTH_SOCK=
@@ -10,11 +11,20 @@ EXP=/common/users/shared/pracsys/adaptive_roa_experiments/det_rerun
 AM=amarel.rutgers.edu; AEXP=/scratch/st1122/det_rerun_out
 NAME=$1; WALL=${2:-3-00:00:00}
 LAST=$(awk -F'\t' -v n="$NAME" '$1==n' "$HERE/launched.tsv" | tail -1)
-[ "$(cut -f2 <<< "$LAST")" = amarel ] || { echo "$NAME was not launched on Amarel" >&2; exit 1; }
+WORLD=$(cut -f2 <<< "$LAST")
+[ "$WORLD" = amarel ] || [ "$WORLD" = copied ] || { echo "$NAME was not launched on Amarel" >&2; exit 1; }
 COMMIT=$(cut -f7 <<< "$LAST")
 ROW=$(awk -F'\t' -v n="$NAME" 'NR>1 && $1==n' "$HERE/manifest.tsv")
 MEM=$(cut -f6 <<< "$ROW")
 ADIR=$(grep -o 'output_dir=[^ ]*' <<< "$(cut -f8 <<< "$ROW")" | cut -d= -f2); ADIR=${ADIR/#$EXP/$AEXP}
+if [ "$WORLD" = copied ]; then
+  # extend_cells.py copy: its first run. Push the copy, then mirror it back like any Amarel cell.
+  OUT=$(grep -o 'output_dir=[^ ]*' <<< "$(cut -f8 <<< "$ROW")" | cut -d= -f2)
+  ! ssh -n -o BatchMode=yes $AM "test -e $ADIR" || { echo "$ADIR already exists on Amarel" >&2; exit 1; }
+  ssh -n -o BatchMode=yes $AM "mkdir -p $(dirname "$ADIR")"
+  rsync -a --exclude .amarel_mirror "$OUT/" "$AM:$ADIR/" </dev/null
+  touch "$OUT/.amarel_mirror"
+fi
 ACODE=$(ssh -n -o BatchMode=yes $AM "ls -d /home/st1122/det_rerun_code/${COMMIT}*" | head -1)
 [ -n "$ACODE" ] || { echo "no Amarel snapshot for $COMMIT" >&2; exit 1; }
 ssh -n -o BatchMode=yes $AM "ls $ADIR/epoch_*/artifacts_v2.json" >/dev/null 2>&1 \

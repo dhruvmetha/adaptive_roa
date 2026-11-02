@@ -37,9 +37,10 @@ from matplotlib.lines import Line2D  # noqa: E402
 
 HERE = Path("/common/home/st1122/Projects/adaptive_roa/slurm_logs/det_rerun")
 OUT = HERE / "plots"
-SETTINGS = ["pen", "cp", "cpppo", "q2d", "q2dc", "q3d30", "q3d60", "q3d110", "q3drl40", "q3drl100", "q3drl200"]
+SETTINGS = ["pen", "cp", "cpppo", "q2d", "q2dc", "q3d30", "q3d60", "q3d110", "q3d200", "q3drl40", "q3drl100", "q3drl200"]
 TITLES = {"pen": "Pendulum", "cp": "Cartpole", "q2d": "Quadrotor 2D", "q3d30": "Quadrotor 3D, 30k budget",
           "q3d60": "Quadrotor 3D, 60k budget", "q3d110": "Quadrotor 3D, 110k budget",
+          "q3d200": "Quadrotor 3D, 200k budget",
           "cpppo": "Cartpole RL, 3k budget", "q2dc": "Quadrotor 2D corridor, 15k budget", "q3drl40": "Quadrotor 3D RL, 40k budget", "q3drl100": "Quadrotor 3D RL, 100k budget",
           "q3drl200": "Quadrotor 3D RL, 200k budget"}
 ROWS = [("fm_det", "FM (ours)"), ("det_mlp_clf", "MLP classifier"), ("det_bnn_clf", "BNN classifier"),

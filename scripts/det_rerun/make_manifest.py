@@ -26,6 +26,8 @@ SYSTEMS = {
     "q3d30":  ("quadrotor3d", 2000, [0, 5, 10], "16G"),
     "q3d60":  ("quadrotor3d", 5000, [0, 6, 10], "20G"),
     "q3d110": ("quadrotor3d", 10000, [0, 5, 10], "24G"),
+    # 200k by continuing the 110k cells (user, 2026-11-02): 10,000 + 19 x 10,000 = 200,000.
+    "q3d200": ("quadrotor3d", 10000, [0, 5, 10, 15, 19], "32G"),
     # Second quad3d system: PPO policy, zero-noise level of the stochastic tree
     # (user, 2026-11-01). 40k and 100k schedules, each with its own uniform cells;
     # PPO flights store about 24 rows against LQR's 55, so memory sits below q3d110's.
@@ -42,14 +44,15 @@ SYSTEMS = {
 # 10.6G at 30k, about 0.3G per 1,000 trajectories), so its quad3d cells ask for more.
 ARM_MEM = {("det_bnn_reg", "q3d30"): "24G", ("det_bnn_reg", "q3d60"): "32G", ("det_bnn_reg", "q3d110"): "48G",
            ("det_bnn_reg", "q3drl40"): "24G", ("det_bnn_reg", "q3drl100"): "32G",
-           ("det_bnn_reg", "q3drl200"): "32G"}     # q3drl100 peaked at 9.6G MaxRSS
+           ("det_bnn_reg", "q3drl200"): "32G",     # q3drl100 peaked at 9.6G MaxRSS
+           ("det_bnn_reg", "q3d200"): "64G"}       # q3d110 uniform peaked at 19.4G
 # Schedules longer than the default 11 epochs.
-N_EPOCHS = {"q3drl200": 22}
+N_EPOCHS = {"q3drl200": 22, "q3d200": 20}
 # A setting whose neural cells continue another setting's finished cells
 # (extend_cells.py copies them and raises n_epochs). Part-X is not continued: its
 # budget is fixed when the run starts and hashed into partx_state.pkl, so its cell
 # runs fresh on the longer schedule.
-EXTENDS = {"q3drl200": "q3drl100"}
+EXTENDS = {"q3drl200": "q3drl100", "q3d200": "q3d110"}
 # D24 (one uniform run per arm read at 30k and 60k) is withdrawn (user, 2026-11-01): the
 # 110k run's 10k steps leave the 30k and 60k rows with 3 and 6 uniform points, so every
 # schedule now has its own uniform cells. The 110k uniform run still reports the epochs that land on the
@@ -63,7 +66,7 @@ MODES = {"uniform": ("direct", ["acquisition.d2_ratio=0"]),
          "direct": ("direct", []), "ranked": ("ranked", []), "entropy": ("entropy", [])}
 # Lower runs first: quad2d and quad3d separate the signals; longest schedules first.
 PRIORITY = {"q3d110": 0, "q3d60": 1, "q3d30": 2, "q2d": 3, "cp": 4, "pen": 5, "q3drl100": 0, "q3drl40": 1, "cpppo": 4, "q2dc": 3,
-            "q3drl200": 0}
+            "q3drl200": 0, "q3d200": 0}
 
 
 def cells(seed: int):
@@ -71,6 +74,8 @@ def cells(seed: int):
         for arm in ARMS:
             for mode, (acq, extra) in MODES.items():
                 ep = Q3D_UNIFORM_EPOCHS if (mode == "uniform" and sk == "q3d110") else epochs
+                if mode == "uniform" and sk == "q3d200":     # keep the copied 110k stores listed
+                    ep = Q3D_UNIFORM_EPOCHS + [e for e in epochs if e > 10]
                 name = f"dr_{sk}_{SHORT[arm]}_{mode}_s{seed}"
                 ov = [f"system={system}", f"predictor={arm}", f"acquisition={acq}",
                       "+experiment=det_rerun", f"seed={seed}", *extra]

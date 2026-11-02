@@ -105,3 +105,24 @@ def test_extend_refuses_an_unfinished_source(tmp_path):
     with pytest.raises(SystemExit, match="not finished"):
         ec.extend(row, "q3drl200", "q3drl100", launched)
     assert not out.exists()
+
+
+def test_q3d200_continues_q3d110_to_200k():
+    mm = _load("make_manifest")
+    rows = {r["name"]: r for r in mm.cells(99512) if r["system"] == "q3d200"}
+    assert len(rows) == 21 and mm.EXTENDS["q3d200"] == "q3d110"
+    assert 10000 + (mm.N_EPOCHS["q3d200"] - 1) * 10000 == 200000
+    for r in rows.values():
+        assert " n_epochs=20 " in r["overrides"] and "samples_per_epoch=10000" in r["overrides"]
+    assert "'prediction_store.endpoint_epochs=[0,1,2,3,5,10,15,19]'" in rows["dr_q3d200_fm_uniform_s99512"]["overrides"]
+    assert "'prediction_store.endpoint_epochs=[0,5,10,15,19]'" in rows["dr_q3d200_fm_ranked_s99512"]["overrides"]
+    assert rows["dr_q3d200_bnnreg_ranked_s99512"]["mem"] == "64G"
+
+
+def test_q3d200_amarel_slots_hold_a_whole_epoch():
+    rb = _load("rebalance")
+    assert rb.slot("dr_q3d200_mlpreg_ranked_s99512") == "1-12:00:00"
+    assert rb.slot("dr_q3d200_bnnreg_direct_s99512") == "1-12:00:00"
+    assert rb.slot("dr_q3d200_fm_ranked_s99512") == "12:00:00"
+    assert rb.slot("dr_q3d200_mlpclf_ranked_s99512") == "04:00:00"
+    assert rb.slot("dr_q3d110_fm_ranked_s99512") == "04:00:00"          # other settings unchanged

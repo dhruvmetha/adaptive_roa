@@ -43,6 +43,8 @@ ENV = {**os.environ, "SSH_AUTH_SOCK": ""}
 # Expected hours per cell on an A5000-class card (uniform runs measured 2026-10-30;
 # adaptive rounds add acquisition time). Only the order matters here.
 EST_HOURS = {
+    # 200k continues the 110k cells: 9 more epochs at 120k-200k (110k epochs ran 3-13 h).
+    "q3d200": {"bnnreg": 110, "fm": 50, "mlpreg": 120, "bnnclf": 8, "mlpclf": 5},
     "q3d110": {"bnnreg": 30, "fm": 20, "mlpreg": 18, "bnnclf": 6, "mlpclf": 3},
     "q3d60": {"bnnreg": 18, "fm": 12, "mlpreg": 10, "bnnclf": 4, "mlpclf": 2},
     "q3d30": {"bnnreg": 9, "fm": 7, "mlpreg": 5, "bnnclf": 2, "mlpclf": 1},
@@ -86,6 +88,10 @@ def slot(name: str) -> str:
         return "02:00:00"
     if sk in ("cp", "cpppo"):
         return "03:00:00"
+    if sk == "q3d200":
+        # One slot must hold a whole epoch: at 110k an FM epoch ran up to 4.6 h and a
+        # regressor epoch up to 13 h, and they grow with the train set.
+        return "1-12:00:00" if arm in ("mlpreg", "bnnreg") else "12:00:00" if arm == "fm" else "04:00:00"
     if sk in ("q2d", "q2dc") or arm == "bnnreg":
         return "06:00:00"
     return "04:00:00"

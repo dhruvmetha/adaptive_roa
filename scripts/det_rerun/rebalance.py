@@ -92,6 +92,9 @@ def slot(name: str) -> str:
         # One slot must hold a whole epoch: at 110k an FM epoch ran up to 4.6 h and a
         # regressor epoch up to 13 h, and they grow with the train set.
         return "1-12:00:00" if arm in ("mlpreg", "bnnreg") else "12:00:00" if arm == "fm" else "04:00:00"
+    if sk == "q3drl200" and arm in ("fm", "mlpreg", "bnnreg"):
+        # q3drl100 epochs ran about 2.5 h at 100k; near 200k they pass a 4-6 h slot.
+        return "12:00:00"
     if sk in ("q2d", "q2dc") or arm == "bnnreg":
         return "06:00:00"
     return "04:00:00"

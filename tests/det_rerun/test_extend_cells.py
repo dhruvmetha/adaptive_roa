@@ -140,3 +140,11 @@ def test_fprcap_cells_are_100_new_dirs_on_the_existing_schedules():
         strip = lambda ov: [o for o in ov.split() if not o.startswith(("output_dir=", "+experiment="))]
         assert strip(r["overrides"]) == strip(twin["overrides"]) and r["mem"] == twin["mem"]
     assert {r["system"] for r in rows} == set(mm.FPRCAP_SYSTEMS) and "q3d110" not in mm.FPRCAP_SYSTEMS
+
+
+def test_q3drl200_long_arms_get_slots_that_hold_an_epoch():
+    rb = _load("rebalance")
+    for arm in ("fm", "mlpreg", "bnnreg"):
+        assert rb.slot(f"dr_q3drl200_{arm}_ranked_fprcap1pct_s99512") == "12:00:00"
+    assert rb.slot("dr_q3drl200_mlpclf_ranked_fprcap1pct_s99512") == "04:00:00"
+    assert rb.slot("dr_q3drl100_bnnreg_ranked_s99512") == "06:00:00"

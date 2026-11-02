@@ -20,6 +20,7 @@ import numpy as np
 from omegaconf import OmegaConf
 
 from adaptive_roa.adaptive_v2.eval.full_roa import _predict_lambda_delta, _predict_qhat_prediction_sets
+from adaptive_roa.adaptive_v2.eval.run_kind import require_lambda_delta
 from adaptive_roa.conformal.decision import invalid_threshold
 from adaptive_roa.conformal.calibrator import (
     conformal_quantile,
@@ -76,6 +77,9 @@ def sweep(cal, test, lam, delta, rule, inv_thr, alphas=ALPHAS) -> list[dict]:
 
 def sweep_run(run_dir) -> list[dict]:
     run = Path(run_dir)
+    # The sweep replays lambda/delta; a tau-rule run's converted values (negative delta on
+    # pendulum and cartpole) are not the rule it used. A lambda/delta-run analysis for now.
+    require_lambda_delta(run, "store_conformal.sweep_run")
     cfg_path = run / "resolved_config.yaml"
     cfg = OmegaConf.load(cfg_path if cfg_path.exists() else run / ".hydra" / "config.yaml")
     rule = str(cfg.get("decision_rule"))

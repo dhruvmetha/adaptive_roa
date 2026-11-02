@@ -37,6 +37,7 @@ def test_tau_runs_are_recognised_by_name_or_recorded_thresholds(tmp_path):
     lambda r: __import__("adaptive_roa.adaptive_v2.eval.store_boundary", fromlist=["x"]).decision_maps(r),
     lambda r: __import__("adaptive_roa.adaptive_v2.eval.store_score", fromlist=["x"]).score_run(r, "run"),
     lambda r: __import__("adaptive_roa.adaptive_v2.eval.store_score", fromlist=["x"]).score_run(r, "val"),
+    lambda r: __import__("adaptive_roa.adaptive_v2.eval.store_conformal", fromlist=["x"]).sweep_run(r),
 ])
 def test_lambda_delta_tools_refuse_tau_runs(tmp_path, call):
     run = _run(tmp_path, "dr_pen_fm_ranked_fprcap1pct_s99512", tau=True)

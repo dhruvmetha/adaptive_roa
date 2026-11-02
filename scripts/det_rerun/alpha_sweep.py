@@ -7,6 +7,7 @@ import argparse
 import csv
 from pathlib import Path
 
+from adaptive_roa.adaptive_v2.eval.run_kind import uses_tau_rule
 from adaptive_roa.adaptive_v2.eval.store_conformal import sweep_run
 
 ROOT = "/common/users/shared/pracsys/adaptive_roa_experiments/det_rerun"
@@ -20,6 +21,9 @@ def main():
     rows = []
     for run in sorted(Path(a.root).glob("*/dr_*")):
         if (run / "partx_state.pkl").exists():
+            continue
+        if uses_tau_rule(run):
+            print(f"skip {run.name}: FPR-capped tau rule; the conformal sweep is a lambda*/delta* analysis")
             continue
         try:
             rows += [{"system": run.parent.name, **r} for r in sweep_run(run)]

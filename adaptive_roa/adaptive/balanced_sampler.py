@@ -34,6 +34,16 @@ class RankedSamplingResult:
     score_threshold: float            # NC score of the last selected point
 
 
+RULES = ("lambda_delta", "tau")
+
+
+def _check_rule(rule: str, taus) -> None:
+    if rule not in RULES:
+        raise ValueError(f"rule must be one of {RULES}, got {rule!r}")
+    if rule == "tau" and taus is None:
+        raise ValueError("rule='tau' needs taus = (tau_s, tau_f, tau_inv)")
+
+
 class UncertainSampler:
     """
     Samples candidates and filters for uncertain points using q_hat.
@@ -250,7 +260,9 @@ class UncertainSampler:
         delta_star: float,
         decision_rule: str = "two_sided",
         exclude: Set[int] = None,
-        verbose: bool = True
+        verbose: bool = True,
+        rule: str = "lambda_delta",
+        taus: Tuple[float, float, float] = None,
     ) -> UncertainSamplingResult:
         """
         Sample uncertain points using λ*/δ* thresholds directly (no q_hat/conformal).
@@ -267,16 +279,23 @@ class UncertainSampler:
             decision_rule: "one_sided" (p_s only) or "two_sided" (p_s and p_f)
             exclude: Set of indices to exclude from sampling (e.g., D1 indices)
             verbose: Print progress
+            rule: "lambda_delta" (default) or "tau": with "tau", a candidate is
+                eligible when the FPR-capped rule (adaptive_v2/eval/fpr_cap.py) at
+                ``taus`` = (tau_s, tau_f, tau_inv) labels it uncertain or invalid.
 
         Returns:
             UncertainSamplingResult with uncertain indices
         """
         if exclude is None:
             exclude = set()
+        _check_rule(rule, taus)
 
         if verbose:
             print(f"    [Non-conformal] Target: {self.target_count} uncertain points")
-            print(f"    Using λ*={lambda_star:.4f} ± δ*={delta_star:.4f} directly")
+            if rule == "tau":
+                print(f"    Using tau_s={taus[0]}, tau_f={taus[1]}, tau_inv={taus[2]} (rule=tau)")
+            else:
+                print(f"    Using λ*={lambda_star:.4f} ± δ*={delta_star:.4f} directly")
             print(f"    Batch size: {self.batch_size}, Max candidates: {self.max_candidates}")
 
         # Track state
@@ -311,7 +330,8 @@ class UncertainSampler:
             # Classify using direct thresholds
             uncertain_batch, certain_batch = self._classify_batch_direct(
                 batch_states, batch_indices, prob_estimator,
-                lambda_star, delta_star, decision_rule
+                lambda_star, delta_star, decision_rule,
+                rule=rule, taus=taus,
             )
 
             uncertain_indices.extend(uncertain_batch)
@@ -348,7 +368,9 @@ class UncertainSampler:
         prob_estimator,
         lambda_star: float,
         delta_star: float,
-        decision_rule: str
+        decision_rule: str,
+        rule: str = "lambda_delta",
+        taus: Tuple[float, float, float] = None,
     ) -> Tuple[List[int], List[int]]:
         """
         Classify candidates using λ*/δ* thresholds directly (no q_hat).
@@ -370,6 +392,8 @@ class UncertainSampler:
             lambda_star: Decision boundary
             delta_star: Uncertainty half-width
             decision_rule: "one_sided" or "two_sided"
+            rule: "lambda_delta" (the rule above) or "tau": eligible when the
+                FPR-capped rule at ``taus`` labels the state uncertain or invalid.
 
         Returns:
             Tuple of (uncertain_indices, certain_indices)
@@ -378,7 +402,13 @@ class UncertainSampler:
             return [], []
 
         # Estimate probabilities
-        p_success, p_failure, _ = prob_estimator.estimate(states)
+        p_success, p_failure, p_invalid = prob_estimator.estimate(states)
+
+        if rule == "tau":
+            from adaptive_roa.adaptive_v2.eval import fpr_cap
+            eligible = fpr_cap.predict(p_success, p_failure, p_invalid, *taus) < 0
+            return ([idx for i, idx in enumerate(indices) if eligible[i]],
+                    [idx for i, idx in enumerate(indices) if not eligible[i]])
 
         success_thresh = lambda_star + delta_star
         failure_thresh = lambda_star - delta_star
@@ -416,6 +446,8 @@ class UncertainSampler:
         n_candidates: int = 1000,
         n_select: int = 100,
         verbose: bool = True,
+        rule: str = "lambda_delta",
+        taus: Tuple[float, float, float] = None,
     ) -> RankedSamplingResult:
         """
         Rank candidates by non-conformity score (with y=UNKNOWN) and select the lowest-scored.
@@ -435,13 +467,20 @@ class UncertainSampler:
             n_candidates: Number of candidates to evaluate from pool
             n_select: Number of points to select (lowest NC scores)
             verbose: Print progress
+            rule: "lambda_delta" (default) or "tau": with "tau", candidates are scored
+                by fpr_cap.acquisition_score at ``taus`` = (tau_s, tau_f, tau_inv), and
+                ``calibrator`` is not read.
 
         Returns:
             RankedSamplingResult with selected indices and score diagnostics
         """
+        _check_rule(rule, taus)
         if verbose:
             print(f"    [Ranked] Evaluating {n_candidates} candidates, selecting {n_select} lowest NC scores")
-            print(f"    Using λ*={lambda_star:.4f}, δ*={delta_star:.4f}, rule={decision_rule}")
+            if rule == "tau":
+                print(f"    Using tau_s={taus[0]}, tau_f={taus[1]}, tau_inv={taus[2]} (rule=tau)")
+            else:
+                print(f"    Using λ*={lambda_star:.4f}, δ*={delta_star:.4f}, rule={decision_rule}")
 
         # Step 1: Sample candidates from pool
         candidate_states, candidate_indices = self.dataset_builder.sample_candidates_without_marking(
@@ -463,14 +502,18 @@ class UncertainSampler:
             print(f"    Pool has only {n_actual} available (requested {n_candidates})")
 
         # Step 2: Estimate probabilities
-        p_success, p_failure, _ = prob_estimator.estimate(candidate_states)
+        p_success, p_failure, p_invalid = prob_estimator.estimate(candidate_states)
 
         # Step 3: Compute NC scores with label = UNKNOWN (y=0) for all candidates
-        y_unknown = np.zeros(n_actual, dtype=int)
-        p_fail_for_rule = p_failure if decision_rule == "two_sided" else None
-        scores = calibrator.non_conformity_scores_batch(
-            p_success, y_unknown, lambda_star, delta_star, p_fail_for_rule
-        )
+        if rule == "tau":
+            from adaptive_roa.adaptive_v2.eval import fpr_cap
+            scores = fpr_cap.acquisition_score(p_success, p_failure, p_invalid, *taus)
+        else:
+            y_unknown = np.zeros(n_actual, dtype=int)
+            p_fail_for_rule = p_failure if decision_rule == "two_sided" else None
+            scores = calibrator.non_conformity_scores_batch(
+                p_success, y_unknown, lambda_star, delta_star, p_fail_for_rule
+            )
 
         # Step 4: Sort ascending (lowest NC score = most uncertain)
         sorted_order = np.argsort(scores)

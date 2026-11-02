@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from adaptive_roa.adaptive.balanced_sampler import UncertainSampler
+from adaptive_roa.adaptive_v2.strategy.direct import resolve_rule, taus_for_rule
 from adaptive_roa.adaptive_v2.types import AcquisitionResult, ThresholdState
 
 
@@ -18,6 +19,7 @@ class RankedAcquisitionStrategy:
         self.n_ranked_candidates = int(cfg.n_ranked_candidates)
         self.decision_rule = str(cfg.decision_rule)
         self.verbose = bool(cfg.verbose)
+        self.rule = resolve_rule(cfg)
 
     def select(
         self,
@@ -34,21 +36,26 @@ class RankedAcquisitionStrategy:
                 n_certain_discarded=0, n_invalid_added=0,
                 diagnostics={"skipped_reason": "target_count_zero"},
             )
+        taus = taus_for_rule(self.rule, threshold_state)
         sampler = UncertainSampler(
             dataset_builder=pool.dataset_builder,
             target_count=target_count,
             batch_size=self.batch_size_sampling,
             max_candidates=self.max_samples_per_epoch,
         )
+        # rule=tau scores with fpr_cap.acquisition_score and reads no calibrator
+        # (the fpr_cap backend has no ConformalPredictor).
+        rule_kwargs = {"rule": "tau", "taus": taus} if self.rule == "tau" else {}
         ranked_result = sampler.sample_ranked(
             prob_estimator=probability_backend.estimator,
-            calibrator=threshold_backend.predictor.calibrator,
+            calibrator=None if self.rule == "tau" else threshold_backend.predictor.calibrator,
             lambda_star=threshold_state.lambda_star,
             delta_star=threshold_state.delta_star,
             decision_rule=self.decision_rule,
             n_candidates=self.n_ranked_candidates,
             n_select=target_count,
             verbose=self.verbose,
+            **rule_kwargs,
         )
         return AcquisitionResult(
             d1_indices=[],
@@ -59,5 +66,7 @@ class RankedAcquisitionStrategy:
             diagnostics={
                 "ranked_score_threshold": float(ranked_result.score_threshold),
                 "n_ranked_candidates_evaluated": int(ranked_result.n_candidates_evaluated),
+                **({"rule": "tau", "taus": list(taus),
+                    "n_zero_score": int((ranked_result.all_scores == 0).sum())} if self.rule == "tau" else {}),
             },
         )

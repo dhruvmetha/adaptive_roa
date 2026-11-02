@@ -27,6 +27,17 @@ if [ "$WORLD" = copied ]; then
 fi
 ACODE=$(ssh -n -o BatchMode=yes $AM "ls -d /home/st1122/det_rerun_code/${COMMIT}*" | head -1)
 [ -n "$ACODE" ] || { echo "no Amarel snapshot for $COMMIT" >&2; exit 1; }
+if [ "$(cut -f9 <<< "$ROW")" = scripts/run_partx_faithful.py ]; then
+  # Part-X resumes from partx_state.pkl when its own command reruns on the same output dir.
+  ssh -n -o BatchMode=yes $AM "test -f $ADIR/partx_state.pkl" \
+    || { echo "$NAME has no partx_state.pkl on Amarel; launch it instead" >&2; exit 1; }
+  AOV=$(cut -f8 <<< "$ROW"); AOV=${AOV//$EXP/$AEXP}
+  JID=$(ssh -n -o BatchMode=yes $AM \
+    "cd $ACODE && sbatch --parsable -J $NAME --mem=$MEM --time=$WALL --partition=main --cpus-per-task=8 --export=ALL,OMP_NUM_THREADS=8,ADAPTIVE_ROA_COMMIT=$COMMIT,DET_CODE=$ACODE,DET_SCRIPT=scripts/run_partx_faithful.py scripts/det_rerun/sbatch_det_amarel.sh $AOV </dev/null" 2>/dev/null | grep -E '^[0-9]+$')
+  [ -n "$JID" ] || { echo "Amarel sbatch failed for $NAME" >&2; exit 1; }
+  printf '%s\tamarel\t--partition=main\t%s\t%s\t%s\t%s\n' "$NAME" "$JID" "$(date +%Y%m%d_%H%M)" "$HERE/amarel_logs/${NAME}_${JID}.out" "$COMMIT" >> "$HERE/launched.tsv"
+  echo "$NAME resumed -> Amarel CPU job $JID (commit $COMMIT)"; exit 0
+fi
 ssh -n -o BatchMode=yes $AM "ls $ADIR/epoch_*/artifacts_v2.json" >/dev/null 2>&1 \
   || { echo "$NAME has no banked epoch on Amarel; launch it instead" >&2; exit 1; }
 JID=$(ssh -n -o BatchMode=yes $AM \

@@ -97,3 +97,24 @@ def test_folded_epoch_reads_the_rescored_artifact(tmp_path, monkeypatch):
     xs, ys, fin = mod.load()["q3drl40"][("fm_det", "ranked")]
     assert len(xs) == 2                                 # epoch 1 folded, not re-scored: left out
     assert [round(v, 2) for v in ys[3]] == [15.0, 20.0]  # invalid %: re-scored epoch 0, then epoch 2
+
+
+def test_invalid_and_outcome_unc_share_a_scale_per_row(tmp_path, monkeypatch):
+    spec = importlib.util.spec_from_file_location("pp5", ROOT / "scripts/det_rerun/plot_progress.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    figs = []
+    monkeypatch.setattr(mod.plt, "close", lambda fig: figs.append(fig))
+    lo = ([10.0, 20.0], [[0.5, 0.4], [0.8, 0.85], [3.0, 2.0], [1.0, 2.0], [2.0, 0.5], [0.1, 0.08], [0.2, 0.15]], True)
+    hi = ([10.0, 20.0], [[0.5, 0.4], [0.8, 0.85], [30.0, 20.0], [12.0, 9.0], [18.0, 11.0], [0.1, 0.08], [0.2, 0.15]], True)
+    data = {s: {("fm_det", "ranked"): lo} for s in mod.SETTINGS}
+    data["q3d110"] = {("fm_det", "ranked"): hi}
+    mod.plot_compare(data, tmp_path / "c.png")
+    axes = figs[0].axes
+    n = len(mod.METRICS)
+    inv, unc = mod.METRICS.index("Invalid %"), mod.METRICS.index("Outcome-unc %")
+    for i, s in enumerate(mod.SETTINGS):
+        a, b = axes[i * n + inv].get_ylim(), axes[i * n + unc].get_ylim()
+        assert a == b, (s, a, b)
+    i = mod.SETTINGS.index("q3d110")
+    assert axes[i * n + inv].get_ylim()[1] > 18.0 > axes[0 * n + inv].get_ylim()[1]   # per row, not global

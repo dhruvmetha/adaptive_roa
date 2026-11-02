@@ -188,13 +188,17 @@ COMPARE_FIGURES = [("compare", f"compare_{COMPARE_REGIME}.png", COMPARE_LINES, C
                    ("compare_fm_regimes", "compare_fm_regimes.png", FM_REGIME_LINES, FM_REGIME_TITLE)]
 
 
+SHARED_SCALE = (METRICS.index("Invalid %"), METRICS.index("Outcome-unc %"))
+
+
 def plot_compare(data: dict, path: Path, lines=COMPARE_LINES, title=COMPARE_TITLE) -> None:
     """All settings in one figure: rows are settings, columns metrics, one line per entry of `lines`."""
     fig, axes = plt.subplots(len(SETTINGS), len(METRICS), figsize=(24, 3.2 * len(SETTINGS)), squeeze=False)
     for i, s in enumerate(SETTINGS):
-        for j, mlabel in enumerate(METRICS):
+        inner, px = {}, {}
+        for j in range(len(METRICS)):
             ax = axes[i][j]
-            inner, px = [], None
+            inner[j], px[j] = [], None
             for arm, mode, _, color, ls, lw in lines:
                 if (arm, mode) not in data[s]:
                     continue
@@ -203,22 +207,30 @@ def plot_compare(data: dict, path: Path, lines=COMPARE_LINES, title=COMPARE_TITL
                         mfc=color if fin else "white", mew=1.0, zorder=3 if arm == "fm_det" else 2)
                 vals = [v for v in ys[j] if v is not None and math.isfinite(v)]
                 if arm == "partx_faithful":
-                    px = vals
+                    px[j] = vals
                 else:
-                    inner += vals
+                    inner[j] += vals
+        # Invalid % and outcome-unc % are two parts of the same abstention, so a row reads
+        # them on one scale.
+        shared = inner[SHARED_SCALE[0]] + inner[SHARED_SCALE[1]]
+        for j in SHARED_SCALE:
+            inner[j] = shared
+        for j, mlabel in enumerate(METRICS):
+            ax = axes[i][j]
             if j == 0:
                 ax.set_yscale("log")
             # Scale to the learned methods; Part-X is drawn but labelled when it falls outside.
-            if inner:
-                lo, hi = min(inner), max(inner)
+            if inner[j]:
+                lo, hi = min(inner[j]), max(inner[j])
                 if j == 0:
                     lo, hi = lo / 1.15, hi * 1.15
                 else:
                     pad = 0.06 * (hi - lo or abs(hi) or 1.0)
                     lo, hi = lo - pad, hi + pad
                 ax.set_ylim(lo, hi)
-                if px and (max(px) > hi or min(px) < lo):
-                    med = sorted(px)[len(px) // 2]
+                px_ = px[j]
+                if px_ and (max(px_) > hi or min(px_) < lo):
+                    med = sorted(px_)[len(px_) // 2]
                     ax.text(0.98, 0.95 if med > hi else 0.05, f"Part-X off scale (median {med:.3g})",
                             transform=ax.transAxes, ha="right", va="top" if med > hi else "bottom",
                             fontsize=7.5, color="#6250d6")

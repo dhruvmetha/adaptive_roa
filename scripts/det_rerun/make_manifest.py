@@ -31,6 +31,8 @@ SYSTEMS = {
     # PPO flights store about 24 rows against LQR's 55, so memory sits below q3d110's.
     "q3drl40":  ("quadrotor3d_rl", None, [0, 5, 10], "16G"),
     "q3drl100": ("quadrotor3d_rl", 9000, [0, 5, 10], "24G"),
+    # 200k by continuing the 100k cells (user, 2026-11-02): 10,000 + 21 x 9,000 = 199,000.
+    "q3drl200": ("quadrotor3d_rl", 9000, [0, 5, 10, 15, 21], "24G"),
     # PPO cartpole, the stochastic tree's zero-noise level (user, 2026-11-01): 500 + 10 x 250.
     "cpppo": ("cartpole_ppo", None, [0, 5, 10], "8G"),
     # quad2d corridor family at zero noise (user, 2026-11-01): 2,000 + 10 x 1,300.
@@ -39,7 +41,15 @@ SYSTEMS = {
 # The BNN regressor's RSS grows with the train set (quad3d 110k: 7.5G at 20k,
 # 10.6G at 30k, about 0.3G per 1,000 trajectories), so its quad3d cells ask for more.
 ARM_MEM = {("det_bnn_reg", "q3d30"): "24G", ("det_bnn_reg", "q3d60"): "32G", ("det_bnn_reg", "q3d110"): "48G",
-           ("det_bnn_reg", "q3drl40"): "24G", ("det_bnn_reg", "q3drl100"): "32G"}
+           ("det_bnn_reg", "q3drl40"): "24G", ("det_bnn_reg", "q3drl100"): "32G",
+           ("det_bnn_reg", "q3drl200"): "32G"}     # q3drl100 peaked at 9.6G MaxRSS
+# Schedules longer than the default 11 epochs.
+N_EPOCHS = {"q3drl200": 22}
+# A setting whose neural cells continue another setting's finished cells
+# (extend_cells.py copies them and raises n_epochs). Part-X is not continued: its
+# budget is fixed when the run starts and hashed into partx_state.pkl, so its cell
+# runs fresh on the longer schedule.
+EXTENDS = {"q3drl200": "q3drl100"}
 # D24 (one uniform run per arm read at 30k and 60k) is withdrawn (user, 2026-11-01): the
 # 110k run's 10k steps leave the 30k and 60k rows with 3 and 6 uniform points, so every
 # schedule now has its own uniform cells. The 110k uniform run still reports the epochs that land on the
@@ -52,7 +62,8 @@ SHORT = {"fm_det": "fm", "det_mlp_clf": "mlpclf", "det_bnn_clf": "bnnclf",
 MODES = {"uniform": ("direct", ["acquisition.d2_ratio=0"]),
          "direct": ("direct", []), "ranked": ("ranked", []), "entropy": ("entropy", [])}
 # Lower runs first: quad2d and quad3d separate the signals; longest schedules first.
-PRIORITY = {"q3d110": 0, "q3d60": 1, "q3d30": 2, "q2d": 3, "cp": 4, "pen": 5, "q3drl100": 0, "q3drl40": 1, "cpppo": 4, "q2dc": 3}
+PRIORITY = {"q3d110": 0, "q3d60": 1, "q3d30": 2, "q2d": 3, "cp": 4, "pen": 5, "q3drl100": 0, "q3drl40": 1, "cpppo": 4, "q2dc": 3,
+            "q3drl200": 0}
 
 
 def cells(seed: int):
@@ -65,6 +76,8 @@ def cells(seed: int):
                       "+experiment=det_rerun", f"seed={seed}", *extra]
                 if step is not None:
                     ov.append(f"samples_per_epoch={step}")
+                if sk in N_EPOCHS:
+                    ov.append(f"n_epochs={N_EPOCHS[sk]}")
                 # Single-quoted: tmux and remote ssh run the line through zsh, which
                 # globs an unquoted [..] and aborts with "no matches found".
                 ov.append("'prediction_store.endpoint_epochs=[" + ",".join(map(str, ep)) + "]'")
@@ -78,6 +91,8 @@ def cells(seed: int):
         ov = [f"system={system}", "+experiment=det_rerun", f"seed={seed}"]
         if step is not None:
             ov.append(f"samples_per_epoch={step}")
+        if sk in N_EPOCHS:
+            ov.append(f"n_epochs={N_EPOCHS[sk]}")
         ov.append(f"output_dir={EXP}/{sk}/{name}")
         yield {"name": name, "system": sk, "arm": "partx_faithful", "mode": "builtin", "seed": seed,
                "mem": mem, "priority": PRIORITY[sk], "overrides": " ".join(ov),

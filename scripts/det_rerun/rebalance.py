@@ -48,6 +48,8 @@ EST_HOURS = {
     "q3d30": {"bnnreg": 9, "fm": 7, "mlpreg": 5, "bnnclf": 2, "mlpclf": 1},
     # PPO quad3d: about 24 stored rows per flight against LQR's 55, so roughly 0.4x per trajectory.
     "q3drl100": {"bnnreg": 12, "fm": 8, "mlpreg": 7, "bnnclf": 2.5, "mlpclf": 1.2},
+    # 200k continues the 100k cells: 11 more epochs at 109k-199k, about 1.5x the 100k epoch each.
+    "q3drl200": {"bnnreg": 40, "fm": 45, "mlpreg": 35, "bnnclf": 3, "mlpclf": 2},
     "q3drl40": {"bnnreg": 4, "fm": 3, "mlpreg": 2.5, "bnnclf": 1, "mlpclf": 0.5},
     "cpppo": {"bnnreg": 1.5, "fm": 3, "mlpreg": 1.2, "bnnclf": 1, "mlpclf": 1},
     "q2dc": {"bnnreg": 3, "fm": 4.5, "mlpreg": 2.5, "bnnclf": 0.8, "mlpclf": 0.6},

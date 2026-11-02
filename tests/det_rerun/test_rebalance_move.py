@@ -155,3 +155,28 @@ def test_a_skipped_move_hands_its_card_to_the_next_candidate(monkeypatch):
     plan = rebalance.plan_moves(cands, [("direct", "arrakis", "4")], 0, 8)
     done = rebalance.execute(plan, cands, 0)
     assert calls == [("started_meanwhile", "4"), ("next", "4")] and [c["name"] for c in done] == ["next"]
+
+
+def test_ilab_jobs_exclude_every_node_but_home(monkeypatch):
+    # rlab4 2026-11-02 14:1x: 1 free a4000 and 50G there, but the --test-only probe excluded
+    # only ilab3/ilab4, SLURM put it on rlab3 (also a4000), and the card sat unused.
+    calls = []
+
+    def sh(cmd, timeout=300):
+        calls.append(cmd)
+        if "sinfo" in cmd:
+            return "ilab1\nilab2\nilab3\nrlab3\nrlab4\nrlab4\n"
+        return "Job 9 to start at 2026-11-02T14:15:00 a using 1 processors on nodes rlab4 in partition unlimited"
+
+    monkeypatch.setattr(rebalance, "sh", sh)
+    assert rebalance.ilab_exclude("rlab4") == "ilab1,ilab2,ilab3,ilab4,rlab3"
+    assert rebalance.ilab_exclude(None) == "ilab3,ilab4"
+    import datetime as dt
+    assert rebalance.ilab_starts_now("a4000", 32, "rlab4", now=dt.datetime(2026, 11, 2, 14, 14))
+    assert any("--test-only" in c and "--exclude=ilab1,ilab2,ilab3,ilab4,rlab3" in c for c in calls)
+
+
+def test_a_move_to_ilab_passes_the_home_node_exclude(fake):
+    fake.banked = 2
+    rebalance.move(_cell(), ("ilab", "a4000", ""))
+    assert any(c.startswith("DET_EXCLUDE=") and "resume_ilab.sh" in c for c in fake.calls)

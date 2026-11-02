@@ -160,13 +160,24 @@ def ilab_pending_cells() -> list[dict]:
             for jid, f in rows.items() if jid in pend and f[0] in manifest]
 
 
+def ilab_exclude(home: str | None) -> str:
+    """--exclude for an iLab job: the known-bad nodes, plus every node but the home one
+    while a job of ours runs there. The association allows one node, so a job SLURM would
+    place on another node (rlab3 also has a4000s) only waits on AssocGrpNodeLimit."""
+    bad = {"ilab3", "ilab4"}
+    if home:
+        names = sh("ssh -n -o BatchMode=yes ilab1.cs.rutgers.edu 'sinfo -h -o %n'").split()
+        bad |= {n for n in names if re.fullmatch(r"[a-z]+\d+", n) and n != home}
+    return ",".join(sorted(bad))
+
+
 def ilab_starts_now(gres: str, mem_gb: int, home: str | None, now=None) -> bool:
     """Ask SLURM whether a job of this shape would start on our node right away. The
     scan can list a card SLURM will not give out (core binding, a held job); then a
     placement only queues behind the one-node limit."""
     import datetime as dt
     txt = sh("ssh -n -o BatchMode=yes ilab1.cs.rutgers.edu 'cd /tmp && sbatch --test-only "
-             f"--gres=gpu:{gres}:1 --mem={mem_gb}G -t 1:00:00 --exclude=ilab3,ilab4 --wrap=hostname 2>&1'")
+             f"--gres=gpu:{gres}:1 --mem={mem_gb}G -t 1:00:00 --exclude={ilab_exclude(home)} --wrap=hostname 2>&1'")
     m = re.search(r"to start at (\S+) .*on nodes (\S+)", txt)
     if not m:
         return False
@@ -289,13 +300,15 @@ def move(c: dict, card: tuple[str, str, str]) -> str:
     if banked:
         script = (f"resume_ilab.sh {c['name']} {ILAB_WALL} {where}" if world == "ilab"
                   else f"resume_direct.sh {c['name']} {where} {gpu}")
-        res = sh(f"bash {WT}/scripts/det_rerun/{script} 2>&1 | tail -1", timeout=900).strip()
+        env = f"DET_EXCLUDE={ilab_exclude(ilab_home_node())} " if world == "ilab" else ""
+        res = sh(f"{env}bash {WT}/scripts/det_rerun/{script} 2>&1 | tail -1", timeout=900).strip()
         return f"moved {c['name']} (Amarel {c['jid']}, {banked} banked, ~{c['hours']}h) -> {res}"
     marker = Path(out) / ".amarel_mirror"
     if marker.exists() and len(list(Path(out).iterdir())) == 1:
         marker.unlink()
     args = f"{c['name']} ilab {where} {ILAB_WALL}" if world == "ilab" else f"{c['name']} direct {where} {gpu}"
-    res = sh(f"cd {WT} && DET_REF={c['commit']} bash scripts/det_rerun/launch.sh {args} 2>&1 | tail -1",
+    env = f"DET_EXCLUDE={ilab_exclude(ilab_home_node())} " if world == "ilab" else ""
+    res = sh(f"cd {WT} && {env}DET_REF={c['commit']} bash scripts/det_rerun/launch.sh {args} 2>&1 | tail -1",
              timeout=900).strip()
     return f"moved {c['name']} (Amarel {c['jid']}, ~{c['hours']}h) -> {res}"
 
@@ -387,7 +400,8 @@ def resume_finished_slots(apply: bool) -> list[str]:
             continue
         if banked:
             script = "resume_amarel.sh" if f[1] == "amarel" else "resume_ilab.sh"
-            res = sh(f"bash {WT}/scripts/det_rerun/{script} {f[0]} {wall_for(f[1], f[0])} 2>&1 | tail -1", timeout=600)
+            env = f"DET_EXCLUDE={ilab_exclude(ilab_home_node())} " if f[1] == "ilab" else ""
+            res = sh(f"{env}bash {WT}/scripts/det_rerun/{script} {f[0]} {wall_for(f[1], f[0])} 2>&1 | tail -1", timeout=600)
         else:   # died inside epoch 0: nothing banked, so start the cell again
             lines = open(HERE / "launched.tsv").read().split("\n")
             lines = [("\t".join([l.split("\t")[0] + "~noepoch"] + l.split("\t")[1:])

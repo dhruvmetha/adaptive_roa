@@ -44,7 +44,7 @@ case "$WORLD" in
 ilabcpu)
   WALL=${3:-7-00:00:00}
   JID=$(ssh -n -o BatchMode=yes ilab1.cs.rutgers.edu \
-    "cd $CODE && sbatch --parsable -J $NAME --mem=$MEM --time=$WALL --exclude=ilab3,ilab4 --export=ALL,ADAPTIVE_ROA_COMMIT=$COMMIT,DET_CODE=$CODE,DET_SCRIPT=$SCRIPT,OMP_NUM_THREADS=8 scripts/det_rerun/sbatch_det.sh $OV </dev/null" 2>/dev/null | grep -E '^[0-9]+$')
+    "cd $CODE && sbatch --parsable -J $NAME --mem=$MEM --time=$WALL --exclude=${DET_EXCLUDE:-ilab3,ilab4} --export=ALL,ADAPTIVE_ROA_COMMIT=$COMMIT,DET_CODE=$CODE,DET_SCRIPT=$SCRIPT,OMP_NUM_THREADS=8 scripts/det_rerun/sbatch_det.sh $OV </dev/null" 2>/dev/null | grep -E '^[0-9]+$')
   [ -n "$JID" ] || { echo "sbatch failed for $NAME" >&2; exit 1; }
   LOG=$HERE/${NAME}_${JID}.out
   printf '%s\tilabcpu\tcpu\t%s\t%s\t%s\t%s\n' "$NAME" "$JID" "$TS" "$LOG" "$COMMIT" >> "$HERE/launched.tsv"
@@ -52,7 +52,7 @@ ilabcpu)
 ilab)
   GRES=$3; WALL=${4:-3-00:00:00}
   JID=$(ssh -n -o BatchMode=yes ilab1.cs.rutgers.edu \
-    "cd $CODE && sbatch --parsable -J $NAME --gres=gpu:$GRES:1 --mem=$MEM --time=$WALL --exclude=ilab3,ilab4 --export=ALL,ADAPTIVE_ROA_COMMIT=$COMMIT,DET_CODE=$CODE,DET_SCRIPT=$SCRIPT scripts/det_rerun/sbatch_det.sh $OV </dev/null" 2>/dev/null | grep -E '^[0-9]+$')
+    "cd $CODE && sbatch --parsable -J $NAME --gres=gpu:$GRES:1 --mem=$MEM --time=$WALL --exclude=${DET_EXCLUDE:-ilab3,ilab4} --export=ALL,ADAPTIVE_ROA_COMMIT=$COMMIT,DET_CODE=$CODE,DET_SCRIPT=$SCRIPT scripts/det_rerun/sbatch_det.sh $OV </dev/null" 2>/dev/null | grep -E '^[0-9]+$')
   [ -n "$JID" ] || { echo "sbatch failed for $NAME" >&2; exit 1; }
   LOG=$HERE/${NAME}_${JID}.out
   printf '%s\tilab\t%s\t%s\t%s\t%s\t%s\n' "$NAME" "$GRES" "$JID" "$TS" "$LOG" "$COMMIT" >> "$HERE/launched.tsv"

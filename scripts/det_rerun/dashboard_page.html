@@ -39,6 +39,7 @@
   .rr-tip-row { display: flex; align-items: center; gap: var(--cds-gap-xs); white-space: nowrap; }
   .rr-tip-row span:last-child { margin-left: auto; padding-left: var(--cds-pad-sm); }
   .rr-tablebox { max-height: 30rem; overflow: auto; }
+  .rr-tcount { flex-direction: row; align-items: center; gap: var(--cds-gap-sm); }
   .rr-table { width: 100%; border-collapse: collapse; font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; }
   .rr-table th { position: sticky; top: 0; z-index: 1; padding: var(--cds-pad-xs) var(--cds-pad-sm); background: var(--color-panel); border-bottom: 1px solid var(--color-border-line); text-align: right; white-space: nowrap; }
   .rr-table th.rr-text, .rr-table td.rr-text { text-align: left; }
@@ -115,10 +116,11 @@
       </div>
     </div>
     <div class="rr-card" id="nominal-final">
-      <h3 class="rr-h3">Last adaptive iteration per cell</h3>
-      <p class="rr-note">Each cell's latest banked epoch in the selected setting: the final iteration for finished cells, the current one for running cells. Click a column to sort.</p>
+      <h3 class="rr-h3">Every cell at one trajectory count</h3>
+      <p class="rr-note">Each shown cell at the same number of training trajectories. The default is the largest count every shown cell has reached, so a running cell holds the comparison at its current count; pick a smaller count to compare earlier. Part-X's last epoch can land just under the budget (109,943 of 110,000, for example) and counts as that budget. Click a column to sort.</p>
+      <label class="rr-field rr-tcount">Trajectories<select id="nominal-tcount" data-draw="tcount" data-ds="nominal_epochs" data-source="nominal_epochs"></select></label>
       <div class="rr-tablebox">
-        <table class="rr-table" data-table="nominal" data-source="nominal_final" data-row-key="setting,cell">
+        <table class="rr-table" data-table="nominal" data-source="nominal_epochs" data-row-key="setting,cell">
           <thead><tr>
             <th class="rr-text" data-field="model"><button type="button" data-sort="model">Model</button></th>
             <th class="rr-text" data-field="regime"><button type="button" data-sort="regime">Regime</button></th>
@@ -133,7 +135,7 @@
             <th data-field="fnr"><button type="button" data-sort="fnr">FNR</button></th>
             <th class="rr-text" data-field="status"><button type="button" data-sort="status">Status</button></th>
           </tr></thead>
-          <tbody data-draw="table" data-ds="nominal_final"></tbody>
+          <tbody data-draw="table" data-ds="nominal_epochs"></tbody>
         </table>
       </div>
     </div>
@@ -159,10 +161,11 @@
       </div>
     </div>
     <div class="rr-card" id="fprcap-final" data-hide-empty="fprcap">
-      <h3 class="rr-h3">Last adaptive iteration per cell</h3>
-      <p class="rr-note">Each FPR-capped cell's latest banked epoch in the selected setting, with the thresholds that epoch fitted. Click a column to sort.</p>
+      <h3 class="rr-h3">Every cell at one trajectory count</h3>
+      <p class="rr-note">Each shown FPR-capped cell at the same number of training trajectories, with the thresholds fitted at that epoch. The default is the largest count every shown cell has reached; pick a smaller count to compare earlier. Click a column to sort.</p>
+      <label class="rr-field rr-tcount">Trajectories<select id="fprcap-tcount" data-draw="tcount" data-ds="fprcap_epochs" data-source="fprcap_epochs"></select></label>
       <div class="rr-tablebox">
-        <table class="rr-table" data-table="fprcap" data-source="fprcap_final" data-row-key="setting,cell">
+        <table class="rr-table" data-table="fprcap" data-source="fprcap_epochs" data-row-key="setting,cell">
           <thead><tr>
             <th class="rr-text" data-field="model"><button type="button" data-sort="model">Model</button></th>
             <th class="rr-text" data-field="regime"><button type="button" data-sort="regime">Regime</button></th>
@@ -180,7 +183,7 @@
             <th data-field="tau_inv"><button type="button" data-sort="tau_inv">τ_inv</button></th>
             <th class="rr-text" data-field="status"><button type="button" data-sort="status">Status</button></th>
           </tr></thead>
-          <tbody data-draw="table" data-ds="fprcap_final"></tbody>
+          <tbody data-draw="table" data-ds="fprcap_epochs"></tbody>
         </table>
       </div>
     </div>
@@ -214,6 +217,7 @@
       size: ['compact', 'large', 'wide'].includes(p.plot_size) ? p.plot_size : 'compact',
       zoom: {nominal: RR.range(p.zoom_nominal), fprcap: RR.range(p.zoom_fprcap)},
       yzoom: {nominal: RR.yranges(p.yzoom_nominal), fprcap: RR.yranges(p.yzoom_fprcap)},
+      tcount: {nominal: RR.num(p.table_train_nominal), fprcap: RR.num(p.table_train_fprcap)},
     };
   };
   // A zoom is [from, to] in thousands of trajectories, or nothing.
@@ -257,36 +261,34 @@
     if (!opts.some((x) => x.controller === p.controller) && opts.length) p.controller = opts[0].controller;
     opts = opts.filter((x) => x.controller === p.controller);
     if (!opts.some((x) => x.budget === p.budget) && opts.length) p.budget = d3.max(opts, (x) => x.budget);
-    dash.setParams({system: p.system, controller: p.controller, budget: p.budget, ...RR.unzoom('nominal'), ...RR.unzoom('fprcap')});
+    dash.setParams({system: p.system, controller: p.controller, budget: p.budget, ...RR.unzoom('nominal'), ...RR.unzoom('fprcap'),
+      table_train_nominal: null, table_train_fprcap: null});
   };
   RR.sort = {};
 
-  dash.calc('nominal_final', {
-    inputs: ['nominal_epochs'],
-    title: 'Last epoch per nominal cell',
-    description: 'Each nominal cell’s latest banked epoch, one row per setting and cell.',
-    fn: (nominal_epochs) => {
-      const last = new Map();
-      for (const r of nominal_epochs) {
-        const k = r.setting + '|' + r.cell, prev = last.get(k);
-        if (!prev || Number(r.epoch) > Number(prev.epoch)) last.set(k, r);
-      }
-      return [...last.values()];
-    },
-  });
-  dash.calc('fprcap_final', {
-    inputs: ['fprcap_epochs'],
-    title: 'Last epoch per FPR-capped cell',
-    description: 'Each FPR-capped cell’s latest banked epoch, one row per setting and cell.',
-    fn: (fprcap_epochs) => {
-      const last = new Map();
-      for (const r of fprcap_epochs) {
-        const k = r.setting + '|' + r.cell, prev = last.get(k);
-        if (!prev || Number(r.epoch) > Number(prev.epoch)) last.set(k, r);
-      }
-      return [...last.values()];
-    },
-  });
+  // Trajectory counts within TOL of each other are one budget: Part-X's last epoch can land
+  // a little under it (109,943 of 110,000).
+  RR.TOL = 0.005;
+  RR.near = (a, b) => Math.abs(a - b) <= RR.TOL * Math.max(a, b);
+  // The counts every cell in rows has banked an epoch at, largest first.
+  RR.commonCounts = (rows) => {
+    const cells = d3.groups(rows, (r) => r.cell).map(([, rs]) => rs.map((r) => RR.num(r.train)));
+    const out = [];
+    for (const t of [...new Set(rows.map((r) => RR.num(r.train)))].filter(Number.isFinite).sort((a, b) => b - a)) {
+      if (out.length && RR.near(out[out.length - 1], t)) continue;
+      if (cells.every((ts) => ts.some((v) => RR.near(v, t)))) out.push(t);
+    }
+    return out;
+  };
+  // The table's count for a section: the picked one while it is still common, else the largest.
+  RR.tableCount = (section, rows) => {
+    const counts = RR.commonCounts(rows), want = RR.params().tcount[section];
+    return {counts, t: counts.find((c) => want !== null && RR.near(c, want)) ?? counts[0] ?? null};
+  };
+  // One row per cell: its epoch closest to t.
+  RR.atCount = (rows, t) => d3.groups(rows, (r) => r.cell)
+    .map(([, rs]) => d3.least(rs.filter((r) => RR.near(RR.num(r.train), t)), (r) => Math.abs(RR.num(r.train) - t)))
+    .filter(Boolean);
 </script>
 
 <script>
@@ -365,6 +367,15 @@
     sel.replaceChildren(...bs.map((b) => new Option(d3.format(',')(b), String(b))));
     sel.value = String(p.budget);
     sel.onchange = () => RRd.pick({budget: Number(sel.value)});
+  });
+
+  dash.draw('tcount', (sel) => {
+    const section = RRd.section(sel.dataset.ds), rows = RRd.rows(sel.dataset.ds) || [];
+    const {counts, t} = RRd.tableCount(section, rows);
+    sel.replaceChildren(...counts.map((c, i) => new Option(`${d3.format(',')(c)}${i === 0 ? ' (largest shared)' : ''}`, String(c))));
+    sel.disabled = !counts.length;
+    if (t !== null) sel.value = String(t);
+    sel.onchange = () => dash.setParams({[`table_train_${section}`]: Number(sel.value)});
   });
 
   dash.draw('legend', (el) => {
@@ -526,10 +537,11 @@
   dash.draw('table', (tbody) => {
     tbody.replaceChildren();
     const table = tbody.closest('table');
-    const g = dash.data(tbody.dataset.ds), cur = RRd.current(), p = RRd.params();
-    if (g.status !== 'ok' || !cur) return;
+    const shown = RRd.rows(tbody.dataset.ds);
+    if (!shown) return;
     const fields = [...table.querySelectorAll('thead th[data-field]')].map((th) => th.dataset.field);
-    const rows = g.data.filter((r) => r.setting === cur.setting && RRd.keep(r, p));
+    const {t} = RRd.tableCount(RRd.section(tbody.dataset.ds), shown);
+    const rows = t === null ? [] : RRd.atCount(shown, t);
     const st = RRd.sort[table.dataset.table];
     const order = (r) => RRd.MODELS.indexOf(r.model) * 10 + RRd.REGIMES.indexOf(r.regime);
     rows.sort((a, b) => {

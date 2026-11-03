@@ -1,0 +1,484 @@
+<meta name="dash-one-writer">
+<style>
+  .rr { display: flex; flex-direction: column; gap: var(--cds-gap-xl); font-family: var(--font-anthropic-sans); color: var(--color-fg); }
+  .rr-head { display: flex; flex-direction: column; gap: var(--cds-gap-xs); }
+  .rr-title { margin: 0; font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); text-wrap: balance; }
+  .rr-sub { margin: 0; max-width: 72ch; color: var(--color-fg-muted); font-size: var(--cds-font-size-body); }
+  .rr-age { color: var(--color-fg); font-variant-numeric: tabular-nums; }
+  .rr-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--cds-gap-md); padding: var(--cds-pad-md); background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); }
+  .rr-field { display: flex; flex-direction: column; gap: var(--cds-gap-xs); color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+  .rr-field select { min-width: 9rem; padding: var(--cds-pad-xs) var(--cds-pad-sm); color: var(--color-fg); background: var(--color-bg); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); font: inherit; font-size: var(--cds-font-size-body); }
+  .rr-group { display: flex; flex-direction: column; gap: var(--cds-gap-xs); min-width: 0; margin: 0; padding: 0; border: 0; }
+  .rr-group legend { padding: 0; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+  .rr-chips { display: flex; flex-wrap: wrap; gap: var(--cds-gap-xs); }
+  .rr-chip { display: inline-flex; align-items: center; gap: var(--cds-gap-xs); padding: var(--cds-pad-xs) var(--cds-pad-sm); background: var(--color-bg); border: 1px solid var(--color-border-line); border-radius: 999px; font-size: var(--cds-font-size-caption); cursor: pointer; }
+  .rr-chip input { margin: 0; }
+  .rr-chip:focus-within { outline: 2px solid var(--cds-chart-axis); outline-offset: 1px; }
+  .rr-reset { padding: var(--cds-pad-xs) var(--cds-pad-sm); color: var(--color-fg); background: transparent; border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); font: inherit; font-size: var(--cds-font-size-caption); cursor: pointer; }
+  .rr-reset:focus-visible { outline: 2px solid var(--cds-chart-axis); outline-offset: 1px; }
+  .rr-section { display: flex; flex-direction: column; gap: var(--cds-gap-md); }
+  .rr-h2 { margin: 0; font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); }
+  .rr-h3 { margin: 0; font-size: var(--cds-font-size-body); font-weight: var(--cds-font-weight-medium); }
+  .rr-note { margin: 0; max-width: 84ch; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+  .rr-card { display: flex; flex-direction: column; gap: var(--cds-gap-sm); min-width: 0; padding: var(--cds-pad-lg); background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); }
+  .rr-legend { display: flex; flex-wrap: wrap; gap: var(--cds-gap-xs) var(--cds-gap-md); min-height: 1.4em; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+  .rr-key { display: inline-flex; align-items: center; gap: var(--cds-gap-xs); }
+  .rr-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: var(--cds-gap-md); }
+  .rr-panel { display: flex; flex-direction: column; gap: var(--cds-gap-xs); min-width: 0; }
+  .rr-panel h4 { margin: 0; font-size: var(--cds-font-size-caption); font-weight: var(--cds-font-weight-medium); }
+  .rr-plot { position: relative; min-height: 180px; }
+  .rr-plot svg { display: block; }
+  .rr-tip { position: absolute; top: 0; z-index: 2; max-width: 17rem; padding: var(--cds-pad-xs) var(--cds-pad-sm); background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; pointer-events: none; }
+  .rr-tip-head { color: var(--cds-text-secondary); }
+  .rr-tip-row { display: flex; align-items: center; gap: var(--cds-gap-xs); white-space: nowrap; }
+  .rr-tip-row span:last-child { margin-left: auto; padding-left: var(--cds-pad-sm); }
+  .rr-tablebox { max-height: 30rem; overflow: auto; }
+  .rr-table { width: 100%; border-collapse: collapse; font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; }
+  .rr-table th { position: sticky; top: 0; z-index: 1; padding: var(--cds-pad-xs) var(--cds-pad-sm); background: var(--color-panel); border-bottom: 1px solid var(--color-border-line); text-align: right; white-space: nowrap; }
+  .rr-table th.rr-text, .rr-table td.rr-text { text-align: left; }
+  .rr-table th button { padding: 0; color: var(--color-fg-muted); background: none; border: 0; font: inherit; font-weight: var(--cds-font-weight-medium); cursor: pointer; }
+  .rr-table th button:focus-visible { outline: 2px solid var(--cds-chart-axis); outline-offset: 2px; }
+  .rr-table td { padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--cds-chart-grid); text-align: right; white-space: nowrap; }
+  .rr-table td.rr-running { color: var(--color-warn); }
+  .rr-table td.rr-finished { color: var(--color-ok); }
+  [data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
+  [data-dash-source-state=empty] { color: transparent; }
+</style>
+
+<div class="rr" id="top">
+  <header class="rr-head">
+    <h1 class="rr-title">Det-paper rerun results</h1>
+    <p class="rr-sub">Test-set metrics at every banked epoch of each det-rerun cell (seed 99512). Pick a system, controller and budget, then the models and acquisition regimes to compare. Numbers from the run directories as of <span class="rr-age" data-draw="age" data-source="snapshot">—</span>.</p>
+  </header>
+
+  <div class="rr-filters" id="filters" role="group" aria-label="Filters">
+    <label class="rr-field">System<select id="rr-system" data-draw="system" data-source="nominal_epochs"></select></label>
+    <label class="rr-field">Controller<select id="rr-controller" data-draw="controller" data-source="nominal_epochs"></select></label>
+    <label class="rr-field">Total budget (trajectories)<select id="rr-budget" data-draw="budget" data-source="nominal_epochs"></select></label>
+    <fieldset class="rr-group">
+      <legend>Models</legend>
+      <div class="rr-chips">
+        <label class="rr-chip"><input type="checkbox" class="rr-model" id="rr-m-fm" value="FM">FM</label>
+        <label class="rr-chip"><input type="checkbox" class="rr-model" id="rr-m-mlpclf" value="MLP classifier">MLP classifier</label>
+        <label class="rr-chip"><input type="checkbox" class="rr-model" id="rr-m-bnnclf" value="BNN classifier">BNN classifier</label>
+        <label class="rr-chip"><input type="checkbox" class="rr-model" id="rr-m-mlpreg" value="MLP final-state">MLP final-state</label>
+        <label class="rr-chip"><input type="checkbox" class="rr-model" id="rr-m-bnnreg" value="BNN final-state">BNN final-state</label>
+        <label class="rr-chip"><input type="checkbox" class="rr-model" id="rr-m-partx" value="Part-X">Part-X</label>
+      </div>
+    </fieldset>
+    <fieldset class="rr-group">
+      <legend>Acquisition</legend>
+      <div class="rr-chips">
+        <label class="rr-chip"><input type="checkbox" class="rr-regime" id="rr-r-ranked" value="ranked">ranked</label>
+        <label class="rr-chip"><input type="checkbox" class="rr-regime" id="rr-r-direct" value="direct">direct</label>
+        <label class="rr-chip"><input type="checkbox" class="rr-regime" id="rr-r-entropy" value="entropy">entropy</label>
+        <label class="rr-chip"><input type="checkbox" class="rr-regime" id="rr-r-uniform" value="uniform">uniform</label>
+        <label class="rr-chip"><input type="checkbox" class="rr-regime" id="rr-r-builtin" value="Part-X built-in">Part-X built-in</label>
+      </div>
+    </fieldset>
+    <button type="button" class="rr-reset" id="rr-reset">Reset filters</button>
+  </div>
+
+  <section class="rr-section" id="nominal" aria-labelledby="nominal-h">
+    <h2 class="rr-h2" id="nominal-h">Nominal threshold fit (λ*, δ*)</h2>
+    <p class="rr-note">Every cell's own scoring: each epoch fits λ* and δ* on the threshold-fit pairs, and that λ/δ rule labels each test state success, failure, outcome-uncertain or invalid.</p>
+    <div class="rr-card" id="nominal-curves">
+      <h3 class="rr-h3">Metrics against training trajectories</h3>
+      <p class="rr-note">One line per model and regime: color is the model, dash pattern the regime, and a hollow end point a cell still running. The x axis is thousands of training trajectories. Invalid % and outcome-uncertain % share one scale. KL is the log score against the true outcome; FPR and FNR are over committed states.</p>
+      <div class="rr-legend" id="nominal-legend" data-draw="legend" data-ds="nominal_epochs" data-source="nominal_epochs"></div>
+      <div class="rr-panels">
+        <div class="rr-panel" id="nominal-kl"><h4>KL (nats, log scale)</h4><div class="rr-plot" data-draw="panel" data-ds="nominal_epochs" data-metric="kl" data-source="nominal_epochs"></div></div>
+        <div class="rr-panel" id="nominal-f1"><h4>F1</h4><div class="rr-plot" data-draw="panel" data-ds="nominal_epochs" data-metric="f1" data-source="nominal_epochs"></div></div>
+        <div class="rr-panel" id="nominal-abstain"><h4>Abstain %</h4><div class="rr-plot" data-draw="panel" data-ds="nominal_epochs" data-metric="abstain_pct" data-source="nominal_epochs"></div></div>
+        <div class="rr-panel" id="nominal-invalid"><h4>Invalid %</h4><div class="rr-plot" data-draw="panel" data-ds="nominal_epochs" data-metric="invalid_pct" data-source="nominal_epochs"></div></div>
+        <div class="rr-panel" id="nominal-uncertain"><h4>Outcome-uncertain %</h4><div class="rr-plot" data-draw="panel" data-ds="nominal_epochs" data-metric="uncertain_pct" data-source="nominal_epochs"></div></div>
+        <div class="rr-panel" id="nominal-fpr"><h4>FPR</h4><div class="rr-plot" data-draw="panel" data-ds="nominal_epochs" data-metric="fpr" data-source="nominal_epochs"></div></div>
+        <div class="rr-panel" id="nominal-fnr"><h4>FNR</h4><div class="rr-plot" data-draw="panel" data-ds="nominal_epochs" data-metric="fnr" data-source="nominal_epochs"></div></div>
+      </div>
+    </div>
+    <div class="rr-card" id="nominal-final">
+      <h3 class="rr-h3">Last adaptive iteration per cell</h3>
+      <p class="rr-note">Each cell's latest banked epoch in the selected setting: the final iteration for finished cells, the current one for running cells. Click a column to sort.</p>
+      <div class="rr-tablebox">
+        <table class="rr-table" data-table="nominal" data-source="nominal_final" data-row-key="setting,cell">
+          <thead><tr>
+            <th class="rr-text" data-field="model"><button type="button" data-sort="model">Model</button></th>
+            <th class="rr-text" data-field="regime"><button type="button" data-sort="regime">Regime</button></th>
+            <th data-field="epoch"><button type="button" data-sort="epoch">Epoch</button></th>
+            <th data-field="train"><button type="button" data-sort="train">Trajectories</button></th>
+            <th data-field="kl"><button type="button" data-sort="kl">KL</button></th>
+            <th data-field="f1"><button type="button" data-sort="f1">F1</button></th>
+            <th data-field="abstain_pct"><button type="button" data-sort="abstain_pct">Abstain %</button></th>
+            <th data-field="invalid_pct"><button type="button" data-sort="invalid_pct">Invalid %</button></th>
+            <th data-field="uncertain_pct"><button type="button" data-sort="uncertain_pct">Uncertain %</button></th>
+            <th data-field="fpr"><button type="button" data-sort="fpr">FPR</button></th>
+            <th data-field="fnr"><button type="button" data-sort="fnr">FNR</button></th>
+            <th class="rr-text" data-field="status"><button type="button" data-sort="status">Status</button></th>
+          </tr></thead>
+          <tbody data-draw="table" data-ds="nominal_final"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="rr-section" id="fprcap" aria-labelledby="fprcap-h">
+    <h2 class="rr-h2" id="fprcap-h">FPR-capped threshold fit (α_s = 1%)</h2>
+    <p class="rr-note">The new cells: each epoch fits τ_s, τ_f and τ_inv on the val split, from the first 20 of its 100 MC draws, to maximize accuracy with false success claims at most 1% of true failures and false failure claims at most 5% of true successes (τ_s ≥ 0.5). Direct and ranked acquisition and the test labels use that rule; uniform and entropy read no thresholds, so they have no cells here. Quadrotor 3D at 110k (LQR) and 100k (PPO) are the 200k runs' first 11 epochs.</p>
+    <p class="rr-note" id="fprcap-empty" data-empty="fprcap" hidden>No FPR-capped cell in this setting has banked an epoch yet.</p>
+    <div class="rr-card" id="fprcap-curves" data-hide-empty="fprcap">
+      <h3 class="rr-h3">Metrics against training trajectories</h3>
+      <p class="rr-note">Same encoding as above: color is the model, dash pattern the regime, a hollow end point a running cell; x in thousands of training trajectories.</p>
+      <div class="rr-legend" id="fprcap-legend" data-draw="legend" data-ds="fprcap_epochs" data-source="fprcap_epochs"></div>
+      <div class="rr-panels">
+        <div class="rr-panel" id="fprcap-kl"><h4>KL (nats, log scale)</h4><div class="rr-plot" data-draw="panel" data-ds="fprcap_epochs" data-metric="kl" data-source="fprcap_epochs"></div></div>
+        <div class="rr-panel" id="fprcap-f1"><h4>F1</h4><div class="rr-plot" data-draw="panel" data-ds="fprcap_epochs" data-metric="f1" data-source="fprcap_epochs"></div></div>
+        <div class="rr-panel" id="fprcap-abstain"><h4>Abstain %</h4><div class="rr-plot" data-draw="panel" data-ds="fprcap_epochs" data-metric="abstain_pct" data-source="fprcap_epochs"></div></div>
+        <div class="rr-panel" id="fprcap-invalid"><h4>Invalid %</h4><div class="rr-plot" data-draw="panel" data-ds="fprcap_epochs" data-metric="invalid_pct" data-source="fprcap_epochs"></div></div>
+        <div class="rr-panel" id="fprcap-uncertain"><h4>Outcome-uncertain %</h4><div class="rr-plot" data-draw="panel" data-ds="fprcap_epochs" data-metric="uncertain_pct" data-source="fprcap_epochs"></div></div>
+        <div class="rr-panel" id="fprcap-fpr"><h4>FPR</h4><div class="rr-plot" data-draw="panel" data-ds="fprcap_epochs" data-metric="fpr" data-source="fprcap_epochs"></div></div>
+        <div class="rr-panel" id="fprcap-fnr"><h4>FNR</h4><div class="rr-plot" data-draw="panel" data-ds="fprcap_epochs" data-metric="fnr" data-source="fprcap_epochs"></div></div>
+      </div>
+    </div>
+    <div class="rr-card" id="fprcap-final" data-hide-empty="fprcap">
+      <h3 class="rr-h3">Last adaptive iteration per cell</h3>
+      <p class="rr-note">Each FPR-capped cell's latest banked epoch in the selected setting, with the thresholds that epoch fitted. Click a column to sort.</p>
+      <div class="rr-tablebox">
+        <table class="rr-table" data-table="fprcap" data-source="fprcap_final" data-row-key="setting,cell">
+          <thead><tr>
+            <th class="rr-text" data-field="model"><button type="button" data-sort="model">Model</button></th>
+            <th class="rr-text" data-field="regime"><button type="button" data-sort="regime">Regime</button></th>
+            <th data-field="epoch"><button type="button" data-sort="epoch">Epoch</button></th>
+            <th data-field="train"><button type="button" data-sort="train">Trajectories</button></th>
+            <th data-field="kl"><button type="button" data-sort="kl">KL</button></th>
+            <th data-field="f1"><button type="button" data-sort="f1">F1</button></th>
+            <th data-field="abstain_pct"><button type="button" data-sort="abstain_pct">Abstain %</button></th>
+            <th data-field="invalid_pct"><button type="button" data-sort="invalid_pct">Invalid %</button></th>
+            <th data-field="uncertain_pct"><button type="button" data-sort="uncertain_pct">Uncertain %</button></th>
+            <th data-field="fpr"><button type="button" data-sort="fpr">FPR</button></th>
+            <th data-field="fnr"><button type="button" data-sort="fnr">FNR</button></th>
+            <th data-field="tau_s"><button type="button" data-sort="tau_s">τ_s</button></th>
+            <th data-field="tau_f"><button type="button" data-sort="tau_f">τ_f</button></th>
+            <th data-field="tau_inv"><button type="button" data-sort="tau_inv">τ_inv</button></th>
+            <th class="rr-text" data-field="status"><button type="button" data-sort="status">Status</button></th>
+          </tr></thead>
+          <tbody data-draw="table" data-ds="fprcap_final"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+  const RR = window.RR = {};
+  RR.MODELS = ['FM', 'MLP classifier', 'BNN classifier', 'MLP final-state', 'BNN final-state', 'Part-X'];
+  RR.REGIMES = ['ranked', 'direct', 'entropy', 'uniform', 'Part-X built-in'];
+  RR.SYSTEMS = ['Pendulum', 'Cartpole', 'Quadrotor 2D', 'Quadrotor 2D corridor', 'Quadrotor 3D'];
+  RR.DASHES = {'ranked': '', 'direct': '7 3', 'entropy': '2 3', 'uniform': '11 3 2 3', 'Part-X built-in': ''};
+  RR.DEFAULTS = {system: 'Quadrotor 3D', controller: 'LQR', budget: 110000, models: RR.MODELS, regimes: RR.REGIMES};
+  const pct = d3.format('.1f'), f3 = d3.format('.3f'), f4 = d3.format('.4f'), f2 = d3.format('.2f');
+  RR.METRICS = {
+    kl: {fmt: f3, log: true}, f1: {fmt: f3}, abstain_pct: {fmt: pct, floor: 0},
+    invalid_pct: {fmt: pct, floor: 0, shared: true}, uncertain_pct: {fmt: pct, floor: 0, shared: true},
+    fpr: {fmt: f4, floor: 0}, fnr: {fmt: f4, floor: 0},
+  };
+  RR.CELL_FMT = {train: d3.format(','), tau_s: f2, tau_f: f2, tau_inv: f2};
+  RR.num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+  RR.params = () => {
+    const p = dash.params();
+    return {
+      system: p.system ?? RR.DEFAULTS.system,
+      controller: p.controller ?? RR.DEFAULTS.controller,
+      budget: RR.num(p.budget ?? RR.DEFAULTS.budget),
+      models: Array.isArray(p.models) ? p.models : RR.DEFAULTS.models,
+      regimes: Array.isArray(p.regimes) ? p.regimes : RR.DEFAULTS.regimes,
+    };
+  };
+  // The (system, controller, budget) settings in the nominal rows, one per setting key.
+  RR.settings = () => {
+    const g = dash.data('nominal_epochs');
+    if (g.status !== 'ok') return [];
+    const seen = new Map();
+    for (const r of g.data) {
+      if (!seen.has(r.setting)) seen.set(r.setting, {setting: r.setting, system: r.system, controller: r.controller, budget: RR.num(r.budget)});
+    }
+    return [...seen.values()];
+  };
+  RR.current = () => {
+    const p = RR.params();
+    return RR.settings().find((s) => s.system === p.system && s.controller === p.controller && s.budget === p.budget) || null;
+  };
+  RR.rows = (id) => {
+    const g = dash.data(id), cur = RR.current(), p = RR.params();
+    if (g.status !== 'ok' || !cur) return null;
+    return g.data.filter((r) => r.setting === cur.setting && p.models.includes(r.model) && p.regimes.includes(r.regime));
+  };
+  RR.color = (model) => dash.colors[RR.MODELS.indexOf(model) % dash.colors.length];
+  // A system or controller change keeps the others valid: an unavailable controller falls
+  // back to the system's first, an unavailable budget to the largest left.
+  RR.pick = (change) => {
+    const p = {...RR.params(), ...change};
+    let opts = RR.settings().filter((x) => x.system === p.system);
+    if (!opts.some((x) => x.controller === p.controller) && opts.length) p.controller = opts[0].controller;
+    opts = opts.filter((x) => x.controller === p.controller);
+    if (!opts.some((x) => x.budget === p.budget) && opts.length) p.budget = d3.max(opts, (x) => x.budget);
+    dash.setParams({system: p.system, controller: p.controller, budget: p.budget});
+  };
+  RR.sort = {};
+
+  dash.calc('nominal_final', {
+    inputs: ['nominal_epochs'],
+    title: 'Last epoch per nominal cell',
+    description: 'Each nominal cell’s latest banked epoch, one row per setting and cell.',
+    fn: (nominal_epochs) => {
+      const last = new Map();
+      for (const r of nominal_epochs) {
+        const k = r.setting + '|' + r.cell, prev = last.get(k);
+        if (!prev || Number(r.epoch) > Number(prev.epoch)) last.set(k, r);
+      }
+      return [...last.values()];
+    },
+  });
+  dash.calc('fprcap_final', {
+    inputs: ['fprcap_epochs'],
+    title: 'Last epoch per FPR-capped cell',
+    description: 'Each FPR-capped cell’s latest banked epoch, one row per setting and cell.',
+    fn: (fprcap_epochs) => {
+      const last = new Map();
+      for (const r of fprcap_epochs) {
+        const k = r.setting + '|' + r.cell, prev = last.get(k);
+        if (!prev || Number(r.epoch) > Number(prev.epoch)) last.set(k, r);
+      }
+      return [...last.values()];
+    },
+  });
+</script>
+
+<script>
+  // Filters that are not data: the model and regime chips, and Reset.
+  const RRb = window.RR;
+  const boxes = (sel) => [...document.querySelectorAll(sel)];
+  for (const [sel, key] of [['.rr-model', 'models'], ['.rr-regime', 'regimes']]) {
+    for (const box of boxes(sel)) {
+      box.addEventListener('change', () => dash.setParams({[key]: boxes(sel).filter((b) => b.checked).map((b) => b.value)}));
+    }
+  }
+  for (const btn of document.querySelectorAll('.rr-reset')) btn.addEventListener('click', () => dash.resetParams());
+  for (const btn of document.querySelectorAll('.rr-table th button[data-sort]')) {
+    btn.addEventListener('click', () => {
+      const table = btn.closest('table'), id = table.dataset.table, field = btn.dataset.sort;
+      const prev = RRb.sort[id] || {};
+      RRb.sort[id] = {field, dir: prev.field === field ? -prev.dir : 1};
+      for (const th of table.querySelectorAll('thead th')) {
+        th.setAttribute('aria-sort', th.dataset.field === field ? (RRb.sort[id].dir > 0 ? 'ascending' : 'descending') : 'none');
+      }
+      dash.draw('table');
+    });
+  }
+  dash.onData(() => {
+    const p = RRb.params();
+    for (const b of boxes('.rr-model')) b.checked = p.models.includes(b.value);
+    for (const b of boxes('.rr-regime')) b.checked = p.regimes.includes(b.value);
+    // The FPR-capped section shows its cards only for a setting with banked epochs.
+    const rows = RRb.rows('fprcap_epochs');
+    const g = dash.data('fprcap_epochs');
+    const empty = g.status === 'ok' && rows !== null && rows.length === 0;
+    for (const el of document.querySelectorAll('[data-empty="fprcap"]')) el.hidden = !empty;
+    for (const el of document.querySelectorAll('[data-hide-empty="fprcap"]')) el.hidden = empty;
+  });
+  setInterval(() => dash.draw('age'), 60000);
+</script>
+
+<script>
+  const RRd = window.RR;
+  dash.draw('age', (el) => {
+    const g = dash.data('snapshot');
+    if (g.status !== 'ok' || !g.data.length) { el.textContent = '—'; return; }
+    const r = g.data[0];
+    const mins = Math.max(0, Math.round((Date.now() - new Date(r.generated_at).getTime()) / 60000));
+    const ago = mins < 1 ? 'just now' : mins < 60 ? `${mins} min ago` : mins < 2880 ? `${(mins / 60).toFixed(1)} h ago` : `${Math.round(mins / 1440)} days ago`;
+    el.textContent = `${r.generated_label} (${ago})`;
+  });
+
+  dash.draw('system', (sel) => {
+    const ss = RRd.settings(), p = RRd.params();
+    const systems = RRd.SYSTEMS.filter((s) => ss.some((x) => x.system === s));
+    sel.replaceChildren(...systems.map((s) => new Option(s, s)));
+    sel.value = p.system;
+    sel.onchange = () => RRd.pick({system: sel.value});
+  });
+  dash.draw('controller', (sel) => {
+    const p = RRd.params();
+    const ctrls = [...new Set(RRd.settings().filter((x) => x.system === p.system).map((x) => x.controller))];
+    sel.replaceChildren(...ctrls.map((c) => new Option(c, c)));
+    sel.value = p.controller;
+    sel.onchange = () => RRd.pick({controller: sel.value});
+  });
+  dash.draw('budget', (sel) => {
+    const p = RRd.params();
+    const bs = RRd.settings().filter((x) => x.system === p.system && x.controller === p.controller).map((x) => x.budget).sort((a, b) => a - b);
+    sel.replaceChildren(...bs.map((b) => new Option(d3.format(',')(b), String(b))));
+    sel.value = String(p.budget);
+    sel.onchange = () => RRd.pick({budget: Number(sel.value)});
+  });
+
+  dash.draw('legend', (el) => {
+    el.replaceChildren();
+    const rows = RRd.rows(el.dataset.ds);
+    if (!rows || !rows.length) return;
+    const key = (label, color, dasharray) => {
+      const span = document.createElement('span');
+      span.className = 'rr-key';
+      const svg = d3.create('svg').attr('width', 26).attr('height', 10).attr('aria-hidden', 'true');
+      svg.append('line').attr('x1', 1).attr('x2', 25).attr('y1', 5).attr('y2', 5)
+        .attr('stroke', color).attr('stroke-width', 2)
+        .attr('stroke-linecap', dasharray ? 'butt' : 'round').attr('stroke-dasharray', dasharray || null);
+      span.append(svg.node(), document.createTextNode(label));
+      return span;
+    };
+    for (const m of RRd.MODELS) if (rows.some((r) => r.model === m)) el.append(key(m, RRd.color(m), ''));
+    for (const x of RRd.REGIMES) if (rows.some((r) => r.regime === x)) el.append(key(x, 'var(--color-fg-muted)', RRd.DASHES[x]));
+  });
+
+  dash.draw('panel', (el) => {
+    el.replaceChildren();
+    const metric = el.dataset.metric, spec = RRd.METRICS[metric];
+    const rows = RRd.rows(el.dataset.ds), cur = RRd.current();
+    if (!rows || !rows.length || !cur) return;
+    const ok = (v) => v !== null && Number.isFinite(v) && (!spec.log || v > 0);
+    const series = d3.groups(rows, (r) => `${r.model} · ${r.regime}`).map(([key, rs]) => ({
+      key, model: rs[0].model, regime: rs[0].regime, done: rs.some((r) => r.status === 'finished'),
+      pts: rs.map((r) => ({x: RRd.num(r.train) / 1000, y: RRd.num(r[metric])})).filter((d) => ok(d.y) && Number.isFinite(d.x)).sort((a, b) => a.x - b.x),
+    })).filter((s) => s.pts.length);
+    if (!series.length) return;
+    const keys = spec.shared ? ['invalid_pct', 'uncertain_pct'] : [metric];
+    const ys = rows.flatMap((r) => keys.map((k) => RRd.num(r[k]))).filter(ok);
+    const width = Math.max(220, Math.round(el.clientWidth || 300)), height = 180;
+    const top = 8, right = 12, bottom = 22;
+    let y;
+    if (spec.log) {
+      y = d3.scaleLog([d3.min(ys) / 1.15, d3.max(ys) * 1.15], [height - bottom, top]);
+    } else {
+      const lo = d3.min(ys), hi = d3.max(ys), pad = 0.06 * ((hi - lo) || Math.abs(hi) || 1);
+      y = d3.scaleLinear([spec.floor === 0 ? Math.max(0, lo - pad) : lo - pad, hi + pad], [height - bottom, top]).nice(4);
+    }
+    let ticks = y.ticks(4);
+    if (spec.log && ticks.length > 5) ticks = ticks.filter((_, i) => i % Math.ceil(ticks.length / 4) === 0);
+    const yfmt = spec.log ? d3.format('.2~g') : y.tickFormat(4);
+    const svg = d3.select(el).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${width} ${height}`)
+      .attr('role', 'img').attr('aria-label', el.parentElement.querySelector('h4')?.textContent || metric);
+    // Left margin from the widest y tick label as drawn.
+    const probe = svg.append('g').attr('font-size', 11);
+    let widest = 0;
+    for (const t of ticks) widest = Math.max(widest, probe.append('text').text(yfmt(t)).node().getComputedTextLength());
+    probe.remove();
+    const left = Math.ceil(widest) + 10;
+    const xs = series.flatMap((s) => s.pts.map((d) => d.x));
+    const x = d3.scaleLinear([d3.min(xs), Math.max(d3.max(xs), cur.budget / 1000)], [left, width - right]);
+    const xticks = x.ticks(Math.max(2, Math.floor((width - left) / 70)));
+
+    svg.append('g').selectAll('line').data(ticks).join('line')
+      .attr('x1', left).attr('x2', width - right).attr('y1', (t) => y(t)).attr('y2', (t) => y(t))
+      .attr('stroke', 'var(--cds-chart-grid)').attr('stroke-width', 1);
+    svg.append('g').selectAll('text').data(ticks).join('text')
+      .attr('x', left - 6).attr('y', (t) => y(t)).attr('dy', '0.32em').attr('text-anchor', 'end')
+      .attr('font-size', 11).attr('fill', 'var(--color-fg-muted)').text((t) => yfmt(t));
+    svg.append('line').attr('x1', left).attr('x2', width - right).attr('y1', height - bottom).attr('y2', height - bottom)
+      .attr('stroke', 'var(--cds-chart-axis)').attr('stroke-width', 1);
+    svg.append('g').selectAll('text').data(xticks).join('text')
+      .attr('x', (t) => x(t)).attr('y', height - 6).attr('text-anchor', 'middle')
+      .attr('font-size', 11).attr('fill', 'var(--color-fg-muted)').text((t) => d3.format('~g')(t));
+
+    const line = d3.line().x((d) => x(d.x)).y((d) => y(d.y));
+    const lines = svg.append('g').attr('fill', 'none');
+    for (const s of series) {
+      const c = RRd.color(s.model), dashes = RRd.DASHES[s.regime];
+      lines.append('path').attr('d', line(s.pts)).attr('stroke', c).attr('stroke-width', s.model === 'FM' ? 2.4 : 2)
+        .attr('stroke-linecap', dashes ? 'butt' : 'round').attr('stroke-linejoin', 'round')
+        .attr('stroke-dasharray', dashes || null);
+      const end = s.pts[s.pts.length - 1];
+      lines.append('circle').attr('cx', x(end.x)).attr('cy', y(end.y)).attr('r', 3)
+        .attr('fill', s.done ? c : 'var(--color-panel)').attr('stroke', c).attr('stroke-width', 1.5);
+    }
+
+    // Hover: a rule at the nearest banked budget and every series' value there.
+    const allx = [...new Set(xs)].sort((a, b) => a - b);
+    const rule = svg.append('line').attr('y1', top).attr('y2', height - bottom)
+      .attr('stroke', 'var(--cds-chart-reference)').attr('stroke-width', 1).attr('visibility', 'hidden');
+    const dots = svg.append('g');
+    const tip = document.createElement('div');
+    tip.className = 'rr-tip';
+    tip.hidden = true;
+    el.append(tip);
+    svg.append('rect').attr('x', left).attr('y', top).attr('width', width - left - right).attr('height', height - top - bottom)
+      .attr('fill', 'transparent')
+      .on('pointermove', (event) => {
+        const [mx] = d3.pointer(event, svg.node());
+        const x0 = x.invert(mx);
+        const near = allx[d3.minIndex(allx, (v) => Math.abs(v - x0))];
+        const hits = series.map((s) => ({s, d: s.pts.find((p) => Math.abs(p.x - near) < 1e-9)})).filter((h) => h.d);
+        rule.attr('x1', x(near)).attr('x2', x(near)).attr('visibility', 'visible');
+        dots.selectAll('circle').data(hits).join('circle').attr('cx', (h) => x(h.d.x)).attr('cy', (h) => y(h.d.y))
+          .attr('r', 3.5).attr('fill', (h) => RRd.color(h.s.model));
+        tip.replaceChildren();
+        const head = document.createElement('div');
+        head.className = 'rr-tip-head';
+        head.textContent = `${d3.format(',')(Math.round(near * 1000))} trajectories`;
+        tip.append(head);
+        for (const h of hits.sort((a, b) => b.d.y - a.d.y)) {
+          const row = document.createElement('div');
+          row.className = 'rr-tip-row';
+          const sw = d3.create('svg').attr('width', 18).attr('height', 8).attr('aria-hidden', 'true');
+          sw.append('line').attr('x1', 1).attr('x2', 17).attr('y1', 4).attr('y2', 4).attr('stroke', RRd.color(h.s.model))
+            .attr('stroke-width', 2).attr('stroke-dasharray', RRd.DASHES[h.s.regime] || null);
+          const name = document.createElement('span');
+          name.textContent = h.s.key;
+          const val = document.createElement('span');
+          val.textContent = spec.fmt(h.d.y);
+          row.append(sw.node(), name, val);
+          tip.append(row);
+        }
+        tip.hidden = false;
+        const scale = el.clientWidth / width;
+        const px = x(near) * scale;
+        const w = tip.offsetWidth;
+        tip.style.left = `${Math.max(0, Math.min(el.clientWidth - w, px + 12 + w > el.clientWidth ? px - 12 - w : px + 12))}px`;
+      })
+      .on('pointerleave', () => {
+        rule.attr('visibility', 'hidden');
+        dots.selectAll('circle').remove();
+        tip.hidden = true;
+      });
+  });
+
+  dash.draw('table', (tbody) => {
+    tbody.replaceChildren();
+    const table = tbody.closest('table');
+    const g = dash.data(tbody.dataset.ds), cur = RRd.current(), p = RRd.params();
+    if (g.status !== 'ok' || !cur) return;
+    const fields = [...table.querySelectorAll('thead th[data-field]')].map((th) => th.dataset.field);
+    const rows = g.data.filter((r) => r.setting === cur.setting && p.models.includes(r.model) && p.regimes.includes(r.regime));
+    const st = RRd.sort[table.dataset.table];
+    const order = (r) => RRd.MODELS.indexOf(r.model) * 10 + RRd.REGIMES.indexOf(r.regime);
+    rows.sort((a, b) => {
+      if (!st) return order(a) - order(b);
+      const va = a[st.field], vb = b[st.field];
+      const na = RRd.num(va), nb = RRd.num(vb);
+      const cmp = (Number.isFinite(na) && Number.isFinite(nb)) ? na - nb : String(va ?? '').localeCompare(String(vb ?? ''));
+      return (cmp || order(a) - order(b)) * (cmp ? st.dir : 1);
+    });
+    for (const r of rows) {
+      const tr = document.createElement('tr');
+      tr.dataset.key = `${encodeURIComponent(r.setting)},${encodeURIComponent(r.cell)}`;
+      for (const f of fields) {
+        const td = document.createElement('td');
+        const v = r[f], spec = RRd.METRICS[f], cellFmt = RRd.CELL_FMT[f];
+        const n = RRd.num(v);
+        td.textContent = (spec || cellFmt) ? (Number.isFinite(n) ? (spec ? spec.fmt(n) : cellFmt(n)) : '—') : String(v ?? '—');
+        if (f === 'model' || f === 'regime') td.className = 'rr-text';
+        if (f === 'status') td.className = `rr-text rr-${v}`;
+        tr.append(td);
+      }
+      tbody.append(tr);
+    }
+  });
+</script>

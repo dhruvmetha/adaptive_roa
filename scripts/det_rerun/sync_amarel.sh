@@ -7,6 +7,7 @@
 #   sync_amarel.sh [name ...]          (default: every amarel row in launched.tsv)
 set -euo pipefail
 export SSH_AUTH_SOCK=
+source "$(dirname "$0")/retry.sh"
 HERE=/common/home/st1122/Projects/adaptive_roa/slurm_logs/det_rerun
 EXP=/common/users/shared/pracsys/adaptive_roa_experiments/det_rerun
 AM=amarel.rutgers.edu; AEXP=/scratch/st1122/det_rerun_out
@@ -38,4 +39,4 @@ for NAME in "${names[@]}"; do
   case $rc in 0|24) echo "synced $NAME";; *) echo "FAILED $NAME (rsync $rc)";; esac
 done
 mkdir -p "$HERE/amarel_logs"
-rsync -a "$AM:/home/st1122/det_rerun_logs/" "$HERE/amarel_logs/" </dev/null
+retry 3 rsync -a "$AM:/home/st1122/det_rerun_logs/" "$HERE/amarel_logs/" </dev/null

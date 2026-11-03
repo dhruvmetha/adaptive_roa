@@ -117,9 +117,39 @@ def test_free_ilab_cards_discount_our_own_pending_jobs(monkeypatch):
             return f"Job 1 to start at {dt.datetime.now().isoformat(timespec='seconds')} a using 2 processors on nodes rlab4"
         return ""
     monkeypatch.setattr(rebalance, "sh", sh)
-    monkeypatch.setattr(rebalance, "shared_free", lambda: [])
+    monkeypatch.setattr(rebalance, "shared_free", lambda busy=(): [])
+    monkeypatch.setattr(rebalance, "occupied_direct", lambda: set())
     cards, mem = rebalance.free_cards(8)
     assert cards == [("direct", "westeros", "4"), ("ilab", "a4000", "")] and mem == 18
+
+
+def test_a_card_a_starting_cell_holds_is_not_free(tmp_path, monkeypatch):
+    # perception 2026-11-03 07:55-07:58: a resumed cell was still loading its pool (no
+    # CUDA context), the scan listed the card idle, and a second cell was put on it.
+    (tmp_path / "launched.tsv").write_text(
+        "cellA\tamarel\t--partition=gpu\t1\tts\tlog\tc\n"
+        "cellA\tdirect\t1spring-303-desktop-10:0\t2\tts\tlog\tc\n"      # latest: perception, live
+        "cellB\tdirect\twesteros:4\t3\tts\tlog\tc\n"
+        "cellB\tamarel\t--partition=gpu\t4\tts\tlog\tc\n"               # moved off westeros since
+        "cellC~old\tdirect\tarrakis:3\t5\tts\tlog\tc\n")                # history row
+    scan = ("VIABLE\n  perception    gpu0 (24GB idle)\n  westeros      gpu4 (11GB idle)\nREJECTED\n")
+    live = {"1spring-303-desktop-10": "gpu_cellA\n", "westeros": "gpu_cellB\n", "arrakis": "gpu_cellC\n"}
+
+    def sh(cmd, timeout=300):
+        if "gpu-free" in cmd:
+            return scan
+        for host, out in live.items():
+            if f"BatchMode=yes {host} " in cmd and "tmux ls" in cmd:
+                return out
+        return ""
+    monkeypatch.setattr(rebalance, "HERE", tmp_path)
+    monkeypatch.setattr(rebalance, "sh", sh)
+    monkeypatch.setattr(rebalance, "ilab_home_node", lambda: None)
+    assert rebalance.occupied_direct() == {("1spring-303-desktop-10", "0")}
+    cards, _ = rebalance.free_cards(8)
+    assert ("direct", "1spring-303-desktop-10", "0") not in cards
+    assert ("direct", "westeros", "4") in cards
+    assert ("direct", "arrakis", "3") in cards       # a history row does not hold a card
 
 
 def test_ilab_card_used_only_when_slurm_would_start_it_now(monkeypatch):

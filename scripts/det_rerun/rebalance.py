@@ -199,19 +199,30 @@ def ilab_home_node() -> str | None:
 SHARED_CARDS = [("arrakis", "3"), ("arrakis", "4")]
 
 
-def shared_free() -> list[tuple[str, str, str]]:
-    placed = {}
+def occupied_direct() -> set[tuple[str, str]]:
+    """(host, gpu) of each direct card a det cell's live tmux session holds, from the
+    cell's latest launched.tsv row. A resumed cell loads its pool for minutes before it
+    opens a CUDA context, and the scan reads its card as idle meanwhile: on 2026-11-03
+    two cells landed on perception's one card three minutes apart."""
+    latest = {}
     for line in open(HERE / "launched.tsv"):
         f = line.rstrip("\n").split("\t")
-        if len(f) >= 7 and f[1] == "direct":
-            placed[f[2]] = f[0].split("~")[0]
-    out = []
-    for host, gpu in SHARED_CARDS:
-        name = placed.get(f"{host}:{gpu}")
-        if name and sh(f"ssh -n -o BatchMode=yes {host}.cs.rutgers.edu 'tmux has-session -t gpu_{name} 2>/dev/null && echo up'").strip() == "up":
-            continue
-        out.append(("direct", host, gpu))
-    return out
+        if len(f) >= 3 and "~" not in f[0]:            # name~... rows are history
+            latest[f[0]] = f
+    by_host: dict[str, list[tuple[str, str]]] = {}
+    for name, f in latest.items():
+        if f[1] == "direct" and ":" in f[2]:
+            host, gpu = f[2].split(":", 1)
+            by_host.setdefault(host, []).append((name, gpu))
+    busy = set()
+    for host, cells in by_host.items():
+        live = set(sh(f"ssh -n -o BatchMode=yes {host} \"tmux ls -F '#S' 2>/dev/null\"").split())
+        busy |= {(host, gpu) for name, gpu in cells if f"gpu_{name}" in live}
+    return busy
+
+
+def shared_free(busy: set[tuple[str, str]] = frozenset()) -> list[tuple[str, str, str]]:
+    return [("direct", host, gpu) for host, gpu in SHARED_CARDS if (host, gpu) not in busy]
 
 
 def free_cards(mem_gb: int) -> tuple[list[tuple[str, str, str]], int]:
@@ -236,7 +247,9 @@ def free_cards(mem_gb: int) -> tuple[list[tuple[str, str, str]], int]:
         elif host in ("westeros", "arrakis", "perception"):
             for g in re.findall(r"gpu(\d+) \(", line):
                 cards.append(("direct", "1spring-303-desktop-10" if host == "perception" else host, g))
-    cards += [c for c in shared_free() if c not in cards]
+    busy = occupied_direct()
+    cards = [c for c in cards if (c[1], c[2]) not in busy]
+    cards += [c for c in shared_free(busy) if c not in cards]
     # The association allows one iLab node at a time: the home node, else the roomiest.
     if not ilab:
         return cards, 0

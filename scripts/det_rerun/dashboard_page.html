@@ -41,10 +41,15 @@
   .rr-tablebox { max-height: 30rem; overflow: auto; }
   .rr-tcount { flex-direction: row; align-items: center; gap: var(--cds-gap-sm); }
   .rr-table { width: 100%; border-collapse: collapse; font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; }
-  .rr-table th { position: sticky; top: 0; z-index: 1; padding: var(--cds-pad-xs) var(--cds-pad-sm); background: var(--color-panel); border-bottom: 1px solid var(--color-border-line); text-align: right; white-space: nowrap; }
+  .rr-table th { position: sticky; top: 0; z-index: 1; padding: 0; background: var(--color-panel); border-bottom: 1px solid var(--color-border-line); text-align: right; white-space: nowrap; }
   .rr-table th.rr-text, .rr-table td.rr-text { text-align: left; }
-  .rr-table th button { padding: 0; color: var(--color-fg-muted); background: none; border: 0; font: inherit; font-weight: var(--cds-font-weight-medium); cursor: pointer; }
-  .rr-table th button:focus-visible { outline: 2px solid var(--cds-chart-axis); outline-offset: 2px; }
+  /* The whole header cell is the sort button; the arrow shows the sorted column and its direction. */
+  .rr-table th button { display: block; width: 100%; padding: var(--cds-pad-xs) var(--cds-pad-sm); color: var(--color-fg-muted); background: none; border: 0; font: inherit; font-weight: var(--cds-font-weight-medium); text-align: inherit; white-space: nowrap; cursor: pointer; }
+  .rr-table th button::after { content: "↕"; display: inline-block; width: 1em; margin-left: 0.25em; text-align: center; opacity: 0.4; }
+  .rr-table th[aria-sort="ascending"] button::after { content: "▲"; opacity: 1; }
+  .rr-table th[aria-sort="descending"] button::after { content: "▼"; opacity: 1; }
+  .rr-table th button:hover, .rr-table th[aria-sort="ascending"] button, .rr-table th[aria-sort="descending"] button { color: var(--color-fg); }
+  .rr-table th button:focus-visible { outline: 2px solid var(--cds-chart-axis); outline-offset: -2px; }
   .rr-table td { padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--cds-chart-grid); text-align: right; white-space: nowrap; }
   .rr-table td.rr-running { color: var(--color-warn); }
   .rr-table td.rr-finished { color: var(--color-ok); }
@@ -304,9 +309,13 @@
   for (const sel of document.querySelectorAll('.rr-size')) sel.addEventListener('change', () => dash.setParams({plot_size: sel.value}));
   for (const btn of document.querySelectorAll('.rr-unzoom')) btn.addEventListener('click', () => dash.setParams(RRb.unzoom(btn.dataset.zoom)));
   for (const btn of document.querySelectorAll('.rr-reset')) btn.addEventListener('click', () => dash.resetParams());
-  for (const btn of document.querySelectorAll('.rr-table th button[data-sort]')) {
-    btn.addEventListener('click', () => {
-      const table = btn.closest('table'), id = table.dataset.table, field = btn.dataset.sort;
+  // One listener per table: a click anywhere in a header cell sorts by that column, and a
+  // second click on the same column reverses it.
+  for (const table of document.querySelectorAll('.rr-table')) {
+    table.addEventListener('click', (e) => {
+      const btn = e.target instanceof Element ? e.target.closest('th button[data-sort]') : null;
+      if (!btn || !table.contains(btn)) return;
+      const id = table.dataset.table, field = btn.dataset.sort;
       const prev = RRb.sort[id] || {};
       RRb.sort[id] = {field, dir: prev.field === field ? -prev.dir : 1};
       for (const th of table.querySelectorAll('thead th')) {

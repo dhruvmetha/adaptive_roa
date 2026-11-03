@@ -8,15 +8,17 @@
 set -euo pipefail
 export SSH_AUTH_SOCK=
 source "$(dirname "$0")/retry.sh"
-HERE=/common/home/st1122/Projects/adaptive_roa/slurm_logs/det_rerun
-EXP=/common/users/shared/pracsys/adaptive_roa_experiments/det_rerun
+HERE=${DET_RERUN_HERE:-/common/home/st1122/Projects/adaptive_roa/slurm_logs/det_rerun}
+EXP=${DET_RERUN_EXP:-/common/users/shared/pracsys/adaptive_roa_experiments/det_rerun}
 AM=amarel.rutgers.edu; AEXP=/scratch/st1122/det_rerun_out
+# One connection for the whole sync: a fresh handshake costs ~2.4 s and a sync makes ~50.
+SSH="ssh -o BatchMode=yes -o ControlMaster=auto -o ControlPath=${XDG_RUNTIME_DIR:-/tmp}/det-sync-%C -o ControlPersist=60"
 names=("$@")
 # Rows renamed <name>~... (moved off Amarel, superseded) are history, not cells to sync.
 [ ${#names[@]} -gt 0 ] || mapfile -t names < <(awk -F'\t' '$2=="amarel" && $1 !~ /~/ {print $1}' "$HERE/launched.tsv" | sort -u)
-present=$(ssh -n -o BatchMode=yes $AM "cd $AEXP 2>/dev/null && ls -d */*" || true)   # cells started on Amarel
+present=$($SSH -n $AM "cd $AEXP 2>/dev/null && ls -d */*" || true)   # cells started on Amarel
 # Cells with a live job; the snapshot (name, state) also tells status.py which are PENDING.
-queue=$(ssh -n -o BatchMode=yes $AM "squeue -u st1122 -h -o '%j %T'") \
+queue=$($SSH -n $AM "squeue -u st1122 -h -o '%j %T'") \
   && printf '%s\n' "$queue" > "$HERE/amarel_queue.txt.tmp" && mv "$HERE/amarel_queue.txt.tmp" "$HERE/amarel_queue.txt" \
   || queue=""
 active=$(awk '{print $1}' <<< "$queue")
@@ -34,9 +36,11 @@ for NAME in "${names[@]}"; do
     echo "REFUSED $NAME: $OUT has files but no .amarel_mirror marker"; continue
   fi
   mkdir -p "$OUT" && touch "$OUT/.amarel_mirror"
-  rc=0; rsync -a --delete --exclude .amarel_mirror "$AM:${OUT/#$EXP/$AEXP}/" "$OUT/" </dev/null 2>/dev/null || rc=$?
+  rc=0; rsync -a --delete --exclude .amarel_mirror -e "$SSH" "$AM:${OUT/#$EXP/$AEXP}/" "$OUT/" </dev/null 2>/dev/null || rc=$?
   # 24: a running job replaced a checkpoint mid-copy; the next sync picks it up.
   case $rc in 0|24) echo "synced $NAME";; *) echo "FAILED $NAME (rsync $rc)";; esac
 done
 mkdir -p "$HERE/amarel_logs"
-retry 3 rsync -a "$AM:/home/st1122/det_rerun_logs/" "$HERE/amarel_logs/" </dev/null
+# Slurm only appends to a log, so --append sends the new tail instead of re-reading the whole
+# file: the FM logs pass 1 GB, and the delta pass took ~200 s of a 373 s sync (2026-11-03).
+retry 3 rsync -a --append -e "$SSH" "$AM:/home/st1122/det_rerun_logs/" "$HERE/amarel_logs/" </dev/null

@@ -102,7 +102,7 @@
     <div class="rr-card" id="nominal-curves">
       <h3 class="rr-h3">Metrics against training trajectories</h3>
       <p class="rr-note">One line per model and regime: color is the model, dash pattern the regime, and a hollow end point a cell still running. The x axis is thousands of training trajectories. Invalid % and outcome-uncertain % share one scale. "FM uniform, always" keeps FM's uniform line in view whatever the model and acquisition chips say. KL is the log score against the true outcome; FPR and FNR are over committed states.</p>
-      <div class="rr-zoombar"><button type="button" class="rr-unzoom" id="nominal-unzoom" data-zoom="nominal" hidden>Reset zoom</button><span>Drag across any chart to zoom all seven into that range of trajectories; double-click to zoom back out.</span></div>
+      <div class="rr-zoombar"><button type="button" class="rr-unzoom" id="nominal-unzoom" data-zoom="nominal" hidden>Reset zoom</button><span>Drag sideways on a chart to zoom all seven into a range of trajectories, drag up or down to zoom that chart’s values, or drag a box to do both. Double-click to zoom back out.</span></div>
       <div class="rr-legend" id="nominal-legend" data-draw="legend" data-ds="nominal_epochs" data-source="nominal_epochs"></div>
       <div class="rr-panels">
         <div class="rr-panel" id="nominal-kl"><h4>KL (nats, log scale)</h4><div class="rr-plot" data-draw="panel" data-ds="nominal_epochs" data-metric="kl" data-source="nominal_epochs"></div></div>
@@ -146,7 +146,7 @@
     <div class="rr-card" id="fprcap-curves" data-hide-empty="fprcap">
       <h3 class="rr-h3">Metrics against training trajectories</h3>
       <p class="rr-note">Same encoding as above: color is the model, dash pattern the regime, a hollow end point a running cell; x in thousands of training trajectories.</p>
-      <div class="rr-zoombar"><button type="button" class="rr-unzoom" id="fprcap-unzoom" data-zoom="fprcap" hidden>Reset zoom</button><span>Drag across any chart to zoom all seven into that range of trajectories; double-click to zoom back out.</span></div>
+      <div class="rr-zoombar"><button type="button" class="rr-unzoom" id="fprcap-unzoom" data-zoom="fprcap" hidden>Reset zoom</button><span>Drag sideways on a chart to zoom all seven into a range of trajectories, drag up or down to zoom that chart’s values, or drag a box to do both. Double-click to zoom back out.</span></div>
       <div class="rr-legend" id="fprcap-legend" data-draw="legend" data-ds="fprcap_epochs" data-source="fprcap_epochs"></div>
       <div class="rr-panels">
         <div class="rr-panel" id="fprcap-kl"><h4>KL (nats, log scale)</h4><div class="rr-plot" data-draw="panel" data-ds="fprcap_epochs" data-metric="kl" data-source="fprcap_epochs"></div></div>
@@ -213,10 +213,16 @@
       fm_uniform: p.fm_uniform === true || p.fm_uniform === 'true',
       size: ['compact', 'large', 'wide'].includes(p.plot_size) ? p.plot_size : 'compact',
       zoom: {nominal: RR.range(p.zoom_nominal), fprcap: RR.range(p.zoom_fprcap)},
+      yzoom: {nominal: RR.yranges(p.yzoom_nominal), fprcap: RR.yranges(p.yzoom_fprcap)},
     };
   };
   // A zoom is [from, to] in thousands of trajectories, or nothing.
   RR.range = (z) => (Array.isArray(z) && z.length === 2 && Number(z[1]) > Number(z[0]) ? [Number(z[0]), Number(z[1])] : null);
+  // A value zoom is per chart, {yKey: [lo, hi]}; the two shared-scale charts share one key.
+  RR.yranges = (z) => Object.fromEntries(Object.entries(z && typeof z === 'object' && !Array.isArray(z) ? z : {})
+    .map(([k, v]) => [k, RR.range(v)]).filter(([, v]) => v));
+  RR.ykey = (metric) => (RR.METRICS[metric].shared ? 'shared_pct' : metric);
+  RR.unzoom = (section) => ({[`zoom_${section}`]: null, [`yzoom_${section}`]: null});
   RR.HEIGHT = {compact: 180, large: 280, wide: 340};
   RR.section = (ds) => (ds === 'fprcap_epochs' ? 'fprcap' : 'nominal');
   // A row is shown when its model and regime are both picked, or when it is FM uniform
@@ -251,7 +257,7 @@
     if (!opts.some((x) => x.controller === p.controller) && opts.length) p.controller = opts[0].controller;
     opts = opts.filter((x) => x.controller === p.controller);
     if (!opts.some((x) => x.budget === p.budget) && opts.length) p.budget = d3.max(opts, (x) => x.budget);
-    dash.setParams({system: p.system, controller: p.controller, budget: p.budget, zoom_nominal: null, zoom_fprcap: null});
+    dash.setParams({system: p.system, controller: p.controller, budget: p.budget, ...RR.unzoom('nominal'), ...RR.unzoom('fprcap')});
   };
   RR.sort = {};
 
@@ -294,7 +300,7 @@
   }
   for (const box of boxes('.rr-flag')) box.addEventListener('change', () => dash.setParams({[box.value]: box.checked}));
   for (const sel of document.querySelectorAll('.rr-size')) sel.addEventListener('change', () => dash.setParams({plot_size: sel.value}));
-  for (const btn of document.querySelectorAll('.rr-unzoom')) btn.addEventListener('click', () => dash.setParams({[`zoom_${btn.dataset.zoom}`]: null}));
+  for (const btn of document.querySelectorAll('.rr-unzoom')) btn.addEventListener('click', () => dash.setParams(RRb.unzoom(btn.dataset.zoom)));
   for (const btn of document.querySelectorAll('.rr-reset')) btn.addEventListener('click', () => dash.resetParams());
   for (const btn of document.querySelectorAll('.rr-table th button[data-sort]')) {
     btn.addEventListener('click', () => {
@@ -317,7 +323,7 @@
       root.classList.toggle('rr-size-large', p.size === 'large');
       root.classList.toggle('rr-size-wide', p.size === 'wide');
     }
-    for (const btn of document.querySelectorAll('.rr-unzoom')) btn.hidden = !p.zoom[btn.dataset.zoom];
+    for (const btn of document.querySelectorAll('.rr-unzoom')) btn.hidden = !p.zoom[btn.dataset.zoom] && !Object.keys(p.yzoom[btn.dataset.zoom]).length;
     // The FPR-capped section shows its cards only for a setting with banked epochs.
     const rows = RRb.rows('fprcap_epochs');
     const g = dash.data('fprcap_epochs');
@@ -383,6 +389,7 @@
     el.replaceChildren();
     const metric = el.dataset.metric, spec = RRd.METRICS[metric];
     const section = RRd.section(el.dataset.ds), zoom = RRd.params().zoom[section];
+    const yzooms = RRd.params().yzoom[section], ykey = RRd.ykey(metric), yzoom = yzooms[ykey];
     const rows = RRd.rows(el.dataset.ds), cur = RRd.current();
     if (!rows || !rows.length || !cur) return;
     const ok = (v) => v !== null && Number.isFinite(v) && (!spec.log || v > 0);
@@ -398,7 +405,9 @@
     const width = Math.max(220, Math.round(el.clientWidth || 300)), height = RRd.HEIGHT[RRd.params().size];
     const top = 8, right = 12, bottom = 22;
     let y;
-    if (spec.log) {
+    if (yzoom && (!spec.log || yzoom[0] > 0)) {
+      y = (spec.log ? d3.scaleLog : d3.scaleLinear)(yzoom, [height - bottom, top]);
+    } else if (spec.log) {
       y = d3.scaleLog([d3.min(ys) / 1.15, d3.max(ys) * 1.15], [height - bottom, top]);
     } else {
       const lo = d3.min(ys), hi = d3.max(ys), pad = 0.06 * ((hi - lo) || Math.abs(hi) || 1);
@@ -458,16 +467,22 @@
     tip.className = 'rr-tip';
     tip.hidden = true;
     el.append(tip);
-    // Drag to zoom every chart of this section into a range of trajectories.
-    const brush = d3.brushX().extent([[left, top], [width - right, height - bottom]])
+    // Drag to zoom. The trajectory range applies to every chart of this section, the value
+    // range to this chart (and its shared-scale partner). A drag spanning under MIN px on one
+    // axis leaves that axis as it was, so a sideways drag with some wobble zooms x only.
+    const MIN = 20;
+    const brush = d3.brush().extent([[left, top], [width - right, height - bottom]])
       .on('end', (event) => {
         if (!event.selection) return;
-        const [a, b] = event.selection.map((v) => x.invert(v));
-        if (b - a > 1e-9) dash.setParams({[`zoom_${section}`]: [a, b]});
+        const [[x0, y0], [x1, y1]] = event.selection, change = {};
+        if (x1 - x0 >= MIN) change[`zoom_${section}`] = [x.invert(x0), x.invert(x1)];
+        if (y1 - y0 >= MIN) change[`yzoom_${section}`] = {...yzooms, [ykey]: [y.invert(y1), y.invert(y0)]};
+        if (Object.keys(change).length) dash.setParams(change);
+        else brushG.call(brush.move, null);
       });
     const brushG = svg.append('g').call(brush);
     brushG.select('.selection').attr('fill', 'var(--cds-chart-reference)').attr('fill-opacity', 0.18).attr('stroke', 'none');
-    svg.on('dblclick', () => dash.setParams({[`zoom_${section}`]: null}));
+    svg.on('dblclick', () => dash.setParams(RRd.unzoom(section)));
     brushG
       .on('pointermove.tip', (event) => {
         const [mx] = d3.pointer(event, svg.node());

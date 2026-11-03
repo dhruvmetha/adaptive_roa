@@ -14,7 +14,11 @@ names=("$@")
 # Rows renamed <name>~... (moved off Amarel, superseded) are history, not cells to sync.
 [ ${#names[@]} -gt 0 ] || mapfile -t names < <(awk -F'\t' '$2=="amarel" && $1 !~ /~/ {print $1}' "$HERE/launched.tsv" | sort -u)
 present=$(ssh -n -o BatchMode=yes $AM "cd $AEXP 2>/dev/null && ls -d */*" || true)   # cells started on Amarel
-active=$(ssh -n -o BatchMode=yes $AM "squeue -u st1122 -h -o %j" || true)              # cells with a live job
+# Cells with a live job; the snapshot (name, state) also tells status.py which are PENDING.
+queue=$(ssh -n -o BatchMode=yes $AM "squeue -u st1122 -h -o '%j %T'") \
+  && printf '%s\n' "$queue" > "$HERE/amarel_queue.txt.tmp" && mv "$HERE/amarel_queue.txt.tmp" "$HERE/amarel_queue.txt" \
+  || queue=""
+active=$(awk '{print $1}' <<< "$queue")
 for NAME in "${names[@]}"; do
   last=$(awk -F'\t' -v n="$NAME" '$1==n{w=$2} END{print w}' "$HERE/launched.tsv")
   [ "$last" = amarel ] || { echo "skip $NAME: last launch is not on Amarel ($last)"; continue; }

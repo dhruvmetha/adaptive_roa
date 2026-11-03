@@ -7,7 +7,9 @@ whose logs (stdout and, for iLab, the sibling .err) and in-progress epoch dir
 (trainer metrics, checkpoints) have been silent for longer than 1.5x its last
 epoch, and at least STALE_MIN minutes, shows as "stalled?":
 check its process before trusting "running". Some trainers print nothing for a
-whole epoch, and epochs lengthen as the train set grows. Usage: status.py [--check]
+whole epoch, and epochs lengthen as the train set grows. An Amarel cell whose job is
+PENDING in sync_amarel.sh's last squeue snapshot (a resume waiting for a slot) shows
+as "queued" instead, since its silence is expected. Usage: status.py [--check]
 """
 from __future__ import annotations
 
@@ -20,6 +22,15 @@ from pathlib import Path
 
 HERE = Path("/common/home/st1122/Projects/adaptive_roa/slurm_logs/det_rerun")
 STALE_MIN = 90      # an FM eval writes its tqdm line every few seconds; training logs per epoch
+QUEUE_MAX_AGE = 30 * 60   # an older squeue snapshot says nothing about the queue now
+
+
+def amarel_pending(path: Path, now: float | None = None) -> set[str]:
+    """Job names PENDING in sync_amarel.sh's squeue snapshot ("<name> <state>" lines), if fresh."""
+    if not path.exists() or (now or time.time()) - path.stat().st_mtime > QUEUE_MAX_AGE:
+        return set()
+    return {f[0] for f in (line.split() for line in path.read_text().splitlines())
+            if len(f) >= 2 and f[1] == "PENDING"}
 
 
 def main():
@@ -32,6 +43,7 @@ def main():
         for line in open(HERE / "launched.tsv"):
             f = line.rstrip("\n").split("\t")
             launched[f[0]] = f
+    pending = amarel_pending(HERE / "amarel_queue.txt")
     counts = {}
     for r in rows:
         out = Path(re.search(r"output_dir=(\S+)", r["overrides"]).group(1))
@@ -47,7 +59,11 @@ def main():
             log = Path(launched[r["name"]][5]) if r["name"] in launched else None
             logs = [q for q in (log, log and log.with_suffix(".err")) if q and q.exists()]
             logs += [q for q in (out / f"epoch_{len(arts):03d}").rglob("*") if q.is_file()]
-            if state == "running" and logs:
+            world = launched.get(r["name"], ["", ""])[1]
+            if state == "running" and world == "amarel" and r["name"] in pending:
+                state = "queued"
+                detail += " | resume queued on Amarel"
+            elif state == "running" and logs:
                 silent = time.time() - max(q.stat().st_mtime for q in logs)
                 last_epoch = (arts[-1].stat().st_mtime - arts[-2].stat().st_mtime) if len(arts) > 1 else 0.0
                 if silent > max(60 * STALE_MIN, 1.5 * last_epoch):

@@ -23,10 +23,16 @@
   .rr-card { display: flex; flex-direction: column; gap: var(--cds-gap-sm); min-width: 0; padding: var(--cds-pad-lg); background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); }
   .rr-legend { display: flex; flex-wrap: wrap; gap: var(--cds-gap-xs) var(--cds-gap-md); min-height: 1.4em; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
   .rr-key { display: inline-flex; align-items: center; gap: var(--cds-gap-xs); }
-  .rr-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: var(--cds-gap-md); }
+  .rr { --rr-panel-min: 15rem; --rr-plot-h: 180px; }
+  .rr.rr-size-large { --rr-panel-min: 24rem; --rr-plot-h: 280px; }
+  .rr.rr-size-wide { --rr-panel-min: 100%; --rr-plot-h: 340px; }
+  .rr-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--rr-panel-min)), 1fr)); gap: var(--cds-gap-md); }
+  .rr-zoombar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cds-gap-sm); color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+  .rr-unzoom { padding: var(--cds-pad-xs) var(--cds-pad-sm); color: var(--color-fg); background: var(--color-bg); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); font: inherit; font-size: var(--cds-font-size-caption); cursor: pointer; }
+  .rr-unzoom:focus-visible { outline: 2px solid var(--cds-chart-axis); outline-offset: 1px; }
   .rr-panel { display: flex; flex-direction: column; gap: var(--cds-gap-xs); min-width: 0; }
   .rr-panel h4 { margin: 0; font-size: var(--cds-font-size-caption); font-weight: var(--cds-font-weight-medium); }
-  .rr-plot { position: relative; min-height: 180px; }
+  .rr-plot { position: relative; min-height: var(--rr-plot-h); }
   .rr-plot svg { display: block; }
   .rr-tip { position: absolute; top: 0; z-index: 2; max-width: 17rem; padding: var(--cds-pad-xs) var(--cds-pad-sm); background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; pointer-events: none; }
   .rr-tip-head { color: var(--cds-text-secondary); }
@@ -55,6 +61,11 @@
     <label class="rr-field">System<select id="rr-system" data-draw="system" data-source="nominal_epochs"></select></label>
     <label class="rr-field">Controller<select id="rr-controller" data-draw="controller" data-source="nominal_epochs"></select></label>
     <label class="rr-field">Total budget (trajectories)<select id="rr-budget" data-draw="budget" data-source="nominal_epochs"></select></label>
+    <label class="rr-field">Plot size<select id="rr-size" class="rr-size">
+      <option value="compact">Compact</option>
+      <option value="large">Large</option>
+      <option value="wide">Full width</option>
+    </select></label>
     <fieldset class="rr-group">
       <legend>Models</legend>
       <div class="rr-chips">
@@ -91,6 +102,7 @@
     <div class="rr-card" id="nominal-curves">
       <h3 class="rr-h3">Metrics against training trajectories</h3>
       <p class="rr-note">One line per model and regime: color is the model, dash pattern the regime, and a hollow end point a cell still running. The x axis is thousands of training trajectories. Invalid % and outcome-uncertain % share one scale. "FM uniform, always" keeps FM's uniform line in view whatever the model and acquisition chips say. KL is the log score against the true outcome; FPR and FNR are over committed states.</p>
+      <div class="rr-zoombar"><button type="button" class="rr-unzoom" id="nominal-unzoom" data-zoom="nominal" hidden>Reset zoom</button><span>Drag across any chart to zoom all seven into that range of trajectories; double-click to zoom back out.</span></div>
       <div class="rr-legend" id="nominal-legend" data-draw="legend" data-ds="nominal_epochs" data-source="nominal_epochs"></div>
       <div class="rr-panels">
         <div class="rr-panel" id="nominal-kl"><h4>KL (nats, log scale)</h4><div class="rr-plot" data-draw="panel" data-ds="nominal_epochs" data-metric="kl" data-source="nominal_epochs"></div></div>
@@ -134,6 +146,7 @@
     <div class="rr-card" id="fprcap-curves" data-hide-empty="fprcap">
       <h3 class="rr-h3">Metrics against training trajectories</h3>
       <p class="rr-note">Same encoding as above: color is the model, dash pattern the regime, a hollow end point a running cell; x in thousands of training trajectories.</p>
+      <div class="rr-zoombar"><button type="button" class="rr-unzoom" id="fprcap-unzoom" data-zoom="fprcap" hidden>Reset zoom</button><span>Drag across any chart to zoom all seven into that range of trajectories; double-click to zoom back out.</span></div>
       <div class="rr-legend" id="fprcap-legend" data-draw="legend" data-ds="fprcap_epochs" data-source="fprcap_epochs"></div>
       <div class="rr-panels">
         <div class="rr-panel" id="fprcap-kl"><h4>KL (nats, log scale)</h4><div class="rr-plot" data-draw="panel" data-ds="fprcap_epochs" data-metric="kl" data-source="fprcap_epochs"></div></div>
@@ -198,8 +211,14 @@
       models: Array.isArray(p.models) ? p.models : RR.DEFAULTS.models,
       regimes: Array.isArray(p.regimes) ? p.regimes : RR.DEFAULTS.regimes,
       fm_uniform: p.fm_uniform === true || p.fm_uniform === 'true',
+      size: ['compact', 'large', 'wide'].includes(p.plot_size) ? p.plot_size : 'compact',
+      zoom: {nominal: RR.range(p.zoom_nominal), fprcap: RR.range(p.zoom_fprcap)},
     };
   };
+  // A zoom is [from, to] in thousands of trajectories, or nothing.
+  RR.range = (z) => (Array.isArray(z) && z.length === 2 && Number(z[1]) > Number(z[0]) ? [Number(z[0]), Number(z[1])] : null);
+  RR.HEIGHT = {compact: 180, large: 280, wide: 340};
+  RR.section = (ds) => (ds === 'fprcap_epochs' ? 'fprcap' : 'nominal');
   // A row is shown when its model and regime are both picked, or when it is FM uniform
   // and the "FM uniform, always" reference is on.
   RR.keep = (r, p) => (p.models.includes(r.model) && p.regimes.includes(r.regime))
@@ -232,7 +251,7 @@
     if (!opts.some((x) => x.controller === p.controller) && opts.length) p.controller = opts[0].controller;
     opts = opts.filter((x) => x.controller === p.controller);
     if (!opts.some((x) => x.budget === p.budget) && opts.length) p.budget = d3.max(opts, (x) => x.budget);
-    dash.setParams({system: p.system, controller: p.controller, budget: p.budget});
+    dash.setParams({system: p.system, controller: p.controller, budget: p.budget, zoom_nominal: null, zoom_fprcap: null});
   };
   RR.sort = {};
 
@@ -274,6 +293,8 @@
     }
   }
   for (const box of boxes('.rr-flag')) box.addEventListener('change', () => dash.setParams({[box.value]: box.checked}));
+  for (const sel of document.querySelectorAll('.rr-size')) sel.addEventListener('change', () => dash.setParams({plot_size: sel.value}));
+  for (const btn of document.querySelectorAll('.rr-unzoom')) btn.addEventListener('click', () => dash.setParams({[`zoom_${btn.dataset.zoom}`]: null}));
   for (const btn of document.querySelectorAll('.rr-reset')) btn.addEventListener('click', () => dash.resetParams());
   for (const btn of document.querySelectorAll('.rr-table th button[data-sort]')) {
     btn.addEventListener('click', () => {
@@ -291,6 +312,12 @@
     for (const b of boxes('.rr-model')) b.checked = p.models.includes(b.value);
     for (const b of boxes('.rr-regime')) b.checked = p.regimes.includes(b.value);
     for (const b of boxes('.rr-flag')) b.checked = Boolean(p[b.value]);
+    for (const sel of document.querySelectorAll('.rr-size')) sel.value = p.size;
+    for (const root of document.querySelectorAll('.rr')) {
+      root.classList.toggle('rr-size-large', p.size === 'large');
+      root.classList.toggle('rr-size-wide', p.size === 'wide');
+    }
+    for (const btn of document.querySelectorAll('.rr-unzoom')) btn.hidden = !p.zoom[btn.dataset.zoom];
     // The FPR-capped section shows its cards only for a setting with banked epochs.
     const rows = RRb.rows('fprcap_epochs');
     const g = dash.data('fprcap_epochs');
@@ -355,6 +382,7 @@
   dash.draw('panel', (el) => {
     el.replaceChildren();
     const metric = el.dataset.metric, spec = RRd.METRICS[metric];
+    const section = RRd.section(el.dataset.ds), zoom = RRd.params().zoom[section];
     const rows = RRd.rows(el.dataset.ds), cur = RRd.current();
     if (!rows || !rows.length || !cur) return;
     const ok = (v) => v !== null && Number.isFinite(v) && (!spec.log || v > 0);
@@ -364,8 +392,10 @@
     })).filter((s) => s.pts.length);
     if (!series.length) return;
     const keys = spec.shared ? ['invalid_pct', 'uncertain_pct'] : [metric];
-    const ys = rows.flatMap((r) => keys.map((k) => RRd.num(r[k]))).filter(ok);
-    const width = Math.max(220, Math.round(el.clientWidth || 300)), height = 180;
+    const inView = (r) => !zoom || (RRd.num(r.train) / 1000 >= zoom[0] && RRd.num(r.train) / 1000 <= zoom[1]);
+    let ys = rows.filter(inView).flatMap((r) => keys.map((k) => RRd.num(r[k]))).filter(ok);
+    if (!ys.length) ys = rows.flatMap((r) => keys.map((k) => RRd.num(r[k]))).filter(ok);
+    const width = Math.max(220, Math.round(el.clientWidth || 300)), height = RRd.HEIGHT[RRd.params().size];
     const top = 8, right = 12, bottom = 22;
     let y;
     if (spec.log) {
@@ -386,7 +416,7 @@
     probe.remove();
     const left = Math.ceil(widest) + 10;
     const xs = series.flatMap((s) => s.pts.map((d) => d.x));
-    const x = d3.scaleLinear([d3.min(xs), Math.max(d3.max(xs), cur.budget / 1000)], [left, width - right]);
+    const x = d3.scaleLinear(zoom || [d3.min(xs), Math.max(d3.max(xs), cur.budget / 1000)], [left, width - right]);
     const xticks = x.ticks(Math.max(2, Math.floor((width - left) / 70)));
 
     svg.append('g').selectAll('line').data(ticks).join('line')
@@ -402,7 +432,11 @@
       .attr('font-size', 11).attr('fill', 'var(--color-fg-muted)').text((t) => d3.format('~g')(t));
 
     const line = d3.line().x((d) => x(d.x)).y((d) => y(d.y));
-    const lines = svg.append('g').attr('fill', 'none');
+    RRd.clips = (RRd.clips || 0) + 1;
+    const clipId = `rr-clip-${RRd.clips}`;
+    svg.append('defs').append('clipPath').attr('id', clipId).append('rect')
+      .attr('x', left).attr('y', top - 4).attr('width', width - left - right + 4).attr('height', height - top - bottom + 8);
+    const lines = svg.append('g').attr('fill', 'none').attr('clip-path', `url(#${clipId})`);
     for (const s of series) {
       const c = RRd.color(s.model), dashes = RRd.DASHES[s.regime];
       lines.append('path').attr('d', line(s.pts)).attr('stroke', c).attr('stroke-width', s.model === 'FM' ? 2.4 : 2)
@@ -414,7 +448,9 @@
     }
 
     // Hover: a rule at the nearest banked budget and every series' value there.
-    const allx = [...new Set(xs)].sort((a, b) => a - b);
+    const dom = x.domain();
+    let allx = [...new Set(xs)].filter((v) => v >= dom[0] && v <= dom[1]).sort((a, b) => a - b);
+    if (!allx.length) allx = [...new Set(xs)].sort((a, b) => a - b);
     const rule = svg.append('line').attr('y1', top).attr('y2', height - bottom)
       .attr('stroke', 'var(--cds-chart-reference)').attr('stroke-width', 1).attr('visibility', 'hidden');
     const dots = svg.append('g');
@@ -422,9 +458,18 @@
     tip.className = 'rr-tip';
     tip.hidden = true;
     el.append(tip);
-    svg.append('rect').attr('x', left).attr('y', top).attr('width', width - left - right).attr('height', height - top - bottom)
-      .attr('fill', 'transparent')
-      .on('pointermove', (event) => {
+    // Drag to zoom every chart of this section into a range of trajectories.
+    const brush = d3.brushX().extent([[left, top], [width - right, height - bottom]])
+      .on('end', (event) => {
+        if (!event.selection) return;
+        const [a, b] = event.selection.map((v) => x.invert(v));
+        if (b - a > 1e-9) dash.setParams({[`zoom_${section}`]: [a, b]});
+      });
+    const brushG = svg.append('g').call(brush);
+    brushG.select('.selection').attr('fill', 'var(--cds-chart-reference)').attr('fill-opacity', 0.18).attr('stroke', 'none');
+    svg.on('dblclick', () => dash.setParams({[`zoom_${section}`]: null}));
+    brushG
+      .on('pointermove.tip', (event) => {
         const [mx] = d3.pointer(event, svg.node());
         const x0 = x.invert(mx);
         const near = allx[d3.minIndex(allx, (v) => Math.abs(v - x0))];
@@ -456,7 +501,7 @@
         const w = tip.offsetWidth;
         tip.style.left = `${Math.max(0, Math.min(el.clientWidth - w, px + 12 + w > el.clientWidth ? px - 12 - w : px + 12))}px`;
       })
-      .on('pointerleave', () => {
+      .on('pointerleave.tip', () => {
         rule.attr('visibility', 'hidden');
         dots.selectAll('circle').remove();
         tip.hidden = true;

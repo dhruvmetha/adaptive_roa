@@ -76,6 +76,12 @@
         <label class="rr-chip"><input type="checkbox" class="rr-regime" id="rr-r-builtin" value="Part-X built-in">Part-X built-in</label>
       </div>
     </fieldset>
+    <fieldset class="rr-group">
+      <legend>Reference</legend>
+      <div class="rr-chips">
+        <label class="rr-chip"><input type="checkbox" class="rr-flag" id="rr-fm-uniform" value="fm_uniform">FM uniform, always</label>
+      </div>
+    </fieldset>
     <button type="button" class="rr-reset" id="rr-reset">Reset filters</button>
   </div>
 
@@ -84,7 +90,7 @@
     <p class="rr-note">Every cell's own scoring: each epoch fits λ* and δ* on the threshold-fit pairs, and that λ/δ rule labels each test state success, failure, outcome-uncertain or invalid.</p>
     <div class="rr-card" id="nominal-curves">
       <h3 class="rr-h3">Metrics against training trajectories</h3>
-      <p class="rr-note">One line per model and regime: color is the model, dash pattern the regime, and a hollow end point a cell still running. The x axis is thousands of training trajectories. Invalid % and outcome-uncertain % share one scale. KL is the log score against the true outcome; FPR and FNR are over committed states.</p>
+      <p class="rr-note">One line per model and regime: color is the model, dash pattern the regime, and a hollow end point a cell still running. The x axis is thousands of training trajectories. Invalid % and outcome-uncertain % share one scale. "FM uniform, always" keeps FM's uniform line in view whatever the model and acquisition chips say. KL is the log score against the true outcome; FPR and FNR are over committed states.</p>
       <div class="rr-legend" id="nominal-legend" data-draw="legend" data-ds="nominal_epochs" data-source="nominal_epochs"></div>
       <div class="rr-panels">
         <div class="rr-panel" id="nominal-kl"><h4>KL (nats, log scale)</h4><div class="rr-plot" data-draw="panel" data-ds="nominal_epochs" data-metric="kl" data-source="nominal_epochs"></div></div>
@@ -191,8 +197,13 @@
       budget: RR.num(p.budget ?? RR.DEFAULTS.budget),
       models: Array.isArray(p.models) ? p.models : RR.DEFAULTS.models,
       regimes: Array.isArray(p.regimes) ? p.regimes : RR.DEFAULTS.regimes,
+      fm_uniform: p.fm_uniform === true || p.fm_uniform === 'true',
     };
   };
+  // A row is shown when its model and regime are both picked, or when it is FM uniform
+  // and the "FM uniform, always" reference is on.
+  RR.keep = (r, p) => (p.models.includes(r.model) && p.regimes.includes(r.regime))
+    || (p.fm_uniform && r.model === 'FM' && r.regime === 'uniform');
   // The (system, controller, budget) settings in the nominal rows, one per setting key.
   RR.settings = () => {
     const g = dash.data('nominal_epochs');
@@ -210,7 +221,7 @@
   RR.rows = (id) => {
     const g = dash.data(id), cur = RR.current(), p = RR.params();
     if (g.status !== 'ok' || !cur) return null;
-    return g.data.filter((r) => r.setting === cur.setting && p.models.includes(r.model) && p.regimes.includes(r.regime));
+    return g.data.filter((r) => r.setting === cur.setting && RR.keep(r, p));
   };
   RR.color = (model) => dash.colors[RR.MODELS.indexOf(model) % dash.colors.length];
   // A system or controller change keeps the others valid: an unavailable controller falls
@@ -262,6 +273,7 @@
       box.addEventListener('change', () => dash.setParams({[key]: boxes(sel).filter((b) => b.checked).map((b) => b.value)}));
     }
   }
+  for (const box of boxes('.rr-flag')) box.addEventListener('change', () => dash.setParams({[box.value]: box.checked}));
   for (const btn of document.querySelectorAll('.rr-reset')) btn.addEventListener('click', () => dash.resetParams());
   for (const btn of document.querySelectorAll('.rr-table th button[data-sort]')) {
     btn.addEventListener('click', () => {
@@ -278,6 +290,7 @@
     const p = RRb.params();
     for (const b of boxes('.rr-model')) b.checked = p.models.includes(b.value);
     for (const b of boxes('.rr-regime')) b.checked = p.regimes.includes(b.value);
+    for (const b of boxes('.rr-flag')) b.checked = Boolean(p[b.value]);
     // The FPR-capped section shows its cards only for a setting with banked epochs.
     const rows = RRb.rows('fprcap_epochs');
     const g = dash.data('fprcap_epochs');
@@ -456,7 +469,7 @@
     const g = dash.data(tbody.dataset.ds), cur = RRd.current(), p = RRd.params();
     if (g.status !== 'ok' || !cur) return;
     const fields = [...table.querySelectorAll('thead th[data-field]')].map((th) => th.dataset.field);
-    const rows = g.data.filter((r) => r.setting === cur.setting && p.models.includes(r.model) && p.regimes.includes(r.regime));
+    const rows = g.data.filter((r) => r.setting === cur.setting && RRd.keep(r, p));
     const st = RRd.sort[table.dataset.table];
     const order = (r) => RRd.MODELS.indexOf(r.model) * 10 + RRd.REGIMES.indexOf(r.regime);
     rows.sort((a, b) => {

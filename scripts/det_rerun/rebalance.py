@@ -31,6 +31,7 @@ import csv
 import os
 import re
 import subprocess
+import time
 from pathlib import Path
 
 HERE = Path("/common/home/st1122/Projects/adaptive_roa/slurm_logs/det_rerun")
@@ -174,18 +175,27 @@ def ilab_exclude(home: str | None) -> str:
     return ",".join(sorted(bad))
 
 
-def ilab_starts_now(gres: str, mem_gb: int, home: str | None, now=None) -> bool:
-    """Ask SLURM whether a job of this shape would start on our node right away. The
-    scan can list a card SLURM will not give out (core binding, a held job); then a
-    placement only queues behind the one-node limit."""
-    import datetime as dt
-    txt = sh("ssh -n -o BatchMode=yes ilab1.cs.rutgers.edu 'cd /tmp && sbatch --test-only "
-             f"--gres=gpu:{gres}:1 --mem={mem_gb}G -t 1:00:00 --exclude={ilab_exclude(home)} --wrap=hostname 2>&1'")
-    m = re.search(r"to start at (\S+) .*on nodes (\S+)", txt)
-    if not m:
+def ilab_starts_now(gres: str, mem_gb: int, home: str | None, wait_s: float = 45, poll_s: float = 5) -> bool:
+    """Whether a job of this shape starts on our node right away, from a 2-minute probe
+    job. The scan can list a card SLURM will not give out (core binding, a held job); a
+    placement then only queues behind the one-node limit. sbatch --test-only is no
+    substitute: on 2026-11-04 it put every shape on rlab4 five days out, even a CPU-only
+    10-minute job, while a real probe started in 2 s and five a4000s sat free all night.
+    A probe still PENDING after wait_s is cancelled."""
+    il = "ssh -n -o BatchMode=yes ilab1.cs.rutgers.edu"
+    jid = sh(f"{il} 'cd /tmp && sbatch --parsable -J det_probe --gres=gpu:{gres}:1 --mem={mem_gb}G -t 0:02:00 "
+             f"--exclude={ilab_exclude(home)} --output=/dev/null --wrap=true </dev/null'").strip()
+    if not jid.isdigit():
         return False
-    start = dt.datetime.fromisoformat(m.group(1))
-    return (home is None or m.group(2) == home) and start <= (now or dt.datetime.now()) + dt.timedelta(minutes=2)
+    deadline = time.time() + wait_s
+    while True:
+        state, _, node = sh(f"{il} 'sacct -j {jid} -X -n -P -o State,NodeList'").strip().partition("|")
+        if state and not state.startswith("PENDING"):
+            return state.split()[0] in ("RUNNING", "COMPLETED", "COMPLETING") and (home is None or node.strip() == home)
+        if time.time() >= deadline:
+            sh(f"{il} 'scancel {jid}'")
+            return False
+        time.sleep(poll_s)
 
 
 def ilab_home_node() -> str | None:

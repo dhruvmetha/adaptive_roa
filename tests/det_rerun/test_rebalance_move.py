@@ -112,9 +112,10 @@ def test_free_ilab_cards_discount_our_own_pending_jobs(monkeypatch):
             return "rlab4\n"
         if "-t PD -o %m" in cmd:
             return "12G\n"
-        if "--test-only" in cmd:
-            import datetime as dt
-            return f"Job 1 to start at {dt.datetime.now().isoformat(timespec='seconds')} a using 2 processors on nodes rlab4"
+        if "-J det_probe" in cmd:
+            return "123\n"
+        if "sacct -j 123" in cmd:
+            return "COMPLETED|rlab4\n"
         return ""
     monkeypatch.setattr(rebalance, "sh", sh)
     monkeypatch.setattr(rebalance, "shared_free", lambda busy=(): [])
@@ -152,17 +153,28 @@ def test_a_card_a_starting_cell_holds_is_not_free(tmp_path, monkeypatch):
     assert ("direct", "arrakis", "3") in cards       # a history row does not hold a card
 
 
-def test_ilab_card_used_only_when_slurm_would_start_it_now(monkeypatch):
-    # rlab4 2026-10-31 08:2x: scan listed 1 card and 14G free, but a 4G test job was
-    # predicted to start on rlab3 on Nov 4.
-    import datetime as dt
-    now = dt.datetime(2026, 10, 31, 8, 25)
-    for txt, ok in [("Job 9 to start at 2026-11-04T11:32:49 a using 2 processors on nodes rlab3 in partition unlimited", False),
-                    ("Job 9 to start at 2026-10-31T08:25:30 a using 2 processors on nodes rlab4 in partition unlimited", True),
-                    ("Job 9 to start at 2026-10-31T08:25:30 a using 2 processors on nodes rlab3 in partition unlimited", False),
-                    ("allocation failure", False)]:
-        monkeypatch.setattr(rebalance, "sh", lambda cmd, timeout=300, t=txt: t)
-        assert rebalance.ilab_starts_now("a4000", 12, "rlab4", now=now) is ok, txt
+def test_ilab_card_used_only_when_a_probe_job_starts_on_home(monkeypatch):
+    # rlab4 2026-11-04 09:3x: five a4000s free, but sbatch --test-only put every shape
+    # (even a CPU-only 10-minute job) five days out, so no card was used for a night.
+    # A real 2-minute probe started in 2 s. A probe still PENDING is cancelled.
+    monkeypatch.setattr(rebalance, "ilab_exclude", lambda home: "rlab3")
+    for state, ok in [("RUNNING|rlab4", True), ("COMPLETED|rlab4", True), ("COMPLETING|rlab4", True),
+                      ("RUNNING|rlab3", False), ("PENDING|None assigned", False), ("FAILED|rlab4", False)]:
+        calls = []
+
+        def sh(cmd, timeout=300, s=state):
+            calls.append(cmd)
+            if "-J det_probe" in cmd:
+                return "77\n"
+            if "sacct -j 77" in cmd:
+                return s + "\n"
+            return ""
+        monkeypatch.setattr(rebalance, "sh", sh)
+        assert rebalance.ilab_starts_now("a4000", 12, "rlab4", wait_s=0, poll_s=0) is ok, state
+        assert not any("--test-only" in c for c in calls)
+        assert any("scancel 77" in c for c in calls) is state.startswith("PENDING"), state
+    monkeypatch.setattr(rebalance, "sh", lambda cmd, timeout=300: "sbatch: error: Batch job submission failed\n")
+    assert rebalance.ilab_starts_now("a4000", 12, "rlab4", wait_s=0, poll_s=0) is False
 
 
 def test_cells_pending_on_ilab_go_only_to_direct_cards():
@@ -196,14 +208,18 @@ def test_ilab_jobs_exclude_every_node_but_home(monkeypatch):
         calls.append(cmd)
         if "sinfo" in cmd:
             return "ilab1\nilab2\nilab3\nrlab3\nrlab4\nrlab4\n"
-        return "Job 9 to start at 2026-11-02T14:15:00 a using 1 processors on nodes rlab4 in partition unlimited"
+        if "-J det_probe" in cmd:
+            return "9\n"
+        if "sacct -j 9" in cmd:
+            return "RUNNING|rlab4\n"
+        return ""
 
     monkeypatch.setattr(rebalance, "sh", sh)
     assert rebalance.ilab_exclude("rlab4") == "ilab1,ilab2,ilab3,ilab4,rlab3"
     assert rebalance.ilab_exclude(None) == "ilab3,ilab4"
-    import datetime as dt
-    assert rebalance.ilab_starts_now("a4000", 32, "rlab4", now=dt.datetime(2026, 11, 2, 14, 14))
-    assert any("--test-only" in c and "--exclude=ilab1,ilab2,ilab3,ilab4,rlab3" in c for c in calls)
+    assert rebalance.ilab_starts_now("a4000", 32, "rlab4", wait_s=0, poll_s=0)
+    assert any("-J det_probe" in c and "--mem=32G" in c and "--exclude=ilab1,ilab2,ilab3,ilab4,rlab3" in c
+               for c in calls)
 
 
 def test_a_move_to_ilab_passes_the_home_node_exclude(fake):

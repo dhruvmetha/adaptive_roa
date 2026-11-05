@@ -120,6 +120,7 @@ def test_free_ilab_cards_discount_our_own_pending_jobs(monkeypatch):
     monkeypatch.setattr(rebalance, "sh", sh)
     monkeypatch.setattr(rebalance, "shared_free", lambda busy=(): [])
     monkeypatch.setattr(rebalance, "occupied_direct", lambda: set())
+    monkeypatch.setattr(rebalance, "held_hosts", lambda: set())
     cards, mem = rebalance.free_cards(8)
     assert cards == [("direct", "westeros", "4"), ("ilab", "a4000", "")] and mem == 18
 
@@ -175,6 +176,22 @@ def test_ilab_card_used_only_when_a_probe_job_starts_on_home(monkeypatch):
         assert any("scancel 77" in c for c in calls) is state.startswith("PENDING"), state
     monkeypatch.setattr(rebalance, "sh", lambda cmd, timeout=300: "sbatch: error: Batch job submission failed\n")
     assert rebalance.ilab_starts_now("a4000", 12, "rlab4", wait_s=0, poll_s=0) is False
+
+
+def test_held_hosts_get_no_cells(tmp_path, monkeypatch):
+    # westeros 2026-11-04: CPU-bound under another user's load, det cells ran at under half
+    # their Amarel speed and the user moved them back; a freed westeros card must not pull
+    # the same cells straight back.
+    (tmp_path / "launched.tsv").write_text("")
+    (tmp_path / "hold_hosts.txt").write_text("westeros  # CPU-starved\n")
+    scan = "VIABLE\n  westeros      gpu2 (11GB idle)\n  arrakis       gpu1 (48GB idle)\nREJECTED\n"
+    monkeypatch.setattr(rebalance, "HERE", tmp_path)
+    monkeypatch.setattr(rebalance, "sh", lambda cmd, timeout=300: scan if "gpu-free" in cmd else "")
+    monkeypatch.setattr(rebalance, "ilab_home_node", lambda: None)
+    cards, _ = rebalance.free_cards(8)
+    assert ("direct", "westeros", "2") not in cards and ("direct", "arrakis", "1") in cards
+    (tmp_path / "hold_hosts.txt").unlink()
+    assert ("direct", "westeros", "2") in rebalance.free_cards(8)[0]
 
 
 def test_cells_pending_on_ilab_go_only_to_direct_cards():

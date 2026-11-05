@@ -231,6 +231,14 @@ def occupied_direct() -> set[tuple[str, str]]:
     return busy
 
 
+def held_hosts() -> set[str]:
+    """Direct hosts no cell is moved onto, one per line in hold_hosts.txt. westeros
+    2026-11-04: CPU-bound under another user's load, det cells ran at under half their
+    Amarel speed and the user moved them back to Amarel."""
+    f = HERE / "hold_hosts.txt"
+    return {l.split("#")[0].strip() for l in f.read_text().splitlines()} - {""} if f.exists() else set()
+
+
 def shared_free(busy: set[tuple[str, str]] = frozenset()) -> list[tuple[str, str, str]]:
     return [("direct", host, gpu) for host, gpu in SHARED_CARDS if (host, gpu) not in busy]
 
@@ -257,9 +265,10 @@ def free_cards(mem_gb: int) -> tuple[list[tuple[str, str, str]], int]:
         elif host in ("westeros", "arrakis", "perception"):
             for g in re.findall(r"gpu(\d+) \(", line):
                 cards.append(("direct", "1spring-303-desktop-10" if host == "perception" else host, g))
-    busy = occupied_direct()
+    busy, held = occupied_direct(), held_hosts()
     cards = [c for c in cards if (c[1], c[2]) not in busy]
     cards += [c for c in shared_free(busy) if c not in cards]
+    cards = [c for c in cards if c[1] not in held]
     # The association allows one iLab node at a time: the home node, else the roomiest.
     if not ilab:
         return cards, 0

@@ -16,6 +16,9 @@
   .rr-chip:focus-within { outline: 2px solid var(--cds-chart-axis); outline-offset: 1px; }
   .rr-reset { padding: var(--cds-pad-xs) var(--cds-pad-sm); color: var(--color-fg); background: transparent; border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); font: inherit; font-size: var(--cds-font-size-caption); cursor: pointer; }
   .rr-reset:focus-visible { outline: 2px solid var(--cds-chart-axis); outline-offset: 1px; }
+  .rr-preset { padding: var(--cds-pad-xs) var(--cds-pad-sm); color: var(--color-fg); background: var(--color-bg); border: 1px solid var(--color-border-line); border-radius: 999px; font: inherit; font-size: var(--cds-font-size-caption); cursor: pointer; }
+  .rr-preset[aria-pressed="true"] { border-color: var(--color-fg); font-weight: var(--cds-font-weight-medium); }
+  .rr-preset:focus-visible { outline: 2px solid var(--cds-chart-axis); outline-offset: 1px; }
   .rr-section { display: flex; flex-direction: column; gap: var(--cds-gap-md); }
   .rr-h2 { margin: 0; font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); }
   .rr-h3 { margin: 0; font-size: var(--cds-font-size-body); font-weight: var(--cds-font-weight-medium); }
@@ -100,6 +103,13 @@
         <label class="rr-chip"><input type="checkbox" class="rr-flag" id="rr-fm-uniform" value="fm_uniform">FM uniform, always</label>
       </div>
     </fieldset>
+    <fieldset class="rr-group">
+      <legend>Presets</legend>
+      <div class="rr-chips">
+        <button type="button" class="rr-preset" id="rr-preset-fm" data-preset="fm" aria-pressed="false">All FM methods</button>
+        <button type="button" class="rr-preset" id="rr-preset-ranked" data-preset="ranked" aria-pressed="false">Every model ranked, plus FM uniform</button>
+      </div>
+    </fieldset>
     <button type="button" class="rr-reset" id="rr-reset">Reset filters</button>
   </div>
 
@@ -108,7 +118,7 @@
     <p class="rr-note">Every cell's own scoring: each epoch fits λ* and δ* on the threshold-fit pairs, and that λ/δ rule labels each test state success, failure, outcome-uncertain or invalid.</p>
     <div class="rr-card" id="nominal-curves">
       <h3 class="rr-h3">Metrics against training trajectories</h3>
-      <p class="rr-note">One line per model and regime: color is the model, dash pattern the regime, and a hollow end point a cell still running. The x axis is thousands of training trajectories. Invalid % and outcome-uncertain % share one scale. "FM uniform, always" keeps FM's uniform line in view whatever the model and acquisition chips say. KL is the log score against the true outcome; FPR and FNR are over committed states.</p>
+      <p class="rr-note">One line per model and regime. With up to eight lines in view each line has its own color, the same in both sections; with more, color is the model. The dash pattern is always the regime, and a hollow end point a cell still running. The x axis is thousands of training trajectories. Invalid % and outcome-uncertain % share one scale. "FM uniform, always" keeps FM's uniform line in view whatever the model and acquisition chips say. KL is the log score against the true outcome; FPR and FNR are over committed states.</p>
       <div class="rr-zoombar"><button type="button" class="rr-unzoom" id="nominal-unzoom" data-zoom="nominal" hidden>Reset zoom</button><span>Drag sideways on a chart to zoom all seven into a range of trajectories, drag up or down to zoom that chart’s values, or drag a box to do both. Double-click to zoom back out.</span></div>
       <div class="rr-legend" id="nominal-legend" data-draw="legend" data-ds="nominal_epochs" data-source="nominal_epochs"></div>
       <div class="rr-panels">
@@ -153,7 +163,7 @@
     <p class="rr-note" id="fprcap-empty" data-empty="fprcap" hidden>No FPR-capped cell in this setting has banked an epoch yet.</p>
     <div class="rr-card" id="fprcap-curves" data-hide-empty="fprcap">
       <h3 class="rr-h3">Metrics against training trajectories</h3>
-      <p class="rr-note">Same encoding as above: color is the model, dash pattern the regime, a hollow end point a running cell; x in thousands of training trajectories.</p>
+      <p class="rr-note">Same encoding as above: a color per line with up to eight in view (else per model), dash pattern the regime, a hollow end point a running cell; x in thousands of training trajectories.</p>
       <div class="rr-zoombar"><button type="button" class="rr-unzoom" id="fprcap-unzoom" data-zoom="fprcap" hidden>Reset zoom</button><span>Drag sideways on a chart to zoom all seven into a range of trajectories, drag up or down to zoom that chart’s values, or drag a box to do both. Double-click to zoom back out.</span></div>
       <div class="rr-legend" id="fprcap-legend" data-draw="legend" data-ds="fprcap_epochs" data-source="fprcap_epochs"></div>
       <div class="rr-panels">
@@ -259,6 +269,24 @@
     return g.data.filter((r) => r.setting === cur.setting && RR.keep(r, p));
   };
   RR.color = (model) => dash.colors[RR.MODELS.indexOf(model) % dash.colors.length];
+  RR.key = (r) => `${r.model} · ${r.regime}`;
+  // The lines in view across both sections, in model then regime order. Up to eight get a
+  // color each, so a line keeps its color in both sections; past that, color is the model
+  // and the dash pattern alone tells regimes apart.
+  RR.palette = () => {
+    const seen = new Map();
+    for (const id of ['nominal_epochs', 'fprcap_epochs']) for (const r of RR.rows(id) || []) seen.set(RR.key(r), r);
+    const order = [...seen.values()].sort((a, b) => (RR.MODELS.indexOf(a.model) - RR.MODELS.indexOf(b.model))
+      || (RR.REGIMES.indexOf(a.regime) - RR.REGIMES.indexOf(b.regime)));
+    const each = order.length <= dash.colors.length;
+    return {each, color: new Map(order.map((r, i) => [RR.key(r), each ? dash.colors[i] : RR.color(r.model)]))};
+  };
+  // Presets set the model and acquisition chips and the FM-uniform reference together.
+  RR.PRESETS = {
+    fm: {models: ['FM'], regimes: ['ranked', 'direct', 'entropy', 'uniform'], fm_uniform: false},
+    ranked: {models: ['FM', 'MLP classifier', 'BNN classifier', 'MLP final-state', 'BNN final-state'], regimes: ['ranked'], fm_uniform: true},
+  };
+  RR.sameSet = (a, b) => a.length === b.length && a.every((v) => b.includes(v));
   // A system or controller change keeps the others valid: an unavailable controller falls
   // back to the system's first, an unavailable budget to the largest left.
   RR.pick = (change) => {
@@ -310,6 +338,12 @@
   for (const sel of document.querySelectorAll('.rr-size')) sel.addEventListener('change', () => dash.setParams({plot_size: sel.value}));
   for (const btn of document.querySelectorAll('.rr-unzoom')) btn.addEventListener('click', () => dash.setParams(RRb.unzoom(btn.dataset.zoom)));
   for (const btn of document.querySelectorAll('.rr-reset')) btn.addEventListener('click', () => dash.resetParams());
+  for (const btn of document.querySelectorAll('.rr-preset')) {
+    btn.addEventListener('click', () => {
+      const pre = RRb.PRESETS[btn.dataset.preset];
+      if (pre) dash.setParams({models: pre.models, regimes: pre.regimes, fm_uniform: pre.fm_uniform});
+    });
+  }
   // One listener per table: a click anywhere in a header cell sorts by that column, and a
   // second click on the same column reverses it.
   for (const table of document.querySelectorAll('.rr-table')) {
@@ -330,6 +364,11 @@
     for (const b of boxes('.rr-model')) b.checked = p.models.includes(b.value);
     for (const b of boxes('.rr-regime')) b.checked = p.regimes.includes(b.value);
     for (const b of boxes('.rr-flag')) b.checked = Boolean(p[b.value]);
+    for (const btn of document.querySelectorAll('.rr-preset')) {
+      const pre = RRb.PRESETS[btn.dataset.preset];
+      const on = Boolean(pre) && pre.fm_uniform === p.fm_uniform && RRb.sameSet(pre.models, p.models) && RRb.sameSet(pre.regimes, p.regimes);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
     for (const sel of document.querySelectorAll('.rr-size')) sel.value = p.size;
     for (const root of document.querySelectorAll('.rr')) {
       root.classList.toggle('rr-size-large', p.size === 'large');
@@ -402,6 +441,12 @@
       span.append(svg.node(), document.createTextNode(label));
       return span;
     };
+    const pal = RRd.palette();
+    if (pal.each) {
+      const here = new Set(rows.map(RRd.key));
+      for (const [k, c] of pal.color) if (here.has(k)) el.append(key(k, c, RRd.DASHES[rows.find((r) => RRd.key(r) === k).regime]));
+      return;
+    }
     for (const m of RRd.MODELS) if (rows.some((r) => r.model === m)) el.append(key(m, RRd.color(m), ''));
     for (const x of RRd.REGIMES) if (rows.some((r) => r.regime === x)) el.append(key(x, 'var(--color-fg-muted)', RRd.DASHES[x]));
   });
@@ -419,6 +464,7 @@
       pts: rs.map((r) => ({x: RRd.num(r.train) / 1000, y: RRd.num(r[metric])})).filter((d) => ok(d.y) && Number.isFinite(d.x)).sort((a, b) => a.x - b.x),
     })).filter((s) => s.pts.length);
     if (!series.length) return;
+    const pal = RRd.palette(), colorOf = (s) => pal.color.get(s.key) ?? RRd.color(s.model);
     const keys = spec.shared ? ['invalid_pct', 'uncertain_pct'] : [metric];
     const inView = (r) => !zoom || (RRd.num(r.train) / 1000 >= zoom[0] && RRd.num(r.train) / 1000 <= zoom[1]);
     let ys = rows.filter(inView).flatMap((r) => keys.map((k) => RRd.num(r[k]))).filter(ok);
@@ -468,7 +514,7 @@
       .attr('x', left).attr('y', top - 4).attr('width', width - left - right + 4).attr('height', height - top - bottom + 8);
     const lines = svg.append('g').attr('fill', 'none').attr('clip-path', `url(#${clipId})`);
     for (const s of series) {
-      const c = RRd.color(s.model), dashes = RRd.DASHES[s.regime];
+      const c = colorOf(s), dashes = RRd.DASHES[s.regime];
       lines.append('path').attr('d', line(s.pts)).attr('stroke', c).attr('stroke-width', s.model === 'FM' ? 2.4 : 2)
         .attr('stroke-linecap', dashes ? 'butt' : 'round').attr('stroke-linejoin', 'round')
         .attr('stroke-dasharray', dashes || null);
@@ -512,7 +558,7 @@
         const hits = series.map((s) => ({s, d: s.pts.find((p) => Math.abs(p.x - near) < 1e-9)})).filter((h) => h.d);
         rule.attr('x1', x(near)).attr('x2', x(near)).attr('visibility', 'visible');
         dots.selectAll('circle').data(hits).join('circle').attr('cx', (h) => x(h.d.x)).attr('cy', (h) => y(h.d.y))
-          .attr('r', 3.5).attr('fill', (h) => RRd.color(h.s.model));
+          .attr('r', 3.5).attr('fill', (h) => colorOf(h.s));
         tip.replaceChildren();
         const head = document.createElement('div');
         head.className = 'rr-tip-head';
@@ -522,7 +568,7 @@
           const row = document.createElement('div');
           row.className = 'rr-tip-row';
           const sw = d3.create('svg').attr('width', 18).attr('height', 8).attr('aria-hidden', 'true');
-          sw.append('line').attr('x1', 1).attr('x2', 17).attr('y1', 4).attr('y2', 4).attr('stroke', RRd.color(h.s.model))
+          sw.append('line').attr('x1', 1).attr('x2', 17).attr('y1', 4).attr('y2', 4).attr('stroke', colorOf(h.s))
             .attr('stroke-width', 2).attr('stroke-dasharray', RRd.DASHES[h.s.regime] || null);
           const name = document.createElement('span');
           name.textContent = h.s.key;

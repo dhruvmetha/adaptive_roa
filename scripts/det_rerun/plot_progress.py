@@ -10,6 +10,9 @@ setting's budget (same seed, initial batch and eval set).
 Metrics, all on the held-out eval grid with the run's lambda*/delta* rule:
   KL      KL(true outcome || predicted p_success) in nats. Labels are deterministic,
           so this equals the log score (mean negative log-likelihood).
+  False cert. rate   fp / (tp + fp): the share of success claims that are true failures
+  Success recall     tp over every true success; one the rule abstains on or calls
+          failure is a false negative (the conservative_lambda_delta counts)
   F1      success F1 over committed (non-abstained) states
   Unc %   invalid + outcome-uncertain share of all states
   Invalid %, Outcome-unc %   the two parts of Unc %
@@ -48,7 +51,7 @@ ROWS = [("fm_det", "FM (ours)"), ("det_mlp_clf", "MLP classifier"), ("det_bnn_cl
 ACQ = [("uniform", "uniform", "#2a78d6", "o"), ("direct", "direct (uniform top-up)", "#eb6834", "s"),
        ("ranked", "ranked", "#1baf7a", "^"), ("entropy", "entropy", "#eda100", "D"),
        ("builtin", "Part-X built-in", "#6250d6", "v")]
-METRICS = ["KL (nats)", "F1", "Unc %", "Invalid %", "Outcome-unc %", "FPR", "FNR"]
+METRICS = ["KL (nats)", "False cert. rate", "Success recall", "F1", "Unc %", "Invalid %", "Outcome-unc %", "FPR", "FNR"]
 INK, MUTED, GRID = "#0b0b0b", "#52514e", "#e4e3df"
 
 
@@ -59,10 +62,13 @@ def _rate(a, b):
 def metrics(art: dict) -> list[float]:
     m = art.get("eval_metrics") or {}
     ld, tf = m.get("lambda_delta") or {}, m.get("threshold_free") or {}
+    cons = m.get("conservative_lambda_delta") or {}
     tp, tn, fp, fn = (ld.get(k, 0) for k in ("tp", "tn", "fp", "fn"))
     inv, unc = ld.get("invalid_pct", math.nan), ld.get("uncertain_pct", math.nan)
-    return [tf.get("log_score", math.nan), ld.get("f1", math.nan), 100 * (inv + unc), 100 * inv, 100 * unc,
-            _rate(fp, tn), _rate(fn, tp)]
+    # The conservative block calls every abstention failure, so its tp + fn is every true success.
+    recall = _rate(cons["tp"], cons["fn"]) if "tp" in cons and "fn" in cons else math.nan
+    return [tf.get("log_score", math.nan), _rate(fp, tp), recall, ld.get("f1", math.nan),
+            100 * (inv + unc), 100 * inv, 100 * unc, _rate(fp, tn), _rate(fn, tp)]
 
 
 ENDPOINT_ARMS = {"fm_det", "det_mlp_reg", "det_bnn_reg"}
@@ -128,7 +134,7 @@ def fill_shared_uniform(data: dict) -> dict:
 
 
 def plot(setting: str, cells: dict, path: Path) -> None:
-    fig, axes = plt.subplots(len(ROWS), len(METRICS), figsize=(22, 15), sharex=True, squeeze=False)
+    fig, axes = plt.subplots(len(ROWS), len(METRICS), figsize=(3.15 * len(METRICS), 15), sharex=True, squeeze=False)
     n_done = sum(1 for v in cells.values() if v[2])
     for i, (arm, rlabel) in enumerate(ROWS):
         for j, mlabel in enumerate(METRICS):
@@ -158,7 +164,8 @@ def plot(setting: str, cells: dict, path: Path) -> None:
     fig.suptitle(f"{TITLES[setting]}: {n_done} of {len(cells)} cells finished (seed 99512)", fontsize=14,
                  color=INK, y=0.995)
     fig.text(0.5, 0.005, note + "KL = KL(true outcome || predicted p_success), equal to the log score for "
-             "deterministic labels; FPR and FNR over committed states", ha="center", fontsize=9, color=MUTED)
+             "deterministic labels; false cert. rate = FP / (TP + FP); success recall = TP over all true successes, "
+             "abstentions counted as misses; FPR and FNR over committed states", ha="center", fontsize=9, color=MUTED)
     fig.tight_layout(rect=(0, 0.015, 1, 0.95))
     fig.savefig(path, dpi=150, facecolor="#fcfcfb")
     plt.close(fig)
@@ -193,7 +200,7 @@ SHARED_SCALE = (METRICS.index("Invalid %"), METRICS.index("Outcome-unc %"))
 
 def plot_compare(data: dict, path: Path, lines=COMPARE_LINES, title=COMPARE_TITLE) -> None:
     """All settings in one figure: rows are settings, columns metrics, one line per entry of `lines`."""
-    fig, axes = plt.subplots(len(SETTINGS), len(METRICS), figsize=(24, 3.2 * len(SETTINGS)), squeeze=False)
+    fig, axes = plt.subplots(len(SETTINGS), len(METRICS), figsize=(3.4 * len(METRICS), 3.2 * len(SETTINGS)), squeeze=False)
     for i, s in enumerate(SETTINGS):
         inner, px = {}, {}
         for j in range(len(METRICS)):
@@ -250,7 +257,8 @@ def plot_compare(data: dict, path: Path, lines=COMPARE_LINES, title=COMPARE_TITL
     fig.legend(handles=handles, loc="upper center", ncol=4, frameon=False, fontsize=11, bbox_to_anchor=(0.5, 0.975))
     fig.suptitle(title, fontsize=14, color=INK, y=0.997)
     fig.text(0.5, 0.004, "q3d30 and q3d60 uniform: their own cells once banked, until then the q3d110 uniform cell cut at the budget. KL = KL(true outcome || "
-             "predicted p_success), the log score for deterministic labels. FPR and FNR over committed states.",
+             "predicted p_success), the log score for deterministic labels. False cert. rate = FP / (TP + FP); success recall = "
+             "TP over all true successes, abstentions counted as misses. FPR and FNR over committed states.",
              ha="center", fontsize=9, color=MUTED)
     fig.tight_layout(rect=(0, 0.012, 1, 0.94))
     fig.savefig(path, dpi=150, facecolor="#fcfcfb")

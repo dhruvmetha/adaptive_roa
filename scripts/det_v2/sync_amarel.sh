@@ -8,15 +8,16 @@
 # drops its crashed partial epoch); a dir without the .amarel_mirror marker that already
 # holds files is refused, since it may hold a run from iLab or a direct box. Everything is
 # copied, .hydra included (plot_prob_fields.py skips a run without .hydra/config.yaml).
-# -rlptD with --chmod: -p keeps the umask from narrowing the group bits, and no -g/-o, so
-# the setgid root's group applies.
+# -rlptDO with --chmod: -p keeps the umask from narrowing the group bits, and no -g/-o, so
+# the setgid root's group applies. -O skips directory mtimes: a run dir the other account
+# owns refuses them with EPERM (rsync exit 23), which would block cross-account resumes.
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
 source "$DET_V2_SCRIPTS/retry.sh"
 need_amarel
 # One connection for the whole sync: a fresh handshake costs ~2.4 s and a sync makes many.
 SSH="ssh -o BatchMode=yes -o ControlMaster=auto -o ControlPath=${XDG_RUNTIME_DIR:-/tmp}/det-v2-sync-%C -o ControlPersist=60"
-RSYNC_PERMS=(-rlptD --chmod=Dg+rwxs,Fg+rw)
+RSYNC_PERMS=(-rlptDO --chmod=Dg+rwxs,Fg+rw)
 names=("$@")
 if [ ${#names[@]} -eq 0 ] && [ -f "$LEDGER" ]; then
   mapfile -t names < <(awk -F'\t' -v u="$NET_ID" 'NR>1 {w[$1]=$3; usr[$1]=$2; a[$1]=$10}

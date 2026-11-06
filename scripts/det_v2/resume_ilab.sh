@@ -1,7 +1,7 @@
 #!/bin/bash
 # Resume a det_v2 run on an iLab card from its last banked epoch, from the snapshot of the
 # commit it was launched with (scripts/resume_adaptive.py --run-dir; never from 0).
-#   resume_ilab.sh <name> [walltime] [gres_type]     (defaults: 3-00:00:00, the type it last
+#   resume_ilab.sh <name> [walltime] [gres_type]     (defaults: ILAB_RESUME_WALL, the type it last
 #                                                    ran on; pass the type for a run from
 #                                                    another place)
 # A run banked on Amarel (no live job) gets its final pull into the shared run dir first.
@@ -9,10 +9,11 @@
 # job on it). DET_V2_MEM=<mem> replaces the manifest request.
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
-NAME=${1:?usage: resume_ilab.sh <name> [walltime] [gres_type]}; WALL=${2:-3-00:00:00}; GRES=${3:-}
+NAME=${1:?usage: resume_ilab.sh <name> [walltime] [gres_type]}; WALL=${2:-$ILAB_RESUME_WALL}; GRES=${3:-}
 resume_prepare "$NAME"
 if [ -z "$GRES" ]; then
-  if [ "$PREV" = ilab ]; then GRES=$(lf "$LAST" $L_HOSTGPU); else die "$NAME last ran on $PREV; pass the gres type"; fi
+  # The placement row, not the latest row: an abandon row after a direct move carries host:gpu.
+  if [ "$PREV" = ilab ]; then GRES=$(lf "$PLACED" $L_HOSTGPU); else die "$NAME last ran on $PREV; pass the gres type"; fi
 fi
 ledger_claim_resume "$NAME" "$LAST" ilab "$GRES" "$COMMIT" "$RUN_DIR" || die "not resuming $NAME"
 fail() { ledger_append "$NAME" "$NET_ID" ilab - "$GRES" "$(stamp)" - "$COMMIT" "$RUN_DIR" abandon; die "$1"; }

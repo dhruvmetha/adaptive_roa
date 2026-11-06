@@ -295,7 +295,7 @@ def resume_ended(apply: bool) -> list[str]:
         elif n:
             cmd = f"DET_V2_EXCLUDE={ilab_exclude(ilab_home_node())} bash {HERE}/resume_ilab.sh {r['name']} {ENV.get('ILAB_RESUME_WALL', '06:00:00')} {r['hostgpu']}"
         else:        # died inside epoch 0: nothing banked, so start it again
-            where = "amarel" if r["where"] == "amarel" else f"ilab {r['hostgpu']}"
+            where = "amarel" if r["where"] == "amarel" else f"ilab {r['hostgpu']} {ENV.get('ILAB_RESUME_WALL', '06:00:00')}"
             pre = "" if r["where"] == "amarel" else f"DET_V2_EXCLUDE={ilab_exclude(ilab_home_node())} "
             cmd = f"{pre}DET_V2_RELAUNCH=1 DET_V2_REF={r['commit']} bash {HERE}/launch.sh {r['name']} {where}"
         res = sh(f"{cmd} 2>&1 | tail -1", timeout=900)

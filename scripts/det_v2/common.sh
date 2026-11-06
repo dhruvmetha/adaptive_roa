@@ -49,6 +49,10 @@ AMAREL_USER=${AMAREL_USER:-$NET_ID}
 AMAREL_ACCOUNT=${AMAREL_ACCOUNT:-general}
 AMAREL_PARTITION=${AMAREL_PARTITION:-gpu}
 AMAREL_EXCLUDE=${AMAREL_EXCLUDE:-gpu029,gpu046}
+# gpu029 throws ECC faults and kills jobs in under a minute; cgpu has no /scratch, so jobs die
+# in 0 s with an empty log. Refuse a user.env that would send work there.
+case ",$AMAREL_EXCLUDE," in *,gpu029,*) ;; *) die "AMAREL_EXCLUDE must keep gpu029 (ECC faults): $AMAREL_EXCLUDE" ;; esac
+case ",$AMAREL_PARTITION," in *,cgpu,*) die "AMAREL_PARTITION must not include cgpu (no /scratch there): $AMAREL_PARTITION" ;; esac
 AMAREL_CPUS=${AMAREL_CPUS:-4}
 DET_V2_TMUX_WAIT=${DET_V2_TMUX_WAIT:-3}
 export EXP_DIR DATA_DIR SHARED_DATA_BASE USER_BASE DET_V2_ROOT LEDGER LOG_DIR HOLD_HOSTS SHARED_GROUP \
@@ -116,7 +120,9 @@ ledger_claim() {
   (
     flock -w 120 9 || exit 2
     last=$(awk -F'\t' -v n="$1" 'NR>1 && $1==n' "$LEDGER" | tail -1)
-    if [ -n "$last" ] && [ "$(cut -f10 <<< "$last")" != abandon ] && [ "${DET_V2_RELAUNCH:-0}" != 1 ]; then
+    act=$(cut -f10 <<< "$last")
+    if [ -n "$last" ] && [ "$act" != abandon ] && [ "${DET_V2_RELAUNCH:-0}" != 1 ] \
+       && ! { [ "${DET_V2_RERUN_PLACED:-0}" = 1 ] && [ "$act" != claim ]; }; then
       echo "$1 is already in the ledger ($(cut -f2-4 <<< "$last" | tr '\t' ' '), $(cut -f10 <<< "$last")); resume it, or set DET_V2_RELAUNCH=1 if it has nothing banked" >&2
       exit 3
     fi
@@ -251,7 +257,7 @@ amarel_pull() {
   [ -z "$live" ] || die "$1 still has Amarel job $live; cancel it first"
   local rc=0
   mkdir -p "$2"
-  rsync -rlptD --chmod=Dg+rwxs,Fg+rw --delete --exclude .amarel_mirror "$AMAREL_HOST:$(amarel_dir "$2")/" "$2/" </dev/null || rc=$?
+  rsync -rlptDO --chmod=Dg+rwxs,Fg+rw --delete --exclude .amarel_mirror "$AMAREL_HOST:$(amarel_dir "$2")/" "$2/" </dev/null || rc=$?
   [ $rc = 0 ] || die "final pull of $1 from Amarel failed (rsync $rc)"
   rm -f "$2/.amarel_mirror"
 }

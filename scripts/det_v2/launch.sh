@@ -40,7 +40,8 @@ LAST=$(ledger_last_placed "$NAME")
 [ -z "$LAST" ] || refuse_if_live "$NAME" "$LAST"
 if [ $PARTX = 1 ]; then
   # Part-X continues from partx_state.pkl when its command reruns on the same dir.
-  [ -z "$LAST" ] || export DET_V2_RELAUNCH=1
+  # Rerunning claims over a finished placement, never over another account's in-flight claim.
+  [ -z "$LAST" ] || export DET_V2_RERUN_PLACED=1
   [ ! -f "$RUN_DIR/partx_state.pkl" ] || echo "$NAME continues from $RUN_DIR/partx_state.pkl"
 elif [ "$(banked "$RUN_DIR")" -gt 0 ]; then
   die "$NAME already has $(banked "$RUN_DIR") banked epoch(s) in $RUN_DIR; resume it instead"
@@ -56,7 +57,7 @@ if [ "$WORLD" = amarel ]; then
   if [ "${DET_V2_SKIP_DATA_CHECK:-0}" != 1 ]; then
     LIST=$(PYTHONPATH="$CODE" PYTHONNOUSERSITE=1 "$PYTHON" "$DET_V2_SCRIPTS/preflight.py" "$NAME" --list --code "$CODE") \
       || die "could not list the data files of $NAME"
-    FILES=$(awk -F'\t' '$1=="f"{print $2}' <<< "$LIST" | sed -e "s#^$DATA_DIR#$AMAREL_DATA_DIR#" -e "s#^$SHARED_DATA_BASE#$AMAREL_DATA_DIR#" | tr '\n' ' ')
+    FILES=$(awk -F'\t' '$1=="f" || $1=="d" {print $2}' <<< "$LIST" | sed -e "s#^$DATA_DIR#$AMAREL_DATA_DIR#" -e "s#^$SHARED_DATA_BASE#$AMAREL_DATA_DIR#" | tr '\n' ' ')
     MISSING=$(rsh "$AMAREL_HOST" "for f in $FILES; do test -e \$f || echo \$f; done" 2>/dev/null || true)
     [ -z "$MISSING" ] || die "$NAME: not staged on Amarel (rsync them from $DATA_DIR first):
 $MISSING"

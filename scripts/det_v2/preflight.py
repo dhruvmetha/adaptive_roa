@@ -11,7 +11,7 @@ SHARED_GROUP, or by everyone, and every parent directory searchable the same way
 
     preflight.py [name ...]              # default: every manifest row with a config
     preflight.py --overrides "system=pendulum predictor=det_mlp_clf acquisition=ranked +experiment=det_rerun"
-    preflight.py <name> --list           # tab-separated kind (f, d, -) and path of the data_source paths
+    preflight.py <name> --list           # tab-separated kind (f, d, -) and path of every data path
     preflight.py ... --fix               # chgrp SHARED_GROUP + chmod g+r (g+rx on dirs, g+x on a
                                          # parent) where the current user owns the entry and it sits
                                          # in DATA_DIR or SHARED_DATA_BASE; the rest is reported
@@ -196,7 +196,7 @@ def main():
     ap.add_argument("--code", default=None, help="code tree whose configs to compose (default: this repo)")
     ap.add_argument("--group", default=None, help="group that must read the data (default: SHARED_GROUP)")
     ap.add_argument("--fix", action="store_true")
-    ap.add_argument("--list", action="store_true", help="print the data_source paths only")
+    ap.add_argument("--list", action="store_true", help="print the data paths only (data_source and TOP_KEYS)")
     a = ap.parse_args()
     env = lib.load_user_env()
     code = a.code or env["DET_V2_REPO"]
@@ -219,10 +219,9 @@ def main():
     for label, make in jobs:
         cfg = make()
         if a.list:
-            for _, p in data_paths(cfg):
-                if _.startswith("data_source"):
-                    kind = "d" if os.path.isdir(p) else "f" if os.path.exists(p) else "-"
-                    print(f"{kind}\t{p}")
+            for _, p in data_paths(cfg):          # data_source entries and TOP_KEYS
+                kind = "d" if os.path.isdir(p) else "f" if os.path.exists(p) else "-"
+                print(f"{kind}\t{p}")
             continue
         left += report(label, cfg, env, group, gid, a.fix)
     sys.exit(1 if left else 0)

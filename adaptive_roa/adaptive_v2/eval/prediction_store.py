@@ -16,6 +16,8 @@ run writes, per epoch and next to ``full_roa_per_point.npz`` (the test split):
 from __future__ import annotations
 
 import os
+import socket
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -201,7 +203,7 @@ def write_split_states_once(run_dir: str | Path, split: str, X: np.ndarray, y: n
     """
     path = Path(run_dir) / f"prediction_store_states_{split}.npz"
     if not path.exists():
-        tmp = path.with_name(f".{path.stem}.{os.getpid()}.tmp.npz")
+        tmp = path.with_name(f".{path.stem}.{socket.gethostname()}.{uuid.uuid4().hex}.tmp.npz")
         np.savez(tmp, states=np.asarray(X, dtype=np.float32), true_labels=np.asarray(y).astype(np.int8))
         os.replace(tmp, path)
 

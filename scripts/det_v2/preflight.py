@@ -110,11 +110,19 @@ class Problem:
                 f"  ({self.why}; {', '.join(sorted(set(self.keys)))[:120]})")
 
 
+# Paths a config lists but no det_v2 code path reads, so their mode does not matter.
+# deterministic/quadrotor2D_rl/trajectory_lengths_cache.txt (dm1487:nogroup 660): the npz
+# data source keeps trajectory lengths in memory (reviewed 2026-11-06).
+NOT_READ = ("deterministic/quadrotor2D_rl/trajectory_lengths_cache.txt",)
+
+
 def check(seen: dict[str, list[str]], gid: int) -> tuple[list[Problem], int]:
     """Problems with the entries and every parent dir, and how many paths were checked."""
     problems: dict[str, Problem] = {}
     checked = set()
     for rp, keys in seen.items():
+        if rp.endswith(NOT_READ):
+            continue
         if not os.path.lexists(rp):
             problems[rp] = Problem(rp, None, "missing", keys, False)
             continue

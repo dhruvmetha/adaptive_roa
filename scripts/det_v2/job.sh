@@ -21,6 +21,7 @@ umask 002
 cd "$DET_V2_CODE"
 export PYTHONPATH="$DET_V2_CODE"
 export PYTHONNOUSERSITE=1
+export PYTHONUNBUFFERED=1               # logs show progress as it happens, not at exit
 export Q3D_CACHE_TRANSFORMED=1
 export Q2D_CACHE_TRANSFORMED=1
 export OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}

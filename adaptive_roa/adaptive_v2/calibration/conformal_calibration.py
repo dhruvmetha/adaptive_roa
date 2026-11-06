@@ -89,3 +89,42 @@ class ConformalCalibrationBackend:
         self._predictor_eval.delta_star = threshold_state.delta_star
         q_hat = self._predictor_eval.calibrate_qhat(X_cal_eval, y_cal_eval, verbose=self.verbose)
         return float(q_hat)
+
+    def calibrate_eval_from_probabilities(
+        self,
+        p_success: np.ndarray,
+        p_failure: np.ndarray,
+        y_cal_eval: np.ndarray,
+        threshold_state: ThresholdState,
+    ) -> float:
+        """``calibrate_eval`` on cal-set probabilities the caller already has.
+
+        Step 2 of ``ConformalPredictor.calibrate_qhat`` as it stands: the scores
+        and their quantile read only (p_success, p_failure, labels, lambda*,
+        delta*), so given the probabilities calibrate_eval's own MC pass would
+        produce, this returns its q_hat. The engine uses it with
+        ``prediction_store.reuse_cal_for_qhat`` so the cal split is predicted once.
+        """
+        pred = self._predictor_eval
+        if pred is None:
+            raise RuntimeError("CalibrationBackend used before bind_model")
+        pred.lambda_star = threshold_state.lambda_star
+        pred.delta_star = threshold_state.delta_star
+        y = np.asarray(y_cal_eval)
+        rule = pred.config.decision_rule
+        p_failure_for_cal = np.asarray(p_failure) if rule == "two_sided" else None
+        pred.q_hat = pred.calibrator.calibrate(
+            np.asarray(p_success), y, pred.lambda_star, pred.delta_star, p_failure_for_cal,
+            verbose=self.verbose,
+        )
+        pred.fit_info = {
+            "lambda_star": pred.lambda_star,
+            "delta_star": pred.delta_star,
+            "q_hat": pred.q_hat,
+            "n_train": 0,
+            "n_cal": len(y),
+            "optimization_info": None,
+            "optimize_mode": pred.config.optimize_mode,
+            "decision_rule": rule,
+        }
+        return float(pred.q_hat)

@@ -9,9 +9,10 @@ import os
 import lightning.pytorch as pl
 import random
 from adaptive_roa.utils.env_config import get_data_dir, get_noise_regime
+from adaptive_roa.data.batched_indexing import BatchedIndexingMixin, collate_fn_for
 
 
-class CartPoleEndpointDataset(Dataset):
+class CartPoleEndpointDataset(BatchedIndexingMixin, Dataset):
     def __init__(self, data_file: str,
                  dataset_dir: str = None):
         """
@@ -106,7 +107,7 @@ class CartPoleEndpointDataModule(pl.LightningDataModule):
     def __init__(self, data_file: str, validation_file: str, test_file: str,
                  batch_size: int = 64, val_batch_size: Optional[int] = None,
                  num_workers: int = 4, pin_memory: bool = True,
-                 dataset_dir: str = None):
+                 dataset_dir: str = None, batched_indexing: bool = False):
         """
         CartPole Endpoint Data Module with separate train/val/test files
 
@@ -120,6 +121,8 @@ class CartPoleEndpointDataModule(pl.LightningDataModule):
             pin_memory: Whether to pin memory for data loaders
             dataset_dir: Path to dataset directory containing dataset_description.json.
                         If None, uses default path.
+            batched_indexing: Materialize rows once and fetch each batch with one
+                index operation (data/batched_indexing.py). Same batches, same order.
         """
         if dataset_dir is None:
             dataset_dir = f"{get_data_dir()}/{get_noise_regime()}/cartpole_pybullet"
@@ -132,18 +135,26 @@ class CartPoleEndpointDataModule(pl.LightningDataModule):
         self.num_workers = num_workers
         self.pin_memory = pin_memory
         self.dataset_dir = dataset_dir
+        self.batched_indexing = bool(batched_indexing)
 
         # Cartpole-specific dimensions
         self.state_dim = 4  # Raw state: [x, theta, x_dot, theta_dot]
         self.embedded_dim = 5  # Embedded: [x_norm, sin_theta, cos_theta, x_dot_norm, theta_dot_norm]
 
     def setup(self, stage: Optional[str] = None):
-        if stage == "fit" or stage is None:
+        # Lightning calls setup("fit") again inside trainer.fit; a trainer that
+        # already called setup() would otherwise parse both files a second time.
+        if (stage == "fit" or stage is None) and getattr(self, "train_dataset", None) is None:
             self.train_dataset = CartPoleEndpointDataset(self.data_file, dataset_dir=self.dataset_dir)
             self.val_dataset = CartPoleEndpointDataset(self.validation_file, dataset_dir=self.dataset_dir)
+            if self.batched_indexing:
+                self.train_dataset.enable_batched_indexing()
+                self.val_dataset.enable_batched_indexing()
 
-        if stage == "test" or stage is None:
+        if (stage == "test" or stage is None) and getattr(self, "test_dataset", None) is None:
             self.test_dataset = CartPoleEndpointDataset(self.test_file, dataset_dir=self.dataset_dir)
+            if self.batched_indexing:
+                self.test_dataset.enable_batched_indexing()
     
     def train_dataloader(self):
         return DataLoader(
@@ -152,7 +163,8 @@ class CartPoleEndpointDataModule(pl.LightningDataModule):
             shuffle=True,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
-            persistent_workers=self.num_workers > 0
+            persistent_workers=self.num_workers > 0,
+            collate_fn=collate_fn_for(self.batched_indexing),
         )
     
     def val_dataloader(self):
@@ -162,7 +174,8 @@ class CartPoleEndpointDataModule(pl.LightningDataModule):
             shuffle=False,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
-            persistent_workers=self.num_workers > 0
+            persistent_workers=self.num_workers > 0,
+            collate_fn=collate_fn_for(self.batched_indexing),
         )
 
     def test_dataloader(self):
@@ -172,7 +185,8 @@ class CartPoleEndpointDataModule(pl.LightningDataModule):
             shuffle=False,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
-            persistent_workers=self.num_workers > 0
+            persistent_workers=self.num_workers > 0,
+            collate_fn=collate_fn_for(self.batched_indexing),
         )
     
     def predict_dataloader(self):

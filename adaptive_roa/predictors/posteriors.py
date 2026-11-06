@@ -378,7 +378,15 @@ class LastLayerLaplacePosterior(Posterior):
         return self
 
     def forward_sample(self, x, generator=None):
-        features = self.body(x)
+        return self.sample_from_features(self.body(x), generator=generator)
+
+    def sample_from_features(self, features, generator=None):
+        """``forward_sample`` given ``features = body(x)``: the weight draw and head only.
+
+        The body is deterministic, so a caller drawing K times on one batch can
+        compute it once and pay only for the K head draws; the random draws here
+        are the same, in the same order, as in ``forward_sample``.
+        """
         if not self.is_fitted:
             return self.head_layer(features)  # MAP fallback before fit
         phi = torch.cat(

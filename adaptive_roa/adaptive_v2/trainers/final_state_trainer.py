@@ -217,8 +217,14 @@ class FinalStateTrainer:
             batch_size=self._predictor_cfg.get("batch_size", 1024),
             val_batch_size=self._predictor_cfg.get("val_batch_size", 2048),
             num_workers=0,  # in-memory tensors; workers break on NFS
+            # One index operation per batch (data/batched_indexing.py); same
+            # batches, same order. Off unless predictor.batched_indexing is set.
+            batched_indexing=bool(self._predictor_cfg.get("batched_indexing", False)),
         )
-        dm.setup()
+        # "fit" only: nothing here reads the test split (it is the val file again).
+        # The datamodule keeps what it loaded, so Lightning's own setup("fit")
+        # inside trainer.fit does not parse the files a second time.
+        dm.setup("fit")
         return dm
 
     @staticmethod
@@ -255,7 +261,7 @@ class FinalStateTrainer:
             gradient_clip_val=trainer_cfg.get("gradient_clip_val", 1.0),
             log_every_n_steps=trainer_cfg.get("log_every_n_steps", 10),
             check_val_every_n_epoch=1,
-            enable_progress_bar=False,
+            enable_progress_bar=bool(trainer_cfg.get("enable_progress_bar", False)),
             enable_model_summary=False,
             callbacks=[
                 ModelCheckpoint(
@@ -376,7 +382,12 @@ class FinalStateTrainer:
                 torch.save(posterior.posterior_covariance, ckpt_dir / "laplace_cov.pt")
                 torch.save(posterior.precision_cholesky, ckpt_dir / "laplace_prec_chol.pt")
 
-        handle = FinalStateModelHandle(posterior, head, self.system).eval()
+        # reuse_body_features: compute the deterministic body once per MC batch
+        # instead of once per draw (final_state_handle.py). Bit-identical; off by default.
+        handle = FinalStateModelHandle(
+            posterior, head, self.system,
+            reuse_body_features=bool(fs.get("reuse_body_features", False)),
+        ).eval()
         return handle.to(device) if use_gpu else handle
 
     @staticmethod
@@ -469,6 +480,12 @@ def _full_dataset_tensors(dataset):
     """
     from torch.utils.data import default_collate
 
+    rows = dataset.batched_rows() if hasattr(dataset, "batched_rows") else None
+    if rows is not None:
+        # Batched indexing already holds every row collated through __getitem__
+        # (data/batched_indexing.materialize_rows), i.e. this function's result.
+        # Copied so a caller can never write into the dataset's rows.
+        return rows["start_state"].float().clone(), rows["end_state"].float().clone()
     batch = default_collate([dataset[i] for i in range(len(dataset))])
     return batch["start_state"].float(), batch["end_state"].float()
 

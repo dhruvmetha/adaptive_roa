@@ -13,6 +13,10 @@ adaptive_v2:
   artifact_schema_version: 2
   save_legacy_results_json: true
   save_v2_artifacts: true
+  # Training-set endpoint error (artifacts_v2.json "endpoint_error"); read only by
+  # legacy scripts. false skips it and records {"skipped": true, "reason": ...}.
+  # Skipping removes its model calls, so the later draws of the epoch shift.
+  endpoint_error: true
 
 hydra:
   run:

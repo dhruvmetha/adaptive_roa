@@ -31,3 +31,6 @@ checkpoints/
 Untitled
 telemetry-id
 slurm_logs/
+
+# det_v2 per-user launch settings (scripts/det_v2/user.env.example documents them)
+scripts/det_v2/user.env

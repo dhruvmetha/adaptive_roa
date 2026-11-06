@@ -240,13 +240,50 @@ class AdaptiveEngine:
         state = self.threshold_backend.optimize_val(pred["states"], pred["true_labels"], p_s, p_f, p_i, k)
         return state, pred
 
+    def _calibrate_eval_on_store_prediction(self, model_handle, X_cal, y_cal, threshold_state,
+                                            keep_endpoints: bool):
+        """q_hat_eval from the cal prediction the store writes (prediction_store.reuse_cal_for_qhat).
+
+        One set of model calls on the cal split instead of two (calibrate_eval's
+        MC pass, then the store's). The split is predicted at the eval K, as the
+        store always did, and the scores read its first calibration.num_mc_samples
+        draws, the K calibrate_eval used. The draws move to a different place in
+        the RNG stream, so this is opt-in. Returns (q_hat_eval, prediction).
+        """
+        from adaptive_roa.adaptive_v2.eval import prediction_store as ps
+        k_cal = int(self.calibration_backend.num_mc_samples)
+        k_eval = int(self.evaluator.num_mc_samples_eval)
+        endpoint_model = self.predictor_type != "classifier"
+        if endpoint_model and k_cal > k_eval:
+            raise ValueError(f"calibration.num_mc_samples={k_cal} exceeds eval.num_mc_samples_eval={k_eval}; "
+                             f"reuse_cal_for_qhat reads the first {k_cal} of the stored cal draws")
+        if endpoint_model and self.calibration_backend.attractor_radius != self.evaluator.attractor_radius:
+            raise ValueError(f"calibration.attractor_radius={self.calibration_backend.attractor_radius} differs "
+                             f"from eval.attractor_radius={self.evaluator.attractor_radius}; the stored cal "
+                             f"labels use the eval radius")
+        pred = ps.predict_split(
+            X_cal, y_cal, predictor_type=self.predictor_type, model=model_handle, system=self.system,
+            num_mc_samples=k_eval, attractor_radius=self.evaluator.attractor_radius,
+            batch_size=int(self.cfg.get("val_batch_size", 2048)), device=self.device,
+            keep_endpoints=keep_endpoints,
+        )
+        p_s, p_f, _p_i, _k = ps.fit_probabilities(pred, k_cal)
+        q_hat = self.calibration_backend.calibrate_eval_from_probabilities(p_s, p_f, y_cal, threshold_state)
+        pred["qhat_sub_k"] = k_cal if (endpoint_model and k_cal < k_eval) else None
+        return q_hat, pred
+
     def _write_prediction_store(self, epoch_dir, model_handle, keep_endpoints: bool, threshold_fit,
-                                val_prediction: dict[str, Any] | None = None) -> None:
+                                val_prediction: dict[str, Any] | None = None,
+                                cal_prediction: dict[str, Any] | None = None) -> None:
         """Val, cal and threshold-fit predictions for this epoch (prediction_store.py).
 
         ``val_prediction``: the val split already predicted for the threshold fit
         (threshold=fpr_cap). It is written as is, with the fit-K counts beside the
         full-K ones, instead of predicting the split again.
+
+        ``cal_prediction``: the cal split already predicted for q_hat_eval
+        (prediction_store.reuse_cal_for_qhat), written as is; with sub-K counts
+        when q_hat read fewer draws than were stored.
         """
         from adaptive_roa.adaptive_v2.eval import prediction_store as ps
         ds = self.cfg.data_source
@@ -259,6 +296,12 @@ class AdaptiveEngine:
                                            val_prediction["true_labels"])
                 ps.write_split_prediction(epoch_dir, split, val_prediction,
                                           sub_k=int(self.threshold_backend.fit_mc_samples))
+                continue
+            if split == "cal" and cal_prediction is not None:
+                ps.write_split_states_once(self.output_dir, split, cal_prediction["states"],
+                                           cal_prediction["true_labels"])
+                ps.write_split_prediction(epoch_dir, split, cal_prediction,
+                                          sub_k=cal_prediction.get("qhat_sub_k"))
                 continue
             X, _, y = load_eval_states(path, max_rows=self.evaluator.max_eval_rows,
                                        state_dim=getattr(self.system, "state_dim", None))
@@ -370,6 +413,10 @@ class AdaptiveEngine:
             if self.smoke_mode or not run_eval or self.predictor_type == "classifier":
                 # classifier has no generated endpoints -> no endpoint-prediction error
                 endpoint_error = {"skipped": True}
+            elif not bool(self.cfg.adaptive_v2.get("endpoint_error", True)):
+                # Only legacy scripts read it. Skipping it also skips its model
+                # calls, which moves every later draw in the RNG stream.
+                endpoint_error = {"skipped": True, "reason": "adaptive_v2.endpoint_error=false"}
             else:
                 endpoint_error = compute_endpoint_prediction_error(
                     flow_matcher=model_handle,
@@ -446,6 +493,7 @@ class AdaptiveEngine:
 
             q_hat_eval = None
             n_cal_eval = 0
+            cal_prediction = None
             cal_file = self.cfg.data_source.get("cal_set_file", None)
             if run_eval and cal_file:
                 X_cal_eval, _, y_cal_eval = load_eval_states(
@@ -453,9 +501,16 @@ class AdaptiveEngine:
                     max_rows=self.evaluator.max_eval_rows,
                     state_dim=getattr(self.system, "state_dim", None),
                 )
-                q_hat_eval = self.calibration_backend.calibrate_eval(
-                    X_cal_eval, y_cal_eval, threshold_state
-                )
+                if store_on and bool(store_cfg.get("reuse_cal_for_qhat", False)):
+                    # Predict the cal split once: q_hat_eval from the prediction the
+                    # store writes below, instead of a second MC pass of its own.
+                    q_hat_eval, cal_prediction = self._calibrate_eval_on_store_prediction(
+                        model_handle, X_cal_eval, y_cal_eval, threshold_state,
+                        keep_endpoints=store_endpoints_now)
+                else:
+                    q_hat_eval = self.calibration_backend.calibrate_eval(
+                        X_cal_eval, y_cal_eval, threshold_state
+                    )
                 n_cal_eval = len(X_cal_eval)
 
             threshold_state.q_hat_eval = q_hat_eval
@@ -472,6 +527,7 @@ class AdaptiveEngine:
                         "output_dir": str(epoch_output_dir),
                         "store_endpoints": store_endpoints_now,
                         "endpoint_rows_cap": store_cfg.get("endpoint_test_rows", None) if store_on else None,
+                        "epoch": int(epoch),   # read by eval.plot_epochs
                     },
                 )
                 if store_on:
@@ -479,6 +535,7 @@ class AdaptiveEngine:
                         epoch_output_dir, model_handle, store_endpoints_now,
                         threshold_fit=self.threshold_backend.last_fit if needs_threshold else None,
                         val_prediction=val_prediction,
+                        cal_prediction=cal_prediction,
                     )
             full_roa_metrics["q_hat_training"] = float(q_hat) if q_hat is not None else None
             full_roa_metrics["q_hat_eval"] = float(q_hat_eval) if q_hat_eval is not None else None

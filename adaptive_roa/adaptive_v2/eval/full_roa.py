@@ -746,8 +746,13 @@ def evaluate_full_roa_fast(
     endpoint_rows_cap: int | None = None,
     fpr_cap_taus: tuple[float, float, float] | None = None,
     fpr_cap_alpha_s: float | None = None,
+    make_plots: bool = True,
 ) -> dict[str, Any]:
     """Fast batched full-ROA evaluation with v2-compatible outputs.
+
+    ``make_plots``: False skips full_roa_projections.png and full_roa_heatmap.png
+    (FullROAEvaluator sets it from eval.plot_epochs). The npz files are written
+    either way.
 
     ``fpr_cap_taus``: (tau_s, tau_f, tau_inv) from threshold=fpr_cap. The primary
     labels (the ``lambda_delta`` and ``conservative_lambda_delta`` blocks and the
@@ -1318,6 +1323,8 @@ def evaluate_full_roa_fast(
                 raise ValueError("store_endpoints needs the MC loop; it cannot read endpoints from mc_cache")
             np.savez(str(out / "endpoints_test.npz"), endpoints=kept_endpoints, rows=_keep)
 
+    if output_dir and make_plots:
+        out = Path(output_dir)
         hook.maybe_plot(
             start_states=X_all,
             p_success=p_success,
@@ -1361,10 +1368,11 @@ def evaluate_full_roa_classifier(
     binary_outcomes: bool | None = None,
     fpr_cap_taus: tuple[float, float, float] | None = None,
     fpr_cap_alpha_s: float | None = None,
+    make_plots: bool = True,
 ) -> dict[str, Any]:
     """Full-ROA evaluation for a discriminative classifier (single forward pass).
 
-    ``fpr_cap_taus``: as in evaluate_full_roa_fast.
+    ``fpr_cap_taus``, ``make_plots``: as in evaluate_full_roa_fast.
 
     Reuses the model-agnostic threshold/metric helpers; produces the same
     top-level metric keys as ``evaluate_full_roa_fast`` so downstream artifact
@@ -1501,7 +1509,7 @@ def evaluate_full_roa_classifier(
             delta=delta, attractor_radius=attractor_radius,
             **_fpr_cap_npz_keys(fpr_cap_taus, fpr_cap_alpha_s),
         )
-        if hook is not None:
+        if hook is not None and make_plots:
             hook.maybe_plot(
                 start_states=X_all, p_success=p_success, true_labels=y_all,
                 lambda_star=float(lambda_star), delta=float(delta),
@@ -1551,8 +1559,23 @@ class FullROAEvaluator:
         # existing run's behaviour bit-identical.
         self.binary_outcomes = (None if cfg.get("binary_outcomes", None) is None
                                 else bool(cfg.get("binary_outcomes")))
+        # None (default) plots every evaluated epoch, as always. A list plots only
+        # those epochs; the engine passes the epoch in epoch_context["epoch"], and a
+        # context without one (an offline re-evaluation) is always plotted.
+        plot_epochs = cfg.get("plot_epochs", None)
+        self.plot_epochs = None if plot_epochs is None else {int(e) for e in plot_epochs}
         self.system = system
         self.device = device
+
+    def _plot_kwargs(self, epoch_context: dict[str, Any]) -> dict[str, Any]:
+        """``{"make_plots": False}`` at an epoch eval.plot_epochs leaves out, else {}.
+
+        Passed only when False, so every call that plots is the call it was.
+        """
+        epoch = epoch_context.get("epoch", None)
+        if self.plot_epochs is None or epoch is None or int(epoch) in self.plot_epochs:
+            return {}
+        return {"make_plots": False}
 
     def evaluate_epoch(
         self,
@@ -1581,6 +1604,7 @@ class FullROAEvaluator:
                 invalid_threshold=epoch_context.get("invalid_threshold", None),
                 decision_rule=epoch_context.get("decision_rule", self.decision_rule),
                 binary_outcomes=epoch_context.get("binary_outcomes", self.binary_outcomes),
+                **self._plot_kwargs(epoch_context),
                 **tau_kwargs,
             )
         return evaluate_full_roa_fast(
@@ -1608,5 +1632,6 @@ class FullROAEvaluator:
             binary_outcomes=epoch_context.get("binary_outcomes", self.binary_outcomes),
             store_endpoints=bool(epoch_context.get("store_endpoints", False)),
             endpoint_rows_cap=epoch_context.get("endpoint_rows_cap", None),
+            **self._plot_kwargs(epoch_context),
             **tau_kwargs,
         )

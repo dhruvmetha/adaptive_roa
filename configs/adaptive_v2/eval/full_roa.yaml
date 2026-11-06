@@ -23,3 +23,7 @@ eval:
   refine_num_steps: 100
   refine_max_attempts: 5
   verbose: true
+  # null plots full_roa_projections.png / full_roa_heatmap.png at every evaluated
+  # epoch. A list, e.g. [0, 5, 10], plots only those epochs; the npz files and
+  # metrics are written at every evaluated epoch either way.
+  plot_epochs: null

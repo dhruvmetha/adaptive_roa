@@ -99,9 +99,9 @@ def _manifest():
 def test_manifest_columns_rows_names_and_ranks():
     header, rows = _manifest()
     assert header == COLUMNS
-    assert len(rows) == 306
-    assert len({r["name"] for r in rows}) == 306
-    assert sorted(int(r["rank"]) for r in rows) == list(range(1, 307))
+    assert len(rows) == 309
+    assert len({r["name"] for r in rows}) == 309
+    assert sorted(int(r["rank"]) for r in rows) == list(range(1, 310))
     for r in rows:
         assert r["config"] == f"+experiment=det_v2/runs/{r['name']}"
         assert r["mem"][:-1].isdigit() and r["mem"].endswith("G")
@@ -121,7 +121,7 @@ def test_manifest_scripts_and_mem_follow_the_plan():
         assert r["script"] == ("scripts/run_partx_faithful.py" if partx else "scripts/run_adaptive.py")
         key = (make_manifest.SETTING_TO_OLD[run["setting"]], make_manifest.MODEL_TO_ARM[run["model"]])
         assert r["mem"] == mem[key]
-    assert sum(r["script"].endswith("partx_faithful.py") for r in rows) == 3
+    assert sum(r["script"].endswith("partx_faithful.py") for r in rows) == 6   # M44, M55, M66 + reruns of M11, M22, M33
     todo = {n for n, run in runs.items() if run["rank"] is not None}
     assert todo == {r["name"] for r in rows}            # every ranked row, no reused one
 

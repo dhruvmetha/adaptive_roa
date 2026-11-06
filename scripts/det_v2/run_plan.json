@@ -131,11 +131,12 @@
    "model": "Part-X",
    "arm": "Part-X",
    "kind": "main",
-   "reused": true,
+   "reused": false,
    "name": "m11_q3dlqr_partx",
    "hours": 1.0,
-   "rank": null,
-   "owner": "reused"
+   "rank": 308,
+   "tier": 2,
+   "owner": "Sumanth"
   },
   {
    "id": "M12",
@@ -268,11 +269,12 @@
    "model": "Part-X",
    "arm": "Part-X",
    "kind": "main",
-   "reused": true,
+   "reused": false,
    "name": "m22_q3dppo_partx",
    "hours": 1.0,
-   "rank": null,
-   "owner": "reused"
+   "rank": 307,
+   "tier": 1,
+   "owner": "Sumanth"
   },
   {
    "id": "M23",
@@ -405,11 +407,12 @@
    "model": "Part-X",
    "arm": "Part-X",
    "kind": "main",
-   "reused": true,
+   "reused": false,
    "name": "m33_q2dppo_partx",
    "hours": 1.0,
-   "rank": null,
-   "owner": "reused"
+   "rank": 309,
+   "tier": 3,
+   "owner": "Sumanth"
   },
   {
    "id": "M34",

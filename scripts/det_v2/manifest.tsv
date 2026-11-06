@@ -305,3 +305,6 @@ X267	x267_cplqr_bnnreg_qa_a9hyst	303	Dhruv	+experiment=det_v2/runs/x267_cplqr_bn
 X268	x268_penlqr_mlpreg_qa_a9hyst	304	Dhruv	+experiment=det_v2/runs/x268_penlqr_mlpreg_qa_a9hyst	scripts/run_adaptive.py	8G	0.7
 X269	x269_penlqr_fm_qa_a9hyst	305	Dhruv	+experiment=det_v2/runs/x269_penlqr_fm_qa_a9hyst	scripts/run_adaptive.py	8G	0.6
 X270	x270_penlqr_bnnreg_qa_a9hyst	306	Dhruv	+experiment=det_v2/runs/x270_penlqr_bnnreg_qa_a9hyst	scripts/run_adaptive.py	8G	0.5
+M22	m22_q3dppo_partx	307	Sumanth	+experiment=det_v2/runs/m22_q3dppo_partx	scripts/run_partx_faithful.py	16G	1.0
+M11	m11_q3dlqr_partx	308	Sumanth	+experiment=det_v2/runs/m11_q3dlqr_partx	scripts/run_partx_faithful.py	48G	1.0
+M33	m33_q2dppo_partx	309	Sumanth	+experiment=det_v2/runs/m33_q2dppo_partx	scripts/run_partx_faithful.py	32G	1.0

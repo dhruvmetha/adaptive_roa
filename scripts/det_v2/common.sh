@@ -218,10 +218,20 @@ on_origin() {                                         # on_origin <full commit>
   (cd "$DET_V2_REPO" && { git branch -r --contains "$1" 2>/dev/null | grep -q . || git ls-remote origin 2>/dev/null | grep -q "^$1"; })
 }
 
+# amarel_constraint <name>: the node feature a run needs on Amarel's untyped gpu partition.
+# Placement rule: q3d and q2d FM runs need L40S/A100/Ada cards, which are the
+# adalovelace nodes there (ampere mixes A100s with slower sm_86 cards). DET_V2_CONSTRAINT
+# overrides it; empty means any node.
+amarel_constraint() {
+  if [ -n "${DET_V2_CONSTRAINT+x}" ]; then echo "$DET_V2_CONSTRAINT"; return; fi
+  case "$1" in [mx][0-9]*_q3d*_fm_*|[mx][0-9]*_q2d*_fm_*) echo adalovelace ;; *) echo "" ;; esac
+}
+
 # amarel_submit <name> <code> <commit> <mem> <wall> <script> <args...>: prints the job id.
 amarel_submit() {
   local name=$1 code=$2 commit=$3 mem=$4 wall=$5; shift 5
-  rsh "$AMAREL_HOST" "umask 002 && mkdir -p $AMAREL_LOG_DIR && cd $code && sbatch --parsable -J $name --account=$AMAREL_ACCOUNT --partition=$AMAREL_PARTITION --gres=gpu:1 --cpus-per-task=$AMAREL_CPUS --exclude=$AMAREL_EXCLUDE --mem=$mem --time=$wall --output=$AMAREL_LOG_DIR/%x_%j.out --error=$AMAREL_LOG_DIR/%x_%j.err --export=$(job_exports "$code" "$commit" "$name" "$AMAREL_PYTHON" "$AMAREL_CPUS") scripts/det_v2/job.sh $* </dev/null" 2>/dev/null | grep -E '^[0-9]+$' | tail -1
+  local feat; feat=$(amarel_constraint "$name")
+  rsh "$AMAREL_HOST" "umask 002 && mkdir -p $AMAREL_LOG_DIR && cd $code && sbatch --parsable -J $name --account=$AMAREL_ACCOUNT --partition=$AMAREL_PARTITION --gres=gpu:1 ${feat:+--constraint=$feat }--cpus-per-task=$AMAREL_CPUS --exclude=$AMAREL_EXCLUDE --mem=$mem --time=$wall --output=$AMAREL_LOG_DIR/%x_%j.out --error=$AMAREL_LOG_DIR/%x_%j.err --export=$(job_exports "$code" "$commit" "$name" "$AMAREL_PYTHON" "$AMAREL_CPUS") scripts/det_v2/job.sh $* </dev/null" 2>/dev/null | grep -E '^[0-9]+$' | tail -1
 }
 
 # ilab_submit <name> <code> <commit> <mem> <wall> <gres|cpu> <script> <args...>: prints the job id.

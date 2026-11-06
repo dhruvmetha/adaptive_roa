@@ -127,3 +127,20 @@ def test_two_launches_racing_for_one_name_claim_it_once(world):
     codes = [p.wait(timeout=300) for p in procs]
     assert sorted(codes) == [0, 1, 1]
     assert [row[9] for row in world.ledger()[1:]] == ["claim", "launch"]
+
+
+def test_amarel_constraint_keeps_q3d_q2d_fm_on_ada_nodes():
+    import subprocess
+    from pathlib import Path
+    common = Path(__file__).resolve().parents[2] / "scripts/det_v2/common.sh"
+    def feat(name, override=None):
+        env = "" if override is None else f"DET_V2_CONSTRAINT={override} "
+        out = subprocess.run(["bash", "-c", f'eval "$(sed -n "/^amarel_constraint()/,/^}}/p" {common})"; {env}amarel_constraint {name}'],
+                             capture_output=True, text=True, check=True)
+        return out.stdout.strip()
+    assert feat("m16_q3dppo_fm_qa") == "adalovelace"
+    assert feat("x24_q3dlqr_fm_qa_a2jver_w001") == "adalovelace"
+    assert feat("m27_q2dppo_fm_qa") == "adalovelace"
+    assert feat("m15_q3dppo_bnnreg_qa") == ""
+    assert feat("m38_cplqr_fm_qa") == ""            # cp and pen FM take any card
+    assert feat("m16_q3dppo_fm_qa", override="ampere") == "ampere"

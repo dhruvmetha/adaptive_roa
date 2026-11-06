@@ -187,7 +187,7 @@ def test_every_run_config_composes():
     spec.loader.exec_module(mod)                      # registers the resolvers the run scripts use
     plan = json.loads((ROOT / "scripts/det_v2/run_plan.json").read_text())
     runs = [r for r in plan["main"] + plan["abl"] if r.get("rank") is not None]
-    assert len(runs) == 99
+    assert len(runs) == 288
     with initialize_config_dir(config_dir=str(ROOT / "configs/adaptive_v2"), version_base=None):
         for r in runs:
             partx = r["model"] == "Part-X"

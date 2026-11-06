@@ -26,6 +26,7 @@ from adaptive_roa.benchmark.provenance import git_sha
 from adaptive_roa.adaptive_v2.pool.trajectory_pool import TrajectoryPool
 from adaptive_roa.adaptive_v2.filters.confidence_filter import ConfidencePairFilter
 from adaptive_roa.adaptive_v2.types import AcquisitionResult, EpochArtifacts, ThresholdState
+from adaptive_roa.utils.file_mode import new_file_mode
 
 
 def _instantiate(cfg_node, *args, **kwargs):
@@ -69,6 +70,7 @@ def _atomic_write_json(path: Path, obj: Any, **kwargs) -> None:
     try:
         with os.fdopen(fd, "w") as f:
             json.dump(obj, f, **kwargs)
+        os.chmod(tmp_name, new_file_mode())         # mkstemp is 0600; honour the umask
         os.replace(tmp_name, path)
     except BaseException:
         try:

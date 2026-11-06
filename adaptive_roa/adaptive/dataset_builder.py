@@ -1022,6 +1022,8 @@ class AdaptiveDatasetBuilder:
             fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
             with os.fdopen(fd, "w") as f:
                 json.dump(self._suffix.to_dict(), f)
+            from adaptive_roa.utils.file_mode import new_file_mode
+            os.chmod(tmp, new_file_mode())           # mkstemp is 0600; honour the umask
             os.replace(tmp, path)
             return
         state = {

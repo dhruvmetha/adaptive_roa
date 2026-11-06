@@ -8,6 +8,8 @@ import pickle
 import tempfile
 from pathlib import Path
 
+from adaptive_roa.utils.file_mode import new_file_mode
+
 
 def config_hash(obj) -> str:
     return hashlib.sha256(json.dumps(obj, sort_keys=True, default=str).encode()).hexdigest()[:16]
@@ -19,6 +21,7 @@ def save_state(px, path, chash: str) -> None:
     try:
         with os.fdopen(fd, "wb") as f:
             pickle.dump({"config_hash": chash, "px": px}, f, protocol=pickle.HIGHEST_PROTOCOL)
+        os.chmod(tmp, new_file_mode())               # mkstemp is 0600; honour the umask
         os.replace(tmp, path)
     except BaseException:
         if os.path.exists(tmp):

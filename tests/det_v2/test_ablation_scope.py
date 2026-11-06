@@ -27,6 +27,13 @@ def test_each_ablation_covers_every_model_setting_and_variant_once():
     assert max(cells.values()) == 1
 
 
+def test_a9_covers_final_state_and_fm_in_every_setting_and_no_classifier():
+    # tau_s + tau_f >= 1 keeps a classifier in one regime, so A9 has nothing to hold there.
+    a9 = Counter((r["setting"], r["model"]) for r in _plan()["abl"] if r["ab"] == "A9")
+    assert set(a9) == {(s, m) for s in SETTINGS for m in ("FM", "MLP final-state", "BNN final-state")}
+    assert set(a9.values()) == {1}
+
+
 def test_new_rows_use_the_main_budget_and_unique_ids():
     plan = _plan()
     rows = plan["main"] + plan["abl"]

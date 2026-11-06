@@ -64,9 +64,9 @@ def _manifest():
 def test_manifest_columns_rows_names_and_ranks():
     header, rows = _manifest()
     assert header == COLUMNS
-    assert len(rows) == 288
-    assert len({r["name"] for r in rows}) == 288
-    assert sorted(int(r["rank"]) for r in rows) == list(range(1, 289))
+    assert len(rows) == 306
+    assert len({r["name"] for r in rows}) == 306
+    assert sorted(int(r["rank"]) for r in rows) == list(range(1, 307))
     for r in rows:
         assert r["config"] == f"+experiment=det_v2/runs/{r['name']}"
         assert r["mem"][:-1].isdigit() and r["mem"].endswith("G")

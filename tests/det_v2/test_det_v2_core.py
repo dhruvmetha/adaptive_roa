@@ -187,7 +187,7 @@ def test_every_run_config_composes():
     spec.loader.exec_module(mod)                      # registers the resolvers the run scripts use
     plan = json.loads((ROOT / "scripts/det_v2/run_plan.json").read_text())
     runs = [r for r in plan["main"] + plan["abl"] if r.get("rank") is not None]
-    assert len(runs) == 288
+    assert len(runs) == 306
     with initialize_config_dir(config_dir=str(ROOT / "configs/adaptive_v2"), version_base=None):
         for r in runs:
             partx = r["model"] == "Part-X"
@@ -210,6 +210,11 @@ def test_every_run_config_composes():
             want_obj = "j_ver" if change.startswith("J_ver") else "j_sel"
             want_w = float(change.split("w = ")[1]) if "w = " in change else 0.1
             assert (c["threshold"]["objective"], c["threshold"]["w"]) == (want_obj, want_w)
+            hyst = c["threshold"]["_target_"].endswith("HysteresisJSelThresholdBackend")
+            assert hyst == (change == "tau* regime hysteresis")
+            if hyst:
+                assert (c["threshold"]["n_boot"], c["threshold"]["se_mult"], c["threshold"]["margin"],
+                        c["threshold"]["seed"]) == (200, 2.0, None, 99512)
             if r["model"] == "FM":
                 assert c["predictor"]["flow_matching"]["mae_val_frequency"] == 1000000
             if r["model"] in ("MLP final-state", "BNN final-state"):

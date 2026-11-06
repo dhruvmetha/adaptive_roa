@@ -40,9 +40,17 @@ class ThresholdState:
     tau_f_star: float | None = None
     threshold_objective: str | None = None
     threshold_w: float | None = None
+    # tau* regime hysteresis (ablation A9, threshold=j_sel_hysteresis). None elsewhere.
+    # The incumbent regime ("inv": tau_s + tau_f >= 1, "out": < 1), each regime's best
+    # J_sel on this round's fit rows, and the margin the other regime had to beat.
+    threshold_region: str | None = None
+    threshold_j_inv: float | None = None
+    threshold_j_out: float | None = None
+    threshold_margin: float | None = None
 
     TAU_FIELDS = ("tau_s", "tau_f", "tau_inv", "alpha_s")
     DET_V2_FIELDS = ("tau_s_star", "tau_f_star", "threshold_objective", "threshold_w")
+    HYSTERESIS_FIELDS = ("threshold_region", "threshold_j_inv", "threshold_j_out", "threshold_margin")
 
     @property
     def taus(self) -> tuple[float, float, float] | None:

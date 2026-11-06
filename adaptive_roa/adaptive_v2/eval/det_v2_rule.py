@@ -37,6 +37,7 @@ from adaptive_roa.conformal.decision import tie
 GRID = tie(np.arange(1, 100) / 100.0)      # tau values 0.01 .. 0.99
 N_GRID = len(GRID)
 OBJECTIVES = ("j_sel", "j_ver")
+REGIONS = ("inv", "out")
 S, F, A_OUT, A_INV = 1, 0, -1, -2
 
 
@@ -63,15 +64,33 @@ def cell_index(p) -> np.ndarray:
     return np.searchsorted(GRID, tie(np.asarray(p, dtype=float)), side="left")
 
 
-def grid_counts(p_s, p_f, y) -> dict[str, np.ndarray]:
-    """TP, FP, FN (successes called F), TN on the whole grid; arrays [99, 99] indexed (tau_s, tau_f)."""
+def cell_keys(p_s, p_f=None) -> np.ndarray:
+    """Each state's cell (i_s, i_f) as one integer, i_s * 100 + i_f."""
     ps, pf = _arrays(p_s, p_f)
-    succ = np.asarray(y) == 1
-    i_s, i_f = cell_index(ps), cell_index(pf)
+    return cell_index(ps) * (N_GRID + 1) + cell_index(pf)
+
+
+def grid_counts(p_s, p_f, y, weights=None) -> dict[str, np.ndarray]:
+    """TP, FP, FN (successes called F), TN on the whole grid; arrays [99, 99] indexed (tau_s, tau_f).
+
+    ``weights`` (one per row) gives weighted counts as floats, e.g. a bootstrap
+    resample's multiplicities; without it the counts are exact integers.
+    """
+    return counts_from_keys(cell_keys(p_s, p_f), np.asarray(y) == 1, weights)
+
+
+def counts_from_keys(key: np.ndarray, succ: np.ndarray, weights=None) -> dict[str, np.ndarray]:
+    """grid_counts from precomputed cell_keys and success flags."""
     size = N_GRID + 1
-    key = i_s * size + i_f
-    c1 = np.bincount(key[succ], minlength=size * size).reshape(size, size).astype(np.int64)
-    c0 = np.bincount(key[~succ], minlength=size * size).reshape(size, size).astype(np.int64)
+    if weights is None:
+        c1 = np.bincount(key[succ], minlength=size * size).reshape(size, size).astype(np.int64)
+        c0 = np.bincount(key[~succ], minlength=size * size).reshape(size, size).astype(np.int64)
+        n, n_succ = np.int64(len(succ)), np.int64(succ.sum())
+    else:
+        wt = np.asarray(weights, dtype=float)
+        c1 = np.bincount(key[succ], weights=wt[succ], minlength=size * size).reshape(size, size)
+        c0 = np.bincount(key[~succ], weights=wt[~succ], minlength=size * size).reshape(size, size)
+        n, n_succ = wt.sum(), wt[succ].sum()
 
     def s_and_f(c):
         # cum[i, j] = #{i_s <= i, i_f <= j}
@@ -84,8 +103,7 @@ def grid_counts(p_s, p_f, y) -> dict[str, np.ndarray]:
 
     tp, fn = s_and_f(c1)
     fp, tn = s_and_f(c0)
-    return {"tp": tp, "fp": fp, "fn": fn, "tn": tn,
-            "n": np.int64(len(succ)), "n_success": np.int64(succ.sum()), "n_failure": np.int64((~succ).sum())}
+    return {"tp": tp, "fp": fp, "fn": fn, "tn": tn, "n": n, "n_success": n_succ, "n_failure": n - n_succ}
 
 
 def objectives(counts: dict[str, np.ndarray], w: float) -> dict[str, np.ndarray]:
@@ -103,9 +121,27 @@ def objectives(counts: dict[str, np.ndarray], w: float) -> dict[str, np.ndarray]
     return {"mr": mr, "ar": ar, "fcr": fcr, "rec": rec, "j_sel": j_sel, "j_ver": j_ver}
 
 
+def region_mask(region: str | None) -> np.ndarray:
+    """[99, 99] grid pairs in a regime: "inv" = tau_s + tau_f >= 1 (no A_out), "out" = tau_s + tau_f < 1."""
+    a, b = np.meshgrid(np.arange(N_GRID), np.arange(N_GRID), indexing="ij")
+    inv = (a + 1) + (b + 1) >= 100             # in hundredths, so exact
+    if region is None:
+        return np.ones_like(inv)
+    if region not in REGIONS:
+        raise ValueError(f"region must be one of {REGIONS} or None, got {region!r}")
+    return inv if region == "inv" else ~inv
+
+
+def region_of(tau_s: float, tau_f: float) -> str:
+    return "inv" if round(tau_s * 100) + round(tau_f * 100) >= 100 else "out"
+
+
 def fit(p_s, p_f, y, *, w: float = 0.1, objective: str = "j_sel",
-        classifier: bool = False) -> dict[str, Any]:
-    """tau* = (tau_s, tau_f) minimizing the objective; returns the pair and its fit-split diagnostics."""
+        classifier: bool = False, region: str | None = None) -> dict[str, Any]:
+    """tau* = (tau_s, tau_f) minimizing the objective; returns the pair and its fit-split diagnostics.
+
+    ``region`` restricts the search to one regime of region_mask (ablation A9).
+    """
     if objective not in OBJECTIVES:
         raise ValueError(f"objective must be one of {OBJECTIVES}, got {objective!r}")
     y = np.asarray(y)
@@ -116,9 +152,11 @@ def fit(p_s, p_f, y, *, w: float = 0.1, objective: str = "j_sel",
     primary = obj[objective]
     secondary = obj["j_sel"] if objective == "j_ver" else np.zeros_like(primary)
     a, b = np.meshgrid(np.arange(N_GRID), np.arange(N_GRID), indexing="ij")
-    ok = np.ones_like(primary, dtype=bool)
+    ok = region_mask(region)
     if classifier:
-        ok = (a + 1) + (b + 1) >= 100          # tau_s + tau_f >= 1, in hundredths
+        ok = ok & region_mask("inv")             # tau_s + tau_f >= 1
+        if not ok.any():
+            raise ValueError("a classifier's search is tau_s + tau_f >= 1; region='out' leaves no pair")
     # Round so values equal in exact arithmetic tie here too; then smallest tau_s, tau_f.
     keys = (b[ok].ravel(), a[ok].ravel(), np.round(secondary[ok], 12).ravel(), np.round(primary[ok], 12).ravel())
     best = int(np.lexsort(keys)[0])

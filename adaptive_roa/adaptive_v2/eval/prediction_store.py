@@ -209,9 +209,14 @@ def write_split_states_once(run_dir: str | Path, split: str, X: np.ndarray, y: n
 
 
 def write_threshold_fit(epoch_dir: str | Path, fit: dict[str, Any] | None) -> None:
-    """The states, labels and probabilities the lambda*/delta* optimizer used."""
+    """The states, labels and probabilities the lambda*/delta* optimizer used.
+
+    ``trajectory`` (each row's trajectory index) is stored when the fit had it
+    (threshold=j_sel_hysteresis), so the bootstrap can be replayed offline.
+    """
     if not fit:
         return
+    extra = {"trajectory": np.asarray(fit["trajectory"], dtype=np.int64)} if "trajectory" in fit else {}
     np.savez(
         Path(epoch_dir) / "predictions_thrfit.npz",
         states=np.asarray(fit["states"], dtype=np.float32),
@@ -220,4 +225,5 @@ def write_threshold_fit(epoch_dir: str | Path, fit: dict[str, Any] | None) -> No
         p_failure=np.asarray(fit["p_failure"], dtype=np.float32),
         p_invalid=np.asarray(fit["p_invalid"], dtype=np.float32),
         num_mc_samples=np.int32(fit["num_mc_samples"]),
+        **extra,
     )

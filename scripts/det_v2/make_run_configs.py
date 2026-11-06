@@ -31,11 +31,16 @@ SETTINGS = {
 }
 MODELS = {"FM": "fm_det", "MLP classifier": "det_mlp_clf", "BNN classifier": "det_bnn_clf",
           "MLP final-state": "det_mlp_reg", "BNN final-state": "det_bnn_reg"}
+HYSTERESIS = "tau* regime hysteresis"        # ablation A9
+
+
+def threshold_group(change: str | None) -> str:
+    return "j_sel_hysteresis" if change == HYSTERESIS else "j_sel"
 
 
 def ablation(change: str | None) -> tuple[str, dict]:
     """(acquisition group, overrides) for a run's Change column; None is the main q_A arm."""
-    if change is None:
+    if change is None or change == HYSTERESIS:
         return "q_a", {}
     if change == "U_H instead of q_A":
         return "u_h", {}
@@ -77,7 +82,8 @@ def render(run: dict) -> str:
             extra.setdefault("acquisition", {}).setdefault("d2_ratio", 1.0)
         defaults = ["/experiment/det_v2", f"override /system: {system}",
                     f"override /predictor: {MODELS[run['model']]}",
-                    f"override /acquisition: {acq}", "override /threshold: j_sel", "_self_"]
+                    f"override /acquisition: {acq}", f"override /threshold: {threshold_group(run.get('change'))}",
+                    "_self_"]
         body.update(extra)
         if run["model"] == "FM":
             # Bias-free speedup: the in-training endpoint MAE ODE pass feeds only

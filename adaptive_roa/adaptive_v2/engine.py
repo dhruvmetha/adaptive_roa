@@ -80,6 +80,20 @@ def _atomic_write_json(path: Path, obj: Any, **kwargs) -> None:
         raise
 
 
+def restore_threshold_backend(backend: Any, output_dir: Path, start_epoch: int) -> None:
+    """Hand a stateful threshold backend (j_sel_hysteresis) the last banked epoch's threshold_state.
+
+    A resume starts the loop at start_epoch > 0; the incumbent regime then comes from
+    epoch start_epoch - 1's artifacts_v2.json. A fresh run (start_epoch 0) keeps none.
+    """
+    if start_epoch <= 0 or not hasattr(backend, "restore"):
+        return
+    path = Path(output_dir) / f"epoch_{start_epoch - 1:03d}" / "artifacts_v2.json"
+    state = json.loads(path.read_text()).get("threshold_state") or {}
+    backend.restore(state)
+    print(f"Threshold backend restored from {path}: regime {state.get('threshold_region')}")
+
+
 def _drop_unset_taus(threshold_state: Any) -> None:
     """Remove the fpr_cap fields from a serialized ThresholdState when they are unset.
 
@@ -91,6 +105,9 @@ def _drop_unset_taus(threshold_state: Any) -> None:
             threshold_state.pop(k, None)
     if isinstance(threshold_state, dict) and threshold_state.get("tau_s_star") is None:
         for k in ThresholdState.DET_V2_FIELDS:
+            threshold_state.pop(k, None)
+    if isinstance(threshold_state, dict) and threshold_state.get("threshold_region") is None:
+        for k in ThresholdState.HYSTERESIS_FIELDS:
             threshold_state.pop(k, None)
 
 
@@ -249,7 +266,12 @@ class AdaptiveEngine:
         """det_v2 threshold opt (threshold=j_sel) on the threshold-fit rows: the held-out rows
         of the acquired data, predicted at the backend's K (counts for final-state models)."""
         from adaptive_roa.adaptive_v2.eval import prediction_store as ps
-        X, y = sample_val_data_for_optimization(self.pool.dataset_builder)
+        extra = {}
+        if getattr(self.threshold_backend, "needs_groups", False):
+            # j_sel_hysteresis resamples trajectories, so it needs each row's trajectory.
+            X, _ends, y, extra["groups"] = self.pool.dataset_builder.get_val_data(return_groups=True)
+        else:
+            X, y = sample_val_data_for_optimization(self.pool.dataset_builder)
         k = int(self.threshold_backend.num_mc_samples)
         pred = ps.predict_split(
             X, y, predictor_type=self.predictor_type, model=model_handle, system=self.system,
@@ -257,7 +279,8 @@ class AdaptiveEngine:
             batch_size=int(self.cfg.get("val_batch_size", 2048)), device=self.device,
         )
         p_s, p_f, p_i, k_used = ps.fit_probabilities(pred, k)
-        return self.threshold_backend.optimize_probs(pred["states"], pred["true_labels"], p_s, p_f, p_i, k_used)
+        return self.threshold_backend.optimize_probs(pred["states"], pred["true_labels"], p_s, p_f, p_i, k_used,
+                                                     **extra)
 
     def _calibrate_eval_on_store_prediction(self, model_handle, X_cal, y_cal, threshold_state,
                                             keep_endpoints: bool):
@@ -359,6 +382,7 @@ class AdaptiveEngine:
         warm_start = bool(self.cfg.get("warm_start", False))
         acquisition_mode = self.acquisition.mode
         eval_every = int(self.cfg.get("eval_every", 1))
+        restore_threshold_backend(self.threshold_backend, self.output_dir, start_epoch)
 
         for epoch in range(start_epoch, n_epochs):
             print("\n" + "=" * 70)

@@ -557,24 +557,28 @@ class TrajectoryDataSource:
     def build_endpoint_dataset(
         self,
         indices: List[int],
-        mode: str = "train"
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        mode: str = "train",
+        return_groups: bool = False,
+    ) -> Tuple[np.ndarray, ...]:
         """
         Build endpoint dataset from trajectory indices.
 
         Args:
             indices: List of trajectory indices to include
             mode: "train" (all states per trajectory) or "test" (one per trajectory)
+            return_groups: also return each pair's trajectory index
 
         Returns:
             Tuple of:
                 start_states: [N, state_dim]
                 end_states: [N, state_dim]
                 labels: [N] (per-trajectory label, repeated for each pair)
+                groups: [N] trajectory index of each pair (only with return_groups)
         """
         all_starts = []
         all_ends = []
         all_labels = []
+        all_groups = []
         n_timeouts = n_dropped = 0
 
         for idx in indices:
@@ -584,6 +588,7 @@ class TrajectoryDataSource:
             all_starts.append(starts)
             all_ends.append(ends)
             all_labels.extend([label] * len(starts))
+            all_groups.extend([idx] * len(starts))
             if mode != "test":
                 n_rows = self.get_trajectory_length(idx)
                 if self._drops_intermediates(idx, n_rows):
@@ -594,11 +599,12 @@ class TrajectoryDataSource:
             print(f"  timeout_intermediates=drop: {n_timeouts} of {len(indices)} trajectories "
                   f"time out, {n_dropped} intermediate rows dropped")
 
-        return (
+        out = (
             np.vstack(all_starts),
             np.vstack(all_ends),
             np.array(all_labels, dtype=np.int64)
         )
+        return out + (np.array(all_groups, dtype=np.int64),) if return_groups else out
 
     def save_endpoint_dataset(
         self,

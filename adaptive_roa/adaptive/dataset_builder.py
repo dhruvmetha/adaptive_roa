@@ -786,7 +786,7 @@ class AdaptiveDatasetBuilder:
         train_only = train_indices[n_val:]
         return self.data_source.build_endpoint_dataset(train_only, mode="train")
 
-    def get_val_data(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def get_val_data(self, return_groups: bool = False) -> Tuple[np.ndarray, ...]:
         """
         Get validation endpoint data as numpy arrays.
 
@@ -796,9 +796,16 @@ class AdaptiveDatasetBuilder:
         In ``intermediate`` mode: returns intermediate-state pairs from the
         train-val split (non-empty when val_ratio > 0 and data available).
 
+        Args:
+            return_groups: also return each pair's trajectory index (start mode
+                only), for resampling trajectories rather than pairs.
+
         Returns:
-            Tuple of (start_states, end_states, labels)
+            Tuple of (start_states, end_states, labels[, groups])
         """
+        if return_groups and self.candidate_mode != "start":
+            raise NotImplementedError(f"get_val_data(return_groups=True) needs candidate_mode=start, "
+                                      f"not {self.candidate_mode!r}")
         if self.candidate_mode == "suffix":
             return self._suffix_pairs(self._suffix.val_trajectories())
 
@@ -821,7 +828,7 @@ class AdaptiveDatasetBuilder:
         train_indices = list(self.train_split)
         n_val = max(1, int(len(train_indices) * self.val_ratio))
         val_indices = train_indices[:n_val]
-        return self.data_source.build_endpoint_dataset(val_indices, mode="train")
+        return self.data_source.build_endpoint_dataset(val_indices, mode="train", return_groups=return_groups)
 
     def get_val_labels(self) -> Tuple[np.ndarray, np.ndarray]:
         """

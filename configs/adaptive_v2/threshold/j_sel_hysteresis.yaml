@@ -1,0 +1,20 @@
+# @package _global_
+# det_v2 tau* regime hysteresis (ablation A9; adaptive_roa/adaptive_v2/threshold/hysteresis.py).
+#
+# J_sel threshold opt as in j_sel.yaml, but tau* stays in the incumbent regime
+# (tau_s + tau_f >= 1 or < 1) unless the other regime's best J_sel beats it by more
+# than se_mult x the bootstrap SE of the gap, over n_boot trajectory resamples of
+# that round's fit rows. Round 0 takes the global argmin; tau* is refit inside the
+# regime every round. margin: a number replaces the bootstrap with a fixed margin.
+threshold:
+  _target_: adaptive_roa.adaptive_v2.threshold.hysteresis.HysteresisJSelThresholdBackend
+  predictor_type: ${predictor.type}
+  decision_rule: ${decision_rule}     # logged only; the det_v2 rule reads p_s and p_f
+  objective: j_sel
+  w: 0.1
+  num_mc_samples: 100
+  verbose: true
+  n_boot: 200
+  se_mult: 2.0
+  margin: null
+  seed: ${seed}

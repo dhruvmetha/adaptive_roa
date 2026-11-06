@@ -15,11 +15,18 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
 
+from adaptive_roa.data.batched_indexing import BatchedIndexingMixin, collate_fn_for
 
-class _ClassificationDataset(Dataset):
+
+class _ClassificationDataset(BatchedIndexingMixin, Dataset):
     def __init__(self, states: np.ndarray, labels: np.ndarray):
         self.states = torch.as_tensor(states, dtype=torch.float32)
         self.labels = torch.as_tensor(labels, dtype=torch.float32)
+
+    def _materialize_for_batching(self):
+        # Rows are already stacked tensors, and __getitem__ is a plain index into
+        # them, so default_collate of rows i..j is exactly states[i..j], labels[i..j].
+        return {"inputs": self.states, "label": self.labels}
 
     def __len__(self) -> int:
         return self.states.shape[0]
@@ -29,12 +36,15 @@ class _ClassificationDataset(Dataset):
 
 
 class AdaptiveClassificationDataModule(pl.LightningDataModule):
-    def __init__(self, train_file: str, val_file: str, batch_size: int = 1024, num_workers: int = 4):
+    def __init__(self, train_file: str, val_file: str, batch_size: int = 1024, num_workers: int = 4,
+                 batched_indexing: bool = False):
         super().__init__()
         self.train_file = train_file
         self.val_file = val_file
         self.batch_size = int(batch_size)
         self.num_workers = int(num_workers)
+        # One index operation per batch (data/batched_indexing.py). Same batches, same order.
+        self.batched_indexing = bool(batched_indexing)
         self.pos_weight: float = 1.0
         self._train: _ClassificationDataset | None = None
         self._val: _ClassificationDataset | None = None
@@ -57,6 +67,9 @@ class AdaptiveClassificationDataModule(pl.LightningDataModule):
         x_val, y_val = self._load(self.val_file)
         self._train = _ClassificationDataset(x_train, y_train)
         self._val = _ClassificationDataset(x_val, y_val)
+        if self.batched_indexing:
+            self._train.enable_batched_indexing()
+            self._val.enable_batched_indexing()
 
         n_pos = float((y_train == 1.0).sum())
         n_neg = float((y_train == 0.0).sum())
@@ -66,10 +79,12 @@ class AdaptiveClassificationDataModule(pl.LightningDataModule):
         return DataLoader(
             self._train, batch_size=self.batch_size, shuffle=True,
             num_workers=self.num_workers, drop_last=False,
+            collate_fn=collate_fn_for(self.batched_indexing),
         )
 
     def val_dataloader(self) -> DataLoader:
         return DataLoader(
             self._val, batch_size=self.batch_size, shuffle=False,
             num_workers=self.num_workers,
+            collate_fn=collate_fn_for(self.batched_indexing),
         )

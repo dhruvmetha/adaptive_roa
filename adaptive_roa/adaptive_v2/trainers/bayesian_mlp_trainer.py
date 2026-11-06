@@ -229,7 +229,7 @@ class BayesianMLPTrainer:
             gradient_clip_val=trainer_cfg.get("gradient_clip_val", 1.0),
             log_every_n_steps=trainer_cfg.get("log_every_n_steps", 10),
             check_val_every_n_epoch=1,
-            enable_progress_bar=False,
+            enable_progress_bar=bool(trainer_cfg.get("enable_progress_bar", False)),
             enable_model_summary=False,
             callbacks=[
                 ModelCheckpoint(
@@ -254,6 +254,9 @@ class BayesianMLPTrainer:
             val_file=dataset_files["val"],
             batch_size=self._predictor_cfg.get("batch_size", 1024),
             num_workers=0,  # in-memory tensors; workers break on NFS
+            # One index operation per batch (data/batched_indexing.py); same
+            # batches, same order. Off unless predictor.batched_indexing is set.
+            batched_indexing=bool(self._predictor_cfg.get("batched_indexing", False)),
         )
         data_module.setup()
         # The datamodule keeps its datasets on the private `_train` / `_val`

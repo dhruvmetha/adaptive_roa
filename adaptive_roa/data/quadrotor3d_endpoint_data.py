@@ -9,9 +9,10 @@ import os
 import lightning.pytorch as pl
 import random
 from adaptive_roa.utils.env_config import get_shared_data_base, get_noise_regime
+from adaptive_roa.data.batched_indexing import BatchedIndexingMixin, collate_fn_for, materialize_rows
 
 
-class Quadrotor3DEndpointDataset(Dataset):
+class Quadrotor3DEndpointDataset(BatchedIndexingMixin, Dataset):
     """
     Dataset for Quadrotor 3D endpoint pairs (start_state, end_state)
     Handles 13D state with quaternion orientation
@@ -217,11 +218,23 @@ class Quadrotor3DEndpointDataset(Dataset):
         result straight to default_collate, which does batch[0] and raises KeyError
         on a dict. Returning cached slices still removes the expensive part (the
         per-row copy, quaternion normalize/canonicalize and tensor construction);
-        only the collate itself remains."""
+        only the collate itself remains.
+
+        Batched mode (enable_batched_indexing, data/batched_indexing.py) returns
+        one dict of [B, 13] tensors instead, for a DataLoader using
+        identity_collate."""
+        if self._batched_rows is not None:
+            return BatchedIndexingMixin.__getitems__(self, indices)
         if self._cache_start is None:
             return [self.__getitem__(i) for i in indices]
         return [{'start_state': self._cache_start[i], 'end_state': self._cache_end[i]}
                 for i in indices]
+
+    def _materialize_for_batching(self):
+        # The Q3D_CACHE_TRANSFORMED rows are what __getitem__ returns, so reuse them.
+        if self._cache_start is not None:
+            return {'start_state': self._cache_start, 'end_state': self._cache_end}
+        return materialize_rows(self)
 
     def __getitem__(self, idx):
         if self._cache_start is not None:
@@ -270,7 +283,8 @@ class Quadrotor3DEndpointDataModule(pl.LightningDataModule):
                  pin_memory: bool = True,
                  dataset_dir: str = None,
                  max_train_samples: int = None,
-                 max_val_samples: int = None):
+                 max_val_samples: int = None,
+                 batched_indexing: bool = False):
         """
         Initialize Quadrotor 3D Endpoint Data Module.
 
@@ -293,6 +307,8 @@ class Quadrotor3DEndpointDataModule(pl.LightningDataModule):
             dataset_dir: Base dataset directory
             max_train_samples: Limit training samples (for debugging)
             max_val_samples: Limit validation samples
+            batched_indexing: Materialize rows once and fetch each batch with one
+                index operation (data/batched_indexing.py). Same batches, same order.
         """
         if dataset_dir is None:
             dataset_dir = f"{get_shared_data_base()}/{get_noise_regime()}/quadrotor3D_lqr"
@@ -318,6 +334,7 @@ class Quadrotor3DEndpointDataModule(pl.LightningDataModule):
         self.pin_memory = pin_memory
         self.max_train_samples = max_train_samples
         self.max_val_samples = max_val_samples
+        self.batched_indexing = bool(batched_indexing)
 
         # Quadrotor3D-specific dimensions
         self.state_dim = 13
@@ -327,9 +344,13 @@ class Quadrotor3DEndpointDataModule(pl.LightningDataModule):
         self.use_shuffled_indices = train_indices_file is not None
 
     def setup(self, stage: Optional[str] = None):
+        # Lightning calls setup("fit") again inside trainer.fit; a trainer that
+        # already called setup() would otherwise load both splits a second time.
+        fit_loaded = getattr(self, "train_dataset", None) is not None
+        test_loaded = getattr(self, "test_dataset", None) is not None
         if self.use_shuffled_indices:
             # Shuffled indices mode
-            if stage == "fit" or stage is None:
+            if (stage == "fit" or stage is None) and not fit_loaded:
                 self.train_dataset = Quadrotor3DEndpointDataset(
                     shuffled_indices_file=self.train_indices_file,
                     trajectories_dir=self.trajectories_dir,
@@ -347,7 +368,7 @@ class Quadrotor3DEndpointDataModule(pl.LightningDataModule):
                     # Use subset of training as validation
                     self.val_dataset = self.train_dataset
 
-            if stage == "test" or stage is None:
+            if (stage == "test" or stage is None) and not test_loaded:
                 if self.test_indices_file:
                     self.test_dataset = Quadrotor3DEndpointDataset(
                         shuffled_indices_file=self.test_indices_file,
@@ -356,7 +377,7 @@ class Quadrotor3DEndpointDataModule(pl.LightningDataModule):
                     )
         else:
             # Direct file mode
-            if stage == "fit" or stage is None:
+            if (stage == "fit" or stage is None) and not fit_loaded:
                 self.train_dataset = Quadrotor3DEndpointDataset(
                     data_file=self.data_file,
                     dataset_dir=self.dataset_dir,
@@ -368,11 +389,17 @@ class Quadrotor3DEndpointDataModule(pl.LightningDataModule):
                     max_samples=self.max_val_samples
                 )
 
-            if stage == "test" or stage is None:
+            if (stage == "test" or stage is None) and not test_loaded:
                 self.test_dataset = Quadrotor3DEndpointDataset(
                     data_file=self.test_file,
                     dataset_dir=self.dataset_dir
                 )
+
+        if self.batched_indexing:
+            for name in ("train_dataset", "val_dataset", "test_dataset"):
+                ds = getattr(self, name, None)
+                if ds is not None:
+                    ds.enable_batched_indexing()
 
     def train_dataloader(self):
         return DataLoader(
@@ -381,7 +408,8 @@ class Quadrotor3DEndpointDataModule(pl.LightningDataModule):
             shuffle=True,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
-            persistent_workers=self.num_workers > 0
+            persistent_workers=self.num_workers > 0,
+            collate_fn=collate_fn_for(self.batched_indexing),
         )
 
     def val_dataloader(self):
@@ -391,7 +419,8 @@ class Quadrotor3DEndpointDataModule(pl.LightningDataModule):
             shuffle=False,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
-            persistent_workers=self.num_workers > 0
+            persistent_workers=self.num_workers > 0,
+            collate_fn=collate_fn_for(self.batched_indexing),
         )
 
     def test_dataloader(self):
@@ -401,7 +430,8 @@ class Quadrotor3DEndpointDataModule(pl.LightningDataModule):
             shuffle=False,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
-            persistent_workers=self.num_workers > 0
+            persistent_workers=self.num_workers > 0,
+            collate_fn=collate_fn_for(self.batched_indexing),
         )
 
     def predict_dataloader(self):

@@ -11,8 +11,10 @@ from torch.utils.data import Dataset, DataLoader
 from typing import Optional
 import lightning.pytorch as pl
 
+from adaptive_roa.data.batched_indexing import BatchedIndexingMixin, collate_fn_for
 
-class PendulumEndpointDataset(Dataset):
+
+class PendulumEndpointDataset(BatchedIndexingMixin, Dataset):
     """
     Dataset for pendulum endpoint pairs (start_state, end_state).
 
@@ -88,6 +90,7 @@ class PendulumEndpointDataModule(pl.LightningDataModule):
         val_batch_size: Optional[int] = None,
         num_workers: int = 4,
         pin_memory: bool = True,
+        batched_indexing: bool = False,
     ):
         """
         Args:
@@ -98,6 +101,8 @@ class PendulumEndpointDataModule(pl.LightningDataModule):
             val_batch_size: Batch size for validation/test data loaders
             num_workers: Number of workers for data loading
             pin_memory: Whether to pin memory for data loaders
+            batched_indexing: Materialize rows once and fetch each batch with one
+                index operation (data/batched_indexing.py). Same batches, same order.
         """
         super().__init__()
         self.data_file = data_file
@@ -107,18 +112,26 @@ class PendulumEndpointDataModule(pl.LightningDataModule):
         self.val_batch_size = val_batch_size if val_batch_size is not None else batch_size
         self.num_workers = num_workers
         self.pin_memory = pin_memory
+        self.batched_indexing = bool(batched_indexing)
 
         # Pendulum-specific dimensions
         self.state_dim = 2  # Raw state: [theta, theta_dot]
         self.embedded_dim = 3  # Embedded: [sin_theta, cos_theta, theta_dot_norm]
 
     def setup(self, stage: Optional[str] = None):
-        if stage == "fit" or stage is None:
+        # Lightning calls setup("fit") again inside trainer.fit; a trainer that
+        # already called setup() would otherwise parse both files a second time.
+        if (stage == "fit" or stage is None) and getattr(self, "train_dataset", None) is None:
             self.train_dataset = PendulumEndpointDataset(self.data_file)
             self.val_dataset = PendulumEndpointDataset(self.validation_file)
+            if self.batched_indexing:
+                self.train_dataset.enable_batched_indexing()
+                self.val_dataset.enable_batched_indexing()
 
-        if stage == "test" or stage is None:
+        if (stage == "test" or stage is None) and getattr(self, "test_dataset", None) is None:
             self.test_dataset = PendulumEndpointDataset(self.test_file)
+            if self.batched_indexing:
+                self.test_dataset.enable_batched_indexing()
 
     def train_dataloader(self):
         return DataLoader(
@@ -126,7 +139,8 @@ class PendulumEndpointDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
-            pin_memory=self.pin_memory
+            pin_memory=self.pin_memory,
+            collate_fn=collate_fn_for(self.batched_indexing),
         )
 
     def val_dataloader(self):
@@ -135,7 +149,8 @@ class PendulumEndpointDataModule(pl.LightningDataModule):
             batch_size=self.val_batch_size,
             shuffle=False,
             num_workers=self.num_workers,
-            pin_memory=self.pin_memory
+            pin_memory=self.pin_memory,
+            collate_fn=collate_fn_for(self.batched_indexing),
         )
 
     def test_dataloader(self):
@@ -144,7 +159,8 @@ class PendulumEndpointDataModule(pl.LightningDataModule):
             batch_size=self.val_batch_size,
             shuffle=False,
             num_workers=self.num_workers,
-            pin_memory=self.pin_memory
+            pin_memory=self.pin_memory,
+            collate_fn=collate_fn_for(self.batched_indexing),
         )
 
     def predict_dataloader(self):

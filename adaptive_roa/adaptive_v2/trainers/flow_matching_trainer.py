@@ -93,6 +93,12 @@ class FlowMatchingTrainer:
         }
         if self.system_name in {"quadrotor3d", "humanoid_standup_reach"}:
             kwargs["dataset_dir"] = self.cfg.system.get("dataset_dir")
+        # One index operation per batch (data/batched_indexing.py); same batches,
+        # same order. Passed only when on, so the default call is the call it was.
+        if bool(self._predictor_cfg.get("batched_indexing", False)):
+            if self.system_name == "humanoid_standup_reach":
+                raise ValueError("predictor.batched_indexing is not implemented for humanoid_standup_reach")
+            kwargs["batched_indexing"] = True
         return dm_cls(**kwargs)
 
     def fit(

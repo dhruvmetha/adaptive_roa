@@ -207,7 +207,7 @@ def test_ended_slots_resume_relaunch_or_get_reported(env, monkeypatch, tmp_path)
     out = rebalance.resume_ended(True)
     assert len(out) == 4
     assert any(f"resume_amarel.sh {Q3D_FM}" in c for c in calls)
-    assert any(f"DET_V2_EXCLUDE=ilab1,ilab3,ilab4,rlab3 bash" in c and f"resume_ilab.sh {CP_CLF} 3-00:00:00 a4000" in c for c in calls)
+    assert any(f"DET_V2_EXCLUDE=ilab1,ilab3,ilab4,rlab3 bash" in c and f"resume_ilab.sh {CP_CLF} 06:00:00 a4000" in c for c in calls)
     assert any("DET_V2_RELAUNCH=1" in c and f"launch.sh {Q3D_BNNREG} ilab a4000" in c for c in calls)
     assert any(f"launch.sh {PEN_PARTX} ilabcpu" in c and "RELAUNCH" not in c for c in calls)
 

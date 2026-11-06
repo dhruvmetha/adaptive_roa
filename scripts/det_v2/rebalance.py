@@ -293,7 +293,7 @@ def resume_ended(apply: bool) -> list[str]:
         elif n and r["where"] == "amarel":
             cmd = f"bash {HERE}/resume_amarel.sh {r['name']}"
         elif n:
-            cmd = f"DET_V2_EXCLUDE={ilab_exclude(ilab_home_node())} bash {HERE}/resume_ilab.sh {r['name']} 3-00:00:00 {r['hostgpu']}"
+            cmd = f"DET_V2_EXCLUDE={ilab_exclude(ilab_home_node())} bash {HERE}/resume_ilab.sh {r['name']} {ENV.get('ILAB_RESUME_WALL', '06:00:00')} {r['hostgpu']}"
         else:        # died inside epoch 0: nothing banked, so start it again
             where = "amarel" if r["where"] == "amarel" else f"ilab {r['hostgpu']}"
             pre = "" if r["where"] == "amarel" else f"DET_V2_EXCLUDE={ilab_exclude(ilab_home_node())} "

@@ -15,4 +15,7 @@ samples_per_epoch: 2000
 n_epochs: 11
 acquisition:
   d2_ratio: 1.0
+predictor:
+  final_state:
+    reuse_body_features: true
 output_dir: ${exp_dir}/det_v2/q3d-lqr/x37_q3dlqr_bnnreg_uh_s${seed}

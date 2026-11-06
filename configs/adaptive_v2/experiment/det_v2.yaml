@@ -3,6 +3,12 @@
 # Composed by every run config under det_v2/runs/; a run config's own values win.
 #
 # K = 100 for acquisition, threshold opt and evaluation (val, cal, test).
+#
+# Keys marked "speedup" are the bias-free speedups of the 2026-11-06 review, on from
+# epoch 0 of every run: each is bit-identical or an unbiased re-draw (see
+# tests/adaptive_v2/test_det_v2_speedups.py). The run configs add
+# predictor.flow_matching.mae_val_frequency (FM) and
+# predictor.final_state.reuse_body_features (final-state models).
 acquisition_mc_samples: 100
 
 probability:
@@ -19,12 +25,19 @@ eval:
   # Three outcomes always (success, failure, invalid); see det_rerun.yaml for why null
   # would fold invalid into failure on the stochastic tree's zero-noise datasets.
   binary_outcomes: false
+  plot_epochs: [0, 5, 10]           # speedup: scatter/heatmap plots at the reporting epochs only
 
 calibration:
   num_mc_samples: ${eval.num_mc_samples_eval}
 
 adaptive_v2:
   filter_confident_pairs: false
+  endpoint_error: false             # speedup: training-set endpoint error, read only by legacy scripts
+
+predictor:
+  batched_indexing: true            # speedup: one index op per batch, same RandomSampler
+  lightning_trainer:
+    enable_progress_bar: false      # speedup: no per-step .item() sync, no ~300 MB of log
 
 # Candidates are trajectory starts only; test states come from the disjoint test file.
 candidate_mode: start
@@ -36,6 +49,7 @@ prediction_store:
   enabled: true
   endpoint_epochs: [0, 5, 10]
   endpoint_test_rows: 100000
+  reuse_cal_for_qhat: true          # speedup: predict D_cal once; q_hat_eval from the stored counts
 
 seed: 99512
 n_epochs: 11

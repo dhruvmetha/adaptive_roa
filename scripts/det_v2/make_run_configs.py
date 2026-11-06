@@ -55,7 +55,7 @@ def _yaml(d: dict, indent: int = 0) -> list[str]:
             lines.append(" " * indent + f"{k}:")
             lines += _yaml(v, indent + 2)
         else:
-            lines.append(" " * indent + f"{k}: {v}")
+            lines.append(" " * indent + f"{k}: {str(v).lower() if isinstance(v, bool) else v}")
     return lines
 
 
@@ -83,6 +83,9 @@ def render(run: dict) -> str:
             # Bias-free speedup: the in-training endpoint MAE ODE pass feeds only
             # validation_errors.txt.
             body["predictor"] = {"flow_matching": {"mae_val_frequency": 1000000}}
+        elif run["model"] in ("MLP final-state", "BNN final-state"):
+            # Bias-free speedup: the deterministic MLP body once per batch, not once per draw.
+            body["predictor"] = {"final_state": {"reuse_body_features": True}}
     body["output_dir"] = f"${{exp_dir}}/det_v2/{run['setting']}/{run['name']}_s${{seed}}"
     return head + "defaults:\n" + "".join(f"  - {d}\n" for d in defaults) + "\n" + "\n".join(_yaml(body)) + "\n"
 

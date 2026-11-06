@@ -15,4 +15,7 @@ samples_per_epoch: 35
 n_epochs: 11
 acquisition:
   d2_ratio: 0.0
+predictor:
+  final_state:
+    reuse_body_features: true
 output_dir: ${exp_dir}/det_v2/pen-lqr/m64_penlqr_bnnreg_unif_s${seed}

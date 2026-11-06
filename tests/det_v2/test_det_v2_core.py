@@ -202,3 +202,11 @@ def test_every_run_config_composes():
             assert (c["threshold"]["objective"], c["threshold"]["w"]) == (want_obj, want_w)
             if r["model"] == "FM":
                 assert c["predictor"]["flow_matching"]["mae_val_frequency"] == 1000000
+            if r["model"] in ("MLP final-state", "BNN final-state"):
+                assert c["predictor"]["final_state"]["reuse_body_features"] is True
+            # Bias-free speedups, on from epoch 0 of every run.
+            assert c["predictor"]["batched_indexing"] is True
+            assert c["predictor"]["lightning_trainer"]["enable_progress_bar"] is False
+            assert c["prediction_store"]["reuse_cal_for_qhat"] is True
+            assert c["adaptive_v2"]["endpoint_error"] is False
+            assert c["eval"]["plot_epochs"] == [0, 5, 10]

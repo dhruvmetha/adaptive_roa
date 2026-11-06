@@ -57,9 +57,17 @@ def run_dirs() -> list[tuple[dict, Path]]:
     return out
 
 
+def store_file(ep: Path, name: str) -> Path:
+    """A rescored_ternary epoch holds only the re-scored test files; its val/cal store is the original epoch's."""
+    p = ep / name
+    if not p.exists() and ep.parent.name == "rescored_ternary" and name.startswith("predictions_"):
+        return ep.parent.parent / ep.name / name
+    return p
+
+
 def epoch_key(ep: Path) -> str | None:
     try:
-        return ";".join(f"{f}:{os.path.getmtime(ep / f)}" for f in FILES)
+        return ";".join(f"{f}:{os.path.getmtime(store_file(ep, f))}" for f in FILES)
     except OSError:
         return None
 
@@ -68,7 +76,7 @@ def one_epoch(args) -> list[dict] | None:
     ep, alpha, beta_, delta = args
     ep = Path(ep)
     try:
-        val, cal = np.load(ep / "predictions_val.npz"), np.load(ep / "predictions_cal.npz")
+        val, cal = np.load(store_file(ep, "predictions_val.npz")), np.load(store_file(ep, "predictions_cal.npz"))
         test = np.load(ep / "full_roa_per_point.npz", allow_pickle=True)
         ts = json.load(open(ep / "artifacts_v2.json")).get("threshold_state") or {}
     except (OSError, ValueError):

@@ -108,6 +108,16 @@ def test_both_pass_integral_matches_adaptive_quadrature(n, ts, tf):
     assert vs.both_pass_probability([ns], [nf], [ni], ts, tf)[0] == pytest.approx(ref, abs=1e-9)
 
 
+def test_verdict_probabilities_stay_in_the_unit_interval():
+    rng = np.random.default_rng(3)
+    c = rng.multinomial(100, [0.3, 0.3, 0.4], size=3000)
+    c = np.vstack([c, [[100, 0, 0], [0, 100, 0], [0, 0, 100], [50, 50, 0]]])
+    for ts, tf in ((0.3, 0.4), (0.01, 0.01), (0.99, 0.99), (0.5, 0.49)):
+        q = vs.verdict_probabilities(c[:, 0], c[:, 1], c[:, 2], ts, tf)
+        for v in q.values():
+            assert v.min() >= 0.0 and v.max() <= 1.0
+
+
 def test_qa_classifiers():
     # MLP: one draw, the indicator of A.
     q = vs.classifier_verdict_probabilities(np.array([[0.9, 0.5, 0.1]]), 0.6, 0.6)

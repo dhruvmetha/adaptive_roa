@@ -74,7 +74,8 @@ def verdict_probabilities(n_s, n_f, n_inv, tau_s: float, tau_f: float) -> dict[s
     pb = both_pass_probability(us, uf, ui, tau_s, tau_f)
     q_s, q_f = a - pb, b - pb
     q_a = 1.0 - a - b + 2.0 * pb
-    return {"q_s": q_s[inv], "q_f": q_f[inv], "q_a": np.clip(q_a, 0.0, 1.0)[inv]}
+    # Quadrature round-off leaves values a few 1e-15 outside [0, 1]; later ratios and logs need them inside.
+    return {k: np.clip(v, 0.0, 1.0)[inv] for k, v in (("q_s", q_s), ("q_f", q_f), ("q_a", q_a))}
 
 
 def classifier_verdict_probabilities(p_draws: np.ndarray, tau_s: float, tau_f: float) -> dict[str, np.ndarray]:

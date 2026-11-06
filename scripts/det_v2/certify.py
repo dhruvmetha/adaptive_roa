@@ -114,10 +114,13 @@ def main():
             plan_rows.append((r, ep, ck))
             if cache.get(ck, {}).get("key") != key:
                 todo.append((ck, key, (str(ep), a.alpha, a.beta, a.delta)))
+    skipped = []
     with ProcessPoolExecutor(max_workers=a.jobs) as pool:
-        for (ck, key, _), rows in zip(todo, pool.map(one_epoch, [t[2] for t in todo], chunksize=4)):
+        for (ck, key, args), rows in zip(todo, pool.map(one_epoch, [t[2] for t in todo], chunksize=4)):
             if rows is not None:
                 cache[ck] = {"key": key, "rows": rows}
+            else:
+                skipped.append(args[0])                  # missing store file, or another account's 0600 file
     n = 0
     with open(a.out + ".tmp", "w") as f:
         for r, ep, ck in plan_rows:
@@ -138,6 +141,8 @@ def main():
             json.dump(cache, f)
         os.replace(a.cache + ".tmp", a.cache)
     print(f"{n} certificate rows from {len(plan_rows)} epochs ({len(todo)} computed), written to {a.out}")
+    if skipped:
+        print(f"skipped {len(skipped)} epochs that could not be read, e.g. {skipped[0]}")
 
 
 if __name__ == "__main__":

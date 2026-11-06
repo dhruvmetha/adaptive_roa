@@ -81,8 +81,8 @@ def test_6c_F_walk_bounds_roa_loss_and_final_F_excludes_S():
     val, cal, test = (ps[:2000], pf[:2000], y[:2000]), (ps[2000:4000], pf[2000:4000], y[2000:4000]), (ps[4000:], pf[4000:], y[4000:])
     res = C.certify(val, cal, test, classifier=False, tau=(0.5, 0.3))
     f = res["6c"]["F"]
-    if f["passed"]:
-        assert C.cp_upper(f["cal_succ"], cal[2].sum(), 0.025) <= 0.05
+    assert f["passed"]                                       # the fixture must exercise the walk
+    assert C.cp_upper(f["cal_succ"], cal[2].sum(), 0.025) <= 0.05
     r = C.report(test, (0.2, 0.9), (0.9, 0.05))
     S = C.in_S(test[0], test[1], 0.2, 0.9); F = C.in_F(test[0], test[1], 0.9, 0.05) & ~S
     assert r["test_S"] == S.sum() and r["test_F"] == F.sum()
@@ -111,12 +111,20 @@ def test_6a_walks_at_delta_and_6c_at_half_delta():
     res = C.certify(val, cal, test, classifier=False, tau=(0.5, 0.3), alpha=0.05, delta=0.05)
     a, cS, cF = res["6a"], res["6c"]["S"], res["6c"]["F"]
     assert a["m_min"] == 59 and res["6c"]["m_min"] == 72
-    if a["passed"]:
-        assert a["cal_bound"] == pytest.approx(float(C.cp_upper(a["cal_fp"], a["cal_n"], 0.05)))
-    if cS["passed"]:
-        assert cS["cal_bound"] == pytest.approx(float(C.cp_upper(cS["cal_fp"], cS["cal_n"], 0.025)))
-    if cF["passed"]:
-        assert cF["cal_bound"] == pytest.approx(float(C.cp_upper(cF["cal_succ"], cal[2].sum(), 0.025)))
+    assert a["passed"] and cS["passed"] and cF["passed"]     # the fixture must exercise all three walks
+    assert a["cal_bound"] == pytest.approx(float(C.cp_upper(a["cal_fp"], a["cal_n"], 0.05)))
+    assert cS["cal_bound"] == pytest.approx(float(C.cp_upper(cS["cal_fp"], cS["cal_n"], 0.025)))
+    assert cF["cal_bound"] == pytest.approx(float(C.cp_upper(cF["cal_succ"], cal[2].sum(), 0.025)))
     # every 6c S candidate starts at >= 2 * 72 D_val states
     order = C.order_S_final_state(val, 2 * 72)
     assert all(C.in_S(val[0], val[1], *t).sum() >= 144 for t in order)
+
+
+def test_classifier_F_order_is_the_loss_vs_failure_recall_front():
+    ps, pf, y = clf_split(5000, seed=9)
+    order = C.order_F_classifier((ps, None, y))
+    sets = [C.in_F(ps, None, l, None) for l, _ in order]
+    loss = np.array([(s & y).sum() for s in sets]) / y.sum()
+    frec = np.array([(s & ~y).sum() for s in sets]) / (~y).sum()
+    assert sets[0].sum() > 0 and all((a <= b).all() for a, b in zip(sets, sets[1:]))
+    assert (np.diff(frec) > 0).all() and (np.diff(loss) >= 0).all()      # each step adds failures

@@ -194,13 +194,24 @@ def order_F_final_state(val) -> list[tuple[float, float]]:
 
 
 def order_F_classifier(val) -> list[tuple[float, None]]:
-    ps, _, _ = val
-    ps = np.sort(det_v2_rule.tie(ps))
-    sizes = np.searchsorted(ps, CLF_GRID, side="right")                 # |{p_s <= l}|
+    """6c F order for a classifier: the D_val front of lower ROA loss and higher failure recall over F_l,
+    sorted by failure recall ascending. The family is nested, so this drops the l steps that add only successes."""
+    ps, _, y = val
+    ps = det_v2_rule.tie(ps)
+    order = np.argsort(ps, kind="stable")
+    ps_sorted, succ_sorted = ps[order], y[order]
+    sizes = np.searchsorted(ps_sorted, CLF_GRID, side="right")         # |{p_s <= l}|
+    succ_cum = np.concatenate([[0], np.cumsum(succ_sorted)])
+    n_succ_in = succ_cum[sizes]
     ok = np.flatnonzero(sizes > 0)
     if not len(ok):
         return []
-    return [(float(CLF_GRID[i]), None) for i in range(ok.min(), len(CLF_GRID))]
+    n_succ, n_fail = max(int(y.sum()), 1), max(int((~y).sum()), 1)
+    loss = n_succ_in[ok] / n_succ
+    frec = (sizes[ok] - n_succ_in[ok]) / n_fail
+    front = ok[_pareto(loss, frec)]
+    front = front[np.argsort((sizes[front] - n_succ_in[front]) / n_fail, kind="stable")]
+    return [(float(CLF_GRID[i]), None) for i in front]
 
 
 # --- walks ---------------------------------------------------------------------------------------

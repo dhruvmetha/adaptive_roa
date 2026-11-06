@@ -74,32 +74,91 @@ class FinalStateModelHandle:
     ``FinalStateTrainer._resolve_num_mc_samples`` for the guard and its warning.
     """
 
-    def __init__(self, posterior, head, system: Any, device: str = "cpu"):
+    def __init__(self, posterior, head, system: Any, device: str = "cpu",
+                 reuse_body_features: bool = False):
         self.posterior = posterior
         self.head = head
         self.system = system
         self.device = device
         self.training = False
         self.distance_manifold = _ManifoldDistanceShim(head)
+        # Opt-in (predictor.final_state.reuse_body_features). The MC loops call
+        # predict_endpoint K times on the SAME batch tensor; for a deterministic
+        # or last-layer Laplace posterior the body output is identical on every
+        # one of those calls, so it is computed on the first and reused. Only the
+        # head draws (weight noise, component pick, endpoint noise) run per call,
+        # in the order they always ran, so the endpoints are bit-identical.
+        self.reuse_body_features = bool(reuse_body_features)
+        self._body_cache: tuple | None = None
 
     def eval(self):
         self.posterior.eval()
         self.training = False
+        self._body_cache = None
         return self
 
     def train(self, mode: bool = True):
         self.posterior.train(mode)
         self.training = bool(mode)
+        self._body_cache = None
         return self
 
     def to(self, device):
         self.device = device
         self.posterior.to(device)
+        self._body_cache = None
         return self
 
     def _params(self, states: torch.Tensor) -> torch.Tensor:
         embedded = self.system.embed_state_for_model(self.system.normalize_state(states))
         return self.posterior.forward_sample(embedded)
+
+    def _split_posterior(self):
+        """``(body, head_draw)`` with ``head_draw(body(e)) == forward_sample(e)``, or None.
+
+        Only for posteriors whose body is a fixed function in eval mode. Exact
+        types, so a subclass that changes forward_sample is never split.
+        """
+        from adaptive_roa.predictors.posteriors import (
+            DeterministicPosterior, LastLayerLaplacePosterior,
+        )
+        post = self.posterior
+        if post.training:
+            return None
+        if type(post) is DeterministicPosterior:
+            return post.net, (lambda feats: feats)
+        if type(post) is LastLayerLaplacePosterior:
+            return post.body, post.sample_from_features
+        return None
+
+    def _params_reusing_body(self, states, x: torch.Tensor):
+        """``_params(x)``, with the body output reused while ``states`` is the cached batch.
+
+        The key holds a reference to the caller's tensor (so its id cannot be
+        recycled) plus its version counter, which every in-place write bumps,
+        including writes through a view or to the base; and the version of every
+        posterior parameter, so a weight update also invalidates the cache.
+        """
+        split = self._split_posterior()
+        if split is None or not torch.is_tensor(states):
+            return self._params(x)
+        try:
+            version = states._version
+            versions = tuple(p._version for p in self.posterior.parameters())
+        except RuntimeError:
+            # Inference-mode tensors carry no version counter; never cache them.
+            self._body_cache = None
+            return self._params(x)
+        body, head_draw = split
+        c = self._body_cache
+        if (c is not None and c[0] is states and c[1] == version
+                and c[2] == versions and c[3] == x.device):
+            feats = c[4]
+        else:
+            embedded = self.system.embed_state_for_model(self.system.normalize_state(x))
+            feats = body(embedded)
+            self._body_cache = (states, version, versions, x.device, feats)
+        return head_draw(feats)
 
     def predict_endpoint(self, states) -> torch.Tensor:
         """[B, state_dim] raw -> [B, state_dim] raw. Fresh sample every call."""
@@ -111,7 +170,11 @@ class FinalStateModelHandle:
             out_device = self.device
         x = x.to(next(self.posterior.parameters()).device)
         with torch.no_grad():
-            endpoints = self.head.sample(self._params(x))
+            if self.reuse_body_features:
+                params = self._params_reusing_body(states, x)
+            else:
+                params = self._params(x)
+            endpoints = self.head.sample(params)
         return endpoints.to(out_device)
 
     def get_manifold_component_names(self) -> List[str]:

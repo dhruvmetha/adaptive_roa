@@ -100,7 +100,16 @@ def test_manifest_regenerates_byte_for_byte(tmp_path):
 DET_RERUN_MANIFEST = Path("/common/home/st1122/Projects/adaptive_roa/slurm_logs/det_rerun/manifest.tsv")
 
 
-@pytest.mark.skipif(not DET_RERUN_MANIFEST.exists(), reason="needs the det_rerun manifest")
+def _readable(path: Path) -> bool:
+    # Path.exists raises PermissionError when a parent can't be traversed, which another
+    # account (dm1487) hits on /common/home/st1122; that has to skip, not fail collection.
+    try:
+        return path.is_file()
+    except OSError:
+        return False
+
+
+@pytest.mark.skipif(not _readable(DET_RERUN_MANIFEST), reason="needs the det_rerun manifest")
 def test_mem_table_matches_the_det_rerun_manifest():
     assert make_manifest.extract_mem(DET_RERUN_MANIFEST) == make_manifest.read_mem_table(SRC / "det_rerun_mem.tsv")
 

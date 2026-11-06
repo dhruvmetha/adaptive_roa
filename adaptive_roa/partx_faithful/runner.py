@@ -6,6 +6,12 @@ for epoch e is the current leaf partition, with each leaf's GP fit on the
 initial set plus the first (b_e - initial) entries of the acquisition log
 (spec §6.4). Checkpoints are written the moment the count crosses them. A run
 can be killed at any point and restarted with the same command.
+
+With val/cal split files (run_from_cfg passes them when prediction_store.enabled),
+each epoch also writes the classifier prediction store the adaptive runs write
+(adaptive_v2/eval/prediction_store.py): predictions_val.npz and
+predictions_cal.npz with p_success and true_labels, scored by the same handle
+that scores the test split, plus prediction_store_states_<split>.npz once per run.
 """
 from __future__ import annotations
 
@@ -18,7 +24,9 @@ from pathlib import Path
 
 import numpy as np
 
+from adaptive_roa.adaptive.data_source import load_eval_states
 from adaptive_roa.adaptive_v2.engine import _atomic_write_json, _convert_numpy
+from adaptive_roa.adaptive_v2.eval import prediction_store as ps
 from adaptive_roa.adaptive_v2.eval.full_roa import evaluate_full_roa_classifier
 from adaptive_roa.benchmark.provenance import git_sha
 from adaptive_roa.partx_faithful.algorithm import PartX, PartXConfig, derive_seed
@@ -69,7 +77,7 @@ def _git_commit() -> str:
 class CheckpointWriter:
     def __init__(self, *, output_dir, system, eval_states_file, attractor_radius, checkpoints,
                  initial, model_factory, pcfg, extra, decision_rule: str = "one_sided",
-                 guarantee_alpha: float = 0.05):
+                 guarantee_alpha: float = 0.05, store_splits: dict | None = None):
         self.out = Path(output_dir)
         self.system, self.eval_states_file = system, str(eval_states_file)
         self.attractor_radius = optional_radius(attractor_radius)
@@ -78,6 +86,8 @@ class CheckpointWriter:
         self.decision_rule = str(decision_rule)
         # Part-X never fixes alpha for Lemma 1; the det paper uses 0.05 and says so.
         self.guarantee_alpha = float(guarantee_alpha)
+        # split -> (states, labels) for the prediction store; empty means no store.
+        self.store_splits = dict(store_splits or {})
         self.next_e = 0
         self._cache: dict = {}
 
@@ -106,6 +116,7 @@ class CheckpointWriter:
             if not self.complete(e):
                 self.write(px, e)
             else:
+                self._note_missing_store(e)
                 self._fill_prev_d2(px, e)      # a crash may have landed between the two writes
 
     def finish(self, px) -> None:
@@ -114,8 +125,26 @@ class CheckpointWriter:
             if not self.complete(e):
                 self.write(px, e)
             else:
+                self._note_missing_store(e)
                 self._fill_prev_d2(px, e)
         self.next_e = len(self.checkpoints)
+
+    def _note_missing_store(self, e: int) -> None:
+        """A completed epoch is never rewritten: its snapshot was the partition of its own
+        time, so a rewrite now would change its test numbers. Say so if it has no store."""
+        missing = [s for s in self.store_splits if not (self.epoch_dir(e) / f"predictions_{s}.npz").exists()]
+        if missing:
+            print(f"[partx_faithful] {self.epoch_dir(e).name} was written without predictions_"
+                  f"{'/'.join(missing)}.npz; leaving it as it is", flush=True)
+
+    def _write_store(self, handle, epoch_dir: Path) -> None:
+        """predictions_<split>.npz for val and cal, through the handle that scored test,
+        so the three splits are read out the same way (engine._write_prediction_store)."""
+        for split, (X, y) in self.store_splits.items():
+            ps.write_split_states_once(self.out, split, X, y)
+            ps.write_split(epoch_dir, split, X, y, predictor_type="classifier", model=handle,
+                           system=self.system, num_mc_samples=1,      # unused by a classifier
+                           attractor_radius=self.attractor_radius, device="cpu")
 
     def _fill_prev_d2(self, px, e: int) -> None:
         """Match the other arms: epoch e-1 records the pool indices bought between e-1 and e."""
@@ -157,11 +186,15 @@ class CheckpointWriter:
         root = px.regions[0]
         d = self.epoch_dir(e)
         d.mkdir(parents=True, exist_ok=True)
+        handle = PiecewiseHandle(PiecewiseModel(leaves, models, root.low, root.high))
         metrics = evaluate_full_roa_classifier(
-            classifier=PiecewiseHandle(PiecewiseModel(leaves, models, root.low, root.high)),
+            classifier=handle,
             system=self.system, eval_states_file=self.eval_states_file, lambda_star=0.5, delta=0.1,
             attractor_radius=self.attractor_radius, device="cpu", output_dir=str(d), verbose=False,
             decision_rule=self.decision_rule)
+        # Before artifacts_v2.json, which marks the epoch complete: a crash in between
+        # leaves the epoch incomplete, and the resume rewrites it whole.
+        self._write_store(handle, d)
         np.savez(d / "partx_leaves.npz",
                  low=np.array([r.low for r in leaves]), high=np.array([r.high for r in leaves]),
                  rtype=np.array([r.rtype for r in leaves]), rid=np.array([r.rid for r in leaves]),
@@ -211,7 +244,10 @@ def run_partx_faithful(*, system, starts, labels, eval_states_file, output_dir, 
                        falsify: str, attractor_radius: float, extra: dict,
                        decision_rule: str = "one_sided", trajectory=None,
                        reuse_hyperparameters: bool = False, state_pool=None,
-                       guarantee_alpha: float = 0.05) -> dict:
+                       guarantee_alpha: float = 0.05, val_set_file=None, cal_set_file=None,
+                       max_eval_rows: int | None = None) -> dict:
+    """val_set_file / cal_set_file: write the prediction store for each split given, loaded
+    as engine._write_prediction_store loads them (max_eval_rows rows at most)."""
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     starts = np.asarray(starts, dtype=float)
@@ -257,6 +293,14 @@ def run_partx_faithful(*, system, starts, labels, eval_states_file, output_dir, 
         hashed["state_pool"] = True
         hashed["n_states"] = int(len(state_pool[0]))
     chash = config_hash(hashed)
+    # The store is output only (it never feeds the algorithm), so it stays out of the hash:
+    # a run started without it resumes with it, and writes it from the next epoch on.
+    store_splits = {}
+    for split, path in (("val", val_set_file), ("cal", cal_set_file)):
+        if path:
+            X, _, y = load_eval_states(str(path), max_rows=max_eval_rows,
+                                       state_dim=getattr(system, "state_dim", None))
+            store_splits[split] = (X, y)
     state_path = out / "partx_state.pkl"
     if state_path.exists():
         px = load_state(state_path, chash)
@@ -270,7 +314,7 @@ def run_partx_faithful(*, system, starts, labels, eval_states_file, output_dir, 
                               attractor_radius=attractor_radius, checkpoints=checkpoints,
                               initial=initial, model_factory=factory, pcfg=pcfg,
                               extra={**extra, "commit": _git_commit()}, decision_rule=decision_rule,
-                              guarantee_alpha=guarantee_alpha)
+                              guarantee_alpha=guarantee_alpha, store_splits=store_splits)
     px.on_sample = writer.on_sample
     writer.on_sample(px)                     # epoch 0, and anything a crash left unwritten
     t0 = time.time()
@@ -346,6 +390,9 @@ def run_from_cfg(cfg) -> dict:
                      sigma_f2_bounds=tuple(gp["sigma_f2_bounds"]))
     extra = {"partx_faithful": OmegaConf.to_container(cfg.partx_faithful, resolve=True),
              "n0_resolved": pcfg.n0}
+    store = prediction_store_files(cfg)
+    if store:
+        _write_resolved_config(cfg, cfg.output_dir)
     return run_partx_faithful(
         system=system, starts=starts, labels=np.asarray(ds.labels, dtype=float),
         eval_states_file=cfg.data_source.test_set_file, output_dir=cfg.output_dir,
@@ -356,7 +403,40 @@ def run_from_cfg(cfg) -> dict:
         trajectory=PoolTrajectoryStates(ds) if traj_on else None,
         reuse_hyperparameters=bool(gp.get("reuse_hyperparameters", False)),
         state_pool=_state_pool_from(ds) if state_on else None,
-        guarantee_alpha=float(cfg.partx_faithful.get("guarantee_alpha", 0.05)))
+        guarantee_alpha=float(cfg.partx_faithful.get("guarantee_alpha", 0.05)),
+        **store)
+
+
+def prediction_store_files(cfg) -> dict:
+    """run_partx_faithful's store kwargs: on when prediction_store.enabled and both
+    data_source.val_set_file and cal_set_file are set, else {} (no store, as before).
+
+    max_eval_rows is eval.max_eval_rows, the cap the engine loads these splits with.
+    """
+    store = cfg.get("prediction_store", None)
+    if store is None or not bool(store.get("enabled", False)):
+        return {}
+    files = {k: cfg.data_source.get(k, None) for k in ("val_set_file", "cal_set_file")}
+    missing = [k for k, v in files.items() if not v]
+    if missing:
+        print(f"[partx_faithful] prediction_store.enabled, but data_source.{' and '.join(missing)} "
+              f"not set: writing no val/cal predictions", flush=True)
+        return {}
+    rows = (cfg.get("eval", None) or {}).get("max_eval_rows", None)
+    return {**{k: str(v) for k, v in files.items()},
+            "max_eval_rows": None if rows is None else int(rows)}
+
+
+def _write_resolved_config(cfg, output_dir) -> None:
+    """resolved_config.yaml, as the engine writes it; the post-hoc store tools read it."""
+    from omegaconf import OmegaConf
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    try:
+        text = OmegaConf.to_yaml(cfg, resolve=True)
+    except Exception as e:  # an unresolvable interpolation must not kill the run
+        text = f"# could not resolve: {e}\n" + OmegaConf.to_yaml(cfg)
+    (out / "resolved_config.yaml").write_text(text)
 
 
 def _state_pool_from(ds):

@@ -34,6 +34,41 @@ def test_ledger_append_writes_one_header_and_whole_rows_under_contention(world):
     assert all(len(l.split("\t")) == 10 for l in lines)
 
 
+def _hold_lock(path, seconds):
+    """Hold the ledger's flock from another process for ``seconds``."""
+    import textwrap
+    code = textwrap.dedent(f"""
+        import fcntl, sys, time
+        f = open({str(path)!r}, "a"); fcntl.flock(f, fcntl.LOCK_EX); print("held", flush=True)
+        time.sleep({seconds}); fcntl.flock(f, fcntl.LOCK_UN)
+    """)
+    p = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)
+    assert p.stdout.readline().strip() == "held"
+    return p
+
+
+def test_ledger_writers_wait_for_a_held_lock_and_give_up_after_the_wait(world):
+    led = world.exp / "det_v2" / "launched.tsv"
+    led.parent.mkdir(parents=True, exist_ok=True)
+    holder = _hold_lock(led, 1.5)
+    r = _bash(world, "ledger_append a tester ilab 1 a4000 ts log c rd launch")       # polls until released
+    holder.wait()
+    assert r.returncode == 0, r.stderr
+    assert [l.split("\t")[0] for l in led.read_text().splitlines()] == ["name", "a"]
+    holder = _hold_lock(led, 4)
+    r = _bash(world, "LEDGER_LOCK_WAIT=1 ledger_append b tester ilab 2 a4000 ts log c rd launch")
+    assert r.returncode != 0 and "could not lock" in r.stderr
+    with pytest.raises(TimeoutError):
+        import os
+        os.environ["LEDGER_LOCK_WAIT"] = "1"
+        try:
+            lib.append_ledger(led, {"name": "c"})
+        finally:
+            del os.environ["LEDGER_LOCK_WAIT"]
+    holder.wait()
+    assert [l.split("\t")[0] for l in led.read_text().splitlines()] == ["name", "a"]
+
+
 def test_python_and_shell_appends_share_the_format(world):
     led = world.exp / "det_v2" / "launched.tsv"
     lib.append_ledger(led, {"name": "a", "user": "u", "where": "direct", "job": "1", "hostgpu": "h:0",

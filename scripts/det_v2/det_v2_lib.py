@@ -10,8 +10,10 @@ from __future__ import annotations
 import csv
 import fcntl
 import os
+import random
 import re
 import subprocess
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -65,19 +67,32 @@ def latest_rows(path: str | Path) -> dict[str, dict]:
 
 
 def append_ledger(path: str | Path, row: dict) -> None:
-    """Append one row under the same flock the shell scripts take."""
+    """Append one row under the same flock the shell scripts take (common.sh ledger_lock).
+
+    The first open only holds the lock; the row goes through a second open taken after
+    the lock, so on NFS it lands at the server's end of file. The lock is polled
+    non-blocking: NFS's own blocking-lock backoff can starve one host behind another.
+    """
     os.umask(0o002)
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    with open(p, "a") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
+    deadline = time.monotonic() + float(os.environ.get("LEDGER_LOCK_WAIT", 900))
+    with open(p, "a") as lock:
+        while True:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() > deadline:
+                    raise TimeoutError(f"could not lock {p}")
+                time.sleep(random.uniform(0.1, 0.4))
         try:
-            if f.tell() == 0 and p.stat().st_size == 0:
-                f.write("\t".join(LEDGER_COLUMNS) + "\n")
-            f.write("\t".join(str(row.get(c, "-")) for c in LEDGER_COLUMNS) + "\n")
-            f.flush()
+            with open(p, "a") as f:
+                if os.fstat(f.fileno()).st_size == 0:
+                    f.write("\t".join(LEDGER_COLUMNS) + "\n")
+                f.write("\t".join(str(row.get(c, "-")) for c in LEDGER_COLUMNS) + "\n")
         finally:
-            fcntl.flock(f, fcntl.LOCK_UN)
+            fcntl.flock(lock, fcntl.LOCK_UN)
 
 
 # --- run dirs ---------------------------------------------------------------------------

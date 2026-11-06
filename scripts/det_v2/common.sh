@@ -101,14 +101,27 @@ ledger_last() {                                       # latest ledger row for a 
 lf() { cut -f"$2" <<< "$1"; }                         # field of a ledger row: lf "$ROW" 3
 L_USER=2 L_WHERE=3 L_JOB=4 L_HOSTGPU=5 L_LOG=7 L_COMMIT=8 L_RUNDIR=9 L_ACTION=10
 
+# The ledger is written from several hosts and both accounts over NFS. fd 9 is only the
+# lock; every row is written through a fresh open taken after the lock is held, so the
+# append lands at the server's end of file (close-to-open) rather than a client's cached
+# size. The lock is taken with short non-blocking retries: a blocking flock on NFS backs
+# off to tens of seconds per retry, so a host racing another host's loop starved past a
+# 120 s wait (2026-11-06: 4 of 25 arrakis appends died against westeros).
+ledger_lock() {                                       # ledger_lock: flock fd 9 within LEDGER_LOCK_WAIT s
+  local deadline=$(( SECONDS + ${LEDGER_LOCK_WAIT:-900} ))
+  until flock -n 9; do
+    [ "$SECONDS" -lt "$deadline" ] || return 1
+    sleep "0.$(( RANDOM % 4 + 1 ))"
+  done
+}
+
 ledger_append() {                                     # ledger_append <10 fields>; serialized by flock
   [ $# -eq 10 ] || die "ledger_append takes 10 fields, got $#"
   mkdir -p "$(dirname "$LEDGER")"
   local line; line=$(IFS=$'\t'; echo "$*")
   (
-    flock -w 120 9 || die "could not lock $LEDGER"
-    [ -s "$LEDGER" ] || printf '%s\n' "$LEDGER_HEADER" >&9
-    printf '%s\n' "$line" >&9
+    ledger_lock || die "could not lock $LEDGER"
+    { [ -s "$LEDGER" ] || printf '%s\n' "$LEDGER_HEADER"; printf '%s\n' "$line"; } >> "$LEDGER"
   ) 9>>"$LEDGER"
 }
 
@@ -118,7 +131,7 @@ ledger_append() {                                     # ledger_append <10 fields
 ledger_claim() {
   mkdir -p "$(dirname "$LEDGER")"
   (
-    flock -w 120 9 || exit 2
+    ledger_lock || exit 2
     last=$(awk -F'\t' -v n="$1" 'NR>1 && $1==n' "$LEDGER" | tail -1)
     act=$(cut -f10 <<< "$last")
     if [ -n "$last" ] && [ "$act" != abandon ] && [ "${DET_V2_RELAUNCH:-0}" != 1 ] \
@@ -126,8 +139,8 @@ ledger_claim() {
       echo "$1 is already in the ledger ($(cut -f2-4 <<< "$last" | tr '\t' ' '), $(cut -f10 <<< "$last")); resume it, or set DET_V2_RELAUNCH=1 if it has nothing banked" >&2
       exit 3
     fi
-    [ -s "$LEDGER" ] || printf '%s\n' "$LEDGER_HEADER" >&9
-    printf '%s\t%s\t%s\t-\t%s\t%s\t-\t%s\t%s\tclaim\n' "$1" "$NET_ID" "$2" "$3" "$(stamp)" "$4" "$5" >&9
+    { [ -s "$LEDGER" ] || printf '%s\n' "$LEDGER_HEADER"
+      printf '%s\t%s\t%s\t-\t%s\t%s\t-\t%s\t%s\tclaim\n' "$1" "$NET_ID" "$2" "$3" "$(stamp)" "$4" "$5"; } >> "$LEDGER"
   ) 9>>"$LEDGER"
 }
 
@@ -292,13 +305,13 @@ resume_prepare() {
 # append a claim row only if nobody appended for the name since the caller read it.
 ledger_claim_resume() {
   (
-    flock -w 120 9 || exit 2
+    ledger_lock || exit 2
     now=$(awk -F'\t' -v n="$1" 'NR>1 && $1==n' "$LEDGER" | tail -1)
     if [ "$now" != "$2" ]; then
       echo "$1 changed in the ledger meanwhile ($(cut -f2-4,10 <<< "$now" | tr '\t' ' ')); check it before resuming" >&2
       exit 3
     fi
-    printf '%s\t%s\t%s\t-\t%s\t%s\t-\t%s\t%s\tclaim\n' "$1" "$NET_ID" "$3" "$4" "$(stamp)" "$5" "$6" >&9
+    printf '%s\t%s\t%s\t-\t%s\t%s\t-\t%s\t%s\tclaim\n' "$1" "$NET_ID" "$3" "$4" "$(stamp)" "$5" "$6" >> "$LEDGER"
   ) 9>>"$LEDGER"
 }
 

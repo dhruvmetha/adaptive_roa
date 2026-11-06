@@ -111,7 +111,7 @@ class Problem:
 
 
 # Paths a config lists but no det_v2 code path reads, so their mode does not matter.
-# deterministic/quadrotor2D_rl/trajectory_lengths_cache.txt (dm1487:nogroup 660): the npz
+# deterministic/quadrotor2D_rl/trajectory_lengths_cache.txt (the other account's, mode 660): the npz
 # data source keeps trajectory lengths in memory (reviewed 2026-11-06).
 NOT_READ = ("deterministic/quadrotor2D_rl/trajectory_lengths_cache.txt",)
 

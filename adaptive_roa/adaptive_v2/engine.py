@@ -87,6 +87,9 @@ def _drop_unset_taus(threshold_state: Any) -> None:
     if isinstance(threshold_state, dict) and threshold_state.get("tau_s") is None:
         for k in ThresholdState.TAU_FIELDS:
             threshold_state.pop(k, None)
+    if isinstance(threshold_state, dict) and threshold_state.get("tau_s_star") is None:
+        for k in ThresholdState.DET_V2_FIELDS:
+            threshold_state.pop(k, None)
 
 
 class AdaptiveEngine:
@@ -240,6 +243,20 @@ class AdaptiveEngine:
         state = self.threshold_backend.optimize_val(pred["states"], pred["true_labels"], p_s, p_f, p_i, k)
         return state, pred
 
+    def _fit_on_acquired_rows(self, model_handle):
+        """det_v2 threshold opt (threshold=j_sel) on the threshold-fit rows: the held-out rows
+        of the acquired data, predicted at the backend's K (counts for final-state models)."""
+        from adaptive_roa.adaptive_v2.eval import prediction_store as ps
+        X, y = sample_val_data_for_optimization(self.pool.dataset_builder)
+        k = int(self.threshold_backend.num_mc_samples)
+        pred = ps.predict_split(
+            X, y, predictor_type=self.predictor_type, model=model_handle, system=self.system,
+            num_mc_samples=k, attractor_radius=self.evaluator.attractor_radius,
+            batch_size=int(self.cfg.get("val_batch_size", 2048)), device=self.device,
+        )
+        p_s, p_f, p_i, k_used = ps.fit_probabilities(pred, k)
+        return self.threshold_backend.optimize_probs(pred["states"], pred["true_labels"], p_s, p_f, p_i, k_used)
+
     def _write_prediction_store(self, epoch_dir, model_handle, keep_endpoints: bool, threshold_fit,
                                 val_prediction: dict[str, Any] | None = None) -> None:
         """Val, cal and threshold-fit predictions for this epoch (prediction_store.py).
@@ -311,6 +328,11 @@ class AdaptiveEngine:
 
             resume_ckpt = previous_best_checkpoint if (warm_start and previous_best_checkpoint) else None
 
+            # Wall time per phase of this epoch, in artifacts_v2.json under extra.phase_seconds.
+            import time as _time
+            phase_seconds: dict[str, float] = {}
+            _t0 = _time.time()
+
             model_handle = self.trainer.fit(
                 dataset_files=dataset_files,
                 output_dir=str(epoch_output_dir),
@@ -318,6 +340,7 @@ class AdaptiveEngine:
             )
             model_handle.eval()
             model_handle.to(self.device)
+            phase_seconds["train"] = round(_time.time() - _t0, 1)
 
             epoch_ckpts = glob.glob(str(epoch_output_dir / "checkpoints" / "best*.ckpt"))
             if epoch_ckpts:
@@ -340,7 +363,7 @@ class AdaptiveEngine:
             # threshold_state, so for them the training loop never fits a
             # threshold at all -- making that independence structural rather than
             # a fact about who happens to read the variable.
-            threshold_consumers = {"ranked", "direct", "conformal", "partx"}
+            threshold_consumers = {"ranked", "direct", "conformal", "partx", "q_a", "u_h"}
             needs_threshold = run_eval or acquisition_mode in threshold_consumers
 
             store_cfg = self.cfg.get("prediction_store", None)
@@ -352,9 +375,12 @@ class AdaptiveEngine:
             # model calls ahead of acquisition, so it shifts the RNG stream for those
             # arms only. Every other backend keeps the order below unchanged.
             val_prediction = None
+            _t0 = _time.time()
             if needs_threshold and getattr(self.threshold_backend, "fit_split", None) == "val":
                 threshold_state, val_prediction = self._fit_on_val_split(
                     model_handle, store_val=run_eval and store_on, keep_endpoints=store_endpoints_now)
+            elif needs_threshold and getattr(self.threshold_backend, "fit_split", None) == "acq":
+                threshold_state = self._fit_on_acquired_rows(model_handle)
             elif needs_threshold:
                 X_val, y_val = sample_val_data_for_optimization(
                     self.pool.dataset_builder,
@@ -367,6 +393,8 @@ class AdaptiveEngine:
                 print(f"Skipping threshold optimization: {acquisition_mode} is threshold-free "
                       f"and no evaluation runs this epoch")
 
+            phase_seconds["threshold_fit"] = round(_time.time() - _t0, 1)
+            _t0 = _time.time()
             if self.smoke_mode or not run_eval or self.predictor_type == "classifier":
                 # classifier has no generated endpoints -> no endpoint-prediction error
                 endpoint_error = {"skipped": True}
@@ -379,6 +407,8 @@ class AdaptiveEngine:
                     verbose=self.calibration_backend.verbose,
                 )
 
+            phase_seconds["train_endpoint_error"] = round(_time.time() - _t0, 1)
+            _t0 = _time.time()
             d1_states, d1_indices = self.pool.sample_uniform(n_d1_target)
             if n_d1_target > 0 and len(d1_indices) == 0:
                 print("No more trajectories available, stopping.")
@@ -415,6 +445,11 @@ class AdaptiveEngine:
                     target_count=n_d2_target,
                     exclude=set(d1_indices),
                 )
+                # det_v2 strategies return each round's candidate scores; they go to their
+                # own file, not into artifacts_v2.json.
+                score_arrays = acquisition.diagnostics.pop("_arrays", None)
+                if score_arrays is not None:
+                    np.savez_compressed(epoch_output_dir / "acquisition_scores.npz", **score_arrays)
             else:
                 skipped_reason = "d2_target_zero"
                 if skip_ranked_for_eval_off:
@@ -444,6 +479,8 @@ class AdaptiveEngine:
                 print(f"Shortfall fill: {len(acquisition.d2_indices)} acquired of {n_d2_target}, "
                       f"{len(fill_indices)} uniform picks added")
 
+            phase_seconds["acquisition"] = round(_time.time() - _t0, 1)
+            _t0 = _time.time()
             q_hat_eval = None
             n_cal_eval = 0
             cal_file = self.cfg.data_source.get("cal_set_file", None)
@@ -459,6 +496,8 @@ class AdaptiveEngine:
                 n_cal_eval = len(X_cal_eval)
 
             threshold_state.q_hat_eval = q_hat_eval
+            phase_seconds["calibrate_eval"] = round(_time.time() - _t0, 1)
+            _t0 = _time.time()
 
             if not run_eval:
                 full_roa_metrics: dict[str, Any] = {"skipped": True}
@@ -474,12 +513,15 @@ class AdaptiveEngine:
                         "endpoint_rows_cap": store_cfg.get("endpoint_test_rows", None) if store_on else None,
                     },
                 )
+                phase_seconds["evaluate_test"] = round(_time.time() - _t0, 1)
+                _t0 = _time.time()
                 if store_on:
                     self._write_prediction_store(
                         epoch_output_dir, model_handle, store_endpoints_now,
                         threshold_fit=self.threshold_backend.last_fit if needs_threshold else None,
                         val_prediction=val_prediction,
                     )
+                    phase_seconds["prediction_store"] = round(_time.time() - _t0, 1)
             full_roa_metrics["q_hat_training"] = float(q_hat) if q_hat is not None else None
             full_roa_metrics["q_hat_eval"] = float(q_hat_eval) if q_hat_eval is not None else None
             full_roa_metrics["n_cal_eval"] = int(n_cal_eval)
@@ -538,9 +580,12 @@ class AdaptiveEngine:
                 "endpoint_error": endpoint_error,
                 "full_roa": full_roa_metrics,
                 "filter_diagnostics": _convert_numpy(filter_diagnostics.__dict__) if filter_diagnostics else None,
+                "phase_seconds": phase_seconds,
             }
             if getattr(threshold_state, "tau_s", None) is not None:      # threshold=fpr_cap only
                 epoch_result.update({k: getattr(threshold_state, k) for k in ThresholdState.TAU_FIELDS})
+            if getattr(threshold_state, "tau_s_star", None) is not None:  # threshold=j_sel only
+                epoch_result.update({k: getattr(threshold_state, k) for k in ThresholdState.DET_V2_FIELDS})
             epoch_results.append(epoch_result)
 
             conformal_state = None
@@ -569,6 +614,7 @@ class AdaptiveEngine:
                     "n_cal_eval": n_cal_eval,
                     "optimize_mode": self.threshold_backend.optimize_mode,
                     "commit": git_sha(),
+                    "phase_seconds": phase_seconds,
                 },
             )
             artifacts_payload = _convert_numpy(epoch_artifacts.__dict__)

@@ -1,0 +1,21 @@
+# @package _global_
+# det_v2 acquisition (method section 5; adaptive_roa/adaptive_v2/strategy/verdict.py).
+# score=u_h over the first n_candidates unused trajectory starts in pool order, scored
+# batch_size states per model call at num_mc_samples draws. selection=topk takes the
+# k highest scores (ties: farthest from the nearest rolled-out state, then pool order);
+# proportional samples with probability proportional to the score, and fill_shortfall
+# tops a short batch up with uniform starts (logged as uniform_fill). A uniform arm is
+# this group at d2_ratio=0.
+sampling_mode: u_h
+acquisition:
+  _target_: adaptive_roa.adaptive_v2.strategy.verdict.VerdictAcquisitionStrategy
+  score: u_h
+  selection: topk
+  d2_ratio: 1.0
+  n_candidates: 50000
+  batch_size: 2048
+  num_mc_samples: 100
+  seed: ${seed}
+  fill_shortfall: true
+  decision_rule: ${decision_rule}
+  verbose: true

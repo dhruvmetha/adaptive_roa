@@ -393,6 +393,41 @@ def _fpr_cap_npz_keys(taus, alpha_s) -> dict[str, Any]:
             "alpha_s": np.float64(np.nan if alpha_s is None else alpha_s)}
 
 
+def _det_v2_npz_keys(taus) -> dict[str, Any]:
+    """tau* saved beside the per-point probabilities, for det_v2 (threshold=j_sel) arms only."""
+    if taus is None:
+        return {}
+    return {"tau_s_star": float(taus[0]), "tau_f_star": float(taus[1])}
+
+
+def _predict_det_v2(
+    p_success: np.ndarray,
+    p_failure: np.ndarray,
+    taus: tuple[float, float],
+    binary_outcomes: bool = False,
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """The det_v2 rule (eval/det_v2_rule.py) at tau* (threshold=j_sel).
+
+    S = 1, F = 0, A_out (both pass) = -1, A_inv (neither passes) = -2, so the
+    lambda_delta block's uncertain_pct and invalid_pct are AR_out and AR_inv.
+    Under binary outcomes A_inv is counted with A_out, as in _predict_lambda_delta.
+    """
+    from adaptive_roa.adaptive_v2.eval import det_v2_rule
+
+    ts, tf = (float(t) for t in taus)
+    pred = det_v2_rule.predict(p_success, p_failure, ts, tf)
+    if binary_outcomes:
+        pred[pred == det_v2_rule.A_INV] = det_v2_rule.A_OUT
+    lam, dl = (1.0 + ts - tf) / 2.0, (ts + tf - 1.0) / 2.0
+    return pred, {
+        "rule": "det_v2",
+        "tau_s_star": ts, "tau_f_star": tf,
+        "lambda_star": float(lam), "delta": float(dl),
+        "n_a_out": int(np.sum(pred == det_v2_rule.A_OUT)),
+        "n_a_inv": int(np.sum(pred == det_v2_rule.A_INV)),
+    }
+
+
 def _predict_fpr_cap(
     p_success: np.ndarray,
     p_failure: np.ndarray,
@@ -746,6 +781,7 @@ def evaluate_full_roa_fast(
     endpoint_rows_cap: int | None = None,
     fpr_cap_taus: tuple[float, float, float] | None = None,
     fpr_cap_alpha_s: float | None = None,
+    det_v2_taus: tuple[float, float] | None = None,
 ) -> dict[str, Any]:
     """Fast batched full-ROA evaluation with v2-compatible outputs.
 
@@ -1028,7 +1064,11 @@ def evaluate_full_roa_fast(
         p_failure = p_failure + p_invalid
         p_invalid = np.zeros_like(p_invalid)
 
-    if fpr_cap_taus is not None:
+    if det_v2_taus is not None:
+        pred_conformal, conformal_extras = _predict_det_v2(
+            p_success, p_failure, det_v2_taus, binary_outcomes=effective_binary,
+        )
+    elif fpr_cap_taus is not None:
         pred_conformal, conformal_extras = _predict_fpr_cap(
             p_success, p_failure, p_invalid, fpr_cap_taus, fpr_cap_alpha_s,
             binary_outcomes=effective_binary,
@@ -1312,6 +1352,7 @@ def evaluate_full_roa_fast(
             delta=delta,
             attractor_radius=attractor_radius,
             **_fpr_cap_npz_keys(fpr_cap_taus, fpr_cap_alpha_s),
+            **_det_v2_npz_keys(det_v2_taus),
         )
         if store_endpoints:
             if mc_cache is not None:
@@ -1361,6 +1402,7 @@ def evaluate_full_roa_classifier(
     binary_outcomes: bool | None = None,
     fpr_cap_taus: tuple[float, float, float] | None = None,
     fpr_cap_alpha_s: float | None = None,
+    det_v2_taus: tuple[float, float] | None = None,
 ) -> dict[str, Any]:
     """Full-ROA evaluation for a discriminative classifier (single forward pass).
 
@@ -1410,7 +1452,11 @@ def evaluate_full_roa_classifier(
     p_failure = 1.0 - p_success
     p_invalid = np.zeros_like(p_success)
 
-    if fpr_cap_taus is not None:
+    if det_v2_taus is not None:
+        pred_conformal, conformal_extras = _predict_det_v2(
+            p_success, p_failure, det_v2_taus, binary_outcomes=effective_binary,
+        )
+    elif fpr_cap_taus is not None:
         pred_conformal, conformal_extras = _predict_fpr_cap(
             p_success, p_failure, p_invalid, fpr_cap_taus, fpr_cap_alpha_s,
             binary_outcomes=effective_binary,
@@ -1500,6 +1546,7 @@ def evaluate_full_roa_classifier(
             p_invalid=p_invalid, true_labels=y_all, lambda_star=lambda_star,
             delta=delta, attractor_radius=attractor_radius,
             **_fpr_cap_npz_keys(fpr_cap_taus, fpr_cap_alpha_s),
+            **_det_v2_npz_keys(det_v2_taus),
         )
         if hook is not None:
             hook.maybe_plot(
@@ -1563,7 +1610,9 @@ class FullROAEvaluator:
         # threshold=fpr_cap: label with the tau rule. Passed only when set, so every
         # lambda/delta call is the call it was.
         tau_kwargs = {}
-        if getattr(threshold_state, "tau_s", None) is not None:
+        if getattr(threshold_state, "tau_s_star", None) is not None:    # threshold=j_sel (det_v2)
+            tau_kwargs = {"det_v2_taus": (threshold_state.tau_s_star, threshold_state.tau_f_star)}
+        elif getattr(threshold_state, "tau_s", None) is not None:
             tau_kwargs = {"fpr_cap_taus": (threshold_state.tau_s, threshold_state.tau_f, threshold_state.tau_inv),
                           "fpr_cap_alpha_s": threshold_state.alpha_s}
         if self.predictor_type == "classifier":

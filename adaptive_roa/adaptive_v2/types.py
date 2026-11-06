@@ -34,8 +34,15 @@ class ThresholdState:
     tau_f: float | None = None
     tau_inv: float | None = None
     alpha_s: float | None = None
+    # det_v2 threshold opt (threshold=j_sel, adaptive_v2/eval/det_v2_rule.py). None on
+    # every other backend; lambda_star/delta_star then hold converted values for logging.
+    tau_s_star: float | None = None
+    tau_f_star: float | None = None
+    threshold_objective: str | None = None
+    threshold_w: float | None = None
 
     TAU_FIELDS = ("tau_s", "tau_f", "tau_inv", "alpha_s")
+    DET_V2_FIELDS = ("tau_s_star", "tau_f_star", "threshold_objective", "threshold_w")
 
     @property
     def taus(self) -> tuple[float, float, float] | None:

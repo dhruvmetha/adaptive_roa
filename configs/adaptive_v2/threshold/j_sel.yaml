@@ -1,0 +1,15 @@
+# @package _global_
+# det_v2 threshold opt (method section 4; adaptive_roa/adaptive_v2/eval/det_v2_rule.py).
+#
+# Each round picks tau* = (tau_s*, tau_f*) on {0.01, ..., 0.99}^2 by minimizing
+# J_sel = (1 - w) MR + w AR on the threshold-fit rows (held-out rows of the acquired
+# data), predicted at num_mc_samples draws. objective=j_ver is ablation A1:
+# (1 - w) FCR + w (1 - REC), ties broken by J_sel. Classifiers search tau_s + tau_f >= 1.
+threshold:
+  _target_: adaptive_roa.adaptive_v2.threshold.jsel_threshold.JSelThresholdBackend
+  predictor_type: ${predictor.type}
+  decision_rule: ${decision_rule}     # logged only; the det_v2 rule reads p_s and p_f
+  objective: j_sel
+  w: 0.1
+  num_mc_samples: 100
+  verbose: true

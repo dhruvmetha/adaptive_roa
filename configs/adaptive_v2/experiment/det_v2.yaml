@@ -1,0 +1,41 @@
+# @package _global_
+# det_v2 protocol (Claude Docs "Deterministic method draft", Tracker tab: Protocol).
+# Composed by every run config under det_v2/runs/; a run config's own values win.
+#
+# K = 100 for acquisition, threshold opt and evaluation (val, cal, test).
+acquisition_mc_samples: 100
+
+probability:
+  num_mc_samples: ${acquisition_mc_samples}
+
+acquisition:
+  num_mc_samples: ${acquisition_mc_samples}
+
+threshold:
+  num_mc_samples: ${acquisition_mc_samples}
+
+eval:
+  num_mc_samples_eval: 100
+  # Three outcomes always (success, failure, invalid); see det_rerun.yaml for why null
+  # would fold invalid into failure on the stochastic tree's zero-noise datasets.
+  binary_outcomes: false
+
+calibration:
+  num_mc_samples: ${eval.num_mc_samples_eval}
+
+adaptive_v2:
+  filter_confident_pairs: false
+
+# Candidates are trajectory starts only; test states come from the disjoint test file.
+candidate_mode: start
+test_ratio: 0
+
+# p-hat on D_acq (predictions_thrfit), D_val, D_cal and D_test every epoch; all
+# endpoints at the reporting epochs.
+prediction_store:
+  enabled: true
+  endpoint_epochs: [0, 5, 10]
+  endpoint_test_rows: 100000
+
+seed: 99512
+n_epochs: 11

@@ -91,3 +91,21 @@ class OutcomeModelHandle:
                        - torch.logsumexp(F.logsigmoid(-s), dim=0))
 
         return logit_p.to(out_device)
+
+    def p_success_draws(self, states, S: int, seed: int, batch_size: int = 2048) -> np.ndarray:
+        """S posterior draws of p(success), [S, B] float64 (det_v2 q_A for the BNN classifier).
+
+        Seeded by ``seed``, separate from the marginalization seed, so the draws a
+        round scores with never shift the probabilities threshold opt and evaluation read.
+        """
+        x_all = np.asarray(states, dtype=np.float32)
+        param_device = next(self.posterior.parameters()).device
+        generator = torch.Generator(device=param_device).manual_seed(int(seed))
+        out = []
+        with torch.no_grad():
+            for b0 in range(0, len(x_all), batch_size):
+                x = torch.as_tensor(x_all[b0:b0 + batch_size], device=param_device)
+                embedded = self.system.embed_state_for_model(self.system.normalize_state(x))
+                s = self.posterior.predictive_logit_samples(embedded, S=int(S), generator=generator)
+                out.append(torch.sigmoid(s.view(s.shape[0], s.shape[1]).double()).cpu().numpy())
+        return np.concatenate(out, axis=1) if out else np.zeros((int(S), 0))

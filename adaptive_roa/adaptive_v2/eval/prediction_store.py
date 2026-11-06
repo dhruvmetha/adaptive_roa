@@ -15,6 +15,7 @@ run writes, per epoch and next to ``full_roa_per_point.npz`` (the test split):
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -193,10 +194,16 @@ def write_split_prediction(epoch_dir: str | Path, split: str, prediction: dict[s
 
 
 def write_split_states_once(run_dir: str | Path, split: str, X: np.ndarray, y: np.ndarray) -> None:
-    """States and labels of a fixed split, written on first use only."""
+    """States and labels of a fixed split, written on first use only.
+
+    Written to a temporary file and renamed, so a kill mid-write never leaves a
+    truncated file that the exists() check would then keep forever.
+    """
     path = Path(run_dir) / f"prediction_store_states_{split}.npz"
     if not path.exists():
-        np.savez(path, states=np.asarray(X, dtype=np.float32), true_labels=np.asarray(y).astype(np.int8))
+        tmp = path.with_name(f".{path.stem}.{os.getpid()}.tmp.npz")
+        np.savez(tmp, states=np.asarray(X, dtype=np.float32), true_labels=np.asarray(y).astype(np.int8))
+        os.replace(tmp, path)
 
 
 def write_threshold_fit(epoch_dir: str | Path, fit: dict[str, Any] | None) -> None:

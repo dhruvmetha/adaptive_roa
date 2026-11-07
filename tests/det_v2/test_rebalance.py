@@ -120,10 +120,12 @@ def fake_sh(env, monkeypatch):
             return state["queue"] + "\n"
         if "artifacts_v2.json" in cmd:
             return state["banked"] + "\n"
-        if "sacct -j" in cmd:
-            return state["sacct"] + "\n"
+        if "sacct -j" in cmd:                        # a list is read in order, its last value repeating
+            v = state["sacct"]
+            return (v.pop(0) if isinstance(v, list) and len(v) > 1 else v[0] if isinstance(v, list) else v) + "\n"
         return "ok\n"
     monkeypatch.setattr(rebalance, "sh", sh)
+    monkeypatch.setattr(rebalance.time, "sleep", lambda s: None)
     return calls, state
 
 
@@ -176,6 +178,26 @@ def test_a_job_that_starts_between_the_check_and_the_cancel_keeps_running(env, f
     cancels = [c for c in calls if "scancel" in c]
     assert cancels and all("scancel --state=PENDING 777" in c for c in cancels)
     assert res.startswith("FAILED to cancel") and "left as is" in res
+    assert lib.latest_rows(env["LEDGER"])[Q3D_FM]["action"] == "launch"
+    assert not any("resume_direct" in c or "launch.sh" in c for c in calls)
+
+
+def test_a_cancel_that_accounting_reports_late_still_moves_the_run(env, fake_sh):
+    """sacct can read PENDING for a moment after a successful cancel: move() waits for it to settle
+    instead of reporting a failure and leaving the run neither on Amarel nor relaunched."""
+    calls, state = fake_sh
+    state["sacct"] = ["PENDING", "PENDING", "CANCELLED by 1"]
+    res = rebalance.move(_cell(env), ("arrakis", "1", "RTX 6000 Ada"))
+    assert res.startswith("moved") and sum("sacct -j 777" in c for c in calls) == 3
+    assert lib.latest_rows(env["LEDGER"])[Q3D_FM]["action"] == "cancel"
+
+
+def test_a_cancel_that_never_settles_leaves_the_run_alone(env, fake_sh):
+    calls, state = fake_sh
+    state["sacct"] = ["PENDING"]
+    res = rebalance.move(_cell(env), ("arrakis", "1", "RTX 6000 Ada"))
+    assert res.startswith("FAILED to cancel") and "PENDING" in res
+    assert sum("sacct -j 777" in c for c in calls) == rebalance.CANCEL_POLLS
     assert lib.latest_rows(env["LEDGER"])[Q3D_FM]["action"] == "launch"
     assert not any("resume_direct" in c or "launch.sh" in c for c in calls)
 

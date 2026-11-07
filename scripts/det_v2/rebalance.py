@@ -39,6 +39,7 @@ import det_v2_lib as lib  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 LEDGER_QUIET_S = 300
+CANCEL_POLLS = 15      # sacct reads after a cancel, 2 s apart: accounting can lag the cancel itself
 ENDED = ("TIMEOUT", "PREEMPTED", "NODE_FAIL", "BOOT_FAIL", "DEADLINE")
 NEEDS_A_LOOK = ("FAILED", "OUT_OF_MEMORY")
 # Card model per direct host (gpu-free.sh's fixed inventory).
@@ -221,6 +222,17 @@ def cancel_row(c: dict) -> None:
                                       "log": "-", "action": "cancel"})
 
 
+def settled_state(qhost: str, job: str) -> str:
+    """The job's sacct state once it is no longer PENDING, or the last read after CANCEL_POLLS tries."""
+    for i in range(CANCEL_POLLS):
+        st = sh(ssh(qhost, f"sacct -j {job} -X -n -o State")).strip()
+        if st and not st.startswith("PENDING"):
+            return st
+        if i < CANCEL_POLLS - 1:
+            time.sleep(2)
+    return st
+
+
 def move(c: dict, card: tuple[str, str, str]) -> str:
     """Cancel a PENDING run and start it on a direct card: resumed from its banked epochs, or
     launched when nothing is banked. Never touches a job that is no longer PENDING."""
@@ -232,7 +244,7 @@ def move(c: dict, card: tuple[str, str, str]) -> str:
     # --state=PENDING: a job that started since the squeue check is left running (the sacct check below
     # then sees RUNNING and leaves the run where it is).
     sh(ssh(qhost, f"scancel --state=PENDING {c['job']}"))
-    st = sh(ssh(qhost, f"sacct -j {c['job']} -X -n -o State")).strip()
+    st = settled_state(qhost, c["job"])
     if not st.startswith("CANCELLED"):
         return f"FAILED to cancel {c['name']} ({c['where']} {c['job']}: {st}); left as is"
     cancel_row(c)

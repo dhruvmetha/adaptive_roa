@@ -111,6 +111,15 @@ def _drop_unset_taus(threshold_state: Any) -> None:
             threshold_state.pop(k, None)
 
 
+
+def _split_rows(cfg, split: str, eval_rows):
+    """Row cap for the fixed D_val / D_cal files: data_source.<split>_set_max_rows (the files are in
+    random order, so the first n rows are a random subset), else the evaluator's cap."""
+    cap = cfg.data_source.get(f"{split}_set_max_rows", None)
+    if cap is None:
+        return eval_rows
+    return int(cap) if eval_rows is None else min(int(cap), int(eval_rows))
+
 class AdaptiveEngine:
     """Decision-complete adaptive loop used by the unified run script."""
 
@@ -143,6 +152,7 @@ class AdaptiveEngine:
             # threshold-fit and early-stopping set, and every acquired trajectory trains
             external_val_file=(cfg.data_source.get("val_set_file", None)
                                if str(cfg.get("val_split", "prefix")) == "external" else None),
+            external_val_rows=cfg.data_source.get("val_set_max_rows", None),
             test_ratio=cfg.get("test_ratio", 0.1),
             candidate_mode=str(cfg.get("candidate_mode", "start")),
             seed=int(cfg.get("seed", 42)),
@@ -239,7 +249,7 @@ class AdaptiveEngine:
         path = self.cfg.data_source.get("val_set_file", None)
         if not path:
             raise ValueError("the threshold backend fits on the val split, but data_source.val_set_file is not set")
-        X, _, y = load_eval_states(path, max_rows=self.evaluator.max_eval_rows,
+        X, _, y = load_eval_states(path, max_rows=_split_rows(self.cfg, "val", self.evaluator.max_eval_rows),
                                    state_dim=getattr(self.system, "state_dim", None))
         return ps.predict_split(
             X, y, predictor_type=self.predictor_type, model=model_handle, system=self.system,
@@ -350,7 +360,7 @@ class AdaptiveEngine:
                 ps.write_split_prediction(epoch_dir, split, cal_prediction,
                                           sub_k=cal_prediction.get("qhat_sub_k"))
                 continue
-            X, _, y = load_eval_states(path, max_rows=self.evaluator.max_eval_rows,
+            X, _, y = load_eval_states(path, max_rows=_split_rows(self.cfg, split, self.evaluator.max_eval_rows),
                                        state_dim=getattr(self.system, "state_dim", None))
             ps.write_split_states_once(self.output_dir, split, X, y)
             ps.write_split(
@@ -566,7 +576,7 @@ class AdaptiveEngine:
             if run_eval and cal_file:
                 X_cal_eval, _, y_cal_eval = load_eval_states(
                     cal_file,
-                    max_rows=self.evaluator.max_eval_rows,
+                    max_rows=_split_rows(self.cfg, "cal", self.evaluator.max_eval_rows),
                     state_dim=getattr(self.system, "state_dim", None),
                 )
                 if store_on and bool(store_cfg.get("reuse_cal_for_qhat", False)):

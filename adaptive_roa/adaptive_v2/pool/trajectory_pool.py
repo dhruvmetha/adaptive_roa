@@ -23,6 +23,7 @@ class TrajectoryPool:
         seed: int = 42,
         val_split: str = "prefix",
         external_val_file: str | None = None,
+        external_val_rows: int | None = None,
     ):
         cfg = TrajectoryDataSourceConfig(
             trajectories_dir=data_source_cfg.trajectories_dir,
@@ -45,6 +46,7 @@ class TrajectoryPool:
             val_ratio=val_ratio,
             val_split=val_split,
             external_val_file=external_val_file,
+            external_val_rows=external_val_rows,
             test_ratio=test_ratio,
             candidate_mode=candidate_mode,
             # Only suffix mode is seeded from the run; intermediate keeps its

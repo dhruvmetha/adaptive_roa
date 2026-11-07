@@ -68,6 +68,7 @@ class AdaptiveDatasetBuilder:
         seed: int = 42,
         val_split: str = "prefix",
         external_val_file: Optional[str] = None,
+        external_val_rows: Optional[int] = None,
     ):
         """
         Initialize dataset builder.
@@ -97,6 +98,7 @@ class AdaptiveDatasetBuilder:
             raise ValueError("val_split='external' is implemented for candidate_mode='start' only")
         self.val_split = val_split
         self.external_val_file = external_val_file
+        self.external_val_rows = None if external_val_rows is None else int(external_val_rows)
         self._external_val = None
         self.test_ratio = test_ratio
         self.candidate_mode = candidate_mode
@@ -822,6 +824,7 @@ class AdaptiveDatasetBuilder:
         if self._external_val is None:
             from adaptive_roa.adaptive.data_source import load_eval_states
             self._external_val = load_eval_states(self.external_val_file,
+                                                  max_rows=getattr(self, "external_val_rows", None),
                                                   state_dim=self.data_source.get_state_dim())
         return self._external_val
 

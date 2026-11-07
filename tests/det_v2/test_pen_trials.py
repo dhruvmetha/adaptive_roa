@@ -165,3 +165,19 @@ def test_external_needs_the_file_and_start_mode(tmp_path):
     with pytest.raises(ValueError):
         AdaptiveDatasetBuilder(data_source=None, output_dir=str(tmp_path), val_split="external",
                                external_val_file="x.txt", candidate_mode="intermediate")
+
+
+def test_external_val_honours_the_row_cap(tmp_path):
+    b = external_builder(tmp_path, list(range(50)))
+    b.external_val_rows = 2
+    X, E, y = b.get_val_data()
+    assert len(y) == 2 and y.tolist() == [1, -1]
+
+
+def test_split_row_cap_reads_the_per_split_key():
+    from omegaconf import OmegaConf
+    from adaptive_roa.adaptive_v2.engine import _split_rows
+    cfg = OmegaConf.create({"data_source": {"val_set_max_rows": 500, "cal_set_max_rows": 1000}})
+    assert _split_rows(cfg, "val", None) == 500 and _split_rows(cfg, "cal", None) == 1000
+    assert _split_rows(cfg, "cal", 800) == 800
+    assert _split_rows(OmegaConf.create({"data_source": {}}), "val", None) is None

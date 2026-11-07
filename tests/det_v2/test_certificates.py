@@ -128,3 +128,70 @@ def test_classifier_F_order_is_the_loss_vs_failure_recall_front():
     frec = np.array([(s & ~y).sum() for s in sets]) / (~y).sum()
     assert sets[0].sum() > 0 and all((a <= b).all() for a, b in zip(sets, sets[1:]))
     assert (np.diff(frec) > 0).all() and (np.diff(loss) >= 0).all()      # each step adds failures
+
+
+# --- ladders (conservative nested subsets ahead of each D_val front) and the size-scaled start ---------
+
+def test_classifier_F_ladder_is_nested_and_smaller_than_the_first_front_set():
+    ps, pf, y = clf_split(400, seed=11)                       # a small D_val: a long zero-loss stretch
+    plain = C.order_F_classifier((ps, None, y))
+    lad = C.order_F_classifier((ps, None, y), ladder=True)
+    k = len(lad) - len(plain)
+    assert k > 0 and lad[k:] == plain                          # the front is unchanged, after the ladder
+    sets = [C.in_F(ps, None, l, None) for l, _ in lad[:k + 1]]
+    assert all((a <= b).all() and a.sum() < b.sum() for a, b in zip(sets, sets[1:]))
+    assert all(not (s & y).any() for s in sets)               # the ladder lives inside the zero-loss stretch
+
+
+def test_final_state_F_and_S_ladders_are_nested_chains_into_the_first_front_set():
+    ps, pf, y = counts_split(600, seed=12)
+    for kind in ("F", "S"):
+        if kind == "F":
+            plain, lad = C.order_F_final_state((ps, pf, y)), C.order_F_final_state((ps, pf, y), ladder=True)
+            member = lambda t: C.in_F(ps, pf, *t)
+        else:
+            plain, lad = C.order_S_final_state((ps, pf, y), 50), C.order_S_final_state((ps, pf, y), 50, ladder=True)
+            member = lambda t: C.in_S(ps, pf, *t)
+        k = len(lad) - len(plain)
+        assert lad[k:] == plain
+        sets = [member(t) for t in lad[:k + 1]]
+        assert all((a <= b).all() and a.sum() < b.sum() for a, b in zip(sets, sets[1:]))
+
+
+def test_ladder_rescues_a_walk_whose_first_front_set_fails():
+    """D_val has no success with p_s <= 0.5, so the front opens at the largest zero-loss set, F_0.5.
+    D_cal has 60 of its 400 successes in (0.2, 0.5]: that set fails, and the plain walk stops at step one.
+    The ladder tests F_l for smaller l first and certifies one of them."""
+    rng = np.random.default_rng(13)
+    val_ps = np.concatenate([rng.uniform(0.0, 0.5, 300), rng.uniform(0.5, 1.0, 300)])
+    val_y = np.concatenate([np.zeros(300, bool), rng.random(300) < 0.8])
+    cal_ps = np.concatenate([rng.uniform(0.0, 0.2, 600), rng.uniform(0.2, 0.5, 300), rng.uniform(0.5, 1.0, 400)])
+    cal_y = np.concatenate([np.zeros(600, bool), np.arange(300) < 60, np.arange(400) < 340])
+    val, cal = (val_ps, None, val_y), (cal_ps, None, cal_y)
+    plain = C.walk_F(C.order_F_classifier(val), cal, 0.05, 0.025)
+    lad = C.walk_F(C.order_F_classifier(val, ladder=True), cal, 0.05, 0.025)
+    assert not plain["passed"]
+    assert lad["passed"] and lad["u_s"] < 0.5
+
+
+@pytest.mark.parametrize("classifier", [True, False])
+def test_6c_F_with_the_ladder_controls_roa_loss_over_cal_draws(classifier):
+    gen = clf_split if classifier else counts_split
+    val, test = gen(800, seed=200), gen(60000, seed=201)
+    bad, trials = 0, 120
+    for t in range(trials):
+        out = C.certify(val, gen(2000, seed=2000 + t), test, classifier=classifier)["6c"]
+        if out["F"]["passed"] and out["test_roa_loss"] is not None and out["test_roa_loss"] > 0.05:
+            bad += 1
+    assert bad / trials <= 0.025 + 3 * np.sqrt(0.025 * 0.975 / trials)
+
+
+def test_start_size_scales_with_the_split_ratio():
+    ps, pf, y = counts_split(6000, seed=14)
+    val, cal = (ps[:1000], pf[:1000], y[:1000]), (ps[1000:5000], pf[1000:5000], y[1000:5000])
+    test = (ps[5000:], pf[5000:], y[5000:])
+    res = C.certify(val, cal, test, classifier=False)
+    want = C.order_S_final_state(val, int(np.ceil(2 * 59 * 1000 / 4000)))
+    first = C.in_S(val[0], val[1], *want[0])
+    assert first.sum() >= 30                                   # 2 * 59 * 1/4 rounded up
+    assert res["6a"]["n_order"] == len(want)

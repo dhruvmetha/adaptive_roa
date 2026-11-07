@@ -23,6 +23,10 @@ Testing orders (fixed on D_val):
   final-state F: front of lower D_val L and higher D_val failure recall, sorted by failure
                 recall ascending, starting at the first nonempty set; duplicates count once
                 as the tightest (largest u_f, then smallest u_s).
+  ladder (F by default, S opt-in): the front's first set is the largest zero-cost set on D_val, so with a
+                small D_val the first test is aggressive. The ladder tests that set's nested subsets
+                first, smallest first; along a nested chain the cost only grows, so it loses nothing.
+  start size: 2 * m_min * |D_val| / |D_cal| D_val states, i.e. about 2 * m_min D_cal states.
 """
 from __future__ import annotations
 
@@ -128,7 +132,7 @@ def _pareto(cost: np.ndarray, gain: np.ndarray) -> np.ndarray:
 
 # --- testing orders ------------------------------------------------------------------------------
 
-def order_S_final_state(val, start_min: int) -> list[tuple[float, float]]:
+def order_S_final_state(val, start_min: int, ladder: bool = False) -> list[tuple[float, float]]:
     """6a order for a final-state model: Pareto front on D_val, sorted by D_val REC ascending."""
     ps, pf, y = val
     T = _pair_tables(ps, pf, y)
@@ -152,7 +156,21 @@ def order_S_final_state(val, start_min: int) -> list[tuple[float, float]]:
     rec = s[uniq] / max(T["n_succ"], 1)
     front = uniq[_pareto(fcr, rec)]
     front = front[np.argsort(s[front] / max(T["n_succ"], 1), kind="stable")]
-    return [(float(GRID[a.ravel()[i]]), float(GRID[b.ravel()[i]])) for i in front]
+    out = [(float(GRID[a.ravel()[i]]), float(GRID[b.ravel()[i]])) for i in front]
+    if ladder and len(front):
+        # Nested subsets of the first front set (larger t_s, same t_f), smallest first: every one holds
+        # >= start_min D_val states, and false positives can only grow along a nested chain, so the walk
+        # reaches the first front set no later than before and certifies a smaller set if that one fails.
+        a0, b0 = a.ravel()[front[0]], b.ravel()[front[0]]
+        n_mat = T["S_n"]
+        chain = [ia for ia in range(N_GRID - 1, a0, -1) if n_mat[ia, b0] >= start_min and n_mat[ia, b0] < n_mat[a0, b0]]
+        steps, last_n = [], -1
+        for ia in chain:                                   # t_s descending = set size ascending
+            if n_mat[ia, b0] != last_n:
+                steps.append((float(GRID[ia]), float(GRID[b0])))
+                last_n = n_mat[ia, b0]
+        out = steps + out
+    return out
 
 
 def order_S_classifier(val, start_min: int) -> list[tuple[float, None]]:
@@ -166,7 +184,7 @@ def order_S_classifier(val, start_min: int) -> list[tuple[float, None]]:
     return [(float(CLF_GRID[i]), None) for i in range(start, -1, -1)]
 
 
-def order_F_final_state(val) -> list[tuple[float, float]]:
+def order_F_final_state(val, ladder: bool = False) -> list[tuple[float, float]]:
     """6c F order: Pareto front of lower D_val ROA loss and higher D_val failure recall, by failure recall ascending."""
     ps, pf, y = val
     T = _pair_tables(ps, pf, y)
@@ -190,10 +208,23 @@ def order_F_final_state(val) -> list[tuple[float, float]]:
     frec = (n[uniq] - s[uniq]) / n_fail
     front = uniq[_pareto(loss, frec)]
     front = front[np.argsort((n[front] - s[front]) / n_fail, kind="stable")]
-    return [(float(GRID[a.ravel()[i]]), float(GRID[b.ravel()[i]])) for i in front]
+    out = [(float(GRID[a.ravel()[i]]), float(GRID[b.ravel()[i]])) for i in front]
+    if ladder and len(front):
+        # The front's first set is the LARGEST zero-loss F on D_val: every smaller zero-loss set is dominated
+        # and dropped, so a small D_val makes the first test aggressive. Walk the nested subsets (same u_s,
+        # larger u_f) smallest first; successes can only grow along the chain, so nothing later is lost.
+        a0, b0 = a.ravel()[front[0]], b.ravel()[front[0]]
+        n_mat = T["F_n"]
+        steps, last_n = [], -1
+        for ib in range(N_GRID - 1, b0, -1):              # u_f descending = set size ascending
+            if 0 < n_mat[a0, ib] < n_mat[a0, b0] and n_mat[a0, ib] != last_n:
+                steps.append((float(GRID[a0]), float(GRID[ib])))
+                last_n = n_mat[a0, ib]
+        out = steps + out
+    return out
 
 
-def order_F_classifier(val) -> list[tuple[float, None]]:
+def order_F_classifier(val, ladder: bool = False) -> list[tuple[float, None]]:
     """6c F order for a classifier: the D_val front of lower ROA loss and higher failure recall over F_l,
     sorted by failure recall ascending. The family is nested, so this drops the l steps that add only successes."""
     ps, _, y = val
@@ -211,7 +242,19 @@ def order_F_classifier(val) -> list[tuple[float, None]]:
     frec = (sizes[ok] - n_succ_in[ok]) / n_fail
     front = ok[_pareto(loss, frec)]
     front = front[np.argsort((sizes[front] - n_succ_in[front]) / n_fail, kind="stable")]
-    return [(float(CLF_GRID[i]), None) for i in front]
+    out = [(float(CLF_GRID[i]), None) for i in front]
+    if ladder and len(front):
+        # Smaller F_l before the first front set (the largest zero-loss F_l on D_val): nested, smallest first,
+        # one l per D_val size (the smallest l, the tightest set).
+        steps, last_n = [], -1
+        for i in ok:
+            if i >= front[0] or sizes[i] >= sizes[front[0]]:
+                break
+            if sizes[i] != last_n:
+                steps.append((float(CLF_GRID[i]), None))
+                last_n = sizes[i]
+        out = steps + out
+    return out
 
 
 # --- walks ---------------------------------------------------------------------------------------
@@ -267,23 +310,32 @@ def report(test, S_thr=None, F_thr=None, tau=None) -> dict[str, float | int | No
     }
 
 
-def certify(val, cal, test, *, classifier: bool, tau=None, alpha=0.05, beta_=0.05, delta=0.05) -> dict[str, dict]:
+def certify(val, cal, test, *, classifier: bool, tau=None, alpha=0.05, beta_=0.05, delta=0.05,
+            ladder_S: bool = False, ladder_F: bool = True) -> dict[str, dict]:
     """6a and 6c for one epoch. val/cal/test are split_probs tuples; tau = (tau_s*, tau_f*) or None (Part-X)."""
     out = {}
     if classifier:
         val = (val[0], None, val[2]); cal = (cal[0], None, cal[2]); test = (test[0], None, test[2])
-    order_S = order_S_classifier if classifier else order_S_final_state
+    if classifier:
+        order_S = order_S_classifier                       # already the nested chain
+    else:
+        order_S = lambda v, start: order_S_final_state(v, start, ladder=ladder_S)
+    # The order starts at sets expected to hold 2 * m_min D_cal states: in D_val units that is
+    # 2 * m_min * |D_val| / |D_cal| (equal to 2 * m_min when the two splits have the same size).
+    ratio = len(val[2]) / max(len(cal[2]), 1)
+    start = lambda mm_: max(1, math.ceil(2 * mm_ * ratio - 1e-9))
 
     # 6a: S walk at delta, F = F_0 minus S_hat (no claim)
     mm = m_min(alpha, delta)
-    s6a = walk_S(order_S(val, 2 * mm), cal, alpha, delta)
+    s6a = walk_S(order_S(val, start(mm)), cal, alpha, delta)
     S6a = (s6a["t_s"], s6a["t_f"]) if s6a["passed"] else None
     out["6a"] = {**s6a, "alpha": alpha, "delta": delta, "m_min": mm, **report(test, S6a, None, tau)}
 
     # 6c: S walk at delta/2, F walk at delta/2
     mm2 = m_min(alpha, delta / 2)
-    s6c = walk_S(order_S(val, 2 * mm2), cal, alpha, delta / 2)
-    f6c = walk_F(order_F_classifier(val) if classifier else order_F_final_state(val), cal, beta_, delta / 2)
+    s6c = walk_S(order_S(val, start(mm2)), cal, alpha, delta / 2)
+    f6c = walk_F(order_F_classifier(val, ladder=ladder_F) if classifier else order_F_final_state(val, ladder=ladder_F),
+                 cal, beta_, delta / 2)
     S6c = (s6c["t_s"], s6c["t_f"]) if s6c["passed"] else None
     F6c = (f6c["u_s"], f6c["u_f"]) if f6c["passed"] else None
     out["6c"] = {"S": s6c, "F": f6c, "alpha": alpha, "beta": beta_, "delta": delta, "m_min": mm2,

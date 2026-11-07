@@ -227,6 +227,9 @@ class BayesianMLPTrainer:
             accelerator="gpu" if use_gpu else "cpu",
             devices=1,
             gradient_clip_val=trainer_cfg.get("gradient_clip_val", 1.0),
+            # Early stopping cannot fire before this many optimizer steps (None = Lightning default).
+            # D_val as the validation set gives a noisy early loss; a step floor scales with data size.
+            min_steps=trainer_cfg.get("min_steps", None),
             log_every_n_steps=trainer_cfg.get("log_every_n_steps", 10),
             check_val_every_n_epoch=1,
             enable_progress_bar=bool(trainer_cfg.get("enable_progress_bar", False)),

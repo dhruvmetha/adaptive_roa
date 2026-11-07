@@ -822,10 +822,11 @@ class AdaptiveDatasetBuilder:
     def _external_val_rows(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """(starts, ends, internal labels) of the fixed D_val file, loaded once (val_split='external')."""
         if self._external_val is None:
-            from adaptive_roa.adaptive.data_source import load_eval_states
-            self._external_val = load_eval_states(self.external_val_file,
-                                                  max_rows=getattr(self, "external_val_rows", None),
-                                                  state_dim=self.data_source.get_state_dim())
+            from adaptive_roa.adaptive.data_source import load_eval_states, split_subset
+            rows = load_eval_states(self.external_val_file, state_dim=self.data_source.get_state_dim())
+            idx = split_subset(len(rows[2]), getattr(self, "external_val_rows", None))
+            # the same seeded subset the prediction store and the certificates read (never a prefix)
+            self._external_val = rows if idx is None else tuple(a[idx] for a in rows)
         return self._external_val
 
     def _is_external(self) -> bool:

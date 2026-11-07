@@ -78,6 +78,19 @@ def resolve_horizon_steps(config: "TrajectoryDataSourceConfig") -> int:
     return values.pop()
 
 
+SPLIT_SUBSET_SEED = 20261107
+
+
+def split_subset(n_rows: int, cap) -> Optional[np.ndarray]:
+    """The rows of a fixed split file (D_val / D_cal) kept under a size cap: a seeded random subset, the
+    same sorted rows in every run and every loader. The split files are not reliably shuffled (cp-ppo's
+    val and cal files run in state-grid order: 0% successes in the first tenth, 34% in the middle), so a
+    prefix can be badly biased. None when there is no cap or it covers the whole file."""
+    if cap is None or int(cap) >= n_rows:
+        return None
+    return np.sort(np.random.default_rng(SPLIT_SUBSET_SEED).permutation(n_rows)[:int(cap)])
+
+
 def load_eval_states(
     filepath: str,
     label_mapping: Optional[Dict[int, int]] = None,

@@ -112,13 +112,13 @@ def _drop_unset_taus(threshold_state: Any) -> None:
 
 
 
-def _split_rows(cfg, split: str, eval_rows):
-    """Row cap for the fixed D_val / D_cal files: data_source.<split>_set_max_rows (the files are in
-    random order, so the first n rows are a random subset), else the evaluator's cap."""
-    cap = cfg.data_source.get(f"{split}_set_max_rows", None)
-    if cap is None:
-        return eval_rows
-    return int(cap) if eval_rows is None else min(int(cap), int(eval_rows))
+def _load_split(cfg, split: str, path, eval_rows, state_dim):
+    """(X, y) of the fixed D_val / D_cal file, under data_source.<split>_set_max_rows: a seeded random
+    subset (data_source.split_subset), the same rows everywhere, never the first n rows."""
+    from adaptive_roa.adaptive.data_source import split_subset
+    X, _, y = load_eval_states(path, max_rows=eval_rows, state_dim=state_dim)
+    idx = split_subset(len(y), cfg.data_source.get(f"{split}_set_max_rows", None))
+    return (X, y) if idx is None else (X[idx], y[idx])
 
 class AdaptiveEngine:
     """Decision-complete adaptive loop used by the unified run script."""
@@ -249,8 +249,8 @@ class AdaptiveEngine:
         path = self.cfg.data_source.get("val_set_file", None)
         if not path:
             raise ValueError("the threshold backend fits on the val split, but data_source.val_set_file is not set")
-        X, _, y = load_eval_states(path, max_rows=_split_rows(self.cfg, "val", self.evaluator.max_eval_rows),
-                                   state_dim=getattr(self.system, "state_dim", None))
+        X, y = _load_split(self.cfg, "val", path, self.evaluator.max_eval_rows,
+                           getattr(self.system, "state_dim", None))
         return ps.predict_split(
             X, y, predictor_type=self.predictor_type, model=model_handle, system=self.system,
             num_mc_samples=num_mc_samples, attractor_radius=self.evaluator.attractor_radius,
@@ -360,8 +360,8 @@ class AdaptiveEngine:
                 ps.write_split_prediction(epoch_dir, split, cal_prediction,
                                           sub_k=cal_prediction.get("qhat_sub_k"))
                 continue
-            X, _, y = load_eval_states(path, max_rows=_split_rows(self.cfg, split, self.evaluator.max_eval_rows),
-                                       state_dim=getattr(self.system, "state_dim", None))
+            X, y = _load_split(self.cfg, split, path, self.evaluator.max_eval_rows,
+                               getattr(self.system, "state_dim", None))
             ps.write_split_states_once(self.output_dir, split, X, y)
             ps.write_split(
                 epoch_dir, split, X, y,
@@ -574,11 +574,8 @@ class AdaptiveEngine:
             cal_prediction = None
             cal_file = self.cfg.data_source.get("cal_set_file", None)
             if run_eval and cal_file:
-                X_cal_eval, _, y_cal_eval = load_eval_states(
-                    cal_file,
-                    max_rows=_split_rows(self.cfg, "cal", self.evaluator.max_eval_rows),
-                    state_dim=getattr(self.system, "state_dim", None),
-                )
+                X_cal_eval, y_cal_eval = _load_split(self.cfg, "cal", cal_file, self.evaluator.max_eval_rows,
+                                                     getattr(self.system, "state_dim", None))
                 if store_on and bool(store_cfg.get("reuse_cal_for_qhat", False)):
                     # Predict the cal split once: q_hat_eval from the prediction the
                     # store writes below, instead of a second MC pass of its own.

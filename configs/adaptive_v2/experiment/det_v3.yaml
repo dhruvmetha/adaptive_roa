@@ -1,0 +1,23 @@
+# @package _global_
+# det_v3 protocol (2026-11-07): det_v2 plus the fixes from the pendulum trials.
+# Composed by every run config under det_v3/runs/; a run config's own values win.
+#
+#   val_split: external   tau* and early stopping on the fixed D_val file (data_source.val_set_file);
+#                         every acquired and initial trajectory trains (no 20% threshold-fit slice).
+#   acquisition.tie_tol   q_A / U_H scores within 0.001 of the k-th count as tied and the batch is
+#                         filled from that band by greedy farthest point (no one-cluster batches).
+#   min_steps             early stopping cannot fire before 2,000 optimizer steps.
+# Per-setting D_val / D_cal sizes (data_source.val_set_max_rows / cal_set_max_rows) are in the
+# run configs. Certificates (6a, 6c, both ladders) are computed offline from the prediction store.
+defaults:
+  - /experiment/det_v2
+  - _self_
+
+val_split: external
+
+acquisition:
+  tie_tol: 0.001
+
+predictor:
+  lightning_trainer:
+    min_steps: 2000

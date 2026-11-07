@@ -116,8 +116,11 @@ def _load_split(cfg, split: str, path, eval_rows, state_dim):
     """(X, y) of the fixed D_val / D_cal file, under data_source.<split>_set_max_rows: a seeded random
     subset (data_source.split_subset), the same rows everywhere, never the first n rows."""
     from adaptive_roa.adaptive.data_source import split_subset
-    X, _, y = load_eval_states(path, max_rows=eval_rows, state_dim=state_dim)
-    idx = split_subset(len(y), cfg.data_source.get(f"{split}_set_max_rows", None))
+    cap = cfg.data_source.get(f"{split}_set_max_rows", None)
+    # With a cap, read the whole file before subsetting, as the builder's D_val does; reading only the
+    # evaluator's first max_eval_rows rows would subset a different prefix and the two would disagree.
+    X, _, y = load_eval_states(path, max_rows=None if cap is not None else eval_rows, state_dim=state_dim)
+    idx = split_subset(len(y), cap)
     return (X, y) if idx is None else (X[idx], y[idx])
 
 class AdaptiveEngine:

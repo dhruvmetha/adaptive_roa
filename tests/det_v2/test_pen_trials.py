@@ -212,3 +212,16 @@ def test_builder_and_engine_read_the_same_d_val_rows(tmp_path):
     Xb, _, yb = b.get_val_data()
     Xe, ye = _load_split(OmegaConf.create({"data_source": {"val_set_max_rows": 500}}), "val", str(f), None, 2)
     assert np.allclose(Xb, Xe) and np.array_equal(yb, ye)
+
+
+def test_capped_split_ignores_the_evaluator_row_cap(tmp_path):
+    """max_eval_rows must not shrink the file before the seeded subset, or the engine and the builder
+    would read different D_val rows."""
+    from omegaconf import OmegaConf
+    from adaptive_roa.adaptive_v2.engine import _load_split
+    f = tmp_path / "val_set.txt"
+    _sorted_split_file(f)
+    cfg = OmegaConf.create({"data_source": {"val_set_max_rows": 500}})
+    X_none, _ = _load_split(cfg, "val", str(f), None, 2)
+    X_eval, _ = _load_split(cfg, "val", str(f), 800, 2)
+    assert np.array_equal(X_none, X_eval)

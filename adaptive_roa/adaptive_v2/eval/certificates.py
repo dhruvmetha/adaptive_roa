@@ -23,7 +23,7 @@ Testing orders (fixed on D_val):
   final-state F: front of lower D_val L and higher D_val failure recall, sorted by failure
                 recall ascending, starting at the first nonempty set; duplicates count once
                 as the tightest (largest u_f, then smallest u_s).
-  ladder (F by default, S opt-in): the front's first set is the largest zero-cost set on D_val, so with a
+  ladder (both on by default): the front's first set is the largest zero-cost set on D_val, so with a
                 small D_val the first test is aggressive. The ladder tests that set's nested subsets
                 first, smallest first. For F the bound's denominator is fixed (all D_cal successes), so
                 along a nested chain it only grows and the ladder loses nothing. For S the bound is on a
@@ -163,7 +163,7 @@ def order_S_final_state(val, start_min: int, ladder: bool = False) -> list[tuple
         # Nested subsets of the first front set (larger t_s, same t_f), smallest first, each holding
         # >= start_min D_val states. Unlike the F ladder this is not free: FCR is a rate, so a small subset
         # with a few false positives can fail where the larger front set would have passed, and the walk
-        # then stops earlier than without the ladder. Opt-in for that reason.
+        # then stops earlier than without the ladder (5 of 660 epochs at full size; it gains far more at small D_val).
         a0, b0 = a.ravel()[front[0]], b.ravel()[front[0]]
         n_mat = T["S_n"]
         chain = [ia for ia in range(N_GRID - 1, a0, -1) if n_mat[ia, b0] >= start_min and n_mat[ia, b0] < n_mat[a0, b0]]
@@ -314,7 +314,7 @@ def report(test, S_thr=None, F_thr=None, tau=None) -> dict[str, float | int | No
 
 
 def certify(val, cal, test, *, classifier: bool, tau=None, alpha=0.05, beta_=0.05, delta=0.05,
-            ladder_S: bool = False, ladder_F: bool = True) -> dict[str, dict]:
+            ladder_S: bool = True, ladder_F: bool = True) -> dict[str, dict]:
     """6a and 6c for one epoch. val/cal/test are split_probs tuples; tau = (tau_s*, tau_f*) or None (Part-X)."""
     out = {}
     if classifier:

@@ -143,7 +143,7 @@ def test_a_running_job_is_never_cancelled(env, fake_sh):
 def test_a_banked_pending_run_resumes_on_the_card(env, fake_sh):
     calls, _ = fake_sh
     res = rebalance.move(_cell(env), ("arrakis", "1", "RTX 6000 Ada"))
-    assert any("ssh -n -o BatchMode=yes amarel 'scancel 777'" in c for c in calls)
+    assert any("ssh -n -o BatchMode=yes amarel 'scancel --state=PENDING 777'" in c for c in calls)
     assert any(f"resume_direct.sh {Q3D_FM} arrakis 1" in c for c in calls)
     assert not any("launch.sh" in c for c in calls) and "2 banked" in res
     last = lib.latest_rows(env["LEDGER"])[Q3D_FM]
@@ -157,7 +157,7 @@ def test_an_unbanked_pending_run_launches_on_the_card_from_its_commit(env, fake_
     rebalance.move(c, ("westeros", "4", "RTX 2080 Ti"))
     cmd = next(x for x in calls if "launch.sh" in x)
     assert "DET_V2_RELAUNCH=1" in cmd and "DET_V2_REF=abc1234567" in cmd and f"launch.sh {Q3D_FM} direct westeros 4" in cmd
-    assert any("ssh -n -o BatchMode=yes ilab1 'scancel 777'" in x for x in calls)
+    assert any("ssh -n -o BatchMode=yes ilab1 'scancel --state=PENDING 777'" in x for x in calls)
 
 
 def test_a_cancel_that_did_not_take_leaves_the_run_alone(env, fake_sh):
@@ -165,6 +165,19 @@ def test_a_cancel_that_did_not_take_leaves_the_run_alone(env, fake_sh):
     state["sacct"] = "RUNNING"
     res = rebalance.move(_cell(env), ("arrakis", "1", "RTX 6000 Ada"))
     assert res.startswith("FAILED to cancel") and not any("resume_direct" in c or "launch.sh" in c for c in calls)
+
+
+def test_a_job_that_starts_between_the_check_and_the_cancel_keeps_running(env, fake_sh):
+    """squeue said PENDING, then the job started: the cancel is limited to PENDING jobs, so SLURM leaves it
+    running, and the run stays where it is with no cancel row and no relaunch."""
+    calls, state = fake_sh
+    state["sacct"] = "RUNNING"
+    res = rebalance.move(_cell(env), ("arrakis", "1", "RTX 6000 Ada"))
+    cancels = [c for c in calls if "scancel" in c]
+    assert cancels and all("scancel --state=PENDING 777" in c for c in cancels)
+    assert res.startswith("FAILED to cancel") and "left as is" in res
+    assert lib.latest_rows(env["LEDGER"])[Q3D_FM]["action"] == "launch"
+    assert not any("resume_direct" in c or "launch.sh" in c for c in calls)
 
 
 def test_only_this_accounts_pending_jobs_are_candidates(env, monkeypatch):

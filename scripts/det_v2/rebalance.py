@@ -229,7 +229,9 @@ def move(c: dict, card: tuple[str, str, str]) -> str:
     if sh(ssh(qhost, f"squeue -h -j {c['job']} -o %T")).strip() != "PENDING":
         return f"skip {c['name']}: no longer PENDING"
     n = banked(c)
-    sh(ssh(qhost, f"scancel {c['job']}"))
+    # --state=PENDING: a job that started since the squeue check is left running (the sacct check below
+    # then sees RUNNING and leaves the run where it is).
+    sh(ssh(qhost, f"scancel --state=PENDING {c['job']}"))
     st = sh(ssh(qhost, f"sacct -j {c['job']} -X -n -o State")).strip()
     if not st.startswith("CANCELLED"):
         return f"FAILED to cancel {c['name']} ({c['where']} {c['job']}: {st}); left as is"

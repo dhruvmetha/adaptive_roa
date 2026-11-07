@@ -139,6 +139,10 @@ class AdaptiveEngine:
             output_dir=str(self.output_dir / "datasets"),
             val_ratio=cfg.get("val_ratio", 0.1),
             val_split=str(cfg.get("val_split", "prefix")),
+            # val_split=external: the fixed D_val file (the certificate's ordering split) is the
+            # threshold-fit and early-stopping set, and every acquired trajectory trains
+            external_val_file=(cfg.data_source.get("val_set_file", None)
+                               if str(cfg.get("val_split", "prefix")) == "external" else None),
             test_ratio=cfg.get("test_ratio", 0.1),
             candidate_mode=str(cfg.get("candidate_mode", "start")),
             seed=int(cfg.get("seed", 42)),

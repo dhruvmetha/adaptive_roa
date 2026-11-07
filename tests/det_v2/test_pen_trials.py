@@ -121,3 +121,47 @@ def test_farthest_point_maximises_spacing_on_a_line():
     cand = np.arange(11, dtype=float)[:, None]               # 0..10
     rows = vs.spread_farthest_point(cand, np.array([[0.0]]), 2)
     assert rows.tolist() == [10, 5]
+
+
+class _StubSource:
+    def get_state_dim(self):
+        return 2
+
+
+def external_builder(tmp_path, ids):
+    f = tmp_path / "val_set.txt"
+    f.write_text("0.1,0.2,0.0,0.05,1\n-1.0,3.0,2.1,0.0,0\n0.5,-0.5,0.01,-0.06,1\n")
+    b = AdaptiveDatasetBuilder.__new__(AdaptiveDatasetBuilder)
+    b.train_split = DatasetSplit(ids)
+    b.val_ratio, b.val_split, b.external_val_file, b._external_val = 0.2, "external", str(f), None
+    b.data_source, b.output_dir, b.candidate_mode = _StubSource(), tmp_path, "start"
+    return b
+
+
+def test_external_trains_on_every_trajectory_and_fits_on_d_val(tmp_path):
+    ids = list(grow())[-1]
+    b = external_builder(tmp_path, ids)
+    tr, va = b._start_split()
+    assert tr == ids and va == []
+    X, E, y, g = b.get_val_data(return_groups=True)
+    assert X.shape == (3, 2) and E.shape == (3, 2)
+    assert y.tolist() == [1, -1, 1]                          # internal labels, as the val/cal store reads them
+    assert g.tolist() == [0, 1, 2]
+    Xl, yl = b.get_val_labels()
+    assert np.array_equal(Xl, X) and np.array_equal(yl, y)
+
+
+def test_external_writes_d_val_as_the_val_files(tmp_path):
+    b = external_builder(tmp_path, list(range(50)))
+    pairs = np.loadtxt(b.build_val_dataset())
+    assert pairs.shape == (3, 4) and np.allclose(pairs[1], [-1.0, 3.0, 2.1, 0.0])
+    clf = np.loadtxt(b.build_val_classification_dataset())
+    assert clf.shape == (3, 3) and clf[:, 2].tolist() == [1.0, 0.0, 1.0]
+
+
+def test_external_needs_the_file_and_start_mode(tmp_path):
+    with pytest.raises(ValueError):
+        AdaptiveDatasetBuilder(data_source=None, output_dir=str(tmp_path), val_split="external")
+    with pytest.raises(ValueError):
+        AdaptiveDatasetBuilder(data_source=None, output_dir=str(tmp_path), val_split="external",
+                               external_val_file="x.txt", candidate_mode="intermediate")

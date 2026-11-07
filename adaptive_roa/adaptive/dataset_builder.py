@@ -67,6 +67,7 @@ class AdaptiveDatasetBuilder:
         candidate_mode: str = "start",
         seed: int = 42,
         val_split: str = "prefix",
+        external_val_file: Optional[str] = None,
     ):
         """
         Initialize dataset builder.
@@ -86,11 +87,17 @@ class AdaptiveDatasetBuilder:
 
         self.train_split = DatasetSplit()
         self.val_ratio = val_ratio
-        if val_split not in ("prefix", "interleave"):
-            raise ValueError(f"val_split must be 'prefix' or 'interleave', got {val_split!r}")
+        if val_split not in ("prefix", "interleave", "external"):
+            raise ValueError(f"val_split must be 'prefix', 'interleave' or 'external', got {val_split!r}")
         if val_split == "interleave" and not val_ratio > 0:
             raise ValueError("val_split='interleave' needs val_ratio > 0")
+        if val_split == "external" and not external_val_file:
+            raise ValueError("val_split='external' needs external_val_file (data_source.val_set_file)")
+        if val_split == "external" and candidate_mode != "start":
+            raise ValueError("val_split='external' is implemented for candidate_mode='start' only")
         self.val_split = val_split
+        self.external_val_file = external_val_file
+        self._external_val = None
         self.test_ratio = test_ratio
         self.candidate_mode = candidate_mode
         self.seed = seed
@@ -512,6 +519,12 @@ class AdaptiveDatasetBuilder:
         """Build validation endpoint dataset file (no overlap with train)."""
         output_path = self.output_dir / filename
 
+        if self._is_external():
+            starts, ends, _ = self._external_val_rows()
+            np.savetxt(str(output_path), np.hstack([starts, ends]), fmt='%.8f')
+            print(f"Built validation dataset from D_val ({self.external_val_file}): {len(starts)} pairs")
+            return str(output_path)
+
         if self.candidate_mode == "suffix":
             return self._suffix_write_endpoint(self._suffix.val_trajectories(), filename)
 
@@ -563,6 +576,12 @@ class AdaptiveDatasetBuilder:
         if self.candidate_mode == "suffix":
             return self._suffix_write_classification(self._suffix.val_trajectories(), filename)
         output_path = self.output_dir / filename
+        if self._is_external():
+            starts, _ends, labels = self._external_val_rows()
+            label01 = (np.asarray(labels) == 1).astype(np.float64).reshape(-1, 1)
+            np.savetxt(str(output_path), np.hstack([starts, label01]), fmt='%.8f')
+            print(f"Built validation classification dataset from D_val: {len(starts)} rows")
+            return str(output_path)
         train_indices = list(self.train_split)
         _tr, _va = self._start_split()
         n_val = len(_va)
@@ -798,6 +817,17 @@ class AdaptiveDatasetBuilder:
         train_only = _tr
         return self.data_source.build_endpoint_dataset(train_only, mode="train")
 
+    def _external_val_rows(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """(starts, ends, internal labels) of the fixed D_val file, loaded once (val_split='external')."""
+        if self._external_val is None:
+            from adaptive_roa.adaptive.data_source import load_eval_states
+            self._external_val = load_eval_states(self.external_val_file,
+                                                  state_dim=self.data_source.get_state_dim())
+        return self._external_val
+
+    def _is_external(self) -> bool:
+        return getattr(self, "val_split", "prefix") == "external"
+
     def _start_split(self) -> Tuple[List[int], List[int]]:
         """(train_only, val_indices) of the start-mode train split, in insertion order.
 
@@ -807,6 +837,8 @@ class AdaptiveDatasetBuilder:
         one included) gives the same share to val and a trajectory never changes side as N grows.
         """
         train_indices = list(self.train_split)
+        if getattr(self, "val_split", "prefix") == "external":      # D_val is the val set; all trajectories train
+            return train_indices, []
         if getattr(self, "val_split", "prefix") == "interleave":   # builders made via __new__ predate it
             step = max(1, round(1.0 / self.val_ratio))
             return ([x for i, x in enumerate(train_indices) if i % step],
@@ -831,6 +863,12 @@ class AdaptiveDatasetBuilder:
         Returns:
             Tuple of (start_states, end_states, labels[, groups])
         """
+        if self._is_external():
+            starts, ends, labels = self._external_val_rows()
+            out = (starts, ends, labels)
+            # D_val rows are independent states: each is its own resampling group
+            return out + (np.arange(len(labels), dtype=np.int64),) if return_groups else out
+
         if return_groups and self.candidate_mode != "start":
             raise NotImplementedError(f"get_val_data(return_groups=True) needs candidate_mode=start, "
                                       f"not {self.candidate_mode!r}")
@@ -872,6 +910,10 @@ class AdaptiveDatasetBuilder:
         Returns:
             Tuple of (start_states [N_val, dim], labels [N_val])
         """
+        if self._is_external():
+            starts, _ends, labels = self._external_val_rows()
+            return starts, labels
+
         if self.candidate_mode == "suffix":
             starts, _ends, labels = self._suffix_pairs(self._suffix.val_trajectories())
             return starts, labels

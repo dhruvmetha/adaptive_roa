@@ -49,6 +49,7 @@ ILAB_CPU_THREADS=${ILAB_CPU_THREADS:-8}
 ILAB_RESUME_WALL=${ILAB_RESUME_WALL:-06:00:00}
 DIRECT_HOST_SUFFIX=${DIRECT_HOST_SUFFIX-.cs.rutgers.edu}
 DIRECT_TASKSET=${DIRECT_TASKSET:-}
+DIRECT_TMP_ROOT=${DIRECT_TMP_ROOT:-}
 DIRECT_JOBS_TSV=${DIRECT_JOBS_TSV:-}
 SHARED_CARDS=${SHARED_CARDS:-}
 GPU_FREE=${GPU_FREE:-$HOME/.claude/skills/compute/scripts/gpu-free.sh}
@@ -66,7 +67,7 @@ AMAREL_CPUS=${AMAREL_CPUS:-4}
 DET_V2_TMUX_WAIT=${DET_V2_TMUX_WAIT:-3}
 export EXP_DIR DATA_DIR SHARED_DATA_BASE USER_BASE DET_V2_ROOT LEDGER LOG_DIR HOLD_HOSTS SHARED_GROUP \
   TMP_ROOT DET_V2_REPO MANIFEST ILAB_SUBMIT_HOST ILAB_PARTITION ILAB_EXCLUDE ILAB_CPU_THREADS ILAB_RESUME_WALL \
-  DIRECT_HOST_SUFFIX DIRECT_TASKSET DIRECT_JOBS_TSV SHARED_CARDS GPU_FREE SSH_CLEAR_AGENT \
+  DIRECT_HOST_SUFFIX DIRECT_TASKSET DIRECT_TMP_ROOT DIRECT_JOBS_TSV SHARED_CARDS GPU_FREE SSH_CLEAR_AGENT \
   AMAREL_HOST AMAREL_USER AMAREL_ACCOUNT AMAREL_PARTITION AMAREL_EXCLUDE AMAREL_CPUS DET_V2_TMUX_WAIT
 if [ "$SSH_CLEAR_AGENT" = 1 ]; then export SSH_AUTH_SOCK=; fi   # westeros: the agent hangs key auth
 export DET_V2_LOADED=1
@@ -94,6 +95,17 @@ taskset_for() {                                       # "host=0-9 other=0-3" -> 
     [ "${pair%%=*}" = "$1" ] && { echo "taskset -c ${pair#*=}"; return; }
   done
   echo ""
+}
+tmp_root_for() {                                      # "arrakis=/nfs/tmp" -> that host's TMP_ROOT
+  local pair root=$TMP_ROOT
+  for pair in $DIRECT_TMP_ROOT; do
+    local host=${pair%%=*} dir=${pair#*=}
+    if [[ "$pair" != *=* || -z "$host" || "$dir" != /* ]]; then
+      echo "DIRECT_TMP_ROOT entry '$pair' is not host=/absolute/path" >&2; return 1
+    fi
+    [ "$host" = "$1" ] && root=$dir
+  done
+  echo "$root"
 }
 stamp() { date +%Y-%m-%dT%H:%M:%S; }
 
@@ -209,7 +221,8 @@ job_exports() {
 # command file and start it in a detached tmux session; prints the pane pid.
 start_direct() {
   local name=$1 host=$2 gpu=$3 code=$4 commit=$5 log=$6; shift 6
-  local sess="gpu_$SESSION_TAG$name" cmdf ts
+  local sess="gpu_$SESSION_TAG$name" cmdf ts troot
+  troot=$(tmp_root_for "$host") || die "not starting $name on $host: fix DIRECT_TMP_ROOT in $DET_V2_USER_ENV"
   ts=$(date +%Y%m%d_%H%M%S)
   mkdir -p "$LOG_DIR/cmd"
   cmdf="$LOG_DIR/cmd/${ts}_${name}.sh"
@@ -221,7 +234,7 @@ start_direct() {
     echo "# det_v2 $name on $host gpu$gpu, written $(stamp) by $NET_ID"
     echo 'umask 002'
     echo "export DET_V2_CODE=$code ADAPTIVE_ROA_COMMIT=$commit DET_V2_NAME=$name DET_V2_PYTHON=$PYTHON"
-    echo "export DET_V2_NET_ID=$NET_ID DET_V2_TMP_ROOT=$TMP_ROOT OMP_NUM_THREADS=1 CUDA_VISIBLE_DEVICES=$gpu"
+    echo "export DET_V2_NET_ID=$NET_ID DET_V2_TMP_ROOT=$troot OMP_NUM_THREADS=1 CUDA_VISIBLE_DEVICES=$gpu"
     echo "exec $(taskset_for "$host") bash $code/scripts/det_v2/job.sh $* >> $log 2>&1"
   } > "$cmdf"
   on_host "$host" "tmux new-session -d -s '$sess' 'bash $cmdf'" >/dev/null 2>&1 || die "tmux launch failed for $name on $host"

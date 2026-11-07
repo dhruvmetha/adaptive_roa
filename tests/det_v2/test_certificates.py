@@ -191,7 +191,7 @@ def test_start_size_scales_with_the_split_ratio():
     val, cal = (ps[:1000], pf[:1000], y[:1000]), (ps[1000:5000], pf[1000:5000], y[1000:5000])
     test = (ps[5000:], pf[5000:], y[5000:])
     res = C.certify(val, cal, test, classifier=False)
-    want = C.order_S_final_state(val, int(np.ceil(2 * 59 * 1000 / 4000)))
+    want = C.order_S_final_state(val, int(np.ceil(2 * 59 * 1000 / 4000)), ladder=True)   # certify()'s default
     first = C.in_S(val[0], val[1], *want[0])
     assert first.sum() >= 30                                   # 2 * 59 * 1/4 rounded up
     assert res["6a"]["n_order"] == len(want)

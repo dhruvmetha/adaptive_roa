@@ -21,6 +21,7 @@ class TrajectoryPool:
         test_ratio: float = 0.1,
         candidate_mode: str = "start",
         seed: int = 42,
+        val_split: str = "prefix",
     ):
         cfg = TrajectoryDataSourceConfig(
             trajectories_dir=data_source_cfg.trajectories_dir,
@@ -41,6 +42,7 @@ class TrajectoryPool:
             data_source=data_source,
             output_dir=output_dir,
             val_ratio=val_ratio,
+            val_split=val_split,
             test_ratio=test_ratio,
             candidate_mode=candidate_mode,
             # Only suffix mode is seeded from the run; intermediate keeps its

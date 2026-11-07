@@ -66,6 +66,7 @@ class AdaptiveDatasetBuilder:
         test_ratio: float = 0.1,
         candidate_mode: str = "start",
         seed: int = 42,
+        val_split: str = "prefix",
     ):
         """
         Initialize dataset builder.
@@ -85,6 +86,11 @@ class AdaptiveDatasetBuilder:
 
         self.train_split = DatasetSplit()
         self.val_ratio = val_ratio
+        if val_split not in ("prefix", "interleave"):
+            raise ValueError(f"val_split must be 'prefix' or 'interleave', got {val_split!r}")
+        if val_split == "interleave" and not val_ratio > 0:
+            raise ValueError("val_split='interleave' needs val_ratio > 0")
+        self.val_split = val_split
         self.test_ratio = test_ratio
         self.candidate_mode = candidate_mode
         self.seed = seed
@@ -489,8 +495,9 @@ class AdaptiveDatasetBuilder:
 
         # ---- start mode (unchanged) ----
         train_indices = list(self.train_split)
-        n_val = max(1, int(len(train_indices) * self.val_ratio))
-        train_only = train_indices[n_val:]  # Exclude first n_val (val portion)
+        _tr, _va = self._start_split()
+        n_val = len(_va)
+        train_only = _tr  # Exclude first n_val (val portion)
 
         n_pairs = self.data_source.save_endpoint_dataset(
             train_only,
@@ -525,8 +532,9 @@ class AdaptiveDatasetBuilder:
         # ---- start mode (unchanged) ----
         # Take val_ratio of training indices
         train_indices = list(self.train_split)
-        n_val = max(1, int(len(train_indices) * self.val_ratio))
-        val_indices = train_indices[:n_val]  # First n_val from training
+        _tr, _va = self._start_split()
+        n_val = len(_va)
+        val_indices = _va  # First n_val from training
 
         n_pairs = self.data_source.save_endpoint_dataset(
             val_indices,
@@ -543,8 +551,9 @@ class AdaptiveDatasetBuilder:
             return self._suffix_write_classification(self._suffix.train_trajectories(), filename)
         output_path = self.output_dir / filename
         train_indices = list(self.train_split)
-        n_val = max(1, int(len(train_indices) * self.val_ratio))
-        train_only = train_indices[n_val:]
+        _tr, _va = self._start_split()
+        n_val = len(_va)
+        train_only = _tr
         n_rows = self.data_source.save_classification_dataset(train_only, str(output_path), mode="train")
         print(f"Built training classification dataset: {n_rows} (state,label) rows from {len(train_only)} trajectories (excl. {n_val} val)")
         return str(output_path)
@@ -555,8 +564,9 @@ class AdaptiveDatasetBuilder:
             return self._suffix_write_classification(self._suffix.val_trajectories(), filename)
         output_path = self.output_dir / filename
         train_indices = list(self.train_split)
-        n_val = max(1, int(len(train_indices) * self.val_ratio))
-        val_indices = train_indices[:n_val]
+        _tr, _va = self._start_split()
+        n_val = len(_va)
+        val_indices = _va
         n_rows = self.data_source.save_classification_dataset(val_indices, str(output_path), mode="train")
         print(f"Built validation classification dataset: {n_rows} (state,label) rows from {n_val} trajectories")
         return str(output_path)
@@ -731,9 +741,10 @@ class AdaptiveDatasetBuilder:
 
         # ---- start mode (unchanged) ----
         train_indices = list(self.train_split)
-        n_val = max(1, int(len(train_indices) * self.val_ratio))
-        train_only = train_indices[n_val:]
-        val_indices = train_indices[:n_val]
+        _tr, _va = self._start_split()
+        n_val = len(_va)
+        train_only = _tr
+        val_indices = _va
 
         if dataset_kind == "classification":
             return {
@@ -782,9 +793,26 @@ class AdaptiveDatasetBuilder:
 
         # ---- start mode (unchanged) ----
         train_indices = list(self.train_split)
-        n_val = max(1, int(len(train_indices) * self.val_ratio))
-        train_only = train_indices[n_val:]
+        _tr, _va = self._start_split()
+        n_val = len(_va)
+        train_only = _tr
         return self.data_source.build_endpoint_dataset(train_only, mode="train")
+
+    def _start_split(self) -> Tuple[List[int], List[int]]:
+        """(train_only, val_indices) of the start-mode train split, in insertion order.
+
+        ``prefix`` (default): val is the first ``max(1, int(N * val_ratio))`` trajectories, so as the
+        split grows it absorbs the initial batch before any acquired trajectory.
+        ``interleave``: val is every ``round(1 / val_ratio)``-th trajectory, so every batch (the initial
+        one included) gives the same share to val and a trajectory never changes side as N grows.
+        """
+        train_indices = list(self.train_split)
+        if getattr(self, "val_split", "prefix") == "interleave":   # builders made via __new__ predate it
+            step = max(1, round(1.0 / self.val_ratio))
+            return ([x for i, x in enumerate(train_indices) if i % step],
+                    train_indices[::step])
+        n_val = max(1, int(len(train_indices) * self.val_ratio))
+        return train_indices[n_val:], train_indices[:n_val]
 
     def get_val_data(self, return_groups: bool = False) -> Tuple[np.ndarray, ...]:
         """
@@ -826,8 +854,9 @@ class AdaptiveDatasetBuilder:
 
         # ---- start mode (unchanged) ----
         train_indices = list(self.train_split)
-        n_val = max(1, int(len(train_indices) * self.val_ratio))
-        val_indices = train_indices[:n_val]
+        _tr, _va = self._start_split()
+        n_val = len(_va)
+        val_indices = _va
         return self.data_source.build_endpoint_dataset(val_indices, mode="train", return_groups=return_groups)
 
     def get_val_labels(self) -> Tuple[np.ndarray, np.ndarray]:
@@ -862,8 +891,9 @@ class AdaptiveDatasetBuilder:
 
         # ---- start mode (unchanged) ----
         train_indices = list(self.train_split)
-        n_val = max(1, int(len(train_indices) * self.val_ratio))
-        val_indices = train_indices[:n_val]
+        _tr, _va = self._start_split()
+        n_val = len(_va)
+        val_indices = _va
         starts = self.data_source.get_start_states(val_indices)
         labels = self.data_source.get_labels(val_indices)
         return starts, labels
@@ -897,8 +927,9 @@ class AdaptiveDatasetBuilder:
             Note: One per trajectory, not expanded
         """
         train_indices = list(self.train_split)
-        n_val = max(1, int(len(train_indices) * self.val_ratio))
-        train_only = train_indices[n_val:]
+        _tr, _va = self._start_split()
+        n_val = len(_va)
+        train_only = _tr
         starts = self.data_source.get_start_states(train_only)
         labels = self.data_source.get_labels(train_only)
         return starts, labels

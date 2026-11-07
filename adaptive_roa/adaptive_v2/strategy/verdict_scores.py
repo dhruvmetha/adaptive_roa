@@ -118,7 +118,8 @@ def nearest_distance(candidates: np.ndarray, rolled_out: np.ndarray) -> np.ndarr
     return np.asarray(d, dtype=float)
 
 
-def select_topk(scores: np.ndarray, k: int, distance_fn) -> tuple[np.ndarray, dict[str, Any]]:
+def select_topk(scores: np.ndarray, k: int, distance_fn, *, tie_tol: float = 0.0,
+                spread_fn=None) -> tuple[np.ndarray, dict[str, Any]]:
     """Positions of the k highest scores; ties go to the larger distance, then to pool order.
 
     ``distance_fn(positions)`` returns the nearest-rolled-out distance of those
@@ -131,6 +132,19 @@ def select_topk(scores: np.ndarray, k: int, distance_fn) -> tuple[np.ndarray, di
         return np.zeros(0, dtype=np.int64), {"n_tie_group": 0, "u_kth": None}
     order = np.lexsort((np.arange(n), -u))              # U descending, then pool order
     u_kth = u[order[k - 1]]
+    if tie_tol > 0:
+        # Near-ties: scores within tie_tol of the k-th count as tied, and the batch is filled from
+        # that band by spread_fn (greedy farthest-point), so a saturated score cannot pack the
+        # whole batch into one cluster on differences at the 1e-7 level.
+        if spread_fn is None:
+            raise ValueError("select_topk(tie_tol > 0) needs spread_fn")
+        above = order[u[order] > u_kth + tie_tol]
+        band = np.flatnonzero((u >= u_kth - tie_tol) & (u <= u_kth + tie_tol))
+        need = k - len(above)
+        chosen = band if need >= len(band) else np.asarray(spread_fn(band, need, above), dtype=np.int64)
+        picks = np.concatenate([above, chosen]).astype(np.int64)
+        return picks, {"n_tie_group": int(len(band)), "n_tie_taken": int(need), "u_kth": float(u_kth),
+                       "tie_tol": float(tie_tol)}
     above = order[u[order] > u_kth]
     tied = np.flatnonzero(u == u_kth)
     need = k - len(above)
@@ -139,6 +153,20 @@ def select_topk(scores: np.ndarray, k: int, distance_fn) -> tuple[np.ndarray, di
         tied = tied[np.lexsort((tied, -dist))][:need]  # farthest first, then pool order
     picks = np.concatenate([above, tied]).astype(np.int64)
     return picks, {"n_tie_group": int(np.sum(u == u_kth)), "n_tie_taken": int(need), "u_kth": float(u_kth)}
+
+
+def spread_farthest_point(cand_embed: np.ndarray, anchor_embed: np.ndarray, need: int) -> np.ndarray:
+    """Greedy farthest-point: ``need`` rows of cand_embed, each the farthest from the anchors and
+    the rows already taken (ties to the lower row). Returns row positions into cand_embed."""
+    cand = np.asarray(cand_embed, dtype=float)
+    d = nearest_distance(cand, anchor_embed) if len(anchor_embed) else np.full(len(cand), np.inf)
+    taken = []
+    for _ in range(min(int(need), len(cand))):
+        j = int(np.argmax(d))                               # argmax returns the first (lowest) on ties
+        taken.append(j)
+        d = np.minimum(d, np.linalg.norm(cand - cand[j], axis=1))
+        d[j] = -np.inf
+    return np.asarray(taken, dtype=np.int64)
 
 
 def select_proportional(scores: np.ndarray, k: int, rng: np.random.Generator) -> tuple[np.ndarray, dict[str, Any]]:

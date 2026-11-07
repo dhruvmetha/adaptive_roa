@@ -43,6 +43,9 @@ class VerdictAcquisitionStrategy:
             raise ValueError(f"acquisition.batch_size={self.batch_size}: det_v2 scores at least 2,048 states per call")
         self.num_mc_samples = int(cfg.num_mc_samples)
         self.seed = int(cfg.get("seed", 0))
+        self.tie_tol = float(cfg.get("tie_tol", 0.0))
+        if self.tie_tol < 0:
+            raise ValueError(f"acquisition.tie_tol={self.tie_tol} must be >= 0")
         self.verbose = bool(cfg.get("verbose", True))
         self.mode = "uniform" if self.d2_ratio <= 0 else self.score
 
@@ -124,8 +127,15 @@ class VerdictAcquisitionStrategy:
                 return np.full(len(pos), np.inf)
             return vs.nearest_distance(self._embed(system, states[pos]), self._embed(system, rolled))
 
+        def spread(band: np.ndarray, need: int, above: np.ndarray) -> np.ndarray:
+            anchors = np.concatenate([rolled, states[above]]) if len(above) else rolled
+            anchor_embed = self._embed(system, anchors) if len(anchors) else np.zeros((0, 1))
+            rows = vs.spread_farthest_point(self._embed(system, states[band]), anchor_embed, need)
+            return band[rows]
+
         if self.selection == "topk":
-            picks, sel_diag = vs.select_topk(u, target_count, distance)
+            picks, sel_diag = vs.select_topk(u, target_count, distance, tie_tol=self.tie_tol,
+                                             spread_fn=spread if self.tie_tol > 0 else None)
         else:
             rng = np.random.default_rng(round_seed)
             picks, sel_diag = vs.select_proportional(u, target_count, rng)

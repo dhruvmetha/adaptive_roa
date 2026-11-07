@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Write scripts/det_v2/manifest.tsv from the campaign run plan.
+"""Write scripts/<campaign>/manifest.tsv (default det_v2) from the campaign run plan.
 
 One row per to-do run of scripts/det_v2/run_plan.json (keys "main" and "abl"): the
 rows with a rank. Reused rows have no rank and are skipped. Columns:
@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -67,7 +68,7 @@ def is_partx(run: dict) -> bool:
     return run.get("arm") == "Part-X" or run["model"] == "Part-X"
 
 
-def rows(plan: dict, mem: dict[tuple[str, str], str]) -> list[dict]:
+def rows(plan: dict, mem: dict[tuple[str, str], str], campaign: str = "det_v2") -> list[dict]:
     out = []
     for run in plan["main"] + plan["abl"]:
         if run.get("rank") is None or run.get("reused"):
@@ -76,7 +77,7 @@ def rows(plan: dict, mem: dict[tuple[str, str], str]) -> list[dict]:
         if (old, arm) not in mem:
             raise SystemExit(f"{run['name']}: no det_rerun mem for {arm} on {old}")
         out.append({"id": run["id"], "name": run["name"], "rank": int(run["rank"]), "owner": run["owner"],
-                    "config": f"+experiment=det_v2/runs/{run['name']}",
+                    "config": f"+experiment={campaign}/runs/{run['name']}",
                     "script": PARTX_SCRIPT if is_partx(run) else RUN_SCRIPT,
                     "mem": mem[(old, arm)], "est_hours": run["hours"]})
     out.sort(key=lambda r: r["rank"])
@@ -91,16 +92,20 @@ def rows(plan: dict, mem: dict[tuple[str, str], str]) -> list[dict]:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--plan", default=str(HERE / "run_plan.json"))
+    ap.add_argument("--campaign", default=os.environ.get("DET_CAMPAIGN", "det_v2"),
+                    help="scripts/<campaign>/ holds the plan and gets the manifest (default det_v2)")
+    ap.add_argument("--plan", default=None, help="default scripts/<campaign>/run_plan.json")
     ap.add_argument("--mem-table", default=str(HERE / "det_rerun_mem.tsv"))
     ap.add_argument("--det-rerun-manifest", default=None,
                     help="re-extract --mem-table from this det_rerun manifest.tsv first")
-    ap.add_argument("--out", default=str(HERE / "manifest.tsv"))
+    ap.add_argument("--out", default=None, help="default scripts/<campaign>/manifest.tsv")
     a = ap.parse_args()
+    a.plan = a.plan or str(HERE.parent / a.campaign / "run_plan.json")
+    a.out = a.out or str(HERE.parent / a.campaign / "manifest.tsv")
     if a.det_rerun_manifest:
         write_mem_table(extract_mem(Path(a.det_rerun_manifest)), Path(a.mem_table))
     plan = json.loads(Path(a.plan).read_text())
-    out = rows(plan, read_mem_table(Path(a.mem_table)))
+    out = rows(plan, read_mem_table(Path(a.mem_table)), a.campaign)
     with open(a.out, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=COLUMNS, delimiter="\t", lineterminator="\n")
         w.writeheader()

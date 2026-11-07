@@ -19,4 +19,4 @@ LOG=$LOG_DIR/$(date +%Y%m%d_%H%M)_${NAME}_resume.log
 PID=$(start_direct "$NAME" "$HOST" "$GPU" "$CODE" "$COMMIT" "$LOG" scripts/resume_adaptive.py --run-dir "$RUN_DIR") \
   || fail "tmux resume failed for $NAME on $HOST"
 ledger_append "$NAME" "$NET_ID" direct "$PID" "$HOST:$GPU" "$(stamp)" "$LOG" "$COMMIT" "$RUN_DIR" resume
-echo "$NAME resumed -> $HOST gpu$GPU pid $PID session gpu_$NAME ($(banked "$RUN_DIR") banked, commit $COMMIT)"
+echo "$NAME resumed -> $HOST gpu$GPU pid $PID session gpu_$SESSION_TAG$NAME ($(banked "$RUN_DIR") banked, commit $COMMIT)"

@@ -22,15 +22,24 @@ EXP_DIR=${EXP_DIR:-/common/users/shared/pracsys/adaptive_roa_experiments}
 DATA_DIR=${DATA_DIR:-/common/users/shared/pracsys/genMoPlan/data_trajectories}
 SHARED_DATA_BASE=${SHARED_DATA_BASE:-$DATA_DIR}
 USER_BASE=${USER_BASE:-/common/users/shared/pracsys/genMoPlan/global_dynamics_experiments}
-# The run configs put every run under ${exp_dir}/det_v2, so the root is derived, not set.
-DET_V2_ROOT=$EXP_DIR/det_v2
+# Campaign: det_v2 by default; the scripts/det_v3/ wrappers set det_v3. It picks the shared
+# root (and with it the ledger, logs and hold list), the manifest and the Amarel log dir, so
+# two campaigns never share a ledger even though they reuse run names.
+DET_CAMPAIGN=${DET_CAMPAIGN:-det_v2}
+case $DET_CAMPAIGN in det_v[0-9]*) ;; *) die "DET_CAMPAIGN must be det_v2, det_v3, ..., got '$DET_CAMPAIGN'" ;; esac
+# The run configs put every run under ${exp_dir}/<campaign>, so the root is derived, not set.
+DET_V2_ROOT=$EXP_DIR/$DET_CAMPAIGN
 LEDGER=${LEDGER:-$DET_V2_ROOT/launched.tsv}
 LOG_DIR=${LOG_DIR:-$DET_V2_ROOT/logs}
 HOLD_HOSTS=${HOLD_HOSTS:-$DET_V2_ROOT/hold_hosts.txt}
+# det_v2 keeps its unprefixed tmux sessions; later campaigns tag theirs (run names repeat).
+SESSION_TAG=$([ "$DET_CAMPAIGN" = det_v2 ] || echo "${DET_CAMPAIGN#det_}_")
 SHARED_GROUP=${SHARED_GROUP:-login-bekris}
 TMP_ROOT=${TMP_ROOT:-/tmp}
 DET_V2_REPO=${DET_V2_REPO:-$(cd "$DET_V2_SCRIPTS/../.." && pwd)}
-MANIFEST=${MANIFEST:-$DET_V2_SCRIPTS/manifest.tsv}
+MANIFEST=${MANIFEST:-$(dirname "$DET_V2_SCRIPTS")/$DET_CAMPAIGN/manifest.tsv}
+# Amarel logs: det_v2 keeps the user.env dir; later campaigns get a subdir, so log pulls stay apart.
+[ "$DET_CAMPAIGN" = det_v2 ] || [ -z "${AMAREL_LOG_DIR:-}" ] || AMAREL_LOG_DIR=$AMAREL_LOG_DIR/$DET_CAMPAIGN
 ILAB_SUBMIT_HOST=${ILAB_SUBMIT_HOST:-ilab1.cs.rutgers.edu}
 ILAB_PARTITION=${ILAB_PARTITION:-unlimited}
 ILAB_EXCLUDE=${ILAB_EXCLUDE:-ilab3,ilab4}
@@ -200,7 +209,7 @@ job_exports() {
 # command file and start it in a detached tmux session; prints the pane pid.
 start_direct() {
   local name=$1 host=$2 gpu=$3 code=$4 commit=$5 log=$6; shift 6
-  local sess="gpu_$name" cmdf ts
+  local sess="gpu_$SESSION_TAG$name" cmdf ts
   ts=$(date +%Y%m%d_%H%M%S)
   mkdir -p "$LOG_DIR/cmd"
   cmdf="$LOG_DIR/cmd/${ts}_${name}.sh"

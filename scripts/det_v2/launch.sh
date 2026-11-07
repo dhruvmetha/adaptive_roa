@@ -84,7 +84,7 @@ direct)
   LOG=$LOG_DIR/$(date +%Y%m%d_%H%M)_${NAME}.log
   PID=$(start_direct "$NAME" "$HOST" "$GPU" "$CODE" "$COMMIT" "$LOG" $ARGS) || abandon "tmux launch failed for $NAME on $HOST"
   ledger_append "$NAME" "$NET_ID" direct "$PID" "$HOSTGPU" "$(stamp)" "$LOG" "$COMMIT" "$RUN_DIR" launch
-  echo "$NAME -> $HOST gpu$GPU pid $PID session gpu_$NAME (commit $COMMIT, run dir $RUN_DIR)";;
+  echo "$NAME -> $HOST gpu$GPU pid $PID session gpu_$SESSION_TAG$NAME (commit $COMMIT, run dir $RUN_DIR)";;
 amarel)
   ACODE=$(amarel_snapshot "$FULL") || true
   [ -n "$ACODE" ] || abandon "Amarel snapshot of $COMMIT failed"

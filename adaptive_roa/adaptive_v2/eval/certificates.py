@@ -25,7 +25,9 @@ Testing orders (fixed on D_val):
                 as the tightest (largest u_f, then smallest u_s).
   ladder (F by default, S opt-in): the front's first set is the largest zero-cost set on D_val, so with a
                 small D_val the first test is aggressive. The ladder tests that set's nested subsets
-                first, smallest first; along a nested chain the cost only grows, so it loses nothing.
+                first, smallest first. For F the bound's denominator is fixed (all D_cal successes), so
+                along a nested chain it only grows and the ladder loses nothing. For S the bound is on a
+                rate, so a small subset can fail where its superset would pass: the S ladder can cost power.
   start size: 2 * m_min * |D_val| / |D_cal| D_val states, i.e. about 2 * m_min D_cal states.
 """
 from __future__ import annotations
@@ -158,9 +160,10 @@ def order_S_final_state(val, start_min: int, ladder: bool = False) -> list[tuple
     front = front[np.argsort(s[front] / max(T["n_succ"], 1), kind="stable")]
     out = [(float(GRID[a.ravel()[i]]), float(GRID[b.ravel()[i]])) for i in front]
     if ladder and len(front):
-        # Nested subsets of the first front set (larger t_s, same t_f), smallest first: every one holds
-        # >= start_min D_val states, and false positives can only grow along a nested chain, so the walk
-        # reaches the first front set no later than before and certifies a smaller set if that one fails.
+        # Nested subsets of the first front set (larger t_s, same t_f), smallest first, each holding
+        # >= start_min D_val states. Unlike the F ladder this is not free: FCR is a rate, so a small subset
+        # with a few false positives can fail where the larger front set would have passed, and the walk
+        # then stops earlier than without the ladder. Opt-in for that reason.
         a0, b0 = a.ravel()[front[0]], b.ravel()[front[0]]
         n_mat = T["S_n"]
         chain = [ia for ia in range(N_GRID - 1, a0, -1) if n_mat[ia, b0] >= start_min and n_mat[ia, b0] < n_mat[a0, b0]]

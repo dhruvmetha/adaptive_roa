@@ -167,17 +167,48 @@ def test_external_needs_the_file_and_start_mode(tmp_path):
                                external_val_file="x.txt", candidate_mode="intermediate")
 
 
-def test_external_val_honours_the_row_cap(tmp_path):
+def test_external_val_honours_the_row_cap_with_the_seeded_subset(tmp_path):
+    from adaptive_roa.adaptive.data_source import split_subset
     b = external_builder(tmp_path, list(range(50)))
     b.external_val_rows = 2
     X, E, y = b.get_val_data()
-    assert len(y) == 2 and y.tolist() == [1, -1]
+    idx = split_subset(3, 2)
+    assert len(y) == 2 and y.tolist() == np.array([1, -1, 1])[idx].tolist()
 
 
-def test_split_row_cap_reads_the_per_split_key():
+def _sorted_split_file(path, n=2000):
+    """A split file in the order cp-ppo's are: failures first, then successes (label sorted)."""
+    rng = np.random.default_rng(0)
+    X = rng.normal(size=(n, 2)); E = rng.normal(size=(n, 2))
+    y = (np.arange(n) >= int(0.8 * n)).astype(int)          # last 20% are successes
+    np.savetxt(path, np.column_stack([X, E, y]), delimiter=",", fmt="%.6f")
+    return y
+
+
+def test_split_caps_take_a_seeded_random_subset_not_a_prefix(tmp_path):
     from omegaconf import OmegaConf
-    from adaptive_roa.adaptive_v2.engine import _split_rows
-    cfg = OmegaConf.create({"data_source": {"val_set_max_rows": 500, "cal_set_max_rows": 1000}})
-    assert _split_rows(cfg, "val", None) == 500 and _split_rows(cfg, "cal", None) == 1000
-    assert _split_rows(cfg, "cal", 800) == 800
-    assert _split_rows(OmegaConf.create({"data_source": {}}), "val", None) is None
+    from adaptive_roa.adaptive_v2.engine import _load_split
+    f = tmp_path / "val_set.txt"
+    _sorted_split_file(f)
+    cfg = OmegaConf.create({"data_source": {"val_set_max_rows": 500}})
+    X1, y1 = _load_split(cfg, "val", str(f), None, 2)
+    X2, y2 = _load_split(cfg, "val", str(f), None, 2)
+    assert len(y1) == 500 and np.array_equal(X1, X2)               # the same rows every time
+    assert 0.14 < (y1 == 1).mean() < 0.26                           # a prefix would have 0 successes
+    Xa, ya = _load_split(OmegaConf.create({"data_source": {}}), "val", str(f), None, 2)
+    assert len(ya) == 2000                                          # no cap: the whole file
+
+
+def test_builder_and_engine_read_the_same_d_val_rows(tmp_path):
+    from omegaconf import OmegaConf
+    from adaptive_roa.adaptive_v2.engine import _load_split
+    f = tmp_path / "val_set.txt"
+    _sorted_split_file(f)
+    b = AdaptiveDatasetBuilder.__new__(AdaptiveDatasetBuilder)
+    b.train_split = DatasetSplit(list(range(50)))
+    b.val_ratio, b.val_split, b.external_val_file, b._external_val = 0.2, "external", str(f), None
+    b.external_val_rows = 500
+    b.data_source, b.output_dir, b.candidate_mode = _StubSource(), tmp_path, "start"
+    Xb, _, yb = b.get_val_data()
+    Xe, ye = _load_split(OmegaConf.create({"data_source": {"val_set_max_rows": 500}}), "val", str(f), None, 2)
+    assert np.allclose(Xb, Xe) and np.array_equal(yb, ye)

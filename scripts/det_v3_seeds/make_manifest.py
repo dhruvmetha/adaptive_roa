@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Write scripts/det_v3_seeds/manifest.tsv from scripts/det_v3_seeds/run_plan.json (main and abl rows).
+"""Write scripts/det_v3_seeds/manifest.tsv from scripts/det_v3_seeds/run_plan.json (every block).
 
 The det_v2 columns, then base_id and seed. script, mem and est_hours are copied from the det_v3
 manifest row the run repeats, so a repeat asks for what its det_v3 run asked for. (Use this, not
@@ -21,7 +21,7 @@ COLUMNS = ["id", "name", "rank", "owner", "config", "script", "mem", "est_hours"
 def rows(plan: dict, v3_manifest: list[dict]) -> list[dict]:
     base = {r["name"]: r for r in v3_manifest}
     out = []
-    for run in sorted(plan["main"] + plan["abl"], key=lambda r: r["rank"]):
+    for run in sorted((r for rows in plan.values() for r in rows), key=lambda r: r["rank"]):
         b = base[run["base_name"]]
         if b["id"] != run["base_id"] or b["owner"] != run["owner"]:
             raise SystemExit(f"{run['name']}: plan and det_v3 manifest disagree on {run['base_name']}")

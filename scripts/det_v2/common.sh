@@ -59,6 +59,10 @@ AMAREL_USER=${AMAREL_USER:-$NET_ID}
 AMAREL_ACCOUNT=${AMAREL_ACCOUNT:-general}
 AMAREL_PARTITION=${AMAREL_PARTITION:-gpu}
 AMAREL_EXCLUDE=${AMAREL_EXCLUDE:-gpu029,gpu046}
+# Amarel's maintenance reservation (scontrol show reservation maintenance-202611): no Amarel job runs
+# at or after the start and before the end, so an 'outage' row stamped inside it frees is_live.
+AMAREL_OUTAGE_START=${AMAREL_OUTAGE_START:-2026-11-10T08:00:00}
+AMAREL_OUTAGE_END=${AMAREL_OUTAGE_END:-2026-11-11T23:59:00}
 # gpu029 throws ECC faults and kills jobs in under a minute; cgpu has no /scratch, so jobs die
 # in 0 s with an empty log. Refuse a user.env that would send work there.
 case ",$AMAREL_EXCLUDE," in *,gpu029,*) ;; *) die "AMAREL_EXCLUDE must keep gpu029 (ECC faults): $AMAREL_EXCLUDE" ;; esac
@@ -75,6 +79,8 @@ umask 002
 
 # Ledger columns, in order. Append-only: the last row for a name is its current state.
 #   action: claim (launch in progress) | launch | resume | abandon (submit failed) | cancel (moved off)
+#           | outage (Amarel job the last snapshots showed RUNNING or ended TIMEOUT, PREEMPTED or
+#             NODE_FAIL, written inside the reservation; log column squeue:<state> or sacct:<state>)
 LEDGER_HEADER=$'name\tuser\twhere\tjob\thostgpu\ttimestamp\tlog\tcommit\trun_dir\taction'
 
 need_amarel() {
@@ -181,11 +187,15 @@ run_dir_of() {                                        # run_dir_of <name> <code 
 # is_live <ledger row>: 0 when the row's job or process still exists, 1 when it does not,
 # 2 when the host could not be asked. Any account can see any job in squeue and any pid in
 # ps, so this covers the other account's runs too. A job squeue still lists in a final
-# state (CANCELLED, TIMEOUT, ...) is not live.
+# state (CANCELLED, TIMEOUT, ...) is not live, nor is a job a later cancel row names, an Amarel
+# job an outage row names, or one its final pull marked: none needs its cluster asked (it may be down).
 is_live() {
   local row=$1 where job hostgpu probe state
   where=$(lf "$row" $L_WHERE); job=$(lf "$row" $L_JOB); hostgpu=$(lf "$row" $L_HOSTGPU)
   [ -n "$job" ] && [ "$job" != - ] || return 1
+  ! cancelled_in_ledger "$row" || return 1
+  ! outage_in_ledger "$row" || return 1
+  ! amarel_final_ok "$row" || return 1
   case "$where" in
     ilab|ilabcpu) probe=$(rsh "$ILAB_SUBMIT_HOST" "squeue -h -j $job -o %T 2>/dev/null; echo DET_V2_OK" 2>/dev/null) || true ;;
     amarel)       probe=$(rsh "$AMAREL_HOST" "squeue -h -j $job -o %T 2>/dev/null; echo DET_V2_OK" 2>/dev/null) || true ;;
@@ -198,6 +208,41 @@ is_live() {
     ""|COMPLETED|CANCELLED*|FAILED|TIMEOUT|PREEMPTED|NODE_FAIL|OUT_OF_MEMORY|BOOT_FAIL|DEADLINE) return 1 ;;
     *) return 0 ;;
   esac
+}
+
+# cancelled_in_ledger <ledger row>: the ledger holds a cancel row for the same name, world and
+# Slurm job id. rebalance.cancel_row writes one only after sacct shows the job CANCELLED (move and
+# the outage cancel both check), so the job cannot run again. Direct pids are always probed.
+cancelled_in_ledger() {
+  local where job
+  where=$(lf "$1" $L_WHERE); job=$(lf "$1" $L_JOB)
+  case "$where" in ilab|ilabcpu|amarel) ;; *) return 1 ;; esac
+  [ -f "$LEDGER" ] || return 1
+  awk -F'\t' -v n="$(lf "$1" 1)" -v w="$where" -v j="$job" \
+    'NR>1 && $1==n && $3==w && $4==j && $10=="cancel" {f=1} END {exit !f}' "$LEDGER"
+}
+
+# outage_in_ledger <ledger row>: the ledger holds an 'outage' row for the same name and Amarel job id,
+# stamped at or after AMAREL_OUTAGE_START and before AMAREL_OUTAGE_END. amarel_outage_rows.sh writes
+# one only inside that window, for a job the last snapshots showed RUNNING or ended (TIMEOUT,
+# PREEMPTED, NODE_FAIL); no Amarel job runs then, so the job is not live. A row stamped outside
+# the window is ignored.
+outage_in_ledger() {
+  [ "$(lf "$1" $L_WHERE)" = amarel ] && [ -f "$LEDGER" ] || return 1
+  awk -F'\t' -v n="$(lf "$1" 1)" -v j="$(lf "$1" $L_JOB)" -v s="$AMAREL_OUTAGE_START" -v e="$AMAREL_OUTAGE_END" \
+    'NR>1 && $1==n && $3=="amarel" && $4==j && $10=="outage" && $6>=s && $6<e {f=1} END {exit !f}' "$LEDGER"
+}
+
+# amarel_final_ok <ledger row>: the row is an Amarel placement whose run dir holds a .amarel_final
+# marker for the row's own job. final_pull_amarel.sh writes it only once squeue no longer lists
+# the job and the pull returned 0, so the job cannot run again and the shared dir holds every
+# banked epoch: neither a liveness check nor a pull needs Amarel (it may be down), for any account.
+amarel_final_ok() {
+  local rd job
+  [ "$(lf "$1" $L_WHERE)" = amarel ] || return 1
+  rd=$(lf "$1" $L_RUNDIR); job=$(lf "$1" $L_JOB)
+  [ -n "$job" ] && [ "$job" != - ] && [ -f "$rd/.amarel_final" ] \
+    && [ "$(awk 'NR==1 {print $1}' "$rd/.amarel_final")" = "$job" ]
 }
 
 # refuse_if_live <name> <ledger row>: die when the row's job runs, or when its host cannot be asked.
@@ -342,9 +387,19 @@ full_commit() {                                       # full_commit <short>: fet
 }
 
 # leave_amarel <name>: a run that last ran on Amarel gets its final pull before it runs
-# here. A mirror marker left by a push that never ran is dropped: the shared dir is current.
+# here, unless final_pull_amarel.sh already took it for that job (amarel_final_ok), or an
+# outage row names the job (outage_in_ledger): then the run continues from the shared copy,
+# and epochs only Amarel holds get redone (driver 2026-11-09: waiting for Amarel costs about
+# 40 h of the row before the deadline). A mirror marker left by a push that never ran is
+# dropped: the shared dir is current.
 leave_amarel() {
-  if [ "$PREV" = amarel ]; then
+  if [ "$PREV" = amarel ] && amarel_final_ok "$PLACED"; then
+    echo "$1: Amarel job $(lf "$PLACED" $L_JOB) already had its final pull ($(cut -d' ' -f2- "$RUN_DIR/.amarel_final")); not asking Amarel" >&2
+    rm -f "$RUN_DIR/.amarel_mirror"
+  elif [ "$PREV" = amarel ] && outage_in_ledger "$PLACED"; then
+    echo "$1: Amarel job $(lf "$PLACED" $L_JOB) has an outage row: resumed from iLab copy; Amarel may hold later epochs" >&2
+    rm -f "$RUN_DIR/.amarel_mirror"
+  elif [ "$PREV" = amarel ]; then
     amarel_pull "$1" "$RUN_DIR" "$PREV_USER"
   elif [ -f "$RUN_DIR/.amarel_mirror" ]; then
     echo "$1 last ran on $PREV; dropping the stale .amarel_mirror marker" >&2

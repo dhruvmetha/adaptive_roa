@@ -30,6 +30,14 @@ queue=$($SSH -n "$AMAREL_HOST" "squeue -u $AMAREL_USER -h -o '%j %T'") \
   && printf '%s\n' "$queue" > "$QUEUE_SNAP.tmp" && mv "$QUEUE_SNAP.tmp" "$QUEUE_SNAP" \
   || queue=""
 active=$(awk '{print $1}' <<< "$queue")
+# Ended jobs (JobID|JobName|State, last 3 days), so amarel_outage_rows.sh knows which ended TIMEOUT,
+# PREEMPTED or NODE_FAIL before Amarel went down. Replaced only by a sacct that answered.
+SACCT_SNAP=$LOG_DIR/amarel_sacct_$NET_ID.txt
+if acct=$($SSH -n "$AMAREL_HOST" "sacct -X -u $AMAREL_USER -S now-3days -n -P -o JobID,JobName,State; echo DET_V2_OK" 2>/dev/null) \
+    && grep -qx DET_V2_OK <<< "$acct"; then
+  grep -vx DET_V2_OK <<< "$acct" > "$SACCT_SNAP.tmp" || true
+  mv "$SACCT_SNAP.tmp" "$SACCT_SNAP"
+fi
 for NAME in "${names[@]}"; do
   ROW=$(ledger_last "$NAME")
   [ "$(lf "$ROW" $L_WHERE)" = amarel ] && [ "$(lf "$ROW" $L_USER)" = "$NET_ID" ] \
@@ -44,7 +52,8 @@ for NAME in "${names[@]}"; do
     echo "REFUSED $NAME: $OUT has files but no .amarel_mirror marker"; continue
   fi
   mkdir -p "$OUT" && touch "$OUT/.amarel_mirror"
-  rc=0; rsync "${RSYNC_PERMS[@]}" --delete --exclude .amarel_mirror -e "$SSH" "$AMAREL_HOST:$ADIR/" "$OUT/" </dev/null 2>/dev/null || rc=$?
+  # --exclude also keeps --delete off final_pull_amarel.sh's .amarel_final marker.
+  rc=0; rsync "${RSYNC_PERMS[@]}" --delete --exclude .amarel_mirror --exclude .amarel_final -e "$SSH" "$AMAREL_HOST:$ADIR/" "$OUT/" </dev/null 2>/dev/null || rc=$?
   # 24: a running job replaced a checkpoint mid-copy; the next sync picks it up.
   case $rc in 0|24) echo "synced $NAME";; *) echo "FAILED $NAME (rsync $rc)";; esac
 done

@@ -40,7 +40,8 @@ def main() -> None:
     ap.add_argument("--plan", type=Path, default=ROOT / "scripts/det_v3_seeds/run_plan.json")
     ap.add_argument("--check", action="store_true")
     a = ap.parse_args()
-    runs = sorted(json.loads(a.plan.read_text())["main"], key=lambda r: r["rank"])
+    plan = json.loads(a.plan.read_text())
+    runs = sorted(plan["main"] + plan["abl"], key=lambda r: r["rank"])
     OUT.mkdir(parents=True, exist_ok=True)
     bad = []
     for r in runs:

@@ -113,3 +113,35 @@ def test_u_tau_acquisition_config_is_u_h_but_the_score():
     assert a.sampling_mode == "u_tau" and a.acquisition.score == "u_tau"
     a.sampling_mode, a.acquisition.score = b.sampling_mode, b.acquisition.score
     assert OmegaConf.to_container(a) == OmegaConf.to_container(b)
+
+
+class _FinalStateBackend:
+    """What VerdictAcquisitionStrategy reads from a final-state model's probability backend."""
+
+    def __init__(self):
+        self.model_handle, self.system, self.device, self.attractor_radius = object(), None, "cpu", 0.1
+
+
+def _labels(counts, k):
+    """[B, K] endpoint labels (1 success, -1 failure, 0 invalid) with the given (n_s, n_f, n_inv) rows."""
+    rows = [[1] * s + [-1] * f + [0] * (k - s - f) for s, f, _ in counts]
+    return np.asarray(rows, dtype=np.int8)
+
+
+@pytest.mark.parametrize("score", ["u_tau", "q_a", "u_h"])
+def test_strategy_scores_final_state_candidates(monkeypatch, score):
+    from adaptive_roa.adaptive_v2.eval import prediction_store as ps
+    k, tau = 100, (0.11, 0.03)
+    counts = [(50, 50, 0), (0, 0, 100), (100, 0, 0), (12, 2, 86), (3, 90, 7)]
+    monkeypatch.setattr(ps, "mc_predict", lambda *a, **kw: (_labels(counts, k), None))
+    sc = _strategy(score)._candidate_scores(np.zeros((len(counts), 2)), _FinalStateBackend(), False, tau, 0)
+    n_s, n_f, n_i = (np.array([c[j] for c in counts]) for j in range(3))
+    q = vs.verdict_probabilities(n_s, n_f, n_i, *tau)
+    assert sc["q_a"] == pytest.approx(q["q_a"])
+    assert sc["u_h"] == pytest.approx(vs.u_h(n_s / k, n_f / k, n_i / k))
+    if score == "u_tau":
+        assert sc["u_tau"] == pytest.approx(vs.u_tau(q, n_i / k))
+        assert sc["u_tau"][1] == pytest.approx(1.0)              # all invalid: the invalid term
+        assert int(np.argmax(sc["u_tau"][[0, 3]])) == 1           # near the S edge beats an even split
+    else:
+        assert "u_tau" not in sc                                  # q_A and U_H runs: old path, no new array

@@ -1,4 +1,4 @@
-"""det_v2 acquisition (method section 5): q_A or U_H over the next unused starts.
+"""det_v2 acquisition (method section 5): q_A, U_H or U_tau over the next unused starts.
 
 Each round scores the first ``n_candidates`` unused trajectory starts in pool order
 (all of them when fewer remain), excluding the round's uniform picks, and takes
@@ -24,7 +24,7 @@ from adaptive_roa.adaptive_v2.eval import prediction_store as ps
 from adaptive_roa.adaptive_v2.strategy import verdict_scores as vs
 from adaptive_roa.adaptive_v2.types import AcquisitionResult, ThresholdState
 
-SCORES = ("q_a", "u_h")
+SCORES = ("q_a", "u_h", "u_tau")
 SELECTIONS = ("topk", "proportional")
 
 
@@ -66,13 +66,20 @@ class VerdictAcquisitionStrategy:
             out.update(n_success=n_s, n_failure=n_f, n_invalid=n_i)
             if tau is not None:
                 out.update(vs.verdict_probabilities(n_s, n_f, n_i, *tau))
+                if self.score == "u_tau":
+                    out["u_tau"] = vs.u_tau(out, n_i / k)
             out["u_h"] = vs.u_h(n_s / k, n_f / k, n_i / k)
             return out
         # Classifier: p_s from the handle (the marginal threshold opt and evaluation read).
         p = np.asarray(probability_backend.estimate(states).p_success, dtype=float)
         out["p_success"] = p
         out["u_h"] = vs.u_h(p)
-        if tau is not None:
+        if tau is not None and self.score == "u_tau":
+            # U_tau's stand-in posterior: p_s as a count out of K (verdict_scores docstring).
+            q = vs.classifier_beta_verdict_probabilities(p, *tau, k=self.num_mc_samples)
+            out.update(q)
+            out["u_tau"] = vs.u_tau(q)
+        elif tau is not None:
             n_marg = int(getattr(model, "n_marginal_samples", 1))
             if n_marg > 1 and hasattr(model, "p_success_draws"):
                 draws = model.p_success_draws(states, self.num_mc_samples, seed=round_seed,
@@ -102,8 +109,8 @@ class VerdictAcquisitionStrategy:
         tau = None
         if getattr(threshold_state, "tau_s_star", None) is not None:
             tau = (float(threshold_state.tau_s_star), float(threshold_state.tau_f_star))
-        if self.score == "q_a" and tau is None:
-            raise ValueError("acquisition.score=q_a needs tau* from threshold=j_sel")
+        if self.score in ("q_a", "u_tau") and tau is None:
+            raise ValueError(f"acquisition.score={self.score} needs tau* from threshold=j_sel")
 
         t0 = time.time()
         states, indices = pool.sample_candidates_without_marking(self.n_candidates, exclude=exclude or set())
@@ -116,7 +123,7 @@ class VerdictAcquisitionStrategy:
         is_classifier = str(threshold_backend.predictor_type) == "classifier"
         sc = self._candidate_scores(states, probability_backend, is_classifier, tau, round_seed)
         t_score = time.time() - t0
-        u = sc["q_a"] if self.score == "q_a" else sc["u_h"]
+        u = sc[self.score]
 
         system = probability_backend.system
         rolled = np.asarray(builder.data_source.get_start_states(sorted(builder.used_indices)), dtype=np.float32) \
@@ -161,7 +168,7 @@ class VerdictAcquisitionStrategy:
                         q_a_mean=float(np.mean(sc["q_a"])))
         arrays = {"candidate_indices": np.asarray(indices, dtype=np.int64), "selected": mask,
                   "score": np.asarray(u, dtype=np.float32)}
-        for key in ("q_s", "q_f", "q_a", "u_h", "p_success"):
+        for key in ("q_s", "q_f", "q_a", "u_h", "u_tau", "p_success"):
             if key in sc:
                 arrays[key] = np.asarray(sc[key], dtype=np.float32)
         for key in ("n_success", "n_failure", "n_invalid"):

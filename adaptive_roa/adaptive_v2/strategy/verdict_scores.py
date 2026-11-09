@@ -11,7 +11,18 @@ q_A(x) is the predictive probability that x's verdict under tau* is A:
 - MLP classifier: 1 when x's verdict is A, else 0.
 
 U_H(x) = p_inv + (1 - p_inv) H2(p_s / (p_s + p_f)) in bits (ablation A7), with the
-second term 0 when p_s + p_f = 0; for classifiers H2(p_s).
+second term 0 when p_s + p_f = 0; for classifiers H2(p_s). Its entropy peaks where
+p_s = p_f, whatever tau* is.
+
+U_tau(x) = p_inv + (1 - p_inv) H(q_S, q_F, q_A) in bits: U_H with the entropy of x's
+verdict under tau* in place of H2 at p_s = p_f, so it peaks at the two edges of the
+abstain band. Bits, as in U_H, so a unit of invalid mass scores what an even two-way
+verdict split scores; dividing by log2(3) instead let the invalid term supply 90-95% of
+the picked score on the det_v3 final-state rounds (U_H: 52-80%). Final-state models use the q_A posterior above. A classifier
+(no p_inv term) takes q from Beta(K p_s + 1, K (1 - p_s) + 1), as if its p_s were a
+count out of the K = num_mc_samples draws the final-state models use. An MLP has no
+posterior of its own (verdict entropy 0 everywhere), and in 13 of 24 det_v3 BNN rounds
+checked its draws gave fewer candidates of nonzero verdict entropy than the batch.
 
 Batch rules: ``topk`` takes the k highest scores, ties going to the candidate
 farthest from the nearest state already rolled out, then to pool order;
@@ -104,9 +115,33 @@ def u_h(p_s, p_f=None, p_inv=None) -> np.ndarray:
 
 
 def verdict_entropy_bits(q: dict[str, np.ndarray]) -> np.ndarray:
-    """H(q_S, q_F, q_A) in bits: logged as a diagnostic, never used for selection."""
-    total = sum(-xlogy(q[k], q[k]) for k in ("q_s", "q_f", "q_a"))
+    """H(q_S, q_F, q_A) in bits: logged for every q_A round, and the core of U_tau."""
+    total = sum(-xlogy(np.asarray(q[k], dtype=float), np.asarray(q[k], dtype=float)) for k in ("q_s", "q_f", "q_a"))
     return total / np.log(2.0)
+
+
+def classifier_beta_verdict_probabilities(p_s, tau_s: float, tau_f: float, k: int) -> dict[str, np.ndarray]:
+    """q_S, q_F, q_A for a classifier's p_s under Beta(k p_s + 1, k (1 - p_s) + 1), for U_tau.
+
+    With p_f = 1 - p_s the rule's S test passes above tau_s and its F test below
+    1 - tau_f, so S needs p_s above hi = max(tau_s, 1 - tau_f), F needs p_s below
+    lo = min(tau_s, 1 - tau_f), and A is [lo, hi] (A_out or A_inv by regime).
+    """
+    p = np.clip(np.asarray(p_s, dtype=float), 0.0, 1.0)
+    a, b = k * p + 1.0, k * (1.0 - p) + 1.0
+    lo, hi = min(tau_s, 1.0 - tau_f), max(tau_s, 1.0 - tau_f)
+    q_s = 1.0 - betainc(a, b, hi)
+    q_f = betainc(a, b, lo)
+    return {"q_s": q_s, "q_f": q_f, "q_a": np.clip(1.0 - q_s - q_f, 0.0, 1.0)}
+
+
+def u_tau(q: dict[str, np.ndarray], p_inv=None) -> np.ndarray:
+    """U_tau in bits (at most log2 3); a classifier (p_inv None) gives H(q_S, q_F, q_A)."""
+    h = verdict_entropy_bits(q)
+    if p_inv is None:
+        return h
+    p_inv = np.asarray(p_inv, dtype=float)
+    return p_inv + (1.0 - p_inv) * h
 
 
 def nearest_distance(candidates: np.ndarray, rolled_out: np.ndarray) -> np.ndarray:

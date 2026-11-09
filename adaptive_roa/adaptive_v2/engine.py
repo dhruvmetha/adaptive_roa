@@ -28,6 +28,10 @@ from adaptive_roa.adaptive_v2.filters.confidence_filter import ConfidencePairFil
 from adaptive_roa.adaptive_v2.types import AcquisitionResult, EpochArtifacts, ThresholdState
 from adaptive_roa.utils.file_mode import new_file_mode
 
+# Acquisition modes that score against a decision boundary, so the engine fits tau* (or
+# lambda*) for them even in rounds without evaluation.
+THRESHOLD_CONSUMERS = frozenset({"ranked", "direct", "conformal", "partx", "q_a", "u_h", "u_tau"})
+
 
 def _instantiate(cfg_node, *args, **kwargs):
     """Resolve _target_ from cfg_node and construct with cfg_node as first arg."""
@@ -450,8 +454,7 @@ class AdaptiveEngine:
             # threshold_state, so for them the training loop never fits a
             # threshold at all -- making that independence structural rather than
             # a fact about who happens to read the variable.
-            threshold_consumers = {"ranked", "direct", "conformal", "partx", "q_a", "u_h"}
-            needs_threshold = run_eval or acquisition_mode in threshold_consumers
+            needs_threshold = run_eval or acquisition_mode in THRESHOLD_CONSUMERS
 
             store_cfg = self.cfg.get("prediction_store", None)
             store_on = bool(store_cfg is not None and store_cfg.get("enabled", False))

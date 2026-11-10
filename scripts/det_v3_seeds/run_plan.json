@@ -61540,5 +61540,835 @@
    "kind": "partx",
    "rank": 3084
   }
+ ],
+ "k_method": [
+  {
+   "base_id": "X33",
+   "base_name": "x33_q3dlqr_fm_qa_a6d075",
+   "seed": 99512,
+   "setting": "q3d-lqr",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 20",
+   "hours": 7.6,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W12033",
+   "name": "x33_q3dlqr_fm_uh_a6d075_k20_r1",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 20
+   },
+   "rank": 3085
+  },
+  {
+   "base_id": "X33",
+   "base_name": "x33_q3dlqr_fm_qa_a6d075",
+   "seed": 99512,
+   "setting": "q3d-lqr",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 50",
+   "hours": 7.6,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W15033",
+   "name": "x33_q3dlqr_fm_uh_a6d075_k50_r1",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 50
+   },
+   "rank": 3086
+  },
+  {
+   "base_id": "X70",
+   "base_name": "x70_q3dppo_fm_qa_a6d075",
+   "seed": 99512,
+   "setting": "q3d-ppo",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 20",
+   "hours": 6.6,
+   "owner": "Sumanth",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W12070",
+   "name": "x70_q3dppo_fm_uh_a6d075_k20_r1",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 20
+   },
+   "rank": 3087
+  },
+  {
+   "base_id": "X70",
+   "base_name": "x70_q3dppo_fm_qa_a6d075",
+   "seed": 99512,
+   "setting": "q3d-ppo",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 50",
+   "hours": 6.6,
+   "owner": "Sumanth",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W15070",
+   "name": "x70_q3dppo_fm_uh_a6d075_k50_r1",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 50
+   },
+   "rank": 3088
+  },
+  {
+   "base_id": "X31",
+   "base_name": "x31_q2dppo_fm_qa_a6d075",
+   "seed": 99512,
+   "setting": "q2d-ppo",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 20",
+   "hours": 3.7,
+   "owner": "Sumanth",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W12031",
+   "name": "x31_q2dppo_fm_uh_a6d075_k20_r1",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 20
+   },
+   "rank": 3089
+  },
+  {
+   "base_id": "X31",
+   "base_name": "x31_q2dppo_fm_qa_a6d075",
+   "seed": 99512,
+   "setting": "q2d-ppo",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 50",
+   "hours": 3.7,
+   "owner": "Sumanth",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W15031",
+   "name": "x31_q2dppo_fm_uh_a6d075_k50_r1",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 50
+   },
+   "rank": 3090
+  },
+  {
+   "base_id": "X29",
+   "base_name": "x29_cplqr_fm_qa_a6d075",
+   "seed": 99512,
+   "setting": "cp-lqr",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 20",
+   "hours": 3.0,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W12029",
+   "name": "x29_cplqr_fm_uh_a6d075_k20_r1",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 20
+   },
+   "rank": 3091
+  },
+  {
+   "base_id": "X29",
+   "base_name": "x29_cplqr_fm_qa_a6d075",
+   "seed": 99512,
+   "setting": "cp-lqr",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 50",
+   "hours": 3.0,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W15029",
+   "name": "x29_cplqr_fm_uh_a6d075_k50_r1",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 50
+   },
+   "rank": 3092
+  },
+  {
+   "base_id": "X161",
+   "base_name": "x161_cpppo_fm_qa_a6d075",
+   "seed": 99512,
+   "setting": "cp-ppo",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 20",
+   "hours": 2.0,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W12161",
+   "name": "x161_cpppo_fm_uh_a6d075_k20_r1",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 20
+   },
+   "rank": 3093
+  },
+  {
+   "base_id": "X161",
+   "base_name": "x161_cpppo_fm_qa_a6d075",
+   "seed": 99512,
+   "setting": "cp-ppo",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 50",
+   "hours": 2.0,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W15161",
+   "name": "x161_cpppo_fm_uh_a6d075_k50_r1",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 50
+   },
+   "rank": 3094
+  },
+  {
+   "base_id": "X231",
+   "base_name": "x231_penlqr_fm_qa_a6d075",
+   "seed": 99512,
+   "setting": "pen-lqr",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 20",
+   "hours": 0.7,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W12231",
+   "name": "x231_penlqr_fm_uh_a6d075_k20_r1",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 20
+   },
+   "rank": 3095
+  },
+  {
+   "base_id": "X231",
+   "base_name": "x231_penlqr_fm_qa_a6d075",
+   "seed": 99512,
+   "setting": "pen-lqr",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 50",
+   "hours": 0.7,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W15231",
+   "name": "x231_penlqr_fm_uh_a6d075_k50_r1",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 50
+   },
+   "rank": 3096
+  },
+  {
+   "base_id": "X33",
+   "base_name": "x33_q3dlqr_fm_qa_a6d075",
+   "seed": 33407,
+   "setting": "q3d-lqr",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 20",
+   "hours": 7.6,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W22033",
+   "name": "x33_q3dlqr_fm_uh_a6d075_k20_r2",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 20
+   },
+   "rank": 3097
+  },
+  {
+   "base_id": "X33",
+   "base_name": "x33_q3dlqr_fm_qa_a6d075",
+   "seed": 33407,
+   "setting": "q3d-lqr",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 50",
+   "hours": 7.6,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W25033",
+   "name": "x33_q3dlqr_fm_uh_a6d075_k50_r2",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 50
+   },
+   "rank": 3098
+  },
+  {
+   "base_id": "X70",
+   "base_name": "x70_q3dppo_fm_qa_a6d075",
+   "seed": 33407,
+   "setting": "q3d-ppo",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 20",
+   "hours": 6.6,
+   "owner": "Sumanth",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W22070",
+   "name": "x70_q3dppo_fm_uh_a6d075_k20_r2",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 20
+   },
+   "rank": 3099
+  },
+  {
+   "base_id": "X70",
+   "base_name": "x70_q3dppo_fm_qa_a6d075",
+   "seed": 33407,
+   "setting": "q3d-ppo",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 50",
+   "hours": 6.6,
+   "owner": "Sumanth",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W25070",
+   "name": "x70_q3dppo_fm_uh_a6d075_k50_r2",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 50
+   },
+   "rank": 3100
+  },
+  {
+   "base_id": "X31",
+   "base_name": "x31_q2dppo_fm_qa_a6d075",
+   "seed": 33407,
+   "setting": "q2d-ppo",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 20",
+   "hours": 3.7,
+   "owner": "Sumanth",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W22031",
+   "name": "x31_q2dppo_fm_uh_a6d075_k20_r2",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 20
+   },
+   "rank": 3101
+  },
+  {
+   "base_id": "X31",
+   "base_name": "x31_q2dppo_fm_qa_a6d075",
+   "seed": 33407,
+   "setting": "q2d-ppo",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 50",
+   "hours": 3.7,
+   "owner": "Sumanth",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W25031",
+   "name": "x31_q2dppo_fm_uh_a6d075_k50_r2",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 50
+   },
+   "rank": 3102
+  },
+  {
+   "base_id": "X29",
+   "base_name": "x29_cplqr_fm_qa_a6d075",
+   "seed": 33407,
+   "setting": "cp-lqr",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 20",
+   "hours": 3.0,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W22029",
+   "name": "x29_cplqr_fm_uh_a6d075_k20_r2",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 20
+   },
+   "rank": 3103
+  },
+  {
+   "base_id": "X29",
+   "base_name": "x29_cplqr_fm_qa_a6d075",
+   "seed": 33407,
+   "setting": "cp-lqr",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 50",
+   "hours": 3.0,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W25029",
+   "name": "x29_cplqr_fm_uh_a6d075_k50_r2",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 50
+   },
+   "rank": 3104
+  },
+  {
+   "base_id": "X161",
+   "base_name": "x161_cpppo_fm_qa_a6d075",
+   "seed": 33407,
+   "setting": "cp-ppo",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 20",
+   "hours": 2.0,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W22161",
+   "name": "x161_cpppo_fm_uh_a6d075_k20_r2",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 20
+   },
+   "rank": 3105
+  },
+  {
+   "base_id": "X161",
+   "base_name": "x161_cpppo_fm_qa_a6d075",
+   "seed": 33407,
+   "setting": "cp-ppo",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 50",
+   "hours": 2.0,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W25161",
+   "name": "x161_cpppo_fm_uh_a6d075_k50_r2",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 50
+   },
+   "rank": 3106
+  },
+  {
+   "base_id": "X231",
+   "base_name": "x231_penlqr_fm_qa_a6d075",
+   "seed": 33407,
+   "setting": "pen-lqr",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 20",
+   "hours": 0.7,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W22231",
+   "name": "x231_penlqr_fm_uh_a6d075_k20_r2",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 20
+   },
+   "rank": 3107
+  },
+  {
+   "base_id": "X231",
+   "base_name": "x231_penlqr_fm_qa_a6d075",
+   "seed": 33407,
+   "setting": "pen-lqr",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 50",
+   "hours": 0.7,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W25231",
+   "name": "x231_penlqr_fm_uh_a6d075_k50_r2",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 50
+   },
+   "rank": 3108
+  },
+  {
+   "base_id": "X33",
+   "base_name": "x33_q3dlqr_fm_qa_a6d075",
+   "seed": 24475,
+   "setting": "q3d-lqr",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 20",
+   "hours": 7.6,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W32033",
+   "name": "x33_q3dlqr_fm_uh_a6d075_k20_r3",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 20
+   },
+   "rank": 3109
+  },
+  {
+   "base_id": "X33",
+   "base_name": "x33_q3dlqr_fm_qa_a6d075",
+   "seed": 24475,
+   "setting": "q3d-lqr",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 50",
+   "hours": 7.6,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W35033",
+   "name": "x33_q3dlqr_fm_uh_a6d075_k50_r3",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 50
+   },
+   "rank": 3110
+  },
+  {
+   "base_id": "X70",
+   "base_name": "x70_q3dppo_fm_qa_a6d075",
+   "seed": 24475,
+   "setting": "q3d-ppo",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 20",
+   "hours": 6.6,
+   "owner": "Sumanth",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W32070",
+   "name": "x70_q3dppo_fm_uh_a6d075_k20_r3",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 20
+   },
+   "rank": 3111
+  },
+  {
+   "base_id": "X70",
+   "base_name": "x70_q3dppo_fm_qa_a6d075",
+   "seed": 24475,
+   "setting": "q3d-ppo",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 50",
+   "hours": 6.6,
+   "owner": "Sumanth",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W35070",
+   "name": "x70_q3dppo_fm_uh_a6d075_k50_r3",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 50
+   },
+   "rank": 3112
+  },
+  {
+   "base_id": "X31",
+   "base_name": "x31_q2dppo_fm_qa_a6d075",
+   "seed": 24475,
+   "setting": "q2d-ppo",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 20",
+   "hours": 3.7,
+   "owner": "Sumanth",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W32031",
+   "name": "x31_q2dppo_fm_uh_a6d075_k20_r3",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 20
+   },
+   "rank": 3113
+  },
+  {
+   "base_id": "X31",
+   "base_name": "x31_q2dppo_fm_qa_a6d075",
+   "seed": 24475,
+   "setting": "q2d-ppo",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 50",
+   "hours": 3.7,
+   "owner": "Sumanth",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W35031",
+   "name": "x31_q2dppo_fm_uh_a6d075_k50_r3",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 50
+   },
+   "rank": 3114
+  },
+  {
+   "base_id": "X29",
+   "base_name": "x29_cplqr_fm_qa_a6d075",
+   "seed": 24475,
+   "setting": "cp-lqr",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 20",
+   "hours": 3.0,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W32029",
+   "name": "x29_cplqr_fm_uh_a6d075_k20_r3",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 20
+   },
+   "rank": 3115
+  },
+  {
+   "base_id": "X29",
+   "base_name": "x29_cplqr_fm_qa_a6d075",
+   "seed": 24475,
+   "setting": "cp-lqr",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 50",
+   "hours": 3.0,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W35029",
+   "name": "x29_cplqr_fm_uh_a6d075_k50_r3",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 50
+   },
+   "rank": 3116
+  },
+  {
+   "base_id": "X161",
+   "base_name": "x161_cpppo_fm_qa_a6d075",
+   "seed": 24475,
+   "setting": "cp-ppo",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 20",
+   "hours": 2.0,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W32161",
+   "name": "x161_cpppo_fm_uh_a6d075_k20_r3",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 20
+   },
+   "rank": 3117
+  },
+  {
+   "base_id": "X161",
+   "base_name": "x161_cpppo_fm_qa_a6d075",
+   "seed": 24475,
+   "setting": "cp-ppo",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 50",
+   "hours": 2.0,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W35161",
+   "name": "x161_cpppo_fm_uh_a6d075_k50_r3",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 50
+   },
+   "rank": 3118
+  },
+  {
+   "base_id": "X231",
+   "base_name": "x231_penlqr_fm_qa_a6d075",
+   "seed": 24475,
+   "setting": "pen-lqr",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 20",
+   "hours": 0.7,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W32231",
+   "name": "x231_penlqr_fm_uh_a6d075_k20_r3",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 20
+   },
+   "rank": 3119
+  },
+  {
+   "base_id": "X231",
+   "base_name": "x231_penlqr_fm_qa_a6d075",
+   "seed": 24475,
+   "setting": "pen-lqr",
+   "model": "FM",
+   "arm": "U_H",
+   "ab": "K",
+   "change": "K = 50",
+   "hours": 0.7,
+   "owner": "Dhruv",
+   "acquisition": "u_h",
+   "store": {
+    "endpoint_epochs": []
+   },
+   "id": "W35231",
+   "name": "x231_penlqr_fm_uh_a6d075_k50_r3",
+   "kind": "k_method",
+   "set": {
+    "acquisition_mc_samples": 50
+   },
+   "rank": 3120
+  }
  ]
 }

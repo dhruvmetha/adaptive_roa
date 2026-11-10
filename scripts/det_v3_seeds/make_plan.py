@@ -30,6 +30,10 @@ seed. A row keeps its det_v3 setting, model, owner and estimated hours. Seeds: 9
              run at 99512. base_campaign det_v2; owner, setting and hours are the det_v2 row's. CPU
              only (scripts/run_partx_faithful.py), launched with `launch.sh <name> ilabcpu`. Ids P +
              repeat + M number; names add the repeat tag.
+  k_method   the matrix method row of each setting (U_H, A6 d2_ratio = 0.75: the uh_abl rows below) at
+             acquisition_mc_samples 20 and 50, at all three seeds (ranks 3085-3120; Sumanth's GO via the
+             driver, 2026-11-10). The uh_abl row with only that K added. Ids W + repeat + (2 for K = 20,
+             5 for 50) + X number; names add _k20 / _k50 before the repeat tag.
 
 Left out on purpose: A1/A2 under uniform and U_H (their acquisition never reads tau*); A6/A10
 under uniform (no score to mix or select by); K under uniform, under the MLP classifier for
@@ -38,7 +42,8 @@ n_marginal_samples). Ranks: utau_main seed-major in det_v3 order (longest first)
 ablation blocks seed-major: every _r1 row of uh_abl, utau_abl, unif_a11 and k_abl, longest
 first, then every _r2 row of those and qa_abl, then every _r3 row (ties: block order as listed,
 then det_v3 rank, then variant order), so the 99512 ablations that pair with det_v3's q_A
-ablations finish first. partx last, seed-major, longest first (ties: det_v2 rank).
+ablations finish first. partx after them, seed-major, longest first (ties: det_v2 rank); k_method last,
+seed-major, longest first, K = 20 before K = 50.
 
     make_plan.py [--out scripts/det_v3_seeds/run_plan.json]
 """
@@ -67,6 +72,9 @@ K_QA_MODELS = ("FM", "MLP final-state", "BNN final-state", "BNN classifier")
 NEW_ROW_STORE = {"endpoint_epochs": []}
 K_UH_MODELS = ("FM", "MLP final-state", "BNN final-state")
 PARTX_KEEP = ("setting", "model", "arm", "hours", "owner")
+# The matrix method row of each setting (det_v3 base of its uh_abl row): U_H with d2_ratio = 0.75 (A6).
+METHOD_BASES = ("x33_q3dlqr_fm_qa_a6d075", "x70_q3dppo_fm_qa_a6d075", "x31_q2dppo_fm_qa_a6d075",
+                "x29_cplqr_fm_qa_a6d075", "x161_cpppo_fm_qa_a6d075", "x231_penlqr_fm_qa_a6d075")
 
 
 def _num(r: dict) -> int:
@@ -169,6 +177,23 @@ def partx(v2: dict, first_rank: int) -> list[dict]:
     return rows
 
 
+def k_method(uh_abl: list[dict], first_rank: int) -> list[dict]:
+    """The method rows (uh_abl at METHOD_BASES) at K = 20 and 50, seed-major, longest first, K = 20 first."""
+    rows = []
+    for rep, seed in (R1,) + SEEDS:
+        base = sorted((r for r in uh_abl if r["seed"] == seed and r["base_name"] in METHOD_BASES),
+                      key=lambda r: (-r["hours"], METHOD_BASES.index(r["base_name"])))
+        assert len(base) == len(METHOD_BASES), seed
+        for r in base:
+            for kval, kd in K_VALUES:
+                rows.append({**{k: v for k, v in r.items() if k not in ("id", "name", "kind", "rank")},
+                             "id": f"W{rep}{kd}{int(r['base_id'][1:]):03d}",
+                             "name": f"{r['name'][:-3]}_k{kval}_r{rep}", "ab": "K", "change": f"K = {kval}",
+                             "kind": "k_method", "set": {"acquisition_mc_samples": kval},
+                             "rank": first_rank + len(rows)})
+    return rows
+
+
 def plan(v3: dict, v2: dict) -> dict:
     main = repeats(sorted(v3["main"], key=lambda r: r["rank"]), "S", KEEP, "main", 1)
     abl = sorted((r for r in v3["abl"] if r.get("ab") in ABLATIONS), key=lambda r: r["rank"])
@@ -195,6 +220,7 @@ def plan(v3: dict, v2: dict) -> dict:
             for r in p[k]:
                 r["store"] = dict(NEW_ROW_STORE)
     p["partx"] = partx(v2, nxt)                 # no store override: the Part-X engine writes no endpoints
+    p["k_method"] = k_method(p["uh_abl"], nxt + len(p["partx"]))
     return p
 
 

@@ -3,7 +3,8 @@
 Blocks (scripts/det_v3_seeds/make_plan.py): the 60 main rows and the 30 A7 U_H rows at 33407 and
 24475 (ranks 1-180, launched); U_tau main at 99512, 33407 and 24475; U_H and U_tau ablations,
 uniform under A11 and the K ablation at all three seeds; the q_A ablation rows at 33407 and
-24475; det_v2's six Part-X rows at 33407 and 24475 (ranks 3073-3084). The plan, manifest and run
+24475; det_v2's six Part-X rows at 33407 and 24475 (ranks 3073-3084); the six matrix method rows at
+K = 20 and 50, all three seeds (ranks 3085-3120). The plan, manifest and run
 configs regenerate from det_v3's (det_v2's for Part-X); every config composes to its det_v3 (det_v2)
 counterpart plus only the keys its change names; ranks 1-180 stay as launched; the
 scripts/det_v3_seeds/ wrappers get their own root, ledger, logs, Amarel log dir and tmux tag."""
@@ -38,7 +39,10 @@ RUNS = sorted((r for rows in PLAN.values() for r in rows), key=lambda r: r["rank
 BY_NAME = {r["name"]: r for r in RUNS}
 V3_RUNS = [r for r in RUNS if r["kind"] != "partx"]                  # the rows with a det_v3 counterpart
 BLOCKS = {"main": 120, "abl": 60, "utau_main": 90, "uh_abl": 540, "utau_abl": 990, "unif_a11": 180,
-          "k_abl": 432, "qa_abl": 660, "partx": 12}
+          "k_abl": 432, "qa_abl": 660, "partx": 12, "k_method": 36}
+# The matrix method row of each setting (uh_abl, U_H with d2_ratio = 0.75) and its K rows (k_method).
+METHOD = ("x33_q3dlqr_fm_uh_a6d075", "x70_q3dppo_fm_uh_a6d075", "x31_q2dppo_fm_uh_a6d075",
+          "x29_cplqr_fm_uh_a6d075", "x161_cpppo_fm_uh_a6d075", "x231_penlqr_fm_uh_a6d075")
 # Ranks 1-180 as launched (e8476a7, f819778): manifest lines 1-181 and those 180 configs, in rank order.
 LAUNCHED_MANIFEST_SHA = "72bd46cd3d2fc91d50f31df9cdf0e10258013e4ca40e953eea004a21b0c52865"
 LAUNCHED_CONFIGS_SHA = "d520e98da798fe3f9923700c6fa01c876d7aaf3d9561a46a7a78e3c8fffd37ee"
@@ -95,8 +99,8 @@ def test_plan_blocks_ranks_ids_and_counterparts():
     sys.path.insert(0, str(ROOT / "scripts/det_v2"))
     import det_v2_lib as lib
     assert {k: len(v) for k, v in PLAN.items()} == BLOCKS
-    assert [r["rank"] for r in RUNS] == list(range(1, 3085))
-    assert len({r["id"] for r in RUNS}) == len({r["name"] for r in RUNS}) == 3084
+    assert [r["rank"] for r in RUNS] == list(range(1, 3121))
+    assert len({r["id"] for r in RUNS}) == len({r["name"] for r in RUNS}) == 3120
     for r in RUNS:
         b = V2_PARTX[r["base_name"]] if r["kind"] == "partx" else V3_ROWS[r["base_name"]]
         assert r["base_id"] == b["id"] and re.fullmatch(r"[A-Z]\d+", r["id"]), r["name"]
@@ -149,7 +153,7 @@ def test_ranks_are_seed_major_and_longest_first():
     a = PLAN["utau_main"]
     assert [r["rank"] for r in a] == list(range(181, 271))
     assert [(r["base_name"], r["seed"]) for r in a] == [(m["name"], s) for s in ALL_SEEDS.values() for m in V3_QA]
-    rest = [r for r in V3_RUNS if r["rank"] > 270]
+    rest = [r for r in V3_RUNS if 270 < r["rank"] <= 3072]
     assert [r["seed"] for r in rest] == [99512] * 714 + [33407] * 1044 + [24475] * 1044
     assert not {r["kind"] for r in rest[:714]} & {"qa_abl"}
     for lo, hi in ((0, 714), (714, 1758), (1758, 2802)):
@@ -172,7 +176,7 @@ def test_manifest_regenerates_and_copies_the_det_v3_requests(tmp_path):
         assert r["config"] == f"+experiment=det_v3_seeds/runs/{r['name']}"
         assert (ROOT / "configs/adaptive_v2/experiment/det_v3_seeds/runs" / f"{r['name']}.yaml").exists()
     assert [r["name"] for r in rows] == [r["name"] for r in RUNS]
-    assert {o: sum(r["owner"] == o for r in rows) for o in ("Sumanth", "Dhruv")} == {"Sumanth": 1030, "Dhruv": 2054}
+    assert {o: sum(r["owner"] == o for r in rows) for o in ("Sumanth", "Dhruv")} == {"Sumanth": 1042, "Dhruv": 2078}
     # det_v3's owners split by setting; the Part-X rows keep det_v2's owner (q3d-lqr Part-X was Sumanth's).
     assert {BY_NAME[r["name"]]["setting"] for r in rows if r["owner"] == "Sumanth"
             and BY_NAME[r["name"]]["kind"] != "partx"} == {"q3d-ppo", "q2d-ppo"}
@@ -185,7 +189,7 @@ def test_manifest_regenerates_and_copies_the_det_v3_requests(tmp_path):
                                                               for s in ("33407", "24475")}, block
     new = {o: round(sum(float(r["est_hours"]) for r in rows if int(r["rank"]) > 180 and r["owner"] == o), 1)
            for o in ("Sumanth", "Dhruv")}
-    assert new == {"Sumanth": 1846.8, "Dhruv": 2138.4}
+    assert new == {"Sumanth": 1908.6, "Dhruv": 2218.2}
     partx = [r for r in rows if BY_NAME[r["name"]]["kind"] == "partx"]
     assert len(partx) == 12 and {r["script"] for r in partx} == {"scripts/run_partx_faithful.py"}
     assert all(r["script"] == "scripts/run_adaptive.py" for r in rows if BY_NAME[r["name"]]["kind"] != "partx")
@@ -195,7 +199,7 @@ def test_new_rows_take_the_plan_store_override_and_launched_rows_do_not():
     store = _load("make_plan").NEW_ROW_STORE
     assert store == {"endpoint_epochs": []}                       # no endpoint dumps until Sumanth says otherwise
     assert all("store" not in r for r in RUNS[:180])
-    assert all(r.get("store") == store for r in RUNS[180:3072])
+    assert all(r.get("store") == store for r in RUNS[180:3072] + PLAN["k_method"])
     assert all("store" not in r for r in PLAN["partx"])           # the Part-X engine writes no endpoints
 
 
@@ -359,6 +363,56 @@ def test_partx_configs_are_their_det_v2_config_plus_only_the_seed(tmp_path):
         for k in ("data_source.val_set_file", "data_source.cal_set_file", "data_source.test_set_file"):
             assert c[k] == a[k] and c[k], (name, k)
         assert c["prediction_store.enabled"] is True and c["n_epochs"] == 11
+
+
+# ----------------------------------------------------------------- the method rows at K = 20 and 50
+def test_k_method_rows_are_the_matrix_method_rows_at_k20_and_k50():
+    rows, uh = PLAN["k_method"], {r["name"]: r for r in PLAN["uh_abl"]}
+    assert [r["rank"] for r in rows] == list(range(3085, 3121))
+    want = []
+    for seed in ALL_SEEDS.values():                           # seed-major; longest first, K = 20 before 50
+        bases = sorted((uh[f"{m}_r{_rep(seed)}"] for m in METHOD), key=lambda b: -b["hours"])
+        want += [(b["name"], k) for b in bases for k in (20, 50)]
+    assert [(f"{r['name'].rsplit('_k', 1)[0]}_r{_rep(r['seed'])}", r["set"]["acquisition_mc_samples"]) for r in rows] == want
+    for r in rows:
+        b = uh[f"{r['name'].rsplit('_k', 1)[0]}_r{_rep(r['seed'])}"]
+        k = r["set"]["acquisition_mc_samples"]
+        assert r["name"] == f"{b['name'][:-3]}_k{k}_r{_rep(r['seed'])}" and r["id"] == f"W{_rep(r['seed'])}{k // 10}{int(b['base_id'][1:]):03d}"
+        assert r["set"] == {"acquisition_mc_samples": k} and r["kind"] == "k_method" and r["change"] == f"K = {k}"
+        same = ("base_id", "base_name", "seed", "setting", "model", "arm", "hours", "owner", "acquisition", "store")
+        assert {f: r[f] for f in same} == {f: b[f] for f in same}
+    owners = {o: sum(r["owner"] == o for r in rows) for o in ("Sumanth", "Dhruv")}
+    assert owners == {"Sumanth": 12, "Dhruv": 24}
+    assert {r["setting"] for r in rows if r["owner"] == "Sumanth"} == {"q3d-ppo", "q2d-ppo"}
+
+
+def test_k_method_configs_differ_from_their_method_row_only_in_k(tmp_path):
+    pairs = [(r["name"], f"{r['name'].rsplit('_k', 1)[0]}_r{_rep(r['seed'])}") for r in PLAN["k_method"]]
+    exp = str(tmp_path / "exp")
+    with multiprocessing.get_context("fork").Pool(1, initializer=_compose_init, initargs=(exp,)) as pool:
+        results = pool.apply(_compose_seeds_pairs, (pairs,))
+    assert len(results) == 36
+    for name, diff, c, a in results:
+        k = BY_NAME[name]["set"]["acquisition_mc_samples"]
+        assert set(diff) == K_KEYS | {"det_v3_run", "output_dir"}, (name, diff)
+        assert {c[key] for key in K_KEYS} == {k} and {a[key] for key in K_KEYS} == {100}
+        assert c["eval.num_mc_samples_eval"] == c["calibration.num_mc_samples"] == 100     # eval K stays 100
+        assert c["seed"] == a["seed"] == BY_NAME[name]["seed"] and c["det_v3_run"] == name
+
+
+def _compose_seeds_pairs(pairs):
+    """[(det_v3_seeds name, det_v3_seeds name)] -> [(name, keys that differ, values of name, values of the other)]."""
+    from hydra import compose
+    from omegaconf import OmegaConf
+
+    def get(n):
+        return _flat(OmegaConf.to_container(compose(config_name="default", overrides=[f"+experiment=det_v3_seeds/runs/{n}"]),
+                                            resolve=True))
+    out = []
+    for name, other in pairs:
+        c, a = get(name), get(other)
+        out.append((name, sorted(k for k in set(a) | set(c) if a.get(k) != c.get(k)), c, a))
+    return out
 
 
 # ----------------------------------------------------------------- wrappers in a stub world

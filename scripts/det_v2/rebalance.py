@@ -97,6 +97,17 @@ def my_placed() -> dict[str, dict]:
             if r["user"] == ENV["NET_ID"] and r["action"] in ("launch", "resume")}
 
 
+def last_placed(name: str, user: str | None = None) -> dict | None:
+    """The latest launch or resume row for name, whatever came after it (a cancel, pause or claim), optionally only
+    user's: where the run last really was, as common.sh's ledger_last_placed reads it. my_placed() leaves out a run
+    whose latest row is not a placement; a move that cancelled a job and relaunches it later needs this one."""
+    out = None
+    for r in lib.read_ledger(ENV["LEDGER"]):
+        if r["name"] == name and r["action"] in ("launch", "resume") and (user is None or r["user"] == user):
+            out = r
+    return out
+
+
 def manifest() -> dict[str, dict]:
     return {r["name"]: r for r in lib.read_manifest(ENV["MANIFEST"])}
 

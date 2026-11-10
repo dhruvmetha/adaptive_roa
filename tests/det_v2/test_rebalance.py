@@ -36,6 +36,38 @@ def _row(env, name, where, job, hostgpu, action="launch", user="tester", run_dir
                                       "run_dir": run_dir or f"{env['EXP_DIR']}/det_v2/s/{name}_s1", "action": action})
 
 
+# --- ledger lookups -----------------------------------------------------------------------
+
+def test_my_placed_drops_a_run_whose_latest_row_is_a_cancel(env):
+    """pending_runs() and the job map read my_placed(): a cancelled run is not a current placement."""
+    _row(env, Q3D_FM, "ilab", "11", "a4000")
+    _row(env, Q3D_FM, "ilab", "11", "a4000", action="cancel")
+    assert Q3D_FM not in rebalance.my_placed()
+
+
+def test_last_placed_finds_the_placement_behind_a_cancel(env):
+    """A run moved by hand (cancel row, no later launch yet) still has a placement to relaunch or resume from:
+    the latest launch/resume row, as common.sh's ledger_last_placed reads it (2026-11-10: a move script looked a
+    cancelled row up in my_placed() and hit KeyError)."""
+    _row(env, Q3D_FM, "ilab", "-", "a4000", action="claim")
+    _row(env, Q3D_FM, "ilab", "11", "a4000", commit="0cdbcfac60")
+    _row(env, Q3D_FM, "ilab", "11", "a4000", action="cancel")
+    r = rebalance.last_placed(Q3D_FM)
+    assert (r["action"], r["job"], r["commit"]) == ("launch", "11", "0cdbcfac60")
+    _row(env, Q3D_FM, "ilab", "-", "a4500", action="claim")
+    _row(env, Q3D_FM, "ilab", "12", "a4500", action="resume")
+    _row(env, Q3D_FM, "ilab", "12", "a4500", action="pause")
+    assert rebalance.last_placed(Q3D_FM)["job"] == "12"
+
+
+def test_last_placed_is_none_without_a_placement_and_can_filter_by_user(env):
+    _row(env, CP_CLF, "ilab", "-", "a4000", action="claim")
+    assert rebalance.last_placed(CP_CLF) is None and rebalance.last_placed("never_launched") is None
+    _row(env, CP_CLF, "ilab", "21", "a4000", user="other")
+    assert rebalance.last_placed(CP_CLF)["job"] == "21"
+    assert rebalance.last_placed(CP_CLF, user="tester") is None
+
+
 # --- placement rule ------------------------------------------------------------------------
 
 @pytest.mark.parametrize("card, cls", [

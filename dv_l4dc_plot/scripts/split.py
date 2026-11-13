@@ -336,7 +336,8 @@ def top_legend(fig, handles, labels, width, ncols, handlelength=None, columnspac
 
 
 def tight_split_layout(fig, pairs, legend, xlabel, *, width, rec_aspect, err_ratio, set_ylims):
-    """Place a 2 x 3 grid of (recall, error) panel pairs (pairs in setting order) on a figure width in wide, as tight
+    """Place rows of three (recall, error) panel pairs (pairs in setting order; 2 x 3, or one row of three for
+    Figure 7) on a figure width in wide, as tight
     as the drawn text allows, and size the figure to fit. Every gap is measured, not guessed: draw, read the
     tick-label, title, legend and label extents, place in inches, and repeat until the panel width settles (the
     overhang of a tick label at a panel end depends on the panel width). Panel heights follow the width: recall
@@ -345,24 +346,26 @@ def tight_split_layout(fig, pairs, legend, xlabel, *, width, rec_aspect, err_rat
     labels and y labels. The legend sits at the top, centred on the figure; xlabel (a figure text, va='bottom') is
     centred under the panel block. Returns the geometry in inches."""
     W, dpi = width, fig.dpi
+    rows = len(pairs) // 3
+    assert len(pairs) == 3 * rows and rows >= 1
     pw = (W - 1) / 3
-    dec = dict(left=.35, right=0., gaps=[COL_GAP * PT] * 2, top=[.15, .15], pair=PAIR_GAP * PT, below=[.12, .12],
+    dec = dict(left=.35, right=0., gaps=[COL_GAP * PT] * 2, top=[.15] * rows, pair=PAIR_GAP * PT, below=[.12] * rows,
                leg=.15, xl=.12)
     for it in range(20):
         rec_h = rec_aspect * pw
         err_h = err_ratio * rec_h
-        H = (2 * MARGIN + dec['leg'] + (LEG_GAP + ROW_GAP + XL_GAP) * PT + dec['xl']
-             + sum(dec['top']) + sum(dec['below']) + 2 * (rec_h + dec['pair'] + err_h))
+        H = (2 * MARGIN + dec['leg'] + (LEG_GAP + (rows - 1) * ROW_GAP + XL_GAP) * PT + dec['xl']
+             + sum(dec['top']) + sum(dec['below']) + rows * (rec_h + dec['pair'] + err_h))
         fig.set_size_inches(W, H)
         xs = [MARGIN + dec['left'] + c * pw + sum(dec['gaps'][:c]) for c in range(3)]
         y = H - MARGIN - dec['leg'] - LEG_GAP * PT
-        for r in range(2):
+        for r in range(rows):
             y -= dec['top'][r]
             for c in range(3):
                 rec, err = pairs[3 * r + c]
                 rec.set_position([xs[c] / W, (y - rec_h) / H, pw / W, rec_h / H])
                 err.set_position([xs[c] / W, (y - rec_h - dec['pair'] - err_h) / H, pw / W, err_h / H])
-            y -= rec_h + dec['pair'] + err_h + dec['below'][r] + (ROW_GAP if r == 0 else XL_GAP) * PT
+            y -= rec_h + dec['pair'] + err_h + dec['below'][r] + (ROW_GAP if r < rows - 1 else XL_GAP) * PT
         set_ylims(rec_h, err_h)
         legend.set_bbox_to_anchor((.5, (H - MARGIN) / H), transform=fig.transFigure)
         block = (xs[0], xs[2] + pw)
@@ -373,7 +376,7 @@ def tight_split_layout(fig, pairs, legend, xlabel, *, width, rec_aspect, err_rat
         box = lambda a: np.array(a.get_window_extent(rd).extents) / dpi
         pos = lambda ax: np.array(ax.get_position().extents) * [W, H, W, H]
         x_over, title_over = {}, {}       # (left, right) overhang past the panel, per pair
-        top, below, pair_need, left = [0., 0.], [0., 0.], 0., 0.
+        top, below, pair_need, left = [0.] * rows, [0.] * rows, 0., 0.
         for si, (rec, err) in enumerate(pairs):
             r, c = divmod(si, 3)
             pr, pe = pos(rec), pos(err)
@@ -392,10 +395,11 @@ def tight_split_layout(fig, pairs, legend, xlabel, *, width, rec_aspect, err_rat
                                    for a, p in ((rec, pr), (err, pe))], x_over[si][0], title_over[si][0])
         gaps = []
         for c in range(2):
-            need = [x_over[3 * r + c][1] + x_over[3 * r + c + 1][0] for r in range(2)]
-            need += [title_over[3 * r + c][1] + title_over[3 * r + c + 1][0] for r in range(2)]
+            need = [x_over[3 * r + c][1] + x_over[3 * r + c + 1][0] for r in range(rows)]
+            need += [title_over[3 * r + c][1] + title_over[3 * r + c + 1][0] for r in range(rows)]
             gaps.append(max(COL_GAP * PT, max(need) + SEP * PT))
-        right = max(0., *[x_over[si][1] for si in (2, 5)], *[title_over[si][1] for si in (2, 5)])
+        ends = [3 * r + 2 for r in range(rows)]
+        right = max(0., *[x_over[si][1] for si in ends], *[title_over[si][1] for si in ends])
         new = dict(left=left, right=right, gaps=gaps, top=top, pair=max(PAIR_GAP * PT, pair_need), below=below,
                    leg=box(legend)[3] - box(legend)[1], xl=box(xlabel)[3] - box(xlabel)[1])
         new_pw = (W - 2 * MARGIN - left - right - sum(gaps)) / 3
@@ -510,7 +514,7 @@ def save_restyled(fig, stem):
 def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_labels, legend_methods, ylabels,
                           rec_aspect, err_ratio, band_alpha, xlim=None, ref_label=None, rec_extra=(), rec_fill=None,
                           decorate=None, legend_columnspacing=None, method_ls=None, markers=(MARKER_PT, EDGE_PT),
-                          legend_lw=None, methods_first=False):
+                          legend_lw=None, methods_first=False, settings=SETTINGS, ref_label_side='right'):
     """The split layout (recall panel over error panel per setting, settings in 2 rows x 3) in the paper style at
     PRINT_WIDTH[stem], laid out by tight_split_layout. Colour = the metric's side, line style = its kind (recall
     solid, error dash-dot), arm = marker shape and fill only; with method_ls, line style names the arm instead.
@@ -531,6 +535,9 @@ def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_l
     markers: (size, edge width) of every marker in points, panels and legend.
     legend_lw: width of the legend's lines in points (None: LW['curve'], as the panels); dash lengths stay the panels'.
     methods_first: the method keys lead the legend row (Figure 7) instead of following the metric keys.
+    settings: the settings drawn, in rows of three (default all six; Figure 7 draws the RL row only); titles and
+      row_base follow them.
+    ref_label_side: the end of the first error panel that carries ref_label, under the 5% line ('right' or 'left').
     legend_columnspacing: the legend's column gap in font sizes (None: the shared 1.3).
     decorate(panels): called with {setting: (upper, lower)} after the curves are drawn; returns in-panel texts,
       which check_restyled keeps inside their panel and clear of markers.
@@ -543,7 +550,8 @@ def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_l
         ms, mew = markers
         reach = (ms + mew) / 2
         assert method_ls is None or all(isinstance(methods, str) for _, methods in arms)
-        for si, (s, title) in enumerate(zip(SETTINGS, titles)):
+        assert len(titles) == len(settings) and len(settings) % 3 == 0
+        for si, (s, title) in enumerate(zip(settings, titles)):
             rec = fig.add_axes([.1, .5, .2, .2]); err = fig.add_axes([.1, .2, .2, .2], sharex=rec)
             pairs.append((rec, err))
             rec.set_title(tex(title), pad=3)
@@ -571,10 +579,12 @@ def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_l
             else:
                 rec.set_ylabel(tex(ylabels[0])); err.set_ylabel(tex(ylabels[1]))
             if si == 0 and ref_label:
-                ref_text = err.annotate(tex(ref_label), xy=(1, 5), xycoords=('axes fraction', 'data'), xytext=(-1.5, -1.5),
-                                        textcoords='offset points', ha='right', va='top', fontsize=FS['annotation'],
+                at = {'right': (1, -1.5), 'left': (0, 1.5)}[ref_label_side]
+                ref_text = err.annotate(tex(ref_label), xy=(at[0], 5), xycoords=('axes fraction', 'data'),
+                                        xytext=(at[1], -1.5), textcoords='offset points', ha=ref_label_side, va='top',
+                                        fontsize=FS['annotation'],
                                         color=LINE['ref'])
-        notes = list(decorate(dict(zip(SETTINGS, pairs)))) if decorate else []
+        notes = list(decorate(dict(zip(settings, pairs)))) if decorate else []
         metrics = ['rec', 'fail_rec', 'fdr', 'for'] + [m for m, _ in rec_extra]
         labels_ = [tex(t) for t in list(metric_labels) + [t for _, t in rec_extra]]
         m_handles, f_handles = [method_handle(m, ms, mew) for m in legend_methods], []

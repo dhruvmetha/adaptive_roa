@@ -298,29 +298,40 @@ RESTYLE_MARKERS = (2.4, .5)
 RESTYLE_LEGEND_LW = 1.6
 
 
+# The paper figure draws the RL row only (Sumanth, 2026-11-13: the LQR row removed). Its one in-panel mark moved with
+# the text from 90% on Cartpole LQR to MARK_LEVEL on MARK_SETTING.
+RESTYLE_SETTINGS = ['cp-ppo', 'q2d-ppo', 'q3d-ppo']
+MARK_SETTING, MARK_LEVEL = 'q3d-ppo', 50
+
+
 def annotate(panels, data, rows):
-    """The one in-panel mark of the paper figure (Sumanth, 2026-11-13): a dotted line at 90% recall on Cartpole LQR.
-    No ticks and no text are drawn. The caption gives the first budget from which both mean recalls stay above 90%
-    for each arm, and the Planar quadrotor RL seed counts; both are computed from the plotted data and printed here.
+    """The one in-panel mark of the paper figure: a dotted line at MARK_LEVEL% recall on MARK_SETTING (Spatial
+    quadrotor RL, 50%; it was 90% on Cartpole LQR before the LQR row was removed). No ticks and no text are drawn.
+    The text gives, for each arm, the first budget from which both mean recalls stay above MARK_LEVEL to the final
+    budget, or, for an arm that never holds it, the highest mean success and failure recall over all budgets; and the
+    Planar quadrotor RL seed counts. All are computed from the plotted data and printed here.
     Returns the in-panel texts for check_restyled (none)."""
-    rec = panels['cp-lqr'][0]
-    rec.axhline(90, color='#444444', lw=.5, ls=(0, (1, 1.6)), zorder=2)
-    first = {}
+    rec = panels[MARK_SETTING][0]
+    rec.axhline(MARK_LEVEL, color='#444444', lw=.5, ls=(0, (1, 1.6)), zorder=2)
+    first, peak = {}, {}
     for arm in ('U_H', 'uniform'):
-        x, rs = data['cp-lqr', arm, 'rec'][:2]
-        rf = data['cp-lqr', arm, 'fail_rec'][1]
-        ok = (rs > 90) & (rf > 90)
-        assert ok.any() and ok[int(np.argmax(ok)):].all(), arm       # reached, and held to the final budget
-        first[arm] = float(x[int(np.argmax(ok))])
-    assert first['U_H'] < first['uniform'], first
+        x, rs = data[MARK_SETTING, arm, 'rec'][:2]
+        rf = data[MARK_SETTING, arm, 'fail_rec'][1]
+        ok = (rs > MARK_LEVEL) & (rf > MARK_LEVEL)
+        held = [i for i in range(len(x)) if ok[i:].all()]           # reached, and held to the final budget
+        first[arm] = float(x[held[0]]) if held else None
+        peak[arm] = (float(np.nanmax(rs)), float(np.nanmax(rf)))
+    assert first['U_H'] is not None and (first['uniform'] is None or first['U_H'] < first['uniform']), first
     seeds = {}
     for arm in ('U_H', 'uniform'):
         last = [r for r in rows if (r['setting'], r['arm'], r['epoch']) == ('q2d-ppo', arm, 10)]
         assert len(last) == 3
         seeds[arm] = sum(1 for r in last if r['S'] + r['F'] > 0)
-    print(f"  for the caption: cartpole LQR 90% from {first['U_H']:.0f} (TERA) and {first['uniform']:.0f} (Unif-TERA) "
-          f"trajectories; planar quadrotor RL seeds with predictions at the final budget: TERA {seeds['U_H']}/3, "
-          f"Unif-TERA {seeds['uniform']}/3")
+    held = lambda a: f"from {first[a]:.0f}" if first[a] is not None else "never held"
+    print(f"  for the text: {MARK_SETTING} both mean recalls above {MARK_LEVEL}% to the final budget: TERA {held('U_H')}, "
+          f"Unif-TERA {held('uniform')}; highest mean (Rec_s, Rec_f): TERA {peak['U_H'][0]:.1f}, {peak['U_H'][1]:.1f}, "
+          f"Unif-TERA {peak['uniform'][0]:.1f}, {peak['uniform'][1]:.1f}; planar quadrotor RL seeds with predictions "
+          f"at the final budget: TERA {seeds['U_H']}/3, Unif-TERA {seeds['uniform']}/3")
     return []
 
 
@@ -328,7 +339,8 @@ def generate_restyled():
     """Figure 6 (a1d) in the paper style at PRINT_WIDTH['adaptive_learning_a1d'] into plots/ (the paper figure).
     Colour = the metric's side (Success recall and FDR blue, Failure recall and FOR orange); the arms differ by line
     style in both panels (RESTYLE_METHOD_LS: TERA solid, Unif-TERA dash-dot) and by marker (TERA filled circle,
-    Unif-TERA open square, common.METHOD_MARKER), and a faded marker (split.partial_kw) means 1-2 seeds contribute. Draws from compute('a1d') and fails unless its points and
+    Unif-TERA open square, common.METHOD_MARKER), and a faded marker (split.partial_kw) means 1-2 seeds contribute.
+    One row: the RL settings (RESTYLE_SETTINGS), on the RL row's y ranges. Draws from compute('a1d') and fails unless its points and
     source hashes equal the stored values/adaptive_learning_a1d_values.json. Writes nothing to values/ or the paper."""
     stem, src, rows, summaries, data, axes_by_row, shared = compute('a1d')
     stored = json.loads((VALUES / f'{stem}_values.json').read_text())
@@ -343,29 +355,31 @@ def generate_restyled():
         return f
 
     xticks = {}
-    for s in SETTINGS:
+    for s in RESTYLE_SETTINGS:
         x = data[s, 'U_H', 'rec'][0] / 1000
         assert all((data[s, a, 'rec'][0] == data[s, 'U_H', 'rec'][0]).all() for a, *_ in ARMS)
         assert x[0] <= XTICKS[s][0] and XTICKS[s][-1] <= x[-1], (s, XTICKS[s])
         xticks[s] = (XTICKS[s], tick_labels(XTICKS[s]))
     row_base = {}
-    for row, settings in enumerate([SETTINGS[:3], SETTINGS[3:]]):
+    assert RESTYLE_SETTINGS == SETTINGS[3:]          # the drawn row is compute()'s RL row, axes_by_row[1]
+    for row, (settings, axes_row) in enumerate([(RESTYLE_SETTINGS, axes_by_row[1])]):
         pts = [p for p in summaries if p['setting'] in settings and p['n'] and p['metric'] in ('rec', 'fail_rec', 'abstain')]
         lo = min(min(p['mean'], p['min'] if p['n'] > 1 else p['mean']) for p in pts)
         hi = max(max(p['mean'], p['max'] if p['n'] > 1 else p['mean']) for p in pts)
-        rec_ticks, err_ticks = axes_by_row[row]['rec'][1], axes_by_row[row]['err'][1]
+        rec_ticks, err_ticks = axes_row['rec'][1], axes_row['err'][1]
         row_base[row] = dict(rec=(min(rec_ticks[0], lo), max(rec_ticks[-1], hi), rec_ticks),
-                             err=(0, axes_by_row[row]['err'][0][1], err_ticks))
+                             err=(0, axes_row['err'][0][1], err_ticks))
     out = split_figure_restyled(
         stem, arms=[(series(arm), ARM_LABEL[arm]) for arm, *_ in ARMS], xticks=xticks,
-        xlabel='Training trajectories', titles=[TITLE[s] for s in SETTINGS], row_base=row_base,
+        xlabel='Training trajectories', titles=[TITLE[s] for s in RESTYLE_SETTINGS], row_base=row_base,
         metric_labels=[REC_S, REC_F, ERR_S, ERR_F],
         legend_methods=[ARM_LABEL[a] for a, *_ in ARMS[::-1]], ylabels=('Rate (%)', 'Error (%)'),
         rec_aspect=RESTYLE_ASPECT, err_ratio=RESTYLE_ERR_RATIO, band_alpha=0, ref_label='5% limit',
         rec_fill=dict(metric='abstain', label=ABST, alpha=.30,
                       colors={ARM_LABEL['U_H']: ARM_FILL['adaptive'], ARM_LABEL['uniform']: ARM_FILL['uniform']}),
         decorate=lambda panels: annotate(panels, data, rows), legend_columnspacing=RESTYLE_LEGEND_GAP,
-        method_ls=RESTYLE_METHOD_LS, markers=RESTYLE_MARKERS, legend_lw=RESTYLE_LEGEND_LW, methods_first=True)
+        method_ls=RESTYLE_METHOD_LS, markers=RESTYLE_MARKERS, legend_lw=RESTYLE_LEGEND_LW, methods_first=True,
+        settings=RESTYLE_SETTINGS, ref_label_side='left')   # Cartpole RL's markers reach the right end under 5%
     g = out['geometry']
     print(f"  panels {g['panel_w']:.3f} in wide, recall {g['rec_h']:.3f} in, error {g['err_h']:.3f} in; "
           f"legend {out['legend_ncol']} columns; layout settled in {g['iterations']} passes")

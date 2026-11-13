@@ -3,8 +3,8 @@
   "source_hashes": {
     "/common/users/shared/pracsys/adaptive_roa_experiments/det_v3_seeds/_index/scored/matrix_rows.jsonl": "4a75be7c965c43bb4e94148536a5c6cf29cd27fdd083ee8ae9658e25a528da60",
     "/common/home/dm1487/robotics_research/tripods/deterministic-verification/results-discussion-assets/generalized_6c_values.json": "d63d99d42d9ec8f6196321c6b0c60bd339c96a01abb51c1f18e36ddf002f88a7",
-    "/common/home/dm1487/robotics_research/tripods/dv_l4dc_plot/values/table_matrix_certified_values.json": "b95da3f3e6f726c59362c0142813f1d9222556f7823df6810e4bd488cab8288b",
-    "/common/home/dm1487/robotics_research/tripods/dv_l4dc_plot/tables/matrix_certified_body.tex": "5cd280398347cc190d515f426a01f9df5e93790938c7cf47d628f8472ee406b4"
+    "/common/home/dm1487/robotics_research/tripods/dv_l4dc_plot/values/table_matrix_certified_values.json": "8472ff307ea0ae4dfcff227f15ffed7b7ee46426f2535c0d67fab02b02de9236",
+    "/common/home/dm1487/robotics_research/tripods/dv_l4dc_plot/tables/matrix_certified_body.tex": "1a9673fc90b9dba761d06c3eb1a28b6f9292ebce59576e9debc91d35bacdc2e4"
   },
   "verified_original_cells": 12,
   "cells": [

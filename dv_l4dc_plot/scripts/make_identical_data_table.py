@@ -9,8 +9,8 @@ setting (R_s, FDR, R_f, FOR, Abst.).
 
 All three rows print absolute three-seed means (Sumanth, 2026-11-13, "Option 1": the earlier signed differences
 from \nameUnif{} could not carry the shading). R_s, R_f and Abst. count all three seeds, all-Abstain seeds included
-(zero recall, 100% abstention). FDR and FOR are means over seeds with a nonempty predicted class: superscript (n)
-when n < 3, -- when n = 0. When n = 0, that outcome's R_s or R_f cell is -- too (Sumanth, 2026-11-13: "cases that
+(zero recall, 100% abstention). FDR and FOR are means over seeds with a nonempty predicted class (no seed-count
+superscript, Sumanth 2026-11-13), -- when n = 0. When n = 0, that outcome's R_s or R_f cell is -- too (Sumanth, 2026-11-13: "cases that
 don't have results should have dashes and not 0s"). Shading as make_tables (T.jw_best over the three displayed
 rows, per setting and outcome), no bold. Means only, as every table (assert_means_only). Layout as make_tables
 (Option A, T.table_open / T.panel_head). The Results text quotes differences between rows; DIFF_SPOT checks them
@@ -48,10 +48,10 @@ DIFF_SPOT = {('q3d-ppo', 'BNN classifier', 'rec'): '$-27.24$', ('q3d-ppo', 'BNN 
 
 
 def absolute(a):
-    """Mean in % to 2 dp, (n) superscript below three contributing seeds, -- for none."""
+    """Mean in % to 2 dp, -- for none. No seed-count superscript."""
     if a['n'] == 0:
         return '--'
-    return '$' + f"{a['mean']:.2f}" + (f"^{{({a['n']})}}" if a['n'] < 3 else '') + '$'
+    return '$' + f"{a['mean']:.2f}" + '$'
 
 
 def signed(d):
@@ -117,7 +117,7 @@ def cross_check(cells):
         if c.get('empty_class'):
             assert c['tex'] == '--' and not vals(c['setting'], model_of[c['model']], err_of[c['metric']]), c
         else:
-            want = '--' if not xs else '$' + f'{st.mean(xs):.2f}' + (f'^{{({len(xs)})}}' if len(xs) < 3 else '') + '$'
+            want = '--' if not xs else '$' + f'{st.mean(xs):.2f}' + '$'
             assert want == c['tex'] and (not xs or abs(st.mean(xs) - c['mean']) < 1e-9), (c, want)
         checked += 1
     return checked

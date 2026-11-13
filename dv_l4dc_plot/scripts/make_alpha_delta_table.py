@@ -7,7 +7,7 @@ Runs: TERA (matrix_role 'method', U at rho = 0.75), six settings, three seeds. R
 {(0.05, 0.05), (0.05, 0.01), (0.01, 0.05), (0.01, 0.01)}; the first is the paper's setting.
 
 Entries follow the tables' rules (make_tables.value): means over seeds in percent, recall and abstention over all three
-seeds, errors over the seeds with a nonempty predicted class with a superscript count below three, and -- for an
+seeds, errors over the seeds with a nonempty predicted class (no seed-count superscript), and -- for an
 outcome no seed predicts (its recall too). No shading: the rows hold different error limits. A dagger on Abst. marks a
 cell where, in every seed, D_cal holds fewer calibration states of an outcome than the minimum count the test needs at
 these limits (g*_lim6c), so no threshold setting can pass. Layout as make_tables (Option A).

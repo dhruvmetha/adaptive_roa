@@ -26,8 +26,8 @@ gets \\cellcolor{tablebest}: the outcome's term of the threshold-fitting objecti
 is computed from the displayed 2 dp means, so a reader can recompute it from the table; ties are all shaded;
 rows whose Err is -- (no seed predicted that outcome) take no part. Abst. is never shaded. The paper defines
 tablebest (colortbl) in main.tex and supplementary.tex.
-Conditional errors use seeds with a nonempty predicted class; except in matrix_uncertified, a superscript
-gives that count if below three. -- means all three were empty. When all three are empty, the outcome's recall is -- as well,
+Conditional errors use seeds with a nonempty predicted class. No table prints that seed count (Sumanth, 2026-11-13:
+the superscripts were removed from every table). -- means all three were empty. When all three are empty, the outcome's recall is -- as well,
 not 0.00 (Sumanth, 2026-11-13: "cases that don't have results should have dashes and not 0s").
 """
 import hashlib, json, re, shutil
@@ -123,16 +123,13 @@ WRAPPED_IN = {'matrix_uncertified': 'sections/06_experiments.tex', 'matrix_certi
               'predictor_ablation': 'sections/appendix_predictor_ablation.tex'}
 
 
-def value(rs, key, show_seed_count=True):
-    """Mean in % to 2 dp. Tables print means only (Dhruv, 2026-11-12): never a range or an SD."""
+def value(rs, key):
+    """Mean in % to 2 dp. Tables print means only (Dhruv, 2026-11-12): never a range, an SD or a seed count."""
     vv = [100 * r[key] for r in rs if r[key] is not None]
     if not vv:
         return '--'
     mean, _, _ = spread(vv)
-    v = f'{mean:.2f}'
-    if show_seed_count and len(vv) < 3:
-        v += f'^{{({len(vv)})}}'
-    return '$' + v + '$'
+    return '$' + f'{mean:.2f}' + '$'
 
 
 SPREAD_IN_TABLE = re.compile(r'\\pm|\[\s*-?[0-9]|\]\$|\^\{\\,|\\shortstack|[0-9]\$?\s*(--|–)\s*\$?[+-]?[0-9]')
@@ -230,8 +227,7 @@ def matrix_body(name, groups, rows, cells, group_labels=True, extra_row=None, ex
                     rs = [r for r in rows if (r['setting'], r['matrix_role'], r['model']) == (setting, role, model)]
                     assert len(rs) == len({r['seed'] for r in rs}) == 3
                     for key, _ in METRICS:
-                        v = value([r['test'] for r in rs], key,
-                                  show_seed_count=name != 'matrix_uncertified')
+                        v = value([r['test'] for r in rs], key)
                         if key in ERR_OF and all(r['test'][ERR_OF[key]] is None for r in rs):
                             v = '--'   # no seed predicts this outcome: a dash, not a 0.00 recall (Sumanth, 2026-11-13)
                         defined = [100 * r['test'][key] for r in rs if r['test'][key] is not None]

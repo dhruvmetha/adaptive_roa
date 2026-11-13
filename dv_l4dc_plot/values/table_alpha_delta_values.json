@@ -926,7 +926,7 @@
       "seeds_limited": 0,
       "seeds_certified": 2,
       "mean": 1.785034,
-      "tex": "$1.79^{(2)}$"
+      "tex": "$1.79$"
     },
     {
       "table": "alpha_delta",
@@ -950,7 +950,7 @@
       "seeds_limited": 0,
       "seeds_certified": 2,
       "mean": 0.04801,
-      "tex": "$0.05^{(2)}$"
+      "tex": "$0.05$"
     },
     {
       "table": "alpha_delta",

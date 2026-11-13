@@ -126,10 +126,10 @@ import argparse
 import math
 import re
 import matplotlib.colors
-from matplotlib.legend_handler import HandlerTuple
-from matplotlib.patches import Patch
+from matplotlib.legend_handler import HandlerBase, HandlerTuple
+from matplotlib.patches import Patch, Rectangle
 from matplotlib.transforms import ScaledTranslation
-from common import PLOTS, PAPER, PRINT_WIDTH, FS, LINE, LS, LW, marker_kw, paper_legend_kw, style_rc, PARTIAL_TINT, ours
+from common import PLOTS, PAPER, PRINT_WIDTH, FS, LINE, LS, LW, INK, marker_kw, paper_legend_kw, style_rc, PARTIAL_TINT, ours
 
 RESTYLE_DIR = PLOTS                     # the paper figures themselves since 2026-11-13 (was plots/restyle/)
 PT = 1 / 72                                                    # inches per point
@@ -140,6 +140,9 @@ KIND = {'rec': LS['recall'], 'fail_rec': LS['recall'], 'fdr': LS['error'], 'for'
         'abstain': LS['recall']}
 MARKER_PT, EDGE_PT = 3.0, .6                                   # common.marker_kw defaults
 REACH_PT = (MARKER_PT + EDGE_PT) / 2                           # marker centre to the outside of its edge stroke
+# A method key's line (MethodKey) when line style names the method: a dash, dot, dash cycle at LW['curve'] stays
+# readable between two markers at its ends.
+METHOD_KEY_PT = 14.0
 # The few fixed gaps, in points. Everything else is measured from the drawn text.
 SEP = 2.0        # least space between two neighbouring pieces of text
 LEG_GAP = 3.0    # legend to the first row's titles
@@ -176,37 +179,38 @@ def tex(s):
 # at print size; a centre dot vanished. PARTIAL_TINT lives in common.py.
 
 
-def partial_kw(method, color):
+def partial_kw(method, color, ms=MARKER_PT, mew=EDGE_PT):
     """Marker for a point from 1-2 seeds: the method's marker (shape and fill unchanged) in the side colour faded by
     PARTIAL_TINT toward white, so shape still names the method and hue the side."""
     faded = tuple(c + (1 - c) * PARTIAL_TINT for c in matplotlib.colors.to_rgb(color))
-    return marker_kw(method, faded, MARKER_PT, EDGE_PT)
+    return marker_kw(method, faded, ms, mew)
 
 
-def draw_restyled(ax, x, mean, lo, hi, n, metric, methods, band_alpha):
+def draw_restyled(ax, x, mean, lo, hi, n, metric, methods, band_alpha, ls=None, ms=MARKER_PT, mew=EDGE_PT):
     """One metric of one arm. Band = min-max over seeds where at least 2 contribute; line = mean, with a gap where no
     seed contributes; a marker per point: the method's marker (common.METHOD_MARKER) where 3 seeds contribute, faded
     (partial_kw) where 1-2 do. methods is one method name, or one per x (Figure S2: Unif-TERA at rho = 0).
+    ls: the line style (None: the metric's kind, KIND); ms, mew: marker size and edge width in points.
     Returns the band (lo, hi) as drawn."""
     color = SIDE[metric]
     x, mean, n = np.asarray(x, dtype=float), np.asarray(mean, dtype=float), np.asarray(n)
     lo, hi = band_arrays(mean, lo, hi, n, min_band_n=2)
     if band_alpha:                                          # 0 or None: no seed band (Figure 6)
         ax.fill_between(x, lo, hi, color=color, alpha=band_alpha, lw=0)
-    ax.plot(x, mean, color=color, ls=KIND[metric], lw=LW['curve'], zorder=3)
+    ax.plot(x, mean, color=color, ls=KIND[metric] if ls is None else ls, lw=LW['curve'], zorder=3)
     methods = np.array(np.broadcast_to(np.asarray(methods, dtype=object), x.shape))
     for method in dict.fromkeys(methods.tolist()):
-        for sel, kw in [(n >= 3, marker_kw(method, color, MARKER_PT, EDGE_PT)), ((n > 0) & (n < 3), partial_kw(method, color))]:
+        for sel, kw in [(n >= 3, marker_kw(method, color, ms, mew)), ((n > 0) & (n < 3), partial_kw(method, color, ms, mew))]:
             sel = sel & (methods == method)
             if sel.any():
                 ax.plot(x[sel], mean[sel], ls='none', zorder=4, **kw)
     return lo, hi
 
 
-def padded_ylim(lo, hi, panel_in, pad_pt=.6):
-    """y limits that keep a marker centred at lo or at hi, edge stroke included, pad_pt inside a panel panel_in tall.
-    The padding is rounded up to two significant digits so the limits print cleanly."""
-    k = (REACH_PT + pad_pt) / (panel_in / PT)
+def padded_ylim(lo, hi, panel_in, pad_pt=.6, reach_pt=REACH_PT):
+    """y limits that keep a marker centred at lo or at hi, edge stroke included (reach_pt from its centre), pad_pt
+    inside a panel panel_in tall. The padding is rounded up to two significant digits so the limits print cleanly."""
+    k = (reach_pt + pad_pt) / (panel_in / PT)
     d = (hi - lo) * k / (1 - 2 * k)
     step = 10 ** (math.floor(math.log10(d)) - 1)
     d = math.ceil(d / step - 1e-9) * step
@@ -231,13 +235,84 @@ def dashdot_handlelength():
     return (sum(dash) + dash[0]) * LW['curve'] / FS['legend']
 
 
-def metric_handle(metric):
-    return Line2D([], [], color=SIDE[metric], ls=KIND[metric], lw=LW['curve'])
+def metric_handle(metric, ls=None):
+    return Line2D([], [], color=SIDE[metric], ls=KIND[metric] if ls is None else ls, lw=LW['curve'])
 
 
-def method_handle(method):
+# Legend keys that set their own width (Figure 7, Sumanth 2026-11-13). The legend gives every handle the same
+# handlelength, but a method key there holds two markers, a dash-dot cycle between them and a colour square, while a
+# colour-only metric key needs a short line. HandlerKey widens or narrows the key's handle box before drawing it; the
+# legend lays its row out from the box widths when it draws, so the label moves with the key.
+KEY_GAP_PT = 2.0                        # between the parts of one key: two squares, or the line and its square
+
+
+def fill_square(x, y, side, color, alpha):
+    """A legend colour square: the fill colour at alpha inside a .5 pt border in the full colour, the line the panel
+    draws along the top of the same fill."""
+    return Rectangle((x, y), side, side, facecolor=matplotlib.colors.to_rgba(color, alpha), edgecolor=color, lw=.5)
+
+
+def centred_dashes(ls, length_pt, lw):
+    """A dash tuple (offset, seq) shifted so the middle of seq[2], the dot of a dash-dot, falls at the middle of a key
+    line length_pt long drawn at lw: the key then reads dash, dot, dash between its end markers. A named style such
+    as '-' passes through. matplotlib scales the offset and the pattern by lw (lines.scale_dashes)."""
+    if not isinstance(ls, tuple):
+        return ls
+    seq = ls[1]
+    return ((seq[0] + seq[1] + seq[2] / 2 - length_pt / 2 / lw) % sum(seq), seq)
+
+
+class LegendKey:
+    """A legend handle that HandlerKey draws at width(h) points, h being the handle box height."""
+
+
+class SwatchKey(LegendKey):
+    """Fill colours as squares of the handle height side by side (the abstention key of Figure 7)."""
+    def __init__(self, colors, alpha):
+        self.colors, self.alpha = colors, alpha
+
+    def width(self, h):
+        return len(self.colors) * (h + KEY_GAP_PT) - KEY_GAP_PT
+
+    def artists(self, x0, y0, h):
+        return [fill_square(x0 + i * (h + KEY_GAP_PT), y0, h, c, self.alpha) for i, c in enumerate(self.colors)]
+
+
+class MethodKey(LegendKey):
+    """A method's key: its marker in both side colours (success left, failure right) at the two ends of an INK line
+    line_pt long in the method's line style (no line when ls is None), then its fill colour as a square the size of
+    SwatchKey's (none when fill is None)."""
+    def __init__(self, method, ms, mew, line_pt, ls=None, fill=None, alpha=None):
+        self.method, self.ms, self.mew, self.line_pt, self.ls, self.fill, self.alpha = method, ms, mew, line_pt, ls, fill, alpha
+
+    def width(self, h):
+        return self.line_pt + (KEY_GAP_PT + h if self.fill else 0)
+
+    def artists(self, x0, y0, h):
+        yc, r, L = y0 + h / 2, (self.ms + self.mew) / 2, self.line_pt
+        out = []
+        if self.ls is not None:
+            out.append(Line2D([x0, x0 + L], [yc, yc], color=INK, lw=LW['curve'],
+                              ls=centred_dashes(self.ls, L, LW['curve'])))
+        out += [Line2D([x], [yc], ls='none', **marker_kw(self.method, SIDE[m], self.ms, self.mew))
+                for x, m in [(x0 + r, 'rec'), (x0 + L - r, 'fail_rec')]]
+        if self.fill:
+            out.append(fill_square(x0 + L + KEY_GAP_PT, y0, h, self.fill, self.alpha))
+        return out
+
+
+class HandlerKey(HandlerBase):
+    def legend_artist(self, legend, orig_handle, fontsize, handlebox):
+        handlebox.width = orig_handle.width(handlebox.height)
+        arts = orig_handle.artists(-handlebox.xdescent, -handlebox.ydescent, handlebox.height)
+        for a in arts:
+            handlebox.add_artist(a)
+        return arts[0]
+
+
+def method_handle(method, ms=MARKER_PT, mew=EDGE_PT):
     """A method's marker in both side colours, as the curves draw it."""
-    return tuple(Line2D([], [], ls='none', **marker_kw(method, SIDE[m], MARKER_PT, EDGE_PT)) for m in ('rec', 'fail_rec'))
+    return tuple(Line2D([], [], ls='none', **marker_kw(method, SIDE[m], ms, mew)) for m in ('rec', 'fail_rec'))
 
 
 def top_legend(fig, handles, labels, width, ncols, handlelength=None, columnspacing=None):
@@ -250,7 +325,8 @@ def top_legend(fig, handles, labels, width, ncols, handlelength=None, columnspac
     if columnspacing is not None:
         kw['columnspacing'] = columnspacing
     for ncol in ncols:
-        leg = fig.legend(handles, labels, ncol=ncol, handler_map={tuple: HandlerTuple(ndivide=None, pad=.3)}, **kw)
+        leg = fig.legend(handles, labels, ncol=ncol, handler_map={tuple: HandlerTuple(ndivide=None, pad=.3),
+                                                                 LegendKey: HandlerKey()}, **kw)
         fig.canvas.draw()
         if leg.get_window_extent(fig.canvas.get_renderer()).width / fig.dpi <= width - 2 * MARGIN:
             return leg, ncol
@@ -432,10 +508,10 @@ def save_restyled(fig, stem):
 
 def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_labels, legend_methods, ylabels,
                           rec_aspect, err_ratio, band_alpha, xlim=None, ref_label=None, rec_extra=(), rec_fill=None,
-                          decorate=None, legend_columnspacing=None):
+                          decorate=None, legend_columnspacing=None, method_ls=None, markers=(MARKER_PT, EDGE_PT)):
     """The split layout (recall panel over error panel per setting, settings in 2 rows x 3) in the paper style at
     PRINT_WIDTH[stem], laid out by tight_split_layout. Colour = the metric's side, line style = its kind (recall
-    solid, error dash-dot), arm = marker shape and fill only.
+    solid, error dash-dot), arm = marker shape and fill only; with method_ls, line style names the arm instead.
 
     arms: [(series, methods)], drawn in order (draw the reference arm first so the method sits on top);
       series(setting, metric) -> (x, mean, lo, hi, n); methods as in draw_restyled.
@@ -445,7 +521,12 @@ def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_l
     ref_label: text of the one direct label of the 5% line, in the first error panel (None: no label).
     rec_extra: [(metric, legend text)] drawn as curves in the upper panel under the recall curves.
     rec_fill: dict(metric, label, colors={method: colour}, alpha): that metric shaded from 0 up in the upper panel,
-      one colour per arm (Figure 6: abstention); the legend shows the colours beside the label and each method.
+      one colour per arm (Figure 7: abstention); the legend shows the colours as bordered squares beside the label
+      and each method (SwatchKey, MethodKey).
+    method_ls: {method: line style} (Figure 7): line style names the method in both panels instead of the metric's
+      kind; each arm's methods must then be one name. The metric keys become solid colour lines and each method key
+      shows its line between its two markers (MethodKey).
+    markers: (size, edge width) of every marker in points, panels and legend.
     legend_columnspacing: the legend's column gap in font sizes (None: the shared 1.3).
     decorate(panels): called with {setting: (upper, lower)} after the curves are drawn; returns in-panel texts,
       which check_restyled keeps inside their panel and clear of markers.
@@ -455,6 +536,9 @@ def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_l
     with plt.rc_context(style_rc()):
         fig = plt.figure(figsize=(W, 4))
         pairs, drawn, ref_text = [], {}, None
+        ms, mew = markers
+        reach = (ms + mew) / 2
+        assert method_ls is None or all(isinstance(methods, str) for _, methods in arms)
         for si, (s, title) in enumerate(zip(SETTINGS, titles)):
             rec = fig.add_axes([.1, .5, .2, .2]); err = fig.add_axes([.1, .2, .2, .2], sharex=rec)
             pairs.append((rec, err))
@@ -470,7 +554,8 @@ def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_l
                 for series, methods in arms:
                     for m in metrics:
                         x, mean, lo, hi, n = series(s, m)
-                        band = draw_restyled(ax, x, mean, lo, hi, n, m, methods, band_alpha)
+                        band = draw_restyled(ax, x, mean, lo, hi, n, m, methods, band_alpha, ms=ms, mew=mew,
+                                             ls=method_ls[methods] if method_ls else None)
                         drawn.setdefault(ax, []).append((np.asarray(x, dtype=float), np.asarray(mean, dtype=float), band))
             err.axhline(5, color=LINE['ref'], lw=LW['ref'], ls=LS['ref'], zorder=0)
             if xlim is not None:
@@ -488,15 +573,21 @@ def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_l
         notes = list(decorate(dict(zip(SETTINGS, pairs)))) if decorate else []
         metrics = ['rec', 'fail_rec', 'fdr', 'for'] + [m for m, _ in rec_extra]
         labels_ = [tex(t) for t in list(metric_labels) + [t for _, t in rec_extra]]
-        m_handles, f_handles = [method_handle(m) for m in legend_methods], []
-        if rec_fill:                            # the fill colours: both beside the label, each beside its method
-            sw = lambda m: Patch(facecolor=rec_fill['colors'][m], alpha=rec_fill['alpha'] + .25, edgecolor='none')
-            f_handles, labels_ = [tuple(sw(m) for m in legend_methods)], labels_ + [tex(rec_fill['label'])]
-            m_handles = [h + (sw(m),) for h, m in zip(m_handles, legend_methods)]
-        legend, ncol = top_legend(fig, [metric_handle(m) for m in metrics] + f_handles + m_handles,
-                                  labels_ + [ours(m) for m in legend_methods], W,
+        m_handles, f_handles = [method_handle(m, ms, mew) for m in legend_methods], []
+        if rec_fill or method_ls:               # keys of their own width: the fill colours, both beside the label and
+            alpha = rec_fill['alpha'] + .25 if rec_fill else None      # each beside its method; the method's line
+            fill = lambda m: rec_fill['colors'][m] if rec_fill else None
+            if rec_fill:
+                f_handles = [SwatchKey([fill(m) for m in legend_methods], alpha)]
+                labels_ = labels_ + [tex(rec_fill['label'])]
+            ls = lambda m: method_ls[m] if method_ls else None
+            m_handles = [MethodKey(m, ms, mew, line_pt=METHOD_KEY_PT if method_ls else 2 * ms + 2 * mew + 2,
+                                   ls=ls(m), fill=fill(m), alpha=alpha) for m in legend_methods]
+        legend, ncol = top_legend(fig, [metric_handle(m, ls='-' if method_ls else None) for m in metrics] + f_handles
+                                  + m_handles, labels_ + [ours(m) for m in legend_methods], W,
                                   ncols=(len(metrics) + len(f_handles) + len(m_handles), 4, 3, 2),
-                                  handlelength=dashdot_handlelength(), columnspacing=legend_columnspacing)
+                                  handlelength=None if method_ls else dashdot_handlelength(),
+                                  columnspacing=legend_columnspacing)
         xl = fig.text(.5, 0, tex(xlabel), ha='center', va='bottom', fontsize=FS['label'])
         limits = {}
 
@@ -505,7 +596,7 @@ def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_l
                 base = row_base[si // 3]
                 for ax, key, h in [(rec, 'rec', rec_h), (err, 'err', err_h)]:
                     lo, hi, ticks = base[key]
-                    ax.set_ylim(*padded_ylim(lo, hi, h)); ax.set_yticks(ticks)
+                    ax.set_ylim(*padded_ylim(lo, hi, h, reach_pt=reach)); ax.set_yticks(ticks)
                     limits[si // 3, key] = ax.get_ylim()
 
         layout = lambda: tight_split_layout(fig, pairs, legend, xl, width=W, rec_aspect=rec_aspect,
@@ -521,7 +612,7 @@ def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_l
                        and l.get_color() == LINE['ref'])
             for ax in (rec, err):
                 for x, mean, band in drawn[ax]:
-                    assert_markers_inside_xy(fig, ax, x, mean)
+                    assert_markers_inside_xy(fig, ax, x, mean, reach_pt=reach)
                     assert_bands_inside(ax, [band])
         edges = check_restyled(fig, [a for p in pairs for a in p], legend,
                                inside=([ref_text] if ref_text else []) + notes)

@@ -40,7 +40,7 @@ from matplotlib.lines import Line2D
 from matplotlib.colors import to_rgb
 from matplotlib.legend_handler import HandlerTuple
 from common import ASSETS, SCORED, VALUES, SETTINGS, BLUE, ORANGE, RECALL, ERROR, RC, method_names, save, spread
-from common import REC_S, REC_F, ERR_S, ERR_F, ABST, ARM_FILL, FS
+from common import REC_S, REC_F, ERR_S, ERR_F, ABST, ARM_FILL, FS, LS
 from make_tables import macro_name
 from split import draw, assert_markers_inside, assert_bands_inside, REF_SOLID, DASHDOT
 from split import restyle_args, split_figure_restyled
@@ -288,6 +288,11 @@ RESTYLE_ERR_RATIO = ERR_H / (RESTYLE_REC_SCALE * REC_H)
 # The legend's column gap, in font sizes. The shared 1.3 puts "TERA (Ours)" on a second legend row at 4.20 in, which
 # makes the figure 0.16 in taller; 1.0 keeps the one-row legend and the figure's size (Sumanth, 2026-11-13).
 RESTYLE_LEGEND_GAP = 1.0
+# Line style names the method, the same in the rate and error panels: TERA solid, Unif-TERA dash-dot (Sumanth,
+# 2026-11-13; it named the metric kind before, recall solid and error dash-dot). Markers 2.4 pt with a .5 pt edge
+# (Sumanth, 2026-11-13: smaller circles and squares; they were 3.0 and .6).
+RESTYLE_METHOD_LS = {ARM_LABEL['U_H']: LS['recall'], ARM_LABEL['uniform']: LS['error']}
+RESTYLE_MARKERS = (2.4, .5)
 
 
 def annotate(panels, data, rows):
@@ -318,9 +323,9 @@ def annotate(panels, data, rows):
 
 def generate_restyled():
     """Figure 6 (a1d) in the paper style at PRINT_WIDTH['adaptive_learning_a1d'] into plots/ (the paper figure).
-    Colour = the metric's side (Success recall and FDR gold, Failure recall and FOR purple), recall solid, error
-    dash-dot; the arms differ only by marker (TERA filled circle, Unif-TERA open square, common.METHOD_MARKER), and
-    a faded marker (split.partial_kw) means 1-2 seeds contribute. Draws from compute('a1d') and fails unless its points and
+    Colour = the metric's side (Success recall and FDR blue, Failure recall and FOR orange); the arms differ by line
+    style in both panels (RESTYLE_METHOD_LS: TERA solid, Unif-TERA dash-dot) and by marker (TERA filled circle,
+    Unif-TERA open square, common.METHOD_MARKER), and a faded marker (split.partial_kw) means 1-2 seeds contribute. Draws from compute('a1d') and fails unless its points and
     source hashes equal the stored values/adaptive_learning_a1d_values.json. Writes nothing to values/ or the paper."""
     stem, src, rows, summaries, data, axes_by_row, shared = compute('a1d')
     stored = json.loads((VALUES / f'{stem}_values.json').read_text())
@@ -356,7 +361,8 @@ def generate_restyled():
         rec_aspect=RESTYLE_ASPECT, err_ratio=RESTYLE_ERR_RATIO, band_alpha=0, ref_label='5% limit',
         rec_fill=dict(metric='abstain', label=ABST, alpha=.30,
                       colors={ARM_LABEL['U_H']: ARM_FILL['adaptive'], ARM_LABEL['uniform']: ARM_FILL['uniform']}),
-        decorate=lambda panels: annotate(panels, data, rows), legend_columnspacing=RESTYLE_LEGEND_GAP)
+        decorate=lambda panels: annotate(panels, data, rows), legend_columnspacing=RESTYLE_LEGEND_GAP,
+        method_ls=RESTYLE_METHOD_LS, markers=RESTYLE_MARKERS)
     g = out['geometry']
     print(f"  panels {g['panel_w']:.3f} in wide, recall {g['rec_h']:.3f} in, error {g['err_h']:.3f} in; "
           f"legend {out['legend_ncol']} columns; layout settled in {g['iterations']} passes")

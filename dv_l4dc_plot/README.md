@@ -93,9 +93,9 @@ build, commit and Overleaf push described in its `AGENTS.md`.
 - Figure 6 shades each arm's abstention rate from 0 up in the upper panels (`rec_fill`; colours `common.ARM_FILL`,
   green for TERA and violet for Unif-TERA) and draws no seed bands (`band_alpha=0`). The legend shows both colours
   beside the abstention label and each one beside its method. `plot_learning_curves.annotate` computes from the
-  data and draws, on Cartpole LQR, a dotted 90% line and a tick per arm at the first budget from which both mean
-  recalls stay above it (800 and 2K). No text is drawn in the panels: the caption gives those budgets and the
-  Planar quadrotor RL seed counts (3/3 and 1/3), which the script prints. The upper y label is "Rate (%)". The learning-curve values JSONs hold 132 abstention
+  data the first budget from which both mean recalls stay above 90% on Cartpole LQR (800 and 2K) and the Planar
+  quadrotor RL seed counts (3/3 and 1/3), and prints them for the caption. The only in-panel mark is the dotted
+  90% line on Cartpole LQR; no ticks or text are drawn. The upper y label is "Rate (%)". The learning-curve values JSONs hold 132 abstention
   points each beside the four older metrics.
 - Figure 5 prints at 3.00 in (`PRINT_WIDTH`), half the text width, as a wrapped figure (paper commit after
   `1daddc1`). Its legend is one centred row (two if it does not fit); titles wrap to two lines when one line is

@@ -285,12 +285,10 @@ RESTYLE_ERR_RATIO = ERR_H / REC_H
 
 
 def annotate(panels, data, rows):
-    """The in-panel marks of the paper figure (Sumanth, 2026-11-13), computed from the plotted data. Cartpole LQR: a
-    dotted line at 90% recall and, per arm, a short tick at the first budget from which both mean recalls stay above
-    it, in a darker shade of the arm's abstention colour. No text is drawn: the caption gives the budgets, and the
-    Planar quadrotor RL seed counts printed here. Returns the in-panel texts for check_restyled (none)."""
-    dark = lambda c: tuple(.62 * v for v in to_rgb(c))
-    col = {'U_H': dark(ARM_FILL['adaptive']), 'uniform': dark(ARM_FILL['uniform'])}
+    """The one in-panel mark of the paper figure (Sumanth, 2026-11-13): a dotted line at 90% recall on Cartpole LQR.
+    No ticks and no text are drawn. The caption gives the first budget from which both mean recalls stay above 90%
+    for each arm, and the Planar quadrotor RL seed counts; both are computed from the plotted data and printed here.
+    Returns the in-panel texts for check_restyled (none)."""
     rec = panels['cp-lqr'][0]
     rec.axhline(90, color='#444444', lw=.5, ls=(0, (1, 1.6)), zorder=2)
     first = {}
@@ -300,8 +298,6 @@ def annotate(panels, data, rows):
         ok = (rs > 90) & (rf > 90)
         assert ok.any() and ok[int(np.argmax(ok)):].all(), arm       # reached, and held to the final budget
         first[arm] = float(x[int(np.argmax(ok))])
-        xk = first[arm] / 1000
-        rec.plot([xk, xk], [62, 90], color=col[arm], lw=.9, zorder=5, solid_capstyle='butt')   # over the curves
     assert first['U_H'] < first['uniform'], first
     seeds = {}
     for arm in ('U_H', 'uniform'):

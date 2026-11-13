@@ -28,7 +28,7 @@ from predictor_comparison_data import build
 STEM = 'predictor_comparison_compact'
 WIDTH = 3.30                                     # in, printed at scale 1 as a half-width wrap figure
 SETTINGS = [('q3d-lqr', 'Spatial Quad (12D), LQR'), ('cp-ppo', 'Cartpole (4D), RL')]   # appendix figure's titles
-MODELS = [('FM', 'Unif-TERA'), ('BNN classifier', 'Unif-BNN-Label'), ('BNN final-state', 'Unif-TERA-BNN')]
+MODELS = [('FM', 'Unif-TERA'), ('BNN final-state', 'Unif-TERA-BNN'), ('BNN classifier', 'Unif-BNN-Label')]   # legend order (Sumanth)
 SIDES = [('fdr', 'rec', ERR_S + r' (\%)', REC_S + r' (\%)', LINE['success']),
          ('for', 'fail_rec', ERR_F + r' (\%)', REC_F + r' (\%)', LINE['fail'])]
 MS, MEW, HALO, BAR, LINK = 5.2, .7, .5, .45, .7

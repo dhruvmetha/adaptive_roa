@@ -90,6 +90,9 @@ build, commit and Overleaf push described in its `AGENTS.md`.
   off (`SHOW_SPARSE`), since at round 2 it is a maze around the 120 training trajectories. The `.txt` report lists
   the thresholds (tau^s_s, tau^s_f = stored `t_s`, `t_f`; tau^f_s, tau^f_f = `u_s`, `u_f`) and the counts.
 - The paper writes the number of samples per query as M; K means one thousand only.
+- Figure 6 also draws the abstention rate (`common.ABST`, gray, `LINE['abstain']`) in each upper panel, through
+  `split_figure_restyled(..., rec_extra=[('abstain', ABST)])`; the upper y label is "Rate (%)". The values JSONs of
+  the learning curves gain 132 abstention points each; the four older metrics are unchanged.
 - Figure 5 prints at 3.00 in (`PRINT_WIDTH`), half the text width, as a wrapped figure (paper commit after
   `1daddc1`). Its legend is one centred row (two if it does not fit); titles wrap to two lines when one line is
   wider than a column.

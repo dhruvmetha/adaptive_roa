@@ -40,7 +40,7 @@ from matplotlib.lines import Line2D
 from matplotlib.colors import to_rgb
 from matplotlib.legend_handler import HandlerTuple
 from common import ASSETS, SCORED, VALUES, SETTINGS, BLUE, ORANGE, RECALL, ERROR, RC, method_names, save, spread
-from common import REC_S, REC_F, ERR_S, ERR_F
+from common import REC_S, REC_F, ERR_S, ERR_F, ABST
 from make_tables import macro_name
 from split import draw, assert_markers_inside, assert_bands_inside, REF_SOLID, DASHDOT
 from split import restyle_args, split_figure_restyled
@@ -141,7 +141,7 @@ def share_first_point(rows):
                               replaced=None if equal else other['name'],
                               shown_rates={k: best[k] for k in RATES},
                               replaced_rates=None if equal else {k: other[k] for k in RATES}))
-            other.update({k: best[k] for k in RATES + ('S', 'F')})
+            other.update({k: best[k] for k in RATES + ('S', 'F', 'abstain')})
     assert len(picks) == 18
     return picks
 
@@ -157,6 +157,7 @@ def compute(protocol):
         src = [softpath]; raw = soft; stem = 'adaptive_learning'
         rows = [dict(name=r['name'], setting=r['setting'], seed=r['seed'], epoch=r['epoch'],
                      train=r['train'], arm=r['acq'], **r['test']) for r in raw]
+        assert all('abstain' in r for r in rows)
     else:
         ep = SCORED / 'epochs.jsonl'
         src = [softpath, ep]; raw = [r for l in ep.read_text().splitlines() if (r := json.loads(l))['name'] in meta]
@@ -164,7 +165,8 @@ def compute(protocol):
         stem = 'adaptive_learning_a1d'
         rows = [{k: r[k] for k in ['name', 'setting', 'seed', 'epoch', 'train', 'arm']} |
                 {k: r[v] for k, v in [('rec', 'c6c_rec'), ('fail_rec', 'c6c_fail_rec'), ('fdr', 'c6c_fp'),
-                                      ('for', 'c6c_ferr'), ('S', 'c6c_S'), ('F', 'c6c_F')]} for r in raw]
+                                      ('for', 'c6c_ferr'), ('S', 'c6c_S'), ('F', 'c6c_F'),
+                                      ('abstain', 'c6c_abstain')]} for r in raw]
     assert {(r['name'], r['seed'], r['epoch'], r['train']) for r in rows} == \
            {(r['name'], r['seed'], r['epoch'], r['train']) for r in soft}
     for r in rows:
@@ -187,7 +189,9 @@ def compute(protocol):
                                   mean=m, min=a, max=b))
         return tuple(np.array(v, dtype=float) for v in (x, mean, lo, hi, n))
 
-    data = {(s, arm, m): summarize(s, arm, m) for s in SETTINGS for arm, *_ in ARMS for m, _ in RECALL + ERROR}
+    # abstention (Sumanth, 2026-11-13) is summarised after the four rates and drawn only in the paper figure
+    data = {(s, arm, m): summarize(s, arm, m) for s in SETTINGS for arm, *_ in ARMS
+            for m, _ in RECALL + ERROR + [('abstain', None)]}
     axes_by_row = row_axes(summaries)
     return stem, src, rows, summaries, data, axes_by_row, shared
 
@@ -306,7 +310,7 @@ def generate_restyled():
         xticks[s] = (XTICKS[s], tick_labels(XTICKS[s]))
     row_base = {}
     for row, settings in enumerate([SETTINGS[:3], SETTINGS[3:]]):
-        pts = [p for p in summaries if p['setting'] in settings and p['n'] and p['metric'] in ('rec', 'fail_rec')]
+        pts = [p for p in summaries if p['setting'] in settings and p['n'] and p['metric'] in ('rec', 'fail_rec', 'abstain')]
         lo = min(min(p['mean'], p['min'] if p['n'] > 1 else p['mean']) for p in pts)
         hi = max(max(p['mean'], p['max'] if p['n'] > 1 else p['mean']) for p in pts)
         rec_ticks, err_ticks = axes_by_row[row]['rec'][1], axes_by_row[row]['err'][1]
@@ -316,8 +320,9 @@ def generate_restyled():
         stem, arms=[(series(arm), ARM_LABEL[arm]) for arm, *_ in ARMS], xticks=xticks,
         xlabel='Training trajectories', titles=[TITLE[s] for s in SETTINGS], row_base=row_base,
         metric_labels=[REC_S, REC_F, ERR_S, ERR_F],
-        legend_methods=[ARM_LABEL[a] for a, *_ in ARMS[::-1]], ylabels=('Recall (%)', 'Error (%)'),
-        rec_aspect=RESTYLE_ASPECT, err_ratio=RESTYLE_ERR_RATIO, band_alpha=BAND_ALPHA, ref_label='5% limit')
+        legend_methods=[ARM_LABEL[a] for a, *_ in ARMS[::-1]], ylabels=('Rate (%)', 'Error (%)'),
+        rec_aspect=RESTYLE_ASPECT, err_ratio=RESTYLE_ERR_RATIO, band_alpha=BAND_ALPHA, ref_label='5% limit',
+        rec_extra=[('abstain', ABST)])
     g = out['geometry']
     print(f"  panels {g['panel_w']:.3f} in wide, recall {g['rec_h']:.3f} in, error {g['err_h']:.3f} in; "
           f"legend {out['legend_ncol']} columns; layout settled in {g['iterations']} passes")

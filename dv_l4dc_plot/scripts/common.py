@@ -76,6 +76,7 @@ ERROR = [('fdr', BLUE), ('for', ORANGE)]                 # success error pairs w
 # rec, fail_rec, fdr and for.
 REC_S, REC_F = r'$\widehat{\mathrm{Rec}}_{\mathrm{s}}$', r'$\widehat{\mathrm{Rec}}_{\mathrm{f}}$'
 ERR_S, ERR_F = r'$\widehat{\mathrm{Err}}_{\mathrm{s}}$', r'$\widehat{\mathrm{Err}}_{\mathrm{f}}$'
+ABST = r'$\widehat{\mathrm{Abst}}$'                      # empirical abstention rate on the test states
 RC = {'font.family': 'DejaVu Sans', 'font.size': 8, 'axes.titlesize': 8, 'axes.labelsize': 7.5,
       'legend.fontsize': 7.5, 'xtick.labelsize': 7, 'ytick.labelsize': 7, 'axes.linewidth': .65,
       'pdf.fonttype': 42, 'ps.fonttype': 42, 'axes.spines.top': False, 'axes.spines.right': False}

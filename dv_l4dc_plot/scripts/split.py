@@ -132,8 +132,10 @@ from common import PLOTS, PAPER, PRINT_WIDTH, FS, LINE, LS, LW, marker_kw, paper
 RESTYLE_DIR = PLOTS                     # the paper figures themselves since 2026-11-13 (was plots/restyle/)
 PT = 1 / 72                                                    # inches per point
 # Colour names the metric's side and line style its kind (common.LINE, common.LS).
-SIDE = {'rec': LINE['success'], 'fdr': LINE['success'], 'fail_rec': LINE['fail'], 'for': LINE['fail']}
-KIND = {'rec': LS['recall'], 'fail_rec': LS['recall'], 'fdr': LS['error'], 'for': LS['error']}
+SIDE = {'rec': LINE['success'], 'fdr': LINE['success'], 'fail_rec': LINE['fail'], 'for': LINE['fail'],
+        'abstain': LINE['abstain']}
+KIND = {'rec': LS['recall'], 'fail_rec': LS['recall'], 'fdr': LS['error'], 'for': LS['error'],
+        'abstain': LS['recall']}
 MARKER_PT, EDGE_PT = 3.0, .6                                   # common.marker_kw defaults
 REACH_PT = (MARKER_PT + EDGE_PT) / 2                           # marker centre to the outside of its edge stroke
 # The few fixed gaps, in points. Everything else is measured from the drawn text.
@@ -411,7 +413,7 @@ def save_restyled(fig, stem):
 
 
 def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_labels, legend_methods, ylabels,
-                          rec_aspect, err_ratio, band_alpha, xlim=None, ref_label=None):
+                          rec_aspect, err_ratio, band_alpha, xlim=None, ref_label=None, rec_extra=()):
     """The split layout (recall panel over error panel per setting, settings in 2 rows x 3) in the paper style at
     PRINT_WIDTH[stem], laid out by tight_split_layout. Colour = the metric's side, line style = its kind (recall
     solid, error dash-dot), arm = marker shape and fill only.
@@ -422,6 +424,7 @@ def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_l
       y range the data must show, padded per panel height so a marker at either end stays inside.
     metric_labels: legend texts of rec, fail_rec, fdr, for. legend_methods: methods in the legend, in order.
     ref_label: text of the one direct label of the 5% line, in the first error panel (None: no label).
+    rec_extra: [(metric, legend text)] drawn in the upper panel under the recall curves (Figure 6: abstention).
     Only the left column has y tick labels; the 5% line sits on every error panel. Fails if a marker or band leaves
     its panel, the 5% line leaves an error axis, or check_restyled fails. Returns the layout, checks and size."""
     W = PRINT_WIDTH[stem]
@@ -432,7 +435,7 @@ def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_l
             rec = fig.add_axes([.1, .5, .2, .2]); err = fig.add_axes([.1, .2, .2, .2], sharex=rec)
             pairs.append((rec, err))
             rec.set_title(tex(title), pad=3)
-            for ax, metrics in [(rec, ('rec', 'fail_rec')), (err, ('fdr', 'for'))]:
+            for ax, metrics in [(rec, tuple(m for m, _ in rec_extra) + ('rec', 'fail_rec')), (err, ('fdr', 'for'))]:
                 ax.grid(axis='y', alpha=.2, lw=.45); ax.set_axisbelow(True)
                 for series, methods in arms:
                     for m in metrics:
@@ -453,10 +456,11 @@ def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_l
                                         textcoords='offset points', ha='right', va='top', fontsize=FS['annotation'],
                                         color=LINE['ref'])
         fig.align_ylabels([a for p in pairs[::3] for a in p])
-        metrics = ['rec', 'fail_rec', 'fdr', 'for']
+        metrics = ['rec', 'fail_rec', 'fdr', 'for'] + [m for m, _ in rec_extra]
+        labels_ = [tex(t) for t in list(metric_labels) + [t for _, t in rec_extra]]
         legend, ncol = top_legend(fig, [metric_handle(m) for m in metrics] + [method_handle(m) for m in legend_methods],
-                                  [tex(t) for t in metric_labels] + list(legend_methods), W,
-                                  ncols=(len(metrics) + len(legend_methods), 3, 2), handlelength=dashdot_handlelength())
+                                  labels_ + list(legend_methods), W,
+                                  ncols=(len(metrics) + len(legend_methods), 4, 3, 2), handlelength=dashdot_handlelength())
         xl = fig.text(.5, 0, tex(xlabel), ha='center', va='bottom', fontsize=FS['label'])
         limits = {}
 

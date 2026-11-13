@@ -3,7 +3,7 @@
 \resizebox{\ifdim\width>\textwidth\textwidth\else\width\fi}{!}{%
 \begin{tabular}{l@{\hspace{6pt}}rr!{\tablepairdivider}rr!{\tablepairdivider}r!{\hspace{3pt}\tablesystemdivider\hspace{3pt}}rr!{\tablepairdivider}rr!{\tablepairdivider}r!{\hspace{3pt}\tablesystemdivider\hspace{3pt}}rr!{\tablepairdivider}rr!{\tablepairdivider}r}
 \toprule
-\textbf{LQR} & \multicolumn{5}{c}{Pendulum (2D)} & \multicolumn{5}{c}{Cartpole (4D)} & \multicolumn{5}{c}{Spatial Quad (12D)} \\
+\textbf{LQR} & \multicolumn{5}{c}{Pendulum} & \multicolumn{5}{c}{Cartpole} & \multicolumn{5}{c}{Spatial quadrotor} \\
 \cmidrule(lr){2-6}\cmidrule(lr){7-11}\cmidrule(lr){12-16}
 \textbf{Method} & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & $\widehat{\mathrm{Abst}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & $\widehat{\mathrm{Abst}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & $\widehat{\mathrm{Abst}}\downarrow$ \\
 \midrule
@@ -18,7 +18,7 @@ Part-X GP & $90.89$ & $2.42$ & $94.30$ & $1.89$ & $5.02$ & $25.32$ & $3.36$ & $8
 \nameUnif{} & $96.07$ & $0.79$ & $97.93$ & $0.76$ & $2.02$ & $93.66$ & $1.85$ & $99.16$ & $0.81$ & $0.85$ & $66.92$ & $3.11$ & $93.53$ & $3.71$ & $9.02$ \\
 \nameOurs{} & \cellcolor{tablebest}$98.28$ & \cellcolor{tablebest}$0.77$ & \cellcolor{tablebest}$97.99$ & \cellcolor{tablebest}$0.23$ & $1.47$ & \cellcolor{tablebest}$98.22$ & \cellcolor{tablebest}$0.63$ & \cellcolor{tablebest}$99.59$ & \cellcolor{tablebest}$0.10$ & $0.46$ & \cellcolor{tablebest}$67.77$ & \cellcolor{tablebest}$2.27$ & \cellcolor{tablebest}$92.09$ & \cellcolor{tablebest}$2.51$ & $11.02$ \\
 \midrule[\heavyrulewidth]
-\textbf{RL} & \multicolumn{5}{c}{Cartpole (4D)} & \multicolumn{5}{c}{Planar Quad (6D)} & \multicolumn{5}{c}{Spatial Quad (12D)} \\
+\textbf{RL} & \multicolumn{5}{c}{Cartpole} & \multicolumn{5}{c}{Planar quadrotor} & \multicolumn{5}{c}{Spatial quadrotor} \\
 \cmidrule(lr){2-6}\cmidrule(lr){7-11}\cmidrule(lr){12-16}
 DeepReach & $29.52$ & $18.42$ & $84.20$ & $1.92$ & $23.87$ & $0.02$ & $96.25$ & $99.94$ & $8.12$ & $0.00$ & $1.24$ & $31.83$ & $94.71$ & $1.72$ & $8.90$ \\
 Lyapunov NN & $51.20$ & $9.91$ & $87.87$ & $2.07$ & $16.78$ & $10.25$ & $13.11$ & $93.45$ & $2.38$ & $11.08$ & $32.06$ & $6.29$ & $96.04$ & $1.08$ & $6.40$ \\

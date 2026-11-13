@@ -3,7 +3,7 @@
 \resizebox{\ifdim\width>\textwidth\textwidth\else\width\fi}{!}{%
 \begin{tabular}{l@{\hspace{6pt}}rr!{\tablepairdivider}rr!{\tablepairdivider}r!{\hspace{3pt}\tablesystemdivider\hspace{3pt}}rr!{\tablepairdivider}rr!{\tablepairdivider}r!{\hspace{3pt}\tablesystemdivider\hspace{3pt}}rr!{\tablepairdivider}rr!{\tablepairdivider}r}
 \toprule
-\textbf{LQR} & \multicolumn{5}{c}{Pendulum (2D)} & \multicolumn{5}{c}{Cartpole (4D)} & \multicolumn{5}{c}{Spatial Quad (12D)} \\
+\textbf{LQR} & \multicolumn{5}{c}{Pendulum} & \multicolumn{5}{c}{Cartpole} & \multicolumn{5}{c}{Spatial quadrotor} \\
 \cmidrule(lr){2-6}\cmidrule(lr){7-11}\cmidrule(lr){12-16}
 \textbf{Limits} & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & $\widehat{\mathrm{Abst}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & $\widehat{\mathrm{Abst}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & $\widehat{\mathrm{Abst}}\downarrow$ \\
 \midrule
@@ -12,7 +12,7 @@ $\alpha=0.05$, $\delta=0.01$ & $98.43$ & $0.82$ & $98.13$ & $0.27$ & $1.28$ & --
 $\alpha=0.01$, $\delta=0.05$ & -- & -- & -- & -- & $100.00$ & -- & -- & -- & -- & $100.00^{\dagger}$ & $55.63$ & $0.28$ & $27.33$ & $0.05$ & $66.42$ \\
 $\alpha=0.01$, $\delta=0.01$ & -- & -- & -- & -- & $100.00^{\dagger}$ & -- & -- & -- & -- & $100.00^{\dagger}$ & -- & -- & -- & -- & $100.00$ \\
 \midrule[\heavyrulewidth]
-\textbf{RL} & \multicolumn{5}{c}{Cartpole (4D)} & \multicolumn{5}{c}{Planar Quad (6D)} & \multicolumn{5}{c}{Spatial Quad (12D)} \\
+\textbf{RL} & \multicolumn{5}{c}{Cartpole} & \multicolumn{5}{c}{Planar quadrotor} & \multicolumn{5}{c}{Spatial quadrotor} \\
 \cmidrule(lr){2-6}\cmidrule(lr){7-11}\cmidrule(lr){12-16}
 $\alpha=0.05$, $\delta=0.05$ & $72.64$ & $3.44$ & $84.95$ & $0.26$ & $16.80$ & $79.90$ & $4.21$ & $98.85$ & $0.73$ & $1.73$ & $57.60$ & $2.93$ & $76.48$ & $0.05$ & $24.42$ \\
 $\alpha=0.05$, $\delta=0.01$ & $39.68$ & $1.79$ & $45.57$ & $0.05$ & $55.41$ & $67.22$ & $2.37$ & $90.54$ & $0.51$ & $10.74$ & $54.82$ & $2.32$ & $72.29$ & $0.06$ & $28.56$ \\

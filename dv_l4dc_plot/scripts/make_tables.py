@@ -105,9 +105,9 @@ def ordered_groups(rows, fm_own_group=True):
 
 MAIN_GROUPS = ordered_groups(PRIOR_ROWS + [BNN_LABEL, TERA_BNN, FM_UNIFORM, FM_ADAPTIVE])      # Table 1
 CERT_GROUPS = ordered_groups([FM_ADAPTIVE, TERA_MLP, TERA_BNN, MLP_LABEL, BNN_LABEL], fm_own_group=False)  # Table 2
-# Table S1 (predictor_ablation) keeps its old hand order (FM first) until Dhruv's final supplement sync,
-# when it adopts ordered_groups() too.
-ABLATION_GROUPS = [('Adaptive predictor variants', [FM_ADAPTIVE, TERA_MLP, TERA_BNN, MLP_LABEL, BNN_LABEL])]
+# Table S1 (predictor_ablation), Sumanth 2026-11-13: the MLP counterparts against TERA only, in ordered_groups'
+# order (MLP-Label, TERA-MLP, TERA). The BNN variants are in the main paper's tables. Bold is among these rows.
+ABLATION_GROUPS = ordered_groups([FM_ADAPTIVE, TERA_MLP, MLP_LABEL], fm_own_group=False)
 HEADER = '% Generated table body (column headers and numbers only). Edit the generator, not this file.'
 WRAPPED_IN = {'matrix_uncertified': 'sections/06_experiments.tex', 'matrix_certified': 'sections/06_experiments.tex',
               'predictor_ablation': 'sections/appendix_predictor_ablation.tex'}
@@ -253,11 +253,12 @@ def main(paper):
     cells = {k: [] for k in WRAPPED_IN}
     bodies = {'matrix_uncertified': matrix_body('matrix_uncertified', MAIN_GROUPS, soft, cells['matrix_uncertified'],
                                                 group_labels=False),
-              'predictor_ablation': matrix_body('predictor_ablation', ABLATION_GROUPS, soft, cells['predictor_ablation']),
+              'predictor_ablation': matrix_body('predictor_ablation', ABLATION_GROUPS, soft, cells['predictor_ablation'],
+                                                group_labels=False),
               'matrix_certified': matrix_body('matrix_certified', CERT_GROUPS, cert_rows, cells['matrix_certified'],
                                               group_labels=False, extra_row_rule=True,
                                               extra_row=success_only_row(own, cells['matrix_certified']))}
-    assert [len(cells[k]) for k in ['matrix_uncertified', 'predictor_ablation', 'matrix_certified']] == [240, 150, 162]
+    assert [len(cells[k]) for k in ['matrix_uncertified', 'predictor_ablation', 'matrix_certified']] == [240, 90, 162]
     TABLES.mkdir(exist_ok=True); VALUES.mkdir(exist_ok=True)
     hashes = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in srcs}
     for name, lines in bodies.items():

@@ -1,8 +1,9 @@
 """Split the certified table into two-sided and success-only bodies.
 
-Three bodies (Sumanth, 2026-11-13): matrix_certified_main, the main paper's two-sided table with BNN-Label,
-TERA-BNN and TERA only (bold among these three rows); matrix_certified_twosided, all five adaptive predictors,
-now in the supplement's predictor ablation; success_only, the conservative certificate of TERA.
+Four bodies (Sumanth, 2026-11-13): matrix_certified_main, the main paper's two-sided table with BNN-Label,
+TERA-BNN and TERA; matrix_certified_mlp, the supplement's table with MLP-Label, TERA-MLP and TERA; each is bold
+among its own three rows. matrix_certified_twosided, all five adaptive predictors, is no longer in the paper and is
+kept as the reference the two short tables are checked against. success_only is the conservative certificate of TERA.
 
 Uses make_tables' existing hash-pinned source rows and rendering helpers. The
 original matrix_certified_body.tex and its values JSON are read-only baselines.
@@ -72,7 +73,7 @@ def main():
                  for r in assurance]
 
     name = 'matrix_certified_twosided'
-    tables.WRAPPED_IN[name] = 'sections/appendix_predictor_ablation.tex'
+    tables.WRAPPED_IN[name] = 'no paper section (five-row reference, not in the paper)'
     main_cells = []
     main_lines = tables.matrix_body(name, tables.CERT_GROUPS, cert_rows,
                                     main_cells, group_labels=False)
@@ -91,6 +92,19 @@ def main():
     assert len(short_cells) == 90
     full = {key(c): c for c in main_cells}
     for c in short_cells:
+        for field in ('n', 'mean', 'min', 'max'):
+            assert c[field] == full[key(c)][field], (key(c), field)
+
+    # The supplement's table: the MLP counterparts and TERA, same checks as the main table.
+    mlp_name = 'matrix_certified_mlp'
+    tables.WRAPPED_IN[mlp_name] = 'sections/appendix_predictor_ablation.tex'
+    mlp_groups = tables.ordered_groups([tables.FM_ADAPTIVE, tables.TERA_MLP, tables.MLP_LABEL], fm_own_group=False)
+    assert [label for _, models in mlp_groups for label, _, _ in models] == \
+        [tables.MLP_LABEL[0], tables.TERA_MLP[0], tables.FM_ADAPTIVE[0]]
+    mlp_cells = []
+    mlp_lines = tables.matrix_body(mlp_name, mlp_groups, cert_rows, mlp_cells, group_labels=False)
+    assert len(mlp_cells) == 90
+    for c in mlp_cells:
         for field in ('n', 'mean', 'min', 'max'):
             assert c[field] == full[key(c)][field], (key(c), field)
 
@@ -132,6 +146,7 @@ def main():
                str(baseline_tex): protected[baseline_tex]}
     for output_name, lines, cells in [
             (name, main_lines, main_cells), (short_name, short_lines, short_cells),
+            (mlp_name, mlp_lines, mlp_cells),
             ('success_only', success_lines, success_cells)]:
         tables.assert_means_only(output_name, lines)
         output = tables.TABLES / f'{output_name}_body.tex'

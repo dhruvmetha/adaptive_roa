@@ -72,10 +72,13 @@ def ours(label):
     return names['nameOurs'].replace('~', ' ') if label == names['name'] else label
 
 SETTINGS = ['pen-lqr', 'cp-lqr', 'q3d-lqr', 'cp-ppo', 'q2d-ppo', 'q3d-ppo']
-# A setting is named "System Controller": no comma, no dimension, "quadrotor" spelled out (Sumanth, 2026-11-13).
-# Dimensions appear only in the paper's Table 1.
-TITLES = ['Pendulum LQR', 'Cartpole LQR', 'Spatial quadrotor LQR',
-          'Cartpole RL', 'Planar quadrotor RL', 'Spatial quadrotor RL']
+# A setting is named "System Controller": no comma, "quadrotor" spelled out (Sumanth, 2026-11-13). Where a display has
+# room, the state dimension follows the name as "(12D)" (Sumanth, same day). These titles carry it: every figure that
+# uses them is 6.00 in wide. Figures 5 and 7 are too narrow and keep their own titles without it.
+SETTING_NAMES = ['Pendulum LQR', 'Cartpole LQR', 'Spatial quadrotor LQR',
+                 'Cartpole RL', 'Planar quadrotor RL', 'Spatial quadrotor RL']
+SETTING_DIMS = [2, 4, 12, 4, 6, 12]
+TITLES = [f'{name} ({dim}D)' for name, dim in zip(SETTING_NAMES, SETTING_DIMS)]
 BLUE, ORANGE, GRAY = '#0072B2', '#D55E00', '#777777'
 REF = '#666666'                                          # 5% reference line
 RECALL = [('rec', BLUE), ('fail_rec', ORANGE)]           # success recall, failure recall

@@ -595,8 +595,8 @@ def draw_d(D):
     edges, idx = d_rows()
     gap_rows = sorted(set(range(len(edges) - 1)) - set(idx.values()))
     blocks = [SETTINGS[:3], SETTINGS[3:]]
-    assert all(TITLES[SETTINGS.index(s)].endswith(' LQR') for s in blocks[0])
-    assert all(TITLES[SETTINGS.index(s)].endswith(' RL') for s in blocks[1])
+    assert all(' LQR' in TITLES[SETTINGS.index(s)] for s in blocks[0])
+    assert all(' RL' in TITLES[SETTINGS.index(s)] for s in blocks[1])
     ncols = 3 * len(METRICS) + 2 * SET_GAP
     fig = plt.figure(figsize=(W, 3), dpi=DPI)
     axes, titles, meshes, texts, cells = [], [], {}, {}, []

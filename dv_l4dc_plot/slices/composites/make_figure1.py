@@ -42,6 +42,8 @@ def entries(planar):
 # Paper naming (dm1487, 2026-11-13): systems as in the results tables, state symbols from
 # appendix_experiment_details.tex (cartpole (q, theta, q_dot, theta_dot); planar quadrotor
 # (q_x, q_z, phi, q_dot_x, q_dot_z, phi_dot); spatial quadrotor (q, q_dot, q_quat, omega)), controller in the tag.
+# No "(4D)" style dimension in these titles: with "quadrotor" spelled out, "Planar quadrotor (6D)" and "Spatial
+# quadrotor (12D)" overlap at 3.30 in and the restyle falls back to text one point smaller (tried 2026-11-13).
 META = [dict(system="Cartpole", tag=r"RL, $(q,\ \theta{=}0,\ \dot q,\ \dot\theta{=}0)$",
              axes=(r"$q$ [m]", r"$\dot q$ [m/s]")),
         dict(system="Planar quadrotor", tag=r"RL, $(q_x{=}0,\ q_z,\ \phi{=}0,\ \dot q_x{=}0,\ \dot q_z,\ \dot\phi{=}0)$",

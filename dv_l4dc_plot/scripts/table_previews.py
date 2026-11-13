@@ -16,8 +16,8 @@ Retired 2026-11-12, files in tables/archive/: A (long_lqr, long_ppo) and C (clea
 """
 from common import SETTINGS, spread
 
-HEADS = {'pen-lqr': 'Pendulum', 'cp-lqr': 'Cartpole', 'cp-ppo': 'Cartpole', 'q2d-ppo': 'Planar quadrotor',
-         'q3d-lqr': 'Spatial quadrotor', 'q3d-ppo': 'Spatial quadrotor'}
+HEADS = {'pen-lqr': 'Pendulum (2D)', 'cp-lqr': 'Cartpole (4D)', 'cp-ppo': 'Cartpole (4D)',
+         'q2d-ppo': 'Planar quadrotor (6D)', 'q3d-lqr': 'Spatial quadrotor (12D)', 'q3d-ppo': 'Spatial quadrotor (12D)'}
 PANELS = [('LQR controllers', 'lqr', ['pen-lqr', 'cp-lqr', 'q3d-lqr']),
           ('RL controllers', 'ppo', ['cp-ppo', 'q2d-ppo', 'q3d-ppo'])]
 METRICS = [('rec', r'$R_{\mathrm{s}}\uparrow$'), ('fdr', r'FDR$\downarrow$'),

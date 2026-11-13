@@ -3,7 +3,7 @@
 \resizebox{\ifdim\width>\textwidth\textwidth\else\width\fi}{!}{%
 \begin{tabular}{l@{\hspace{6pt}}rr!{\tablepairdivider}rr!{\tablepairdivider}r!{\hspace{3pt}\tablesystemdivider\hspace{3pt}}rr!{\tablepairdivider}rr!{\tablepairdivider}r!{\hspace{3pt}\tablesystemdivider\hspace{3pt}}rr!{\tablepairdivider}rr!{\tablepairdivider}r}
 \toprule
-\textbf{LQR} & \multicolumn{5}{c}{Pendulum} & \multicolumn{5}{c}{Cartpole} & \multicolumn{5}{c}{Spatial quadrotor} \\
+\textbf{LQR} & \multicolumn{5}{c}{Pendulum (2D)} & \multicolumn{5}{c}{Cartpole (4D)} & \multicolumn{5}{c}{Spatial quadrotor (12D)} \\
 \cmidrule(lr){2-6}\cmidrule(lr){7-11}\cmidrule(lr){12-16}
 \textbf{Method} & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & $\widehat{\mathrm{Abst}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & $\widehat{\mathrm{Abst}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & $\widehat{\mathrm{Abst}}\downarrow$ \\
 \midrule
@@ -13,7 +13,7 @@
 \nameBNN{} & $96.50$ & $0.77$ & $95.43$ & $0.30$ & $3.70$ & $98.16$ & $1.21$ & $98.42$ & $0.18$ & $1.26$ & $69.70$ & $3.93$ & $68.24$ & $1.02$ & $30.17$ \\
 \nameOurs{} & \cellcolor{tablebest}$98.43$ & \cellcolor{tablebest}$0.82$ & \cellcolor{tablebest}$98.13$ & \cellcolor{tablebest}$0.27$ & $1.28$ & \cellcolor{tablebest}$98.24$ & \cellcolor{tablebest}$0.68$ & $99.29$ & $0.17$ & $0.64$ & \cellcolor{tablebest}$72.22$ & \cellcolor{tablebest}$3.29$ & \cellcolor{tablebest}$94.80$ & \cellcolor{tablebest}$3.74$ & $6.72$ \\
 \midrule[\heavyrulewidth]
-\textbf{RL} & \multicolumn{5}{c}{Cartpole} & \multicolumn{5}{c}{Planar quadrotor} & \multicolumn{5}{c}{Spatial quadrotor} \\
+\textbf{RL} & \multicolumn{5}{c}{Cartpole (4D)} & \multicolumn{5}{c}{Planar quadrotor (6D)} & \multicolumn{5}{c}{Spatial quadrotor (12D)} \\
 \cmidrule(lr){2-6}\cmidrule(lr){7-11}\cmidrule(lr){12-16}
 \nameMLPLabel{} & $76.75$ & $3.34$ & $82.89$ & $0.09$ & $17.74$ & $75.75$ & $4.52$ & $86.07$ & $0.01$ & $14.46$ & $32.63$ & $2.93$ & $71.55$ & $0.01$ & $30.55$ \\
 \nameBNNLabel{} & \cellcolor{tablebest}$75.32$ & \cellcolor{tablebest}$2.82$ & $80.39$ & $0.03$ & $20.16$ & $75.13$ & $4.24$ & $89.21$ & $0.01$ & $11.65$ & $33.73$ & $3.66$ & $69.96$ & $0.01$ & $31.97$ \\

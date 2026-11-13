@@ -218,6 +218,13 @@ and every figure since has been installed from here with `--paper`.
 
 ## Tables in the paper
 
+**Certified tables (Sumanth, 2026-11-13, paper commit `793bde7`).** The main paper's two-sided table is now
+`matrix_certified_main_body.tex`: `\nameBNNLabel`, `\nameBNN`, `\name`, bold among these three rows, wrapped in
+`sections/06_results.tex`. The five-row `matrix_certified_twosided_body.tex` moved to the supplement
+(`sections/appendix_predictor_ablation.tex`, `tab:certified_all`) with TERA-MLP and MLP-Label. Both are written by
+`scripts/split_certified_tables.py`, which fails unless the three-row cells equal the five-row ones. The rows of the
+table list below predate this.
+
 `scripts/make_tables.py` writes three bodies; `--paper` copies the ones that differ into the paper's `tables/`.
 The former Table 3 (`verification_application_body.tex`) was folded into Table 2 on 2026-11-12; the generator
 no longer writes it, and its last version is in `tables/archive/`. A body is

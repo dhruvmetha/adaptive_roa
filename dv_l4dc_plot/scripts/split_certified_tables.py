@@ -1,4 +1,8 @@
-"""Split the certified table into two-sided main and success-only supplementary bodies.
+"""Split the certified table into two-sided and success-only bodies.
+
+Three bodies (Sumanth, 2026-11-13): matrix_certified_main, the main paper's two-sided table with BNN-Label,
+TERA-BNN and TERA only (bold among these three rows); matrix_certified_twosided, all five adaptive predictors,
+now in the supplement's predictor ablation; success_only, the conservative certificate of TERA.
 
 Uses make_tables' existing hash-pinned source rows and rendering helpers. The
 original matrix_certified_body.tex and its values JSON are read-only baselines.
@@ -68,12 +72,27 @@ def main():
                  for r in assurance]
 
     name = 'matrix_certified_twosided'
-    tables.WRAPPED_IN[name] = 'sections/06_results.tex'
+    tables.WRAPPED_IN[name] = 'sections/appendix_predictor_ablation.tex'
     main_cells = []
     main_lines = tables.matrix_body(name, tables.CERT_GROUPS, cert_rows,
                                     main_cells, group_labels=False)
     assert len(main_cells) == 150
     assert not any(tables.SUCCESS_ONLY in line for line in main_lines)
+
+    # The main paper's table: the selected BNN variants and TERA, in ordered_groups' order (TERA last). Same
+    # numbers as the five-row body; only the bold marks are taken among the three displayed rows.
+    short_name = 'matrix_certified_main'
+    tables.WRAPPED_IN[short_name] = 'sections/06_results.tex'
+    short_groups = tables.ordered_groups([tables.FM_ADAPTIVE, tables.TERA_BNN, tables.BNN_LABEL], fm_own_group=False)
+    assert [label for _, models in short_groups for label, _, _ in models] == \
+        [tables.BNN_LABEL[0], tables.TERA_BNN[0], tables.FM_ADAPTIVE[0]]
+    short_cells = []
+    short_lines = tables.matrix_body(short_name, short_groups, cert_rows, short_cells, group_labels=False)
+    assert len(short_cells) == 90
+    full = {key(c): c for c in main_cells}
+    for c in short_cells:
+        for field in ('n', 'mean', 'min', 'max'):
+            assert c[field] == full[key(c)][field], (key(c), field)
 
     success_cells = []
     success_row = tables.success_only_row(own, success_cells)
@@ -112,7 +131,8 @@ def main():
                str(baseline_values): protected[baseline_values],
                str(baseline_tex): protected[baseline_tex]}
     for output_name, lines, cells in [
-            (name, main_lines, main_cells), ('success_only', success_lines, success_cells)]:
+            (name, main_lines, main_cells), (short_name, short_lines, short_cells),
+            ('success_only', success_lines, success_cells)]:
         tables.assert_means_only(output_name, lines)
         output = tables.TABLES / f'{output_name}_body.tex'
         output.write_text('\n'.join(lines) + '\n')

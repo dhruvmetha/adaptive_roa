@@ -91,6 +91,13 @@ FM_ADAPTIVE = (method_label('method', 'FM'), 'method', 'FM')
 TERA_MLP, TERA_BNN = [(method_label('model comparison', m), 'model comparison', m) for m in ('MLP final-state', 'BNN final-state')]
 MLP_LABEL, BNN_LABEL = [(method_label('model comparison', m), 'model comparison', m) for m in ('MLP classifier', 'BNN classifier')]
 FAMILY = ['MLP', 'BNN']
+# TERA's own row prints as \nameOurs, "TERA (Ours)" in method-names.tex (Sumanth, 2026-11-13). Only the printed label
+# changes: cells and every keyed check keep row=\name{}.
+OURS_LABEL = r'\nameOurs{}'
+
+
+def printed_label(rowlabel):
+    return OURS_LABEL if rowlabel == FM_ADAPTIVE[0] else rowlabel
 
 
 def ordered_groups(rows, fm_own_group=True):
@@ -238,7 +245,7 @@ def matrix_body(name, groups, rows, cells, group_labels=True, extra_row=None, ex
                                           **dict(zip(['mean', 'min', 'max'],
                                                      [round(x, 6) if x is not None else None for x in spread(defined)])),
                                           tex=v, shaded=winner))
-                t.append(rowlabel + ' & ' + ' & '.join(vv) + r' \\')
+                t.append(printed_label(rowlabel) + ' & ' + ' & '.join(vv) + r' \\')
         if extra_row:
             label, extra = extra_row(panel_settings)
             t += ([r'\midrule'] if extra_row_rule else []) + [label + ' & ' + ' & '.join(extra) + r' \\']

@@ -41,12 +41,15 @@ def cell(final, rows, setting, arm, rho, metric):
 def check_table2(mean_at):
     """Fail unless mean_at(setting, metric) equals, to 2 dp, the FM_ROW row of the paper's
     tables/matrix_certified_body.tex (U_H, rho = 0.75). Returns the 24 checked cells."""
-    body = (PAPER_TABLES / 'matrix_certified_body.tex').read_text().split(r'\par\medskip')
+    # One tabular holds both panels since the tables lost their \par\medskip split, so take the method's two rows in
+    # order. The row prints as \nameOurs{} since 2026-11-13 (make_tables.OURS_LABEL); older bodies have \name{}.
+    text = (PAPER_TABLES / 'matrix_certified_body.tex').read_text()
+    body = [l for l in text.splitlines() if l.startswith((FM_ROW + ' &', r'\nameOurs{} &'))]
+    assert len(body) == 2, len(body)
     order = {0: ['pen-lqr', 'cp-lqr', 'q3d-lqr'], 1: ['cp-ppo', 'q2d-ppo', 'q3d-ppo']}
     metrics = ['rec', 'fdr', 'fail_rec', 'for', 'abstain']
     checked = []
-    for panel, text in enumerate(body):
-        line = next(l for l in text.splitlines() if l.startswith(FM_ROW + ' &'))
+    for panel, line in enumerate(body):
         cells = [c.strip() for c in line.rstrip(' \\').split('&')[1:]]
         assert len(cells) == 15
         for i, tex in enumerate(cells):

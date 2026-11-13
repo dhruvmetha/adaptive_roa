@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT.parent / "scripts"))
 from lib import composite  # noqa: E402
-from common import method_names, paper_legend_kw  # noqa: E402
+from common import method_names, ours, paper_legend_kw  # noqa: E402
 
 PALETTE = dict(success="#FFE33D", fail="#3E0349", abstain="#CDCDCD", fp="#00AE70", fn="#215D81")
 PANELS = [("data/cp-ppo/k100_x_x_dot.npz", "pred/cp-ppo/k100_x_x_dot__r1.npz"),
@@ -76,7 +76,7 @@ def restyle(inspect=None, out_stem=None):
     for fonts in (full, smaller):
         try:
             res = composite.render_flagship_tight_h(
-                ents_nt, out, width=PRINT_WIDTH[stem], palette=pal, method_label=label + " (ours)", boundary=True,
+                ents_nt, out, width=PRINT_WIDTH[stem], palette=pal, method_label=ours(label), boundary=True,
                 boundary_legend=True, boundary_label="GT boundary", fonts=fonts, ticks=False, ranges=RANGES,
                 bold_axis_names=False, row_gap=0.05, legend_top=True, legend_kw=paper_legend_kw(fonts["legend"]),
                 base_rc=style_rc(), boundary_lw=LW["boundary"], inspect=inspect)
@@ -121,7 +121,7 @@ if __name__ == "__main__":
     # dm1487: GT boundary back in black; rows packed closer, the two columns 0.11 in apart. Then: panels dominate,
     # text smaller (ticks 5, axis labels 5.5, row labels 6.5 bold, column titles 7, legend 6 pt), "TERA (ours)",
     # and "GT boundary" as a sixth legend entry if one centred line still fits (otherwise left out).
-    kw = dict(width=2.70, palette=PALETTE, method_label=label + " (ours)", col_gap=0.11, boundary=True,
+    kw = dict(width=2.70, palette=PALETTE, method_label=ours(label), col_gap=0.11, boundary=True,
               row_gap_pt=1.0, boundary_label="GT boundary",
               fonts=dict(tick=5, label=5.5, row=6.5, title=7, legend=6))
     out = str(ROOT / "composites" / "figure1_A_3x2")

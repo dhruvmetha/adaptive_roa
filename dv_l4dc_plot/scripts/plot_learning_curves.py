@@ -285,6 +285,9 @@ def generate(protocol, paper):
 RESTYLE_REC_SCALE = .85
 RESTYLE_ASPECT = RESTYLE_REC_SCALE * REC_H / ((FIG_W - LEFT - RIGHT - 2 * COL_GAP) / 3)
 RESTYLE_ERR_RATIO = ERR_H / (RESTYLE_REC_SCALE * REC_H)
+# The legend's column gap, in font sizes. The shared 1.3 puts "TERA (Ours)" on a second legend row at 4.20 in, which
+# makes the figure 0.16 in taller; 1.0 keeps the one-row legend and the figure's size (Sumanth, 2026-11-13).
+RESTYLE_LEGEND_GAP = 1.0
 
 
 def annotate(panels, data, rows):
@@ -353,7 +356,7 @@ def generate_restyled():
         rec_aspect=RESTYLE_ASPECT, err_ratio=RESTYLE_ERR_RATIO, band_alpha=0, ref_label='5% limit',
         rec_fill=dict(metric='abstain', label=ABST, alpha=.30,
                       colors={ARM_LABEL['U_H']: ARM_FILL['adaptive'], ARM_LABEL['uniform']: ARM_FILL['uniform']}),
-        decorate=lambda panels: annotate(panels, data, rows))
+        decorate=lambda panels: annotate(panels, data, rows), legend_columnspacing=RESTYLE_LEGEND_GAP)
     g = out['geometry']
     print(f"  panels {g['panel_w']:.3f} in wide, recall {g['rec_h']:.3f} in, error {g['err_h']:.3f} in; "
           f"legend {out['legend_ncol']} columns; layout settled in {g['iterations']} passes")

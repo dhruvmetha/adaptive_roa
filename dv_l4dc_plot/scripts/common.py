@@ -41,7 +41,7 @@ def method_names():
     if not METHOD_NAMES_TEX.is_file():
         raise FileNotFoundError(f'method-name source is missing: {METHOD_NAMES_TEX}')
     definitions = dict(re.findall(r'\\newcommand\{\\([A-Za-z]+)\}\{([^{}]*)\}', METHOD_NAMES_TEX.read_text()))
-    required = {'name', 'nameBNN', 'nameMLP', 'nameMLPLabel', 'nameBNNLabel',
+    required = {'name', 'nameOurs', 'nameBNN', 'nameMLP', 'nameMLPLabel', 'nameBNNLabel',
                 'nameUnif', 'nameUnifBNN', 'nameUnifMLP', 'nameUnifMLPLabel', 'nameUnifBNNLabel'}
     missing = required - definitions.keys()
     if missing:
@@ -62,6 +62,14 @@ def method_names():
         return value
 
     return {key: resolve(key) for key in required}
+
+
+def ours(label):
+    """The printed name of a method in a figure legend or row label. TERA itself reads "TERA (Ours)", the paper's
+    \\nameOurs (Sumanth, 2026-11-13); every other method, Unif-TERA and TERA-BNN included, keeps its name. Marker and
+    colour lookups keep the plain name, so call this only where the text is drawn."""
+    names = method_names()
+    return names['nameOurs'].replace('~', ' ') if label == names['name'] else label
 
 SETTINGS = ['pen-lqr', 'cp-lqr', 'q3d-lqr', 'cp-ppo', 'q2d-ppo', 'q3d-ppo']
 TITLES = ['Pendulum (2D), LQR', 'Cartpole (4D), LQR', 'Spatial Quad (12D), LQR',

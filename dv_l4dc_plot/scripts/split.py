@@ -129,7 +129,7 @@ import matplotlib.colors
 from matplotlib.legend_handler import HandlerTuple
 from matplotlib.patches import Patch
 from matplotlib.transforms import ScaledTranslation
-from common import PLOTS, PAPER, PRINT_WIDTH, FS, LINE, LS, LW, marker_kw, paper_legend_kw, style_rc, PARTIAL_TINT
+from common import PLOTS, PAPER, PRINT_WIDTH, FS, LINE, LS, LW, marker_kw, paper_legend_kw, style_rc, PARTIAL_TINT, ours
 
 RESTYLE_DIR = PLOTS                     # the paper figures themselves since 2026-11-13 (was plots/restyle/)
 PT = 1 / 72                                                    # inches per point
@@ -240,12 +240,15 @@ def method_handle(method):
     return tuple(Line2D([], [], ls='none', **marker_kw(method, SIDE[m], MARKER_PT, EDGE_PT)) for m in ('rec', 'fail_rec'))
 
 
-def top_legend(fig, handles, labels, width, ncols, handlelength=None):
+def top_legend(fig, handles, labels, width, ncols, handlelength=None, columnspacing=None):
     """The shared paper legend (common.paper_legend_kw at FS['legend']), with the first column count in ncols whose
-    legend fits between the margins. tight_split_layout puts it at the top, centred on the figure."""
+    legend fits between the margins. tight_split_layout puts it at the top, centred on the figure. columnspacing
+    overrides the shared column gap, in font sizes, for a figure whose one-row legend misses the width by a little."""
     kw = paper_legend_kw(FS['legend'])
     if handlelength:
         kw['handlelength'] = handlelength
+    if columnspacing is not None:
+        kw['columnspacing'] = columnspacing
     for ncol in ncols:
         leg = fig.legend(handles, labels, ncol=ncol, handler_map={tuple: HandlerTuple(ndivide=None, pad=.3)}, **kw)
         fig.canvas.draw()
@@ -429,7 +432,7 @@ def save_restyled(fig, stem):
 
 def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_labels, legend_methods, ylabels,
                           rec_aspect, err_ratio, band_alpha, xlim=None, ref_label=None, rec_extra=(), rec_fill=None,
-                          decorate=None):
+                          decorate=None, legend_columnspacing=None):
     """The split layout (recall panel over error panel per setting, settings in 2 rows x 3) in the paper style at
     PRINT_WIDTH[stem], laid out by tight_split_layout. Colour = the metric's side, line style = its kind (recall
     solid, error dash-dot), arm = marker shape and fill only.
@@ -443,6 +446,7 @@ def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_l
     rec_extra: [(metric, legend text)] drawn as curves in the upper panel under the recall curves.
     rec_fill: dict(metric, label, colors={method: colour}, alpha): that metric shaded from 0 up in the upper panel,
       one colour per arm (Figure 6: abstention); the legend shows the colours beside the label and each method.
+    legend_columnspacing: the legend's column gap in font sizes (None: the shared 1.3).
     decorate(panels): called with {setting: (upper, lower)} after the curves are drawn; returns in-panel texts,
       which check_restyled keeps inside their panel and clear of markers.
     Only the left column has y tick labels; the 5% line sits on every error panel. Fails if a marker or band leaves
@@ -490,9 +494,9 @@ def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_l
             f_handles, labels_ = [tuple(sw(m) for m in legend_methods)], labels_ + [tex(rec_fill['label'])]
             m_handles = [h + (sw(m),) for h, m in zip(m_handles, legend_methods)]
         legend, ncol = top_legend(fig, [metric_handle(m) for m in metrics] + f_handles + m_handles,
-                                  labels_ + list(legend_methods), W,
+                                  labels_ + [ours(m) for m in legend_methods], W,
                                   ncols=(len(metrics) + len(f_handles) + len(m_handles), 4, 3, 2),
-                                  handlelength=dashdot_handlelength())
+                                  handlelength=dashdot_handlelength(), columnspacing=legend_columnspacing)
         xl = fig.text(.5, 0, tex(xlabel), ha='center', va='bottom', fontsize=FS['label'])
         limits = {}
 

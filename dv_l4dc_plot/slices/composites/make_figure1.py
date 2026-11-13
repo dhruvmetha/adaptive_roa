@@ -42,11 +42,11 @@ def entries(planar):
 # Paper naming (dm1487, 2026-11-13): systems as in the results tables, state symbols from
 # appendix_experiment_details.tex (cartpole (q, theta, q_dot, theta_dot); planar quadrotor
 # (q_x, q_z, phi, q_dot_x, q_dot_z, phi_dot); spatial quadrotor (q, q_dot, q_quat, omega)), controller in the tag.
-META = [dict(system="Cartpole (4D)", tag=r"RL, $(q,\ \theta{=}0,\ \dot q,\ \dot\theta{=}0)$",
+META = [dict(system="Cartpole", tag=r"RL, $(q,\ \theta{=}0,\ \dot q,\ \dot\theta{=}0)$",
              axes=(r"$q$ [m]", r"$\dot q$ [m/s]")),
-        dict(system="Planar Quad (6D)", tag=r"RL, $(q_x{=}0,\ q_z,\ \phi{=}0,\ \dot q_x{=}0,\ \dot q_z,\ \dot\phi{=}0)$",
+        dict(system="Planar quadrotor", tag=r"RL, $(q_x{=}0,\ q_z,\ \phi{=}0,\ \dot q_x{=}0,\ \dot q_z,\ \dot\phi{=}0)$",
              axes=(r"$q_z$ [m]", r"$\dot q_z$ [m/s]")),
-        dict(system="Spatial Quad (12D)", tag=r"RL, $(q_x,\ \dot q_x)$, others at hover, $q_z{=}1$",
+        dict(system="Spatial quadrotor", tag=r"RL, $(q_x,\ \dot q_x)$, others at hover, $q_z{=}1$",
              axes=(r"$q_x$ [m]", r"$\dot q_x$ [m/s]"))]
 
 

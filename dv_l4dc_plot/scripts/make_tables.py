@@ -37,9 +37,11 @@ from table_previews import previews
 
 TABLES = HERE / 'tables'
 SETTINGS = ['pen-lqr', 'cp-lqr', 'cp-ppo', 'q2d-ppo', 'q3d-lqr', 'q3d-ppo']   # table order, not figure order
-TITLES = ['Pendulum (2D), LQR', 'Cartpole (4D), LQR', 'Cartpole (4D), RL', 'Planar Quad (6D), RL',
-          'Spatial Quad (12D), LQR', 'Spatial Quad (12D), RL']
-HEADS = ['Pendulum (2D)', 'Cartpole (4D)', 'Cartpole (4D)', 'Planar Quad (6D)', 'Spatial Quad (12D)', 'Spatial Quad (12D)']
+# Setting names as in common.TITLES (Sumanth, 2026-11-13): "System Controller" for a row per setting, the system
+# alone under a controller panel, and no dimension (Table 1 of the paper lists it).
+TITLES = ['Pendulum LQR', 'Cartpole LQR', 'Cartpole RL', 'Planar quadrotor RL',
+          'Spatial quadrotor LQR', 'Spatial quadrotor RL']
+HEADS = ['Pendulum', 'Cartpole', 'Cartpole', 'Planar quadrotor', 'Spatial quadrotor', 'Spatial quadrotor']
 PANELS = [('LQR controllers', [0, 1, 4]), ('RL controllers', [2, 3, 5])]
 # Column headers in the method section's notation (04_proposed_method.tex).
 METRICS = [('rec', REC_S[:-1] + r'\uparrow$'), ('fdr', ERR_S[:-1] + r'\downarrow$'),

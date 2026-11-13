@@ -72,8 +72,10 @@ def ours(label):
     return names['nameOurs'].replace('~', ' ') if label == names['name'] else label
 
 SETTINGS = ['pen-lqr', 'cp-lqr', 'q3d-lqr', 'cp-ppo', 'q2d-ppo', 'q3d-ppo']
-TITLES = ['Pendulum (2D), LQR', 'Cartpole (4D), LQR', 'Spatial Quad (12D), LQR',
-          'Cartpole (4D), RL', 'Planar Quad (6D), RL', 'Spatial Quad (12D), RL']
+# A setting is named "System Controller": no comma, no dimension, "quadrotor" spelled out (Sumanth, 2026-11-13).
+# Dimensions appear only in the paper's Table 1.
+TITLES = ['Pendulum LQR', 'Cartpole LQR', 'Spatial quadrotor LQR',
+          'Cartpole RL', 'Planar quadrotor RL', 'Spatial quadrotor RL']
 BLUE, ORANGE, GRAY = '#0072B2', '#D55E00', '#777777'
 REF = '#666666'                                          # 5% reference line
 RECALL = [('rec', BLUE), ('fail_rec', ORANGE)]           # success recall, failure recall

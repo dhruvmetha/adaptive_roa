@@ -285,13 +285,12 @@ RESTYLE_ERR_RATIO = ERR_H / REC_H
 
 
 def annotate(panels, data, rows):
-    """The two in-panel notes of the paper figure (Sumanth, 2026-11-13), both computed from the plotted data.
-    Cartpole LQR: a dotted line at 90% recall and, per arm, the first budget from which both mean recalls stay above
-    it. Planar quadrotor RL: how many of the three seeds return any certified prediction at the final budget.
-    Each arm's note is in a darker shade of its abstention colour. Returns the texts for check_restyled."""
+    """The in-panel marks of the paper figure (Sumanth, 2026-11-13), computed from the plotted data. Cartpole LQR: a
+    dotted line at 90% recall and, per arm, a short tick at the first budget from which both mean recalls stay above
+    it, in a darker shade of the arm's abstention colour. No text is drawn: the caption gives the budgets, and the
+    Planar quadrotor RL seed counts printed here. Returns the in-panel texts for check_restyled (none)."""
     dark = lambda c: tuple(.62 * v for v in to_rgb(c))
     col = {'U_H': dark(ARM_FILL['adaptive']), 'uniform': dark(ARM_FILL['uniform'])}
-    fs, out = FS['annotation'] - 1, []
     rec = panels['cp-lqr'][0]
     rec.axhline(90, color='#444444', lw=.5, ls=(0, (1, 1.6)), zorder=2)
     first = {}
@@ -301,26 +300,18 @@ def annotate(panels, data, rows):
         ok = (rs > 90) & (rf > 90)
         assert ok.any() and ok[int(np.argmax(ok)):].all(), arm       # reached, and held to the final budget
         first[arm] = float(x[int(np.argmax(ok))])
-    assert first['U_H'] < first['uniform'], first
-    for arm, ha, dx, top, drop in [('U_H', 'left', 2.0, 88.5, 15), ('uniform', 'right', -2.0, 73, 30)]:
         xk = first[arm] / 1000
-        rec.plot([xk, xk], [90 - drop, 90], color=col[arm], lw=.6, ls=(0, (1, 1.2)), zorder=2)
-        out.append(rec.annotate(count_label(first[arm]), xy=(xk, top), xytext=(dx, 0), textcoords='offset points',
-                                ha=ha, va='top', fontsize=fs, color=col[arm]))
-    # the line's own label sits under it where no curve passes, between the two arms' marks
-    out.append(rec.annotate(r'90\%', xy=(1.47, 90), xytext=(0, -1.2), textcoords='offset points', ha='center',
-                            va='top', fontsize=fs, color='#444444'))
-    rec = panels['q2d-ppo'][0]
-    xr = float(data['q2d-ppo', 'U_H', 'rec'][0][-1]) / 1000
-    for k, arm in enumerate(('U_H', 'uniform')):
+        rec.plot([xk, xk], [62, 90], color=col[arm], lw=.9, zorder=5, solid_capstyle='butt')   # over the curves
+    assert first['U_H'] < first['uniform'], first
+    seeds = {}
+    for arm in ('U_H', 'uniform'):
         last = [r for r in rows if (r['setting'], r['arm'], r['epoch']) == ('q2d-ppo', arm, 10)]
         assert len(last) == 3
-        n = sum(1 for r in last if r['S'] + r['F'] > 0)
-        out.append(rec.annotate(f'{ARM_LABEL[arm]} {n}/3', xy=(xr, 63 - 17 * k), xytext=(-4.0, 0),
-                                textcoords='offset points', ha='right', va='top', fontsize=fs, color=col[arm]))
-    print(f"  notes: cartpole LQR 90% from {first['U_H']:.0f} (TERA) and {first['uniform']:.0f} (Unif-TERA) trajectories; "
-          f"planar quadrotor RL seeds with predictions at the final budget {[t.get_text() for t in out[-2:]]}")
-    return out
+        seeds[arm] = sum(1 for r in last if r['S'] + r['F'] > 0)
+    print(f"  for the caption: cartpole LQR 90% from {first['U_H']:.0f} (TERA) and {first['uniform']:.0f} (Unif-TERA) "
+          f"trajectories; planar quadrotor RL seeds with predictions at the final budget: TERA {seeds['U_H']}/3, "
+          f"Unif-TERA {seeds['uniform']}/3")
+    return []
 
 
 def generate_restyled():

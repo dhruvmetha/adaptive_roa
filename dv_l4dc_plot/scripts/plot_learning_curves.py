@@ -40,7 +40,7 @@ from matplotlib.lines import Line2D
 from matplotlib.colors import to_rgb
 from matplotlib.legend_handler import HandlerTuple
 from common import ASSETS, SCORED, VALUES, SETTINGS, BLUE, ORANGE, RECALL, ERROR, RC, method_names, save, spread
-from common import REC_S, REC_F, ERR_S, ERR_F, ABST
+from common import REC_S, REC_F, ERR_S, ERR_F, ABST, ARM_FILL, FS
 from make_tables import macro_name
 from split import draw, assert_markers_inside, assert_bands_inside, REF_SOLID, DASHDOT
 from split import restyle_args, split_figure_restyled
@@ -284,6 +284,45 @@ RESTYLE_ASPECT = REC_H / ((FIG_W - LEFT - RIGHT - 2 * COL_GAP) / 3)
 RESTYLE_ERR_RATIO = ERR_H / REC_H
 
 
+def annotate(panels, data, rows):
+    """The two in-panel notes of the paper figure (Sumanth, 2026-11-13), both computed from the plotted data.
+    Cartpole LQR: a dotted line at 90% recall and, per arm, the first budget from which both mean recalls stay above
+    it. Planar quadrotor RL: how many of the three seeds return any certified prediction at the final budget.
+    Each arm's note is in a darker shade of its abstention colour. Returns the texts for check_restyled."""
+    dark = lambda c: tuple(.62 * v for v in to_rgb(c))
+    col = {'U_H': dark(ARM_FILL['adaptive']), 'uniform': dark(ARM_FILL['uniform'])}
+    fs, out = FS['annotation'] - 1, []
+    rec = panels['cp-lqr'][0]
+    rec.axhline(90, color='#444444', lw=.5, ls=(0, (1, 1.6)), zorder=2)
+    first = {}
+    for arm in ('U_H', 'uniform'):
+        x, rs = data['cp-lqr', arm, 'rec'][:2]
+        rf = data['cp-lqr', arm, 'fail_rec'][1]
+        ok = (rs > 90) & (rf > 90)
+        assert ok.any() and ok[int(np.argmax(ok)):].all(), arm       # reached, and held to the final budget
+        first[arm] = float(x[int(np.argmax(ok))])
+    assert first['U_H'] < first['uniform'], first
+    for arm, ha, dx, top, drop in [('U_H', 'left', 2.0, 88.5, 15), ('uniform', 'right', -2.0, 73, 30)]:
+        xk = first[arm] / 1000
+        rec.plot([xk, xk], [90 - drop, 90], color=col[arm], lw=.6, ls=(0, (1, 1.2)), zorder=2)
+        out.append(rec.annotate(count_label(first[arm]), xy=(xk, top), xytext=(dx, 0), textcoords='offset points',
+                                ha=ha, va='top', fontsize=fs, color=col[arm]))
+    # the line's own label sits under it where no curve passes, between the two arms' marks
+    out.append(rec.annotate(r'90\%', xy=(1.47, 90), xytext=(0, -1.2), textcoords='offset points', ha='center',
+                            va='top', fontsize=fs, color='#444444'))
+    rec = panels['q2d-ppo'][0]
+    xr = float(data['q2d-ppo', 'U_H', 'rec'][0][-1]) / 1000
+    for k, arm in enumerate(('U_H', 'uniform')):
+        last = [r for r in rows if (r['setting'], r['arm'], r['epoch']) == ('q2d-ppo', arm, 10)]
+        assert len(last) == 3
+        n = sum(1 for r in last if r['S'] + r['F'] > 0)
+        out.append(rec.annotate(f'{ARM_LABEL[arm]} {n}/3', xy=(xr, 63 - 17 * k), xytext=(-4.0, 0),
+                                textcoords='offset points', ha='right', va='top', fontsize=fs, color=col[arm]))
+    print(f"  notes: cartpole LQR 90% from {first['U_H']:.0f} (TERA) and {first['uniform']:.0f} (Unif-TERA) trajectories; "
+          f"planar quadrotor RL seeds with predictions at the final budget {[t.get_text() for t in out[-2:]]}")
+    return out
+
+
 def generate_restyled():
     """Figure 6 (a1d) in the paper style at PRINT_WIDTH['adaptive_learning_a1d'] into plots/ (the paper figure).
     Colour = the metric's side (Success recall and FDR gold, Failure recall and FOR purple), recall solid, error
@@ -321,8 +360,10 @@ def generate_restyled():
         xlabel='Training trajectories', titles=[TITLE[s] for s in SETTINGS], row_base=row_base,
         metric_labels=[REC_S, REC_F, ERR_S, ERR_F],
         legend_methods=[ARM_LABEL[a] for a, *_ in ARMS[::-1]], ylabels=('Rate (%)', 'Error (%)'),
-        rec_aspect=RESTYLE_ASPECT, err_ratio=RESTYLE_ERR_RATIO, band_alpha=BAND_ALPHA, ref_label='5% limit',
-        rec_extra=[('abstain', ABST)])
+        rec_aspect=RESTYLE_ASPECT, err_ratio=RESTYLE_ERR_RATIO, band_alpha=0, ref_label='5% limit',
+        rec_fill=dict(metric='abstain', label=ABST, alpha=.30,
+                      colors={ARM_LABEL['U_H']: ARM_FILL['adaptive'], ARM_LABEL['uniform']: ARM_FILL['uniform']}),
+        decorate=lambda panels: annotate(panels, data, rows))
     g = out['geometry']
     print(f"  panels {g['panel_w']:.3f} in wide, recall {g['rec_h']:.3f} in, error {g['err_h']:.3f} in; "
           f"legend {out['legend_ncol']} columns; layout settled in {g['iterations']} passes")

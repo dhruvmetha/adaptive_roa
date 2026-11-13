@@ -127,6 +127,7 @@ import math
 import re
 import matplotlib.colors
 from matplotlib.legend_handler import HandlerTuple
+from matplotlib.patches import Patch
 from common import PLOTS, PAPER, PRINT_WIDTH, FS, LINE, LS, LW, marker_kw, paper_legend_kw, style_rc, PARTIAL_TINT
 
 RESTYLE_DIR = PLOTS                     # the paper figures themselves since 2026-11-13 (was plots/restyle/)
@@ -189,7 +190,8 @@ def draw_restyled(ax, x, mean, lo, hi, n, metric, methods, band_alpha):
     color = SIDE[metric]
     x, mean, n = np.asarray(x, dtype=float), np.asarray(mean, dtype=float), np.asarray(n)
     lo, hi = band_arrays(mean, lo, hi, n, min_band_n=2)
-    ax.fill_between(x, lo, hi, color=color, alpha=band_alpha, lw=0)
+    if band_alpha:                                          # 0 or None: no seed band (Figure 6)
+        ax.fill_between(x, lo, hi, color=color, alpha=band_alpha, lw=0)
     ax.plot(x, mean, color=color, ls=KIND[metric], lw=LW['curve'], zorder=3)
     methods = np.array(np.broadcast_to(np.asarray(methods, dtype=object), x.shape))
     for method in dict.fromkeys(methods.tolist()):
@@ -413,7 +415,8 @@ def save_restyled(fig, stem):
 
 
 def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_labels, legend_methods, ylabels,
-                          rec_aspect, err_ratio, band_alpha, xlim=None, ref_label=None, rec_extra=()):
+                          rec_aspect, err_ratio, band_alpha, xlim=None, ref_label=None, rec_extra=(), rec_fill=None,
+                          decorate=None):
     """The split layout (recall panel over error panel per setting, settings in 2 rows x 3) in the paper style at
     PRINT_WIDTH[stem], laid out by tight_split_layout. Colour = the metric's side, line style = its kind (recall
     solid, error dash-dot), arm = marker shape and fill only.
@@ -424,7 +427,11 @@ def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_l
       y range the data must show, padded per panel height so a marker at either end stays inside.
     metric_labels: legend texts of rec, fail_rec, fdr, for. legend_methods: methods in the legend, in order.
     ref_label: text of the one direct label of the 5% line, in the first error panel (None: no label).
-    rec_extra: [(metric, legend text)] drawn in the upper panel under the recall curves (Figure 6: abstention).
+    rec_extra: [(metric, legend text)] drawn as curves in the upper panel under the recall curves.
+    rec_fill: dict(metric, label, colors={method: colour}, alpha): that metric shaded from 0 up in the upper panel,
+      one colour per arm (Figure 6: abstention); the legend shows the colours beside the label and each method.
+    decorate(panels): called with {setting: (upper, lower)} after the curves are drawn; returns in-panel texts,
+      which check_restyled keeps inside their panel and clear of markers.
     Only the left column has y tick labels; the 5% line sits on every error panel. Fails if a marker or band leaves
     its panel, the 5% line leaves an error axis, or check_restyled fails. Returns the layout, checks and size."""
     W = PRINT_WIDTH[stem]
@@ -435,6 +442,12 @@ def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_l
             rec = fig.add_axes([.1, .5, .2, .2]); err = fig.add_axes([.1, .2, .2, .2], sharex=rec)
             pairs.append((rec, err))
             rec.set_title(tex(title), pad=3)
+            if rec_fill:
+                for series, methods in arms:
+                    x, mean, *_ = series(s, rec_fill['metric'])
+                    col = rec_fill['colors'][methods]
+                    rec.fill_between(x, 0, mean, color=col, alpha=rec_fill['alpha'], lw=0, zorder=1)
+                    rec.plot(x, mean, color=col, lw=.5, zorder=1.5)
             for ax, metrics in [(rec, tuple(m for m, _ in rec_extra) + ('rec', 'fail_rec')), (err, ('fdr', 'for'))]:
                 ax.grid(axis='y', alpha=.2, lw=.45); ax.set_axisbelow(True)
                 for series, methods in arms:
@@ -456,11 +469,18 @@ def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_l
                                         textcoords='offset points', ha='right', va='top', fontsize=FS['annotation'],
                                         color=LINE['ref'])
         fig.align_ylabels([a for p in pairs[::3] for a in p])
+        notes = list(decorate(dict(zip(SETTINGS, pairs)))) if decorate else []
         metrics = ['rec', 'fail_rec', 'fdr', 'for'] + [m for m, _ in rec_extra]
         labels_ = [tex(t) for t in list(metric_labels) + [t for _, t in rec_extra]]
-        legend, ncol = top_legend(fig, [metric_handle(m) for m in metrics] + [method_handle(m) for m in legend_methods],
+        m_handles, f_handles = [method_handle(m) for m in legend_methods], []
+        if rec_fill:                            # the fill colours: both beside the label, each beside its method
+            sw = lambda m: Patch(facecolor=rec_fill['colors'][m], alpha=rec_fill['alpha'] + .25, edgecolor='none')
+            f_handles, labels_ = [tuple(sw(m) for m in legend_methods)], labels_ + [tex(rec_fill['label'])]
+            m_handles = [h + (sw(m),) for h, m in zip(m_handles, legend_methods)]
+        legend, ncol = top_legend(fig, [metric_handle(m) for m in metrics] + f_handles + m_handles,
                                   labels_ + list(legend_methods), W,
-                                  ncols=(len(metrics) + len(legend_methods), 4, 3, 2), handlelength=dashdot_handlelength())
+                                  ncols=(len(metrics) + len(f_handles) + len(m_handles), 4, 3, 2),
+                                  handlelength=dashdot_handlelength())
         xl = fig.text(.5, 0, tex(xlabel), ha='center', va='bottom', fontsize=FS['label'])
         limits = {}
 
@@ -483,7 +503,8 @@ def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_l
                 for x, mean, band in drawn[ax]:
                     assert_markers_inside_xy(fig, ax, x, mean)
                     assert_bands_inside(ax, [band])
-        edges = check_restyled(fig, [a for p in pairs for a in p], legend, inside=[ref_text] if ref_text else [])
+        edges = check_restyled(fig, [a for p in pairs for a in p], legend,
+                               inside=([ref_text] if ref_text else []) + notes)
         size = save_restyled(fig, stem)
     return dict(geometry=geo, edges=edges, size=size, legend_ncol=ncol,
                 ylims={f'row{r} {k}': v for (r, k), v in limits.items()})

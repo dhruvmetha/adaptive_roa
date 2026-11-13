@@ -77,6 +77,10 @@ ERROR = [('fdr', BLUE), ('for', ORANGE)]                 # success error pairs w
 REC_S, REC_F = r'$\widehat{\mathrm{Rec}}_{\mathrm{s}}$', r'$\widehat{\mathrm{Rec}}_{\mathrm{f}}$'
 ERR_S, ERR_F = r'$\widehat{\mathrm{Err}}_{\mathrm{s}}$', r'$\widehat{\mathrm{Err}}_{\mathrm{f}}$'
 ABST = r'$\widehat{\mathrm{Abst}}$'                      # empirical abstention rate on the test states
+# Figure 6 shades each arm's abstention rate (Sumanth, 2026-11-13). The arms need their own colours there, outside the
+# success blue and failure orange: a soft green for the method and a soft violet for uniform sampling (same
+# lightness and chroma as LINE; the pair passes the colour-vision check).
+ARM_FILL = dict(adaptive='#56a76a', uniform='#9882d4')
 RC = {'font.family': 'DejaVu Sans', 'font.size': 8, 'axes.titlesize': 8, 'axes.labelsize': 7.5,
       'legend.fontsize': 7.5, 'xtick.labelsize': 7, 'ytick.labelsize': 7, 'axes.linewidth': .65,
       'pdf.fonttype': 42, 'ps.fonttype': 42, 'axes.spines.top': False, 'axes.spines.right': False}

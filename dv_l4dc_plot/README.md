@@ -90,9 +90,13 @@ build, commit and Overleaf push described in its `AGENTS.md`.
   off (`SHOW_SPARSE`), since at round 2 it is a maze around the 120 training trajectories. The `.txt` report lists
   the thresholds (tau^s_s, tau^s_f = stored `t_s`, `t_f`; tau^f_s, tau^f_f = `u_s`, `u_f`) and the counts.
 - The paper writes the number of samples per query as M; K means one thousand only.
-- Figure 6 also draws the abstention rate (`common.ABST`, gray, `LINE['abstain']`) in each upper panel, through
-  `split_figure_restyled(..., rec_extra=[('abstain', ABST)])`; the upper y label is "Rate (%)". The values JSONs of
-  the learning curves gain 132 abstention points each; the four older metrics are unchanged.
+- Figure 6 shades each arm's abstention rate from 0 up in the upper panels (`rec_fill`; colours `common.ARM_FILL`,
+  green for TERA and violet for Unif-TERA) and draws no seed bands (`band_alpha=0`). The legend shows both colours
+  beside the abstention label and each one beside its method. Two notes are computed from the data in
+  `plot_learning_curves.annotate`: on Cartpole LQR a dotted 90% line with the budgets from which both mean recalls
+  stay above it (800 and 2K), and on Planar quadrotor RL the seeds with any certified prediction at the final
+  budget (3/3 and 1/3). The upper y label is "Rate (%)". The learning-curve values JSONs hold 132 abstention
+  points each beside the four older metrics.
 - Figure 5 prints at 3.00 in (`PRINT_WIDTH`), half the text width, as a wrapped figure (paper commit after
   `1daddc1`). Its legend is one centred row (two if it does not fit); titles wrap to two lines when one line is
   wider than a column.

@@ -128,6 +128,7 @@ import re
 import matplotlib.colors
 from matplotlib.legend_handler import HandlerTuple
 from matplotlib.patches import Patch
+from matplotlib.transforms import ScaledTranslation
 from common import PLOTS, PAPER, PRINT_WIDTH, FS, LINE, LS, LW, marker_kw, paper_legend_kw, style_rc, PARTIAL_TINT
 
 RESTYLE_DIR = PLOTS                     # the paper figures themselves since 2026-11-13 (was plots/restyle/)
@@ -329,6 +330,18 @@ def tight_split_layout(fig, pairs, legend, xlabel, *, width, rec_aspect, err_rat
                 **{k: v for k, v in dec.items()})
 
 
+def align_left_ylabels(fig, axes):
+    """Put the y labels of axes (the left column) on one vertical line, at the distance from the left spine that the
+    widest tick labels among them need. fig.align_ylabels only acts on subplot axes, so on these add_axes panels it
+    does nothing and each label sits at its own distance (Sumanth, 2026-11-13). Call once the ticks are final, then
+    lay the figure out again. Returns that distance in inches."""
+    fig.canvas.draw()
+    d = max(ax.get_window_extent().x0 - ax.yaxis.label.get_position()[0] for ax in axes) / fig.dpi
+    for ax in axes:
+        ax.yaxis.set_label_coords(0, .5, transform=ax.transAxes + ScaledTranslation(-d, 0, fig.dpi_scale_trans))
+    return d
+
+
 def assert_markers_inside_xy(fig, ax, xs, ys, reach_pt=REACH_PT):
     """Fail if a marker at any finite (x, y), edge stroke included, would cross the panel edge in x or y."""
     xy = np.c_[np.asarray(xs, dtype=float), np.asarray(ys, dtype=float)]
@@ -468,7 +481,6 @@ def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_l
                 ref_text = err.annotate(tex(ref_label), xy=(1, 5), xycoords=('axes fraction', 'data'), xytext=(-1.5, -1.5),
                                         textcoords='offset points', ha='right', va='top', fontsize=FS['annotation'],
                                         color=LINE['ref'])
-        fig.align_ylabels([a for p in pairs[::3] for a in p])
         notes = list(decorate(dict(zip(SETTINGS, pairs)))) if decorate else []
         metrics = ['rec', 'fail_rec', 'fdr', 'for'] + [m for m, _ in rec_extra]
         labels_ = [tex(t) for t in list(metric_labels) + [t for _, t in rec_extra]]
@@ -492,9 +504,13 @@ def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_l
                     ax.set_ylim(*padded_ylim(lo, hi, h)); ax.set_yticks(ticks)
                     limits[si // 3, key] = ax.get_ylim()
 
-        geo = tight_split_layout(fig, pairs, legend, xl, width=W, rec_aspect=rec_aspect, err_ratio=err_ratio,
-                                 set_ylims=set_ylims)
+        layout = lambda: tight_split_layout(fig, pairs, legend, xl, width=W, rec_aspect=rec_aspect,
+                                            err_ratio=err_ratio, set_ylims=set_ylims)
+        layout()
+        align_left_ylabels(fig, [a for p in pairs[::3] for a in p])
+        geo = layout()
         fig.canvas.draw()
+        assert len({round(a.yaxis.label.get_window_extent().x1, 3) for p in pairs[::3] for a in p}) == 1
         for rec, err in pairs:
             assert err.get_ylim()[0] < 5 < err.get_ylim()[1]        # the 5% line on every error axis
             assert any(abs(l.get_ydata()[0] - 5) < 1e-12 for l in err.lines if l.get_linestyle() == '-'

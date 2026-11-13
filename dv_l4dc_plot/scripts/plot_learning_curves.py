@@ -280,8 +280,11 @@ def generate(protocol, paper):
 
 # --restyle (dm1487, 2026-11-13): Figure 6 in the common.py paper style at its 4.20 in print width. The panel shapes
 # are the paper figure's: recall height / panel width and error height / recall height as above.
-RESTYLE_ASPECT = REC_H / ((FIG_W - LEFT - RIGHT - 2 * COL_GAP) / 3)
-RESTYLE_ERR_RATIO = ERR_H / REC_H
+# The upper panels are RESTYLE_REC_SCALE of that recall height (Sumanth, 2026-11-13: the rate panels a bit shorter);
+# the error panels keep their height.
+RESTYLE_REC_SCALE = .85
+RESTYLE_ASPECT = RESTYLE_REC_SCALE * REC_H / ((FIG_W - LEFT - RIGHT - 2 * COL_GAP) / 3)
+RESTYLE_ERR_RATIO = ERR_H / (RESTYLE_REC_SCALE * REC_H)
 
 
 def annotate(panels, data, rows):

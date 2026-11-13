@@ -1,10 +1,14 @@
 """Paper table bodies: matrix_uncertified (Table 1), matrix_certified (Table 2), predictor_ablation (Table S1).
 
 Ported 2026-11-12 from deterministic-verification/results-discussion-assets/write_paper_tables.py with
-every number, rounding and bolding rule unchanged. Writes only tables/<name>_body.tex: the tabular
-part (column headers, numbers, bold marks, \\resizebox wrappers, \\par\\medskip between the LQR and RL
-panels). The table environment, caption and label live in the paper's sections and this script never
-writes them. With --paper the bodies are copied, byte for byte, into the paper's tables/.
+every number and rounding rule unchanged. Writes only tables/<name>_body.tex: the tabular part (column
+headers, numbers, shading marks, the \\resizebox wrapper). The table environment, caption and label live in
+the paper's sections and this script never writes them. With --paper the bodies are copied, byte for byte,
+into the paper's tables/.
+
+Layout (Sumanth, 2026-11-13, "Option A"): one tabular holds both controller panels, so their columns align.
+The controller name (LQR, RL) sits in the corner cell of each panel's system row, the metric header row
+appears once under the first panel's system row, and a heavy rule separates the two panels.
 
 Entries are test percentages averaged over three seeds within each setting. Tables print means only,
 never a [min, max] range or an SD (Dhruv, 2026-11-12); assert_means_only() fails on any body that does.
@@ -13,12 +17,18 @@ Figures keep their min-max bands.
   matrix_certified                        two-sided A-1d at delta=0.05 (matrix_rows c6c_*), plus one row per
                                           panel, "FM, Success only": the one-sided 6a certificate
                                           (c6a_rec, c6a_fp) of the FM method runs, with n/a for R_f, FOR, Abst.
-                                          This row is outside the bold comparison in both directions.
+                                          This row is outside the shading comparison.
 Tables 1 and 2 have no group-label rows (2026-11-12, to save space); a \\midrule still separates method
 groups. Table S1 keeps its label. The former Table 3 (verification_application) is folded into Table 2.
-Bold marks the best displayed recall and error per setting and metric, ties included, never Abst.
+No bold (Sumanth, 2026-11-13: recall and error must be read together, not one column at a time). For each
+setting and outcome, the (Rec, Err) cell pair of the displayed row with the lowest 0.8 Err + 0.2 (100 - Rec)
+gets \\cellcolor{tablebest}: the outcome's term of the threshold-fitting objective J_w at w = 0.2. The score
+is computed from the displayed 2 dp means, so a reader can recompute it from the table; ties are all shaded;
+rows whose Err is -- (no seed predicted that outcome) take no part. Abst. is never shaded. The paper defines
+tablebest (colortbl) in main.tex and supplementary.tex.
 Conditional errors use seeds with a nonempty predicted class; a superscript gives that count if
-below three, and -- means all three were empty.
+below three, and -- means all three were empty. When all three are empty, the outcome's recall is -- as well,
+not 0.00 (Sumanth, 2026-11-13: "cases that don't have results should have dashes and not 0s").
 """
 import hashlib, json, re, shutil
 import statistics as st
@@ -146,35 +156,64 @@ def header(name):
     return [HEADER, f'% The table environment, caption and label are in {WRAPPED_IN[name]}.']
 
 
+OUTCOMES = [('rec', 'fdr'), ('fail_rec', 'for')]   # the (Rec, Err) column pair of each outcome
+ERR_OF = dict(OUTCOMES)
+SHADE = r'\cellcolor{tablebest}'
+
+
+def shaded_rows(groups, rows):
+    r"""(setting, rec_key) -> the row labels to shade: the displayed rows minimizing the outcome's J_w term,
+    0.8 Err + 0.2 (100 - Rec), from the 2 dp means shown in the table. Computed in exact integer hundredths
+    (5 * 100 * term = 4 Err + 100 * 100 - Rec), so ties are exact. Rows with no defined Err are skipped."""
+    def shown(rs, key):
+        v = [100 * r['test'][key] for r in rs if r['test'][key] is not None]
+        return round(float(f'{st.mean(v):.2f}') * 100) if v else None
+    out = {}
+    for setting in SETTINGS:
+        for rec_key, err_key in OUTCOMES:
+            score = {}
+            for _, models in groups:
+                for rowlabel, role, model in models:
+                    rs = [r for r in rows if (r['setting'], r['matrix_role'], r['model']) == (setting, role, model)]
+                    rec, err = shown(rs, rec_key), shown(rs, err_key)
+                    if err is not None:
+                        score[rowlabel] = 4 * err + 10000 - rec
+            out[setting, rec_key] = {k for k, v in score.items() if v == min(score.values())} if score else set()
+    return out
+
+
+def table_open():
+    """Both panels share one tabular (layout "Option A"), shrunk to the text width if wider."""
+    pair = r'rr!{\tablepairdivider}rr!{\tablepairdivider}r'
+    columns = r'l@{\hspace{6pt}}' + r'!{\hspace{3pt}\tablesystemdivider\hspace{3pt}}'.join([pair] * 3)
+    return [r'\resizebox{\ifdim\width>\textwidth\textwidth\else\width\fi}{!}{%', r'\begin{tabular}{' + columns + '}',
+            r'\toprule']
+
+
+def panel_head(pi, panel, indices):
+    """A panel's system row with the controller (LQR, RL) in the corner cell. The metric header row follows only
+    the first panel's system row; a heavy rule separates the panels."""
+    head = [r'\midrule[\heavyrulewidth]'] if pi else []
+    head += [r'\textbf{' + panel.split()[0] + '} & ' + ' & '.join(r'\multicolumn{5}{c}{' + HEADS[i] + '}' for i in indices)
+             + r' \\', r'\cmidrule(lr){2-6}\cmidrule(lr){7-11}\cmidrule(lr){12-16}']
+    if not pi:
+        head += [r'\textbf{Method} & ' + ' & '.join(label for _ in indices for _, label in METRICS) + r' \\', r'\midrule']
+    return head
+
+
+def table_close():
+    return [r'\bottomrule', r'\end{tabular}}']
+
+
 def matrix_body(name, groups, rows, cells, group_labels=True, extra_row=None, extra_row_rule=True):
     r"""group_labels=False drops the \emph group-label rows but keeps the \midrule between groups. extra_row,
     if given, maps a panel's settings to (label, cells); that row follows a \midrule at the panel's foot and
-    takes no part in the bold comparison."""
-    best = {}
-    for setting in SETTINGS:
-        for key, _ in METRICS:
-            candidates = []
-            for _, models in groups:
-                for _, role, model in models:
-                    values = [100 * r['test'][key] for r in rows
-                              if (r['setting'], r['matrix_role'], r['model']) == (setting, role, model)
-                              and r['test'][key] is not None]
-                    if values:
-                        candidates.append(float(f'{st.mean(values):.2f}'))
-            best[setting, key] = (max if key in ('rec', 'fail_rec') else min)(candidates)
-    pair = r'rr!{\tablepairdivider}rr!{\tablepairdivider}r'
-    columns = r'l@{\hspace{6pt}}' + r'!{\hspace{3pt}\tablesystemdivider\hspace{3pt}}'.join([pair] * 3)
-    t = header(name)
+    takes no part in the shading comparison."""
+    shaded = shaded_rows(groups, rows)
+    t = header(name) + table_open()
     for pi, (panel, indices) in enumerate(PANELS):
         panel_settings = [SETTINGS[i] for i in indices]
-        if pi:
-            t.append(r'\par\medskip')
-        t += [r'\resizebox{\ifdim\width>\textwidth\textwidth\else\width\fi}{!}{%', r'\begin{tabular}{' + columns + '}',
-              r'\toprule', r'\multicolumn{16}{c}{\textbf{' + panel + r'}} \\', r'\midrule',
-              ' & ' + ' & '.join(r'\multicolumn{5}{c}{' + HEADS[i] + '}' for i in indices) + r' \\',
-              r'\cmidrule(lr){2-6}\cmidrule(lr){7-11}\cmidrule(lr){12-16}',
-              r'\textbf{Method} & ' + ' & '.join(label for _ in panel_settings for _, label in METRICS) + r' \\',
-              r'\midrule']
+        t += panel_head(pi, panel, indices)
         for gi, (group, models) in enumerate(groups):
             if gi:
                 t.append(r'\midrule')
@@ -187,28 +226,27 @@ def matrix_body(name, groups, rows, cells, group_labels=True, extra_row=None, ex
                     assert len(rs) == len({r['seed'] for r in rs}) == 3
                     for key, _ in METRICS:
                         v = value([r['test'] for r in rs], key)
+                        if key in ERR_OF and all(r['test'][ERR_OF[key]] is None for r in rs):
+                            v = '--'   # no seed predicts this outcome: a dash, not a 0.00 recall (Sumanth, 2026-11-13)
                         defined = [100 * r['test'][key] for r in rs if r['test'][key] is not None]
-                        winner = key != 'abstain' and bool(defined) and float(f'{st.mean(defined):.2f}') == best[setting, key]
-                        if winner:
-                            v = r'$\mathbf{' + v.strip('$') + '}$'
-                        vv.append(v)
+                        winner = any(key in keys and rowlabel in shaded[setting, keys[0]] for keys in OUTCOMES)
+                        vv.append(SHADE + v if winner else v)
                         cells.append(dict(table=name, panel=panel, row=rowlabel, model=model, role=role, setting=setting,
                                           metric=key, n=len(defined),
                                           **dict(zip(['mean', 'min', 'max'],
                                                      [round(x, 6) if x is not None else None for x in spread(defined)])),
-                                          tex=v, best=winner))
+                                          tex=v, shaded=winner))
                 t.append(rowlabel + ' & ' + ' & '.join(vv) + r' \\')
         if extra_row:
             label, extra = extra_row(panel_settings)
             t += ([r'\midrule'] if extra_row_rule else []) + [label + ' & ' + ' & '.join(extra) + r' \\']
-        t += [r'\bottomrule', r'\end{tabular}}']
-    return t
+    return t + table_close()
 
 
 def success_only_row(own, cells):
     """Table 2's "FM, Success only" row: the one-sided 6a certificate of the FM method runs (the
     former Table 3). R_s = c6a_rec and FDR = c6a_fp as 2-dp means; R_f, FOR and Abst. are n/a because only
-    Success is certified. Never bold, and never part of the bold comparison."""
+    Success is certified. Never shaded, and never part of the shading comparison."""
     def row(panel_settings):
         out = []
         for setting in panel_settings:
@@ -223,7 +261,7 @@ def success_only_row(own, cells):
                 mean, lo, hi = spread([100 * r[key] for r in rs if r[key] is not None])
                 cells.append(dict(table='matrix_certified', row=SUCCESS_ONLY, setting=setting,
                                   metric=metric, source=key, n=len(rs), mean=round(mean, 6), min=round(lo, 6),
-                                  max=round(hi, 6), tex=v, best=False))
+                                  max=round(hi, 6), tex=v, shaded=False))
         return SUCCESS_ONLY, out
     return row
 

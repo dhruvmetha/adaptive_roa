@@ -3,36 +3,25 @@
 \resizebox{\ifdim\width>\textwidth\textwidth\else\width\fi}{!}{%
 \begin{tabular}{l@{\hspace{6pt}}rr!{\tablepairdivider}rr!{\tablepairdivider}r!{\hspace{3pt}\tablesystemdivider\hspace{3pt}}rr!{\tablepairdivider}rr!{\tablepairdivider}r!{\hspace{3pt}\tablesystemdivider\hspace{3pt}}rr!{\tablepairdivider}rr!{\tablepairdivider}r}
 \toprule
-\multicolumn{16}{c}{\textbf{LQR controllers}} \\
-\midrule
- & \multicolumn{5}{c}{Pendulum (2D)} & \multicolumn{5}{c}{Cartpole (4D)} & \multicolumn{5}{c}{Spatial Quad (12D)} \\
+\textbf{LQR} & \multicolumn{5}{c}{Pendulum (2D)} & \multicolumn{5}{c}{Cartpole (4D)} & \multicolumn{5}{c}{Spatial Quad (12D)} \\
 \cmidrule(lr){2-6}\cmidrule(lr){7-11}\cmidrule(lr){12-16}
-\textbf{Method} & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & Abst.$\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & Abst.$\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & Abst.$\downarrow$ \\
+\textbf{Method} & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & $\widehat{\mathrm{Abst}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & $\widehat{\mathrm{Abst}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & $\widehat{\mathrm{Abst}}\downarrow$ \\
 \midrule
-\nameMLPLabel{} & $95.40$ & $2.88$ & $79.90$ & $1.62$ & $12.30$ & $99.08$ & $1.28$ & $\mathbf{99.29}$ & $0.09$ & $0.44$ & $66.52$ & $3.91$ & $36.47$ & $\mathbf{0.07}$ & $56.32$ \\
-\nameBNNLabel{} & $96.97$ & $1.67$ & $85.30$ & $1.11$ & $9.03$ & $\mathbf{99.16}$ & $1.77$ & $98.71$ & $\mathbf{0.06}$ & $0.84$ & $66.13$ & $4.04$ & $39.51$ & $0.10$ & $54.01$ \\
-\nameMLP{} & $97.32$ & $\mathbf{0.71}$ & $93.94$ & $0.36$ & $4.29$ & $96.84$ & $\mathbf{0.42}$ & $98.49$ & $0.07$ & $1.68$ & $68.35$ & $3.75$ & $54.67$ & $0.48$ & $41.50$ \\
+\nameMLPLabel{} & $95.40$ & $2.88$ & $79.90$ & $1.62$ & $12.30$ & $99.08$ & $1.28$ & \cellcolor{tablebest}$99.29$ & \cellcolor{tablebest}$0.09$ & $0.44$ & $66.52$ & $3.91$ & $36.47$ & $0.07$ & $56.32$ \\
+\nameBNNLabel{} & $96.97$ & $1.67$ & $85.30$ & $1.11$ & $9.03$ & $99.16$ & $1.77$ & $98.71$ & $0.06$ & $0.84$ & $66.13$ & $4.04$ & $39.51$ & $0.10$ & $54.01$ \\
+\nameMLP{} & $97.32$ & $0.71$ & $93.94$ & $0.36$ & $4.29$ & $96.84$ & $0.42$ & $98.49$ & $0.07$ & $1.68$ & $68.35$ & $3.75$ & $54.67$ & $0.48$ & $41.50$ \\
 \nameBNN{} & $96.50$ & $0.77$ & $95.43$ & $0.30$ & $3.70$ & $98.16$ & $1.21$ & $98.42$ & $0.18$ & $1.26$ & $69.70$ & $3.93$ & $68.24$ & $1.02$ & $30.17$ \\
-\name{} & $\mathbf{98.43}$ & $0.82$ & $\mathbf{98.13}$ & $\mathbf{0.27}$ & $1.28$ & $98.24$ & $0.68$ & $\mathbf{99.29}$ & $0.17$ & $0.64$ & $\mathbf{72.22}$ & $\mathbf{3.29}$ & $\mathbf{94.80}$ & $3.74$ & $6.72$ \\
+\name{} & \cellcolor{tablebest}$98.43$ & \cellcolor{tablebest}$0.82$ & \cellcolor{tablebest}$98.13$ & \cellcolor{tablebest}$0.27$ & $1.28$ & \cellcolor{tablebest}$98.24$ & \cellcolor{tablebest}$0.68$ & $99.29$ & $0.17$ & $0.64$ & \cellcolor{tablebest}$72.22$ & \cellcolor{tablebest}$3.29$ & \cellcolor{tablebest}$94.80$ & \cellcolor{tablebest}$3.74$ & $6.72$ \\
 \midrule
 \name{}, Success only & $99.04$ & $1.04$ & n/a & n/a & n/a & $98.27$ & $0.70$ & n/a & n/a & n/a & $73.16$ & $3.69$ & n/a & n/a & n/a \\
-\bottomrule
-\end{tabular}}
-\par\medskip
-\resizebox{\ifdim\width>\textwidth\textwidth\else\width\fi}{!}{%
-\begin{tabular}{l@{\hspace{6pt}}rr!{\tablepairdivider}rr!{\tablepairdivider}r!{\hspace{3pt}\tablesystemdivider\hspace{3pt}}rr!{\tablepairdivider}rr!{\tablepairdivider}r!{\hspace{3pt}\tablesystemdivider\hspace{3pt}}rr!{\tablepairdivider}rr!{\tablepairdivider}r}
-\toprule
-\multicolumn{16}{c}{\textbf{RL controllers}} \\
-\midrule
- & \multicolumn{5}{c}{Cartpole (4D)} & \multicolumn{5}{c}{Planar Quad (6D)} & \multicolumn{5}{c}{Spatial Quad (12D)} \\
+\midrule[\heavyrulewidth]
+\textbf{RL} & \multicolumn{5}{c}{Cartpole (4D)} & \multicolumn{5}{c}{Planar Quad (6D)} & \multicolumn{5}{c}{Spatial Quad (12D)} \\
 \cmidrule(lr){2-6}\cmidrule(lr){7-11}\cmidrule(lr){12-16}
-\textbf{Method} & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & Abst.$\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & Abst.$\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & Abst.$\downarrow$ \\
-\midrule
-\nameMLPLabel{} & $\mathbf{76.75}$ & $3.34$ & $82.89$ & $0.09$ & $17.74$ & $75.75$ & $4.52$ & $86.07$ & $\mathbf{0.01}$ & $14.46$ & $32.63$ & $2.93$ & $71.55$ & $\mathbf{0.01}$ & $30.55$ \\
-\nameBNNLabel{} & $75.32$ & $\mathbf{2.82}$ & $80.39$ & $\mathbf{0.03}$ & $20.16$ & $75.13$ & $4.24$ & $89.21$ & $\mathbf{0.01}$ & $11.65$ & $33.73$ & $3.66$ & $69.96$ & $\mathbf{0.01}$ & $31.97$ \\
-\nameMLP{} & $65.30$ & $2.90$ & $74.37$ & $0.25$ & $26.86$ & $67.01$ & $\mathbf{2.93}$ & $95.41$ & $0.60$ & $6.20$ & $8.86$ & $\mathbf{1.77^{(1)}}$ & $8.21$ & $\mathbf{0.01^{(1)}}$ & $91.75$ \\
-\nameBNN{} & $75.71$ & $3.66$ & $\mathbf{85.34}$ & $0.35$ & $15.76$ & $72.30$ & $4.40$ & $90.63$ & $0.49$ & $10.16$ & $0.00$ & -- & $0.00$ & -- & $100.00$ \\
-\name{} & $72.64$ & $3.44$ & $84.95$ & $0.26$ & $16.80$ & $\mathbf{79.90}$ & $4.21$ & $\mathbf{98.85}$ & $0.73$ & $1.73$ & $\mathbf{57.60}$ & $2.93$ & $\mathbf{76.48}$ & $0.05$ & $24.42$ \\
+\nameMLPLabel{} & $76.75$ & $3.34$ & $82.89$ & $0.09$ & $17.74$ & $75.75$ & $4.52$ & $86.07$ & $0.01$ & $14.46$ & $32.63$ & $2.93$ & $71.55$ & $0.01$ & $30.55$ \\
+\nameBNNLabel{} & \cellcolor{tablebest}$75.32$ & \cellcolor{tablebest}$2.82$ & $80.39$ & $0.03$ & $20.16$ & $75.13$ & $4.24$ & $89.21$ & $0.01$ & $11.65$ & $33.73$ & $3.66$ & $69.96$ & $0.01$ & $31.97$ \\
+\nameMLP{} & $65.30$ & $2.90$ & $74.37$ & $0.25$ & $26.86$ & $67.01$ & $2.93$ & $95.41$ & $0.60$ & $6.20$ & $8.86$ & $1.77^{(1)}$ & $8.21$ & $0.01^{(1)}$ & $91.75$ \\
+\nameBNN{} & $75.71$ & $3.66$ & \cellcolor{tablebest}$85.34$ & \cellcolor{tablebest}$0.35$ & $15.76$ & $72.30$ & $4.40$ & $90.63$ & $0.49$ & $10.16$ & -- & -- & -- & -- & $100.00$ \\
+\name{} & $72.64$ & $3.44$ & $84.95$ & $0.26$ & $16.80$ & \cellcolor{tablebest}$79.90$ & \cellcolor{tablebest}$4.21$ & \cellcolor{tablebest}$98.85$ & \cellcolor{tablebest}$0.73$ & $1.73$ & \cellcolor{tablebest}$57.60$ & \cellcolor{tablebest}$2.93$ & \cellcolor{tablebest}$76.48$ & \cellcolor{tablebest}$0.05$ & $24.42$ \\
 \midrule
 \name{}, Success only & $72.64$ & $3.44$ & n/a & n/a & n/a & $79.90$ & $4.21$ & n/a & n/a & n/a & $57.60$ & $2.93$ & n/a & n/a & n/a \\
 \bottomrule

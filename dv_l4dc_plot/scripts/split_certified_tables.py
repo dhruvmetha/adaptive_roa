@@ -1,7 +1,7 @@
 """Split the certified table into two-sided and success-only bodies.
 
 Four bodies (Sumanth, 2026-11-13): matrix_certified_main, the main paper's two-sided table with BNN-Label,
-TERA-BNN and TERA; matrix_certified_mlp, the supplement's table with MLP-Label, TERA-MLP and TERA; each is bold
+TERA-BNN and TERA; matrix_certified_mlp, the supplement's table with MLP-Label, TERA-MLP and TERA; each is shaded
 among its own three rows. matrix_certified_twosided, all five adaptive predictors, is no longer in the paper and is
 kept as the reference the two short tables are checked against. success_only is the conservative certificate of TERA.
 
@@ -81,7 +81,7 @@ def main():
     assert not any(tables.SUCCESS_ONLY in line for line in main_lines)
 
     # The main paper's table: the selected BNN variants and TERA, in ordered_groups' order (TERA last). Same
-    # numbers as the five-row body; only the bold marks are taken among the three displayed rows.
+    # numbers as the five-row body; only the shading is decided among the three displayed rows.
     short_name = 'matrix_certified_main'
     tables.WRAPPED_IN[short_name] = 'sections/06_results.tex'
     short_groups = tables.ordered_groups([tables.FM_ADAPTIVE, tables.TERA_BNN, tables.BNN_LABEL], fm_own_group=False)
@@ -127,7 +127,7 @@ def main():
     assert len(baseline) == len(generated) == 162
     assert baseline.keys() == generated.keys()
     for k, cell in generated.items():
-        for field in ('n', 'mean', 'min', 'max', 'tex', 'best'):
+        for field in ('n', 'mean', 'min', 'max', 'tex', 'shaded'):
             assert cell[field] == baseline[k][field], (k, field, cell[field], baseline[k][field])
 
     # A second check makes the two-sided body byte-equivalent to removing only

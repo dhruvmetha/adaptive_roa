@@ -3,8 +3,8 @@
   "source_hashes": {
     "/common/users/shared/pracsys/adaptive_roa_experiments/det_v3_seeds/_index/scored/matrix_rows.jsonl": "4a75be7c965c43bb4e94148536a5c6cf29cd27fdd083ee8ae9658e25a528da60",
     "/common/home/dm1487/robotics_research/tripods/deterministic-verification/results-discussion-assets/generalized_6c_values.json": "d63d99d42d9ec8f6196321c6b0c60bd339c96a01abb51c1f18e36ddf002f88a7",
-    "/common/home/dm1487/robotics_research/tripods/dv_l4dc_plot/values/table_matrix_certified_values.json": "8cae3150353e6ced6c2c36146c44944fab659a61072c11db17a20e0379221712",
-    "/common/home/dm1487/robotics_research/tripods/dv_l4dc_plot/tables/matrix_certified_body.tex": "43f9939bec15acf0b8b0a2c1df7791e3f5e6dd8b7f78f4daa79833fa91c72fde"
+    "/common/home/dm1487/robotics_research/tripods/dv_l4dc_plot/values/table_matrix_certified_values.json": "b95da3f3e6f726c59362c0142813f1d9222556f7823df6810e4bd488cab8288b",
+    "/common/home/dm1487/robotics_research/tripods/dv_l4dc_plot/tables/matrix_certified_body.tex": "5cd280398347cc190d515f426a01f9df5e93790938c7cf47d628f8472ee406b4"
   },
   "verified_original_cells": 90,
   "cells": [
@@ -21,7 +21,7 @@
       "min": 93.294534,
       "max": 97.216599,
       "tex": "$95.40$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -36,7 +36,7 @@
       "min": 2.395764,
       "max": 3.138787,
       "tex": "$2.88$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -51,7 +51,7 @@
       "min": 74.308486,
       "max": 87.787154,
       "tex": "$79.90$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -66,7 +66,7 @@
       "min": 1.013216,
       "max": 2.511533,
       "tex": "$1.62$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -81,7 +81,7 @@
       "min": 6.85441,
       "max": 16.38489,
       "tex": "$12.30$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -95,8 +95,8 @@
       "mean": 99.080501,
       "min": 98.496174,
       "max": 99.466097,
-      "tex": "$\\mathbf{99.08}$",
-      "best": true
+      "tex": "$99.08$",
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -111,7 +111,7 @@
       "min": 1.143163,
       "max": 1.463329,
       "tex": "$1.28$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -125,8 +125,8 @@
       "mean": 99.289598,
       "min": 99.170653,
       "max": 99.496118,
-      "tex": "$\\mathbf{99.29}$",
-      "best": true
+      "tex": "$99.29$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -141,7 +141,7 @@
       "min": 0.049401,
       "max": 0.171145,
       "tex": "$0.09$",
-      "best": false
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -156,7 +156,7 @@
       "min": 0.338999,
       "max": 0.507696,
       "tex": "$0.44$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -171,7 +171,7 @@
       "min": 64.892565,
       "max": 68.089905,
       "tex": "$66.52$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -186,7 +186,7 @@
       "min": 3.030482,
       "max": 4.959956,
       "tex": "$3.91$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -201,7 +201,7 @@
       "min": 32.488959,
       "max": 39.260087,
       "tex": "$36.47$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -215,8 +215,8 @@
       "mean": 0.072863,
       "min": 0.042784,
       "max": 0.099079,
-      "tex": "$\\mathbf{0.07}$",
-      "best": true
+      "tex": "$0.07$",
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -231,7 +231,7 @@
       "min": 54.639632,
       "max": 58.908041,
       "tex": "$56.32$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -246,7 +246,7 @@
       "min": 96.330972,
       "max": 98.646255,
       "tex": "$97.32$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -260,8 +260,8 @@
       "mean": 0.709478,
       "min": 0.07874,
       "max": 1.109534,
-      "tex": "$\\mathbf{0.71}$",
-      "best": true
+      "tex": "$0.71$",
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -276,7 +276,7 @@
       "min": 86.568214,
       "max": 99.038912,
       "tex": "$93.94$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -291,7 +291,7 @@
       "min": 0.097371,
       "max": 0.580438,
       "tex": "$0.36$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -306,7 +306,7 @@
       "min": 0.396097,
       "max": 8.825234,
       "tex": "$4.29$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -321,7 +321,7 @@
       "min": 96.413953,
       "max": 97.437266,
       "tex": "$96.84$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -335,8 +335,8 @@
       "mean": 0.419846,
       "min": 0.2113,
       "max": 0.671263,
-      "tex": "$\\mathbf{0.42}$",
-      "best": true
+      "tex": "$0.42$",
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -351,7 +351,7 @@
       "min": 97.957023,
       "max": 99.366716,
       "tex": "$98.49$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -365,8 +365,8 @@
       "mean": 0.070546,
       "min": 0.007991,
       "max": 0.155634,
-      "tex": "$\\mathbf{0.07}$",
-      "best": true
+      "tex": "$0.07$",
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -381,7 +381,7 @@
       "min": 0.973619,
       "max": 2.085409,
       "tex": "$1.68$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -396,7 +396,7 @@
       "min": 64.949943,
       "max": 72.027225,
       "tex": "$68.35$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -411,7 +411,7 @@
       "min": 3.096588,
       "max": 4.823656,
       "tex": "$3.75$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -426,7 +426,7 @@
       "min": 35.098844,
       "max": 76.147248,
       "tex": "$54.67$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -441,7 +441,7 @@
       "min": 0.221379,
       "max": 0.849575,
       "tex": "$0.48$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -456,7 +456,7 @@
       "min": 25.345172,
       "max": 57.09057,
       "tex": "$41.50$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -470,8 +470,8 @@
       "mean": 98.431174,
       "min": 97.520243,
       "max": 99.557186,
-      "tex": "$\\mathbf{98.43}$",
-      "best": true
+      "tex": "$98.43$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -486,7 +486,7 @@
       "min": 0.269784,
       "max": 1.633486,
       "tex": "$0.82$",
-      "best": false
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -500,8 +500,8 @@
       "mean": 98.127312,
       "min": 96.061885,
       "max": 99.26551,
-      "tex": "$\\mathbf{98.13}$",
-      "best": true
+      "tex": "$98.13$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -515,8 +515,8 @@
       "mean": 0.269767,
       "min": 0.070944,
       "max": 0.454474,
-      "tex": "$\\mathbf{0.27}$",
-      "best": true
+      "tex": "$0.27$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -531,7 +531,7 @@
       "min": 0.502367,
       "max": 2.593952,
       "tex": "$1.28$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -546,7 +546,7 @@
       "min": 97.134721,
       "max": 99.11906,
       "tex": "$98.24$",
-      "best": false
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -561,7 +561,7 @@
       "min": 0.283183,
       "max": 1.398601,
       "tex": "$0.68$",
-      "best": false
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -575,8 +575,8 @@
       "mean": 99.285023,
       "min": 98.294251,
       "max": 99.87648,
-      "tex": "$\\mathbf{99.29}$",
-      "best": true
+      "tex": "$99.29$",
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -591,7 +591,7 @@
       "min": 0.017949,
       "max": 0.396919,
       "tex": "$0.17$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -606,7 +606,7 @@
       "min": 0.242601,
       "max": 1.288519,
       "tex": "$0.64$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -620,8 +620,8 @@
       "mean": 72.220464,
       "min": 70.808437,
       "max": 74.239247,
-      "tex": "$\\mathbf{72.22}$",
-      "best": true
+      "tex": "$72.22$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -635,8 +635,8 @@
       "mean": 3.29037,
       "min": 2.567314,
       "max": 4.092222,
-      "tex": "$\\mathbf{3.29}$",
-      "best": true
+      "tex": "$3.29$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -650,8 +650,8 @@
       "mean": 94.800254,
       "min": 92.846177,
       "max": 96.194195,
-      "tex": "$\\mathbf{94.80}$",
-      "best": true
+      "tex": "$94.80$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -666,7 +666,7 @@
       "min": 2.803221,
       "max": 4.414585,
       "tex": "$3.74$",
-      "best": false
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -681,7 +681,7 @@
       "min": 5.210577,
       "max": 8.451719,
       "tex": "$6.72$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -695,8 +695,8 @@
       "mean": 76.747822,
       "min": 73.794952,
       "max": 78.838508,
-      "tex": "$\\mathbf{76.75}$",
-      "best": true
+      "tex": "$76.75$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -711,7 +711,7 @@
       "min": 2.519769,
       "max": 4.759849,
       "tex": "$3.34$",
-      "best": false
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -726,7 +726,7 @@
       "min": 77.569886,
       "max": 86.959365,
       "tex": "$82.89$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -740,8 +740,8 @@
       "mean": 0.089722,
       "min": 0.049988,
       "max": 0.13493,
-      "tex": "$\\mathbf{0.09}$",
-      "best": true
+      "tex": "$0.09$",
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -756,7 +756,7 @@
       "min": 14.370843,
       "max": 21.363552,
       "tex": "$17.74$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -771,7 +771,7 @@
       "min": 71.221141,
       "max": 81.196457,
       "tex": "$75.75$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -786,7 +786,7 @@
       "min": 3.216259,
       "max": 6.040494,
       "tex": "$4.52$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -801,7 +801,7 @@
       "min": 84.247668,
       "max": 88.73698,
       "tex": "$86.07$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -815,8 +815,8 @@
       "mean": 0.009543,
       "min": 0.001522,
       "max": 0.017333,
-      "tex": "$\\mathbf{0.01}$",
-      "best": true
+      "tex": "$0.01$",
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -831,7 +831,7 @@
       "min": 12.47784,
       "max": 16.243102,
       "tex": "$14.46$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -846,7 +846,7 @@
       "min": 29.473053,
       "max": 35.769433,
       "tex": "$32.63$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -861,7 +861,7 @@
       "min": 2.04285,
       "max": 3.628319,
       "tex": "$2.93$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -876,7 +876,7 @@
       "min": 64.149828,
       "max": 76.688432,
       "tex": "$71.55$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -890,8 +890,8 @@
       "mean": 0.005955,
       "min": 0.002063,
       "max": 0.008629,
-      "tex": "$\\mathbf{0.01}$",
-      "best": true
+      "tex": "$0.01$",
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -906,7 +906,7 @@
       "min": 25.515727,
       "max": 37.53151,
       "tex": "$30.55$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -921,7 +921,7 @@
       "min": 49.193656,
       "max": 76.126871,
       "tex": "$65.30$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -935,8 +935,8 @@
       "mean": 2.896675,
       "min": 1.713674,
       "max": 3.499632,
-      "tex": "$\\mathbf{2.90}$",
-      "best": true
+      "tex": "$2.90$",
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -951,7 +951,7 @@
       "min": 60.218582,
       "max": 87.560132,
       "tex": "$74.37$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -966,7 +966,7 @@
       "min": 0.079086,
       "max": 0.523857,
       "tex": "$0.25$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -981,7 +981,7 @@
       "min": 13.794481,
       "max": 41.764429,
       "tex": "$26.86$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -996,7 +996,7 @@
       "min": 64.244228,
       "max": 69.71831,
       "tex": "$67.01$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -1010,8 +1010,8 @@
       "mean": 2.929186,
       "min": 2.586966,
       "max": 3.361175,
-      "tex": "$\\mathbf{2.93}$",
-      "best": true
+      "tex": "$2.93$",
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -1026,7 +1026,7 @@
       "min": 89.749704,
       "max": 98.80973,
       "tex": "$95.41$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -1041,7 +1041,7 @@
       "min": 0.206681,
       "max": 1.07106,
       "tex": "$0.60$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -1056,7 +1056,7 @@
       "min": 2.622667,
       "max": 11.507813,
       "tex": "$6.20$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -1071,7 +1071,7 @@
       "min": 0.0,
       "max": 26.579717,
       "tex": "$8.86$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -1085,8 +1085,8 @@
       "mean": 1.772853,
       "min": 1.772853,
       "max": 1.772853,
-      "tex": "$\\mathbf{1.77^{(1)}}$",
-      "best": true
+      "tex": "$1.77^{(1)}$",
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -1101,7 +1101,7 @@
       "min": 0.0,
       "max": 24.628077,
       "tex": "$8.21$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -1115,8 +1115,8 @@
       "mean": 0.005374,
       "min": 0.005374,
       "max": 0.005374,
-      "tex": "$\\mathbf{0.01^{(1)}}$",
-      "best": true
+      "tex": "$0.01^{(1)}$",
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -1131,7 +1131,7 @@
       "min": 75.23552,
       "max": 100.0,
       "tex": "$91.75$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -1146,7 +1146,7 @@
       "min": 71.73107,
       "max": 74.085325,
       "tex": "$72.64$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -1161,7 +1161,7 @@
       "min": 2.978852,
       "max": 3.722706,
       "tex": "$3.44$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -1175,8 +1175,8 @@
       "mean": 84.949788,
       "min": 81.403933,
       "max": 89.298144,
-      "tex": "$\\mathbf{84.95}$",
-      "best": true
+      "tex": "$84.95$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -1191,7 +1191,7 @@
       "min": 0.096583,
       "max": 0.435024,
       "tex": "$0.26$",
-      "best": false
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -1206,7 +1206,7 @@
       "min": 13.255419,
       "max": 20.018117,
       "tex": "$16.80$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -1220,8 +1220,8 @@
       "mean": 79.899327,
       "min": 76.30318,
       "max": 81.704661,
-      "tex": "$\\mathbf{79.90}$",
-      "best": true
+      "tex": "$79.90$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -1236,7 +1236,7 @@
       "min": 3.595671,
       "max": 4.530031,
       "tex": "$4.21$",
-      "best": false
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -1250,8 +1250,8 @@
       "mean": 98.849897,
       "min": 98.161074,
       "max": 99.462231,
-      "tex": "$\\mathbf{98.85}$",
-      "best": true
+      "tex": "$98.85$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -1266,7 +1266,7 @@
       "min": 0.388958,
       "max": 1.147302,
       "tex": "$0.73$",
-      "best": false
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -1281,7 +1281,7 @@
       "min": 0.606046,
       "max": 3.029054,
       "tex": "$1.73$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_mlp",
@@ -1295,8 +1295,8 @@
       "mean": 57.601879,
       "min": 48.114834,
       "max": 64.657822,
-      "tex": "$\\mathbf{57.60}$",
-      "best": true
+      "tex": "$57.60$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -1311,7 +1311,7 @@
       "min": 1.397849,
       "max": 4.304415,
       "tex": "$2.93$",
-      "best": false
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -1325,8 +1325,8 @@
       "mean": 76.482102,
       "min": 65.708109,
       "max": 94.744551,
-      "tex": "$\\mathbf{76.48}$",
-      "best": true
+      "tex": "$76.48$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -1341,7 +1341,7 @@
       "min": 0.026211,
       "max": 0.097229,
       "tex": "$0.05$",
-      "best": false
+      "shaded": true
     },
     {
       "table": "matrix_certified_mlp",
@@ -1356,7 +1356,7 @@
       "min": 6.679139,
       "max": 35.21402,
       "tex": "$24.42$",
-      "best": false
+      "shaded": false
     }
   ]
 }

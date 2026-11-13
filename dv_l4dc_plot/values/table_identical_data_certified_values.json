@@ -769,7 +769,8 @@
       "kind": "difference from Unif-TERA (pp)",
       "fm_mean": 16.366584386041335,
       "difference": -16.366584386041335,
-      "tex": "$-16.37$"
+      "empty_class": true,
+      "tex": "--"
     },
     {
       "table": "identical_data_certified",
@@ -799,7 +800,8 @@
       "kind": "difference from Unif-TERA (pp)",
       "fm_mean": 32.37423751989659,
       "difference": -32.37423751989659,
-      "tex": "$-32.37$"
+      "empty_class": true,
+      "tex": "--"
     },
     {
       "table": "identical_data_certified",

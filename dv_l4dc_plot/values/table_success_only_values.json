@@ -3,8 +3,8 @@
   "source_hashes": {
     "/common/users/shared/pracsys/adaptive_roa_experiments/det_v3_seeds/_index/scored/matrix_rows.jsonl": "4a75be7c965c43bb4e94148536a5c6cf29cd27fdd083ee8ae9658e25a528da60",
     "/common/home/dm1487/robotics_research/tripods/deterministic-verification/results-discussion-assets/generalized_6c_values.json": "d63d99d42d9ec8f6196321c6b0c60bd339c96a01abb51c1f18e36ddf002f88a7",
-    "/common/home/dm1487/robotics_research/tripods/dv_l4dc_plot/values/table_matrix_certified_values.json": "8cae3150353e6ced6c2c36146c44944fab659a61072c11db17a20e0379221712",
-    "/common/home/dm1487/robotics_research/tripods/dv_l4dc_plot/tables/matrix_certified_body.tex": "43f9939bec15acf0b8b0a2c1df7791e3f5e6dd8b7f78f4daa79833fa91c72fde"
+    "/common/home/dm1487/robotics_research/tripods/dv_l4dc_plot/values/table_matrix_certified_values.json": "b95da3f3e6f726c59362c0142813f1d9222556f7823df6810e4bd488cab8288b",
+    "/common/home/dm1487/robotics_research/tripods/dv_l4dc_plot/tables/matrix_certified_body.tex": "5cd280398347cc190d515f426a01f9df5e93790938c7cf47d628f8472ee406b4"
   },
   "verified_original_cells": 12,
   "cells": [
@@ -19,7 +19,7 @@
       "min": 98.507085,
       "max": 99.557186,
       "tex": "$99.04$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified",
@@ -32,7 +32,7 @@
       "min": 0.543478,
       "max": 1.877757,
       "tex": "$1.04$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified",
@@ -45,7 +45,7 @@
       "min": 97.241502,
       "max": 99.11906,
       "tex": "$98.27$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified",
@@ -58,7 +58,7 @@
       "min": 0.351225,
       "max": 1.398601,
       "tex": "$0.70$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified",
@@ -71,7 +71,7 @@
       "min": 71.73107,
       "max": 74.085325,
       "tex": "$72.64$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified",
@@ -84,7 +84,7 @@
       "min": 2.978852,
       "max": 3.722706,
       "tex": "$3.44$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified",
@@ -97,7 +97,7 @@
       "min": 76.30318,
       "max": 81.704661,
       "tex": "$79.90$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified",
@@ -110,7 +110,7 @@
       "min": 3.595671,
       "max": 4.530031,
       "tex": "$4.21$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified",
@@ -123,7 +123,7 @@
       "min": 70.808437,
       "max": 74.429188,
       "tex": "$73.16$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified",
@@ -136,7 +136,7 @@
       "min": 2.567314,
       "max": 4.411242,
       "tex": "$3.69$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified",
@@ -149,7 +149,7 @@
       "min": 48.114834,
       "max": 64.657822,
       "tex": "$57.60$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified",
@@ -162,7 +162,7 @@
       "min": 1.397849,
       "max": 4.304415,
       "tex": "$2.93$",
-      "best": false
+      "shaded": false
     }
   ]
 }

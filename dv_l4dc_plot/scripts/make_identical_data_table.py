@@ -10,8 +10,10 @@ LQR and RL panels, five columns per setting (R_s, FDR, R_f, FOR, Abst.).
 \nameUnif{} row: absolute three-seed means. \nameUnifBNNLabel{} and \nameUnifBNN{} rows: R_s, R_f and Abst. are signed differences
 from \nameUnif{} in percentage points (row mean minus \nameUnif{} mean, both unrounded, then rounded to 2 dp). All three
 seeds count there, all-Abstain seeds included (zero recall, 100% abstention). FDR and FOR are absolute means over
-seeds with a nonempty predicted class, never differences: superscript (n) when n < 3, -- when n = 0. No bolding:
-the rows carry different units, so a best is undefined. Means only, as every table (assert_means_only).
+seeds with a nonempty predicted class, never differences: superscript (n) when n < 3, -- when n = 0. When n = 0,
+that outcome's R_s or R_f cell is -- too, difference or not (Sumanth, 2026-11-13: "cases that don't have results
+should have dashes and not 0s"). No bolding or shading: the rows carry different units, so a best is undefined.
+Means only, as every table (assert_means_only). Layout as make_tables (Option A, T.table_open / T.panel_head).
 
 Before writing, every cell is recomputed from the per-seed table of Figure S3,
 values/predictor_comparison_uniform_per_seed.csv (cal rows): absolute cells must match mean, seed count and LaTeX;
@@ -56,19 +58,10 @@ def signed(d):
 
 
 def body(agg, cells):
-    pair = r'rr!{\tablepairdivider}rr!{\tablepairdivider}r'
-    columns = r'l@{\hspace{6pt}}' + r'!{\hspace{3pt}\tablesystemdivider\hspace{3pt}}'.join([pair] * 3)
-    t = [T.HEADER, f'% The table environment, caption and label are in {WRAPPED_IN}.']
+    t = [T.HEADER, f'% The table environment, caption and label are in {WRAPPED_IN}.'] + T.table_open()
     for pi, (panel, indices) in enumerate(T.PANELS):
         settings = [T.SETTINGS[i] for i in indices]
-        if pi:
-            t.append(r'\par\medskip')
-        t += [r'\resizebox{\ifdim\width>\textwidth\textwidth\else\width\fi}{!}{%', r'\begin{tabular}{' + columns + '}',
-              r'\toprule', r'\multicolumn{16}{c}{\textbf{' + panel + r'}} \\', r'\midrule',
-              ' & ' + ' & '.join(r'\multicolumn{5}{c}{' + T.HEADS[i] + '}' for i in indices) + r' \\',
-              r'\cmidrule(lr){2-6}\cmidrule(lr){7-11}\cmidrule(lr){12-16}',
-              r'\textbf{Method} & ' + ' & '.join(label for _ in settings for _, label in T.METRICS) + r' \\',
-              r'\midrule']
+        t += T.panel_head(pi, panel, indices)
         for row in ROWS + ['rule', FM]:
             if row == 'rule':
                 t.append(r'\midrule'); continue
@@ -89,11 +82,13 @@ def body(agg, cells):
                             assert a['n'] == 3, (s, model, key)
                         tex = absolute(a)
                         cell |= dict(kind='absolute')
+                    if key in T.ERR_OF and agg[s, model, 'cal'][T.ERR_OF[key]]['n'] == 0:
+                        tex = '--'   # no seed predicts this outcome: a dash, not a recall (Sumanth, 2026-11-13)
+                        cell |= dict(empty_class=True)
                     vv.append(tex)
                     cells.append(cell | dict(tex=tex))
             t.append(label + ' & ' + ' & '.join(vv) + r' \\')
-        t += [r'\bottomrule', r'\end{tabular}}']
-    return t
+    return t + T.table_close()
 
 
 def cross_check(cells):
@@ -108,9 +103,12 @@ def cross_check(cells):
         assert len(rr) == 3
         return [float(r[metric]) for r in rr if r[metric] != '']
     checked = 0
+    err_of = dict(T.OUTCOMES)
     for c in cells:
         xs = vals(c['setting'], model_of[c['model']], c['metric'])
-        if c['kind'] == 'absolute':
+        if c.get('empty_class'):
+            assert c['tex'] == '--' and not vals(c['setting'], model_of[c['model']], err_of[c['metric']]), c
+        elif c['kind'] == 'absolute':
             assert len(xs) == c['n'], (c, xs)
             want = '--' if not xs else '$' + f'{st.mean(xs):.2f}' + (f'^{{({len(xs)})}}' if len(xs) < 3 else '') + '$'
             assert want == c['tex'] and (not xs or abs(st.mean(xs) - c['mean']) < 1e-9), (c, want)

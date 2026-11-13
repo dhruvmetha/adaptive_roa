@@ -3,8 +3,8 @@
   "source_hashes": {
     "/common/users/shared/pracsys/adaptive_roa_experiments/det_v3_seeds/_index/scored/matrix_rows.jsonl": "4a75be7c965c43bb4e94148536a5c6cf29cd27fdd083ee8ae9658e25a528da60",
     "/common/home/dm1487/robotics_research/tripods/deterministic-verification/results-discussion-assets/generalized_6c_values.json": "d63d99d42d9ec8f6196321c6b0c60bd339c96a01abb51c1f18e36ddf002f88a7",
-    "/common/home/dm1487/robotics_research/tripods/dv_l4dc_plot/values/table_matrix_certified_values.json": "8cae3150353e6ced6c2c36146c44944fab659a61072c11db17a20e0379221712",
-    "/common/home/dm1487/robotics_research/tripods/dv_l4dc_plot/tables/matrix_certified_body.tex": "43f9939bec15acf0b8b0a2c1df7791e3f5e6dd8b7f78f4daa79833fa91c72fde"
+    "/common/home/dm1487/robotics_research/tripods/dv_l4dc_plot/values/table_matrix_certified_values.json": "b95da3f3e6f726c59362c0142813f1d9222556f7823df6810e4bd488cab8288b",
+    "/common/home/dm1487/robotics_research/tripods/dv_l4dc_plot/tables/matrix_certified_body.tex": "5cd280398347cc190d515f426a01f9df5e93790938c7cf47d628f8472ee406b4"
   },
   "verified_original_cells": 90,
   "cells": [
@@ -21,7 +21,7 @@
       "min": 93.484312,
       "max": 99.962045,
       "tex": "$96.97$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -36,7 +36,7 @@
       "min": 1.040462,
       "max": 2.519789,
       "tex": "$1.67$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -51,7 +51,7 @@
       "min": 75.894671,
       "max": 95.593061,
       "tex": "$85.30$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -66,7 +66,7 @@
       "min": 0.0,
       "max": 2.850463,
       "tex": "$1.11$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -81,7 +81,7 @@
       "min": 2.178533,
       "max": 15.244904,
       "tex": "$9.03$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -95,8 +95,8 @@
       "mean": 99.163552,
       "min": 99.021178,
       "max": 99.421605,
-      "tex": "$\\mathbf{99.16}$",
-      "best": true
+      "tex": "$99.16$",
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -111,7 +111,7 @@
       "min": 1.285917,
       "max": 2.077125,
       "tex": "$1.77$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -126,7 +126,7 @@
       "min": 98.184456,
       "max": 99.402008,
       "tex": "$98.71$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -140,8 +140,8 @@
       "mean": 0.064043,
       "min": 0.03194,
       "max": 0.096556,
-      "tex": "$\\mathbf{0.06}$",
-      "best": true
+      "tex": "$0.06$",
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -156,7 +156,7 @@
       "min": 0.134957,
       "max": 1.400983,
       "tex": "$0.84$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -171,7 +171,7 @@
       "min": 64.520597,
       "max": 68.404495,
       "tex": "$66.13$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -186,7 +186,7 @@
       "min": 3.150067,
       "max": 4.93043,
       "tex": "$4.04$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -201,7 +201,7 @@
       "min": 34.96034,
       "max": 45.679672,
       "tex": "$39.51$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -215,8 +215,8 @@
       "mean": 0.096232,
       "min": 0.055656,
       "max": 0.171401,
-      "tex": "$\\mathbf{0.10}$",
-      "best": true
+      "tex": "$0.10$",
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -231,7 +231,7 @@
       "min": 49.452501,
       "max": 57.940691,
       "tex": "$54.01$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -246,7 +246,7 @@
       "min": 94.154858,
       "max": 98.987854,
       "tex": "$96.50$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -260,8 +260,8 @@
       "mean": 0.772514,
       "min": 0.209616,
       "max": 1.149716,
-      "tex": "$\\mathbf{0.77}$",
-      "best": true
+      "tex": "$0.77$",
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -276,7 +276,7 @@
       "min": 92.139397,
       "max": 98.648226,
       "tex": "$95.43$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -291,7 +291,7 @@
       "min": 0.073578,
       "max": 0.447446,
       "tex": "$0.30$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -306,7 +306,7 @@
       "min": 0.555502,
       "max": 6.487296,
       "tex": "$3.70$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -321,7 +321,7 @@
       "min": 97.125823,
       "max": 99.297028,
       "tex": "$98.16$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -336,7 +336,7 @@
       "min": 0.853847,
       "max": 1.760718,
       "tex": "$1.21$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -351,7 +351,7 @@
       "min": 97.217865,
       "max": 99.582386,
       "tex": "$98.42$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -366,7 +366,7 @@
       "min": 0.050393,
       "max": 0.423471,
       "tex": "$0.18$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -381,7 +381,7 @@
       "min": 0.363099,
       "max": 2.406735,
       "tex": "$1.26$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -396,7 +396,7 @@
       "min": 68.584544,
       "max": 71.328796,
       "tex": "$69.70$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -411,7 +411,7 @@
       "min": 3.491286,
       "max": 4.262269,
       "tex": "$3.93$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -426,7 +426,7 @@
       "min": 39.959283,
       "max": 83.693778,
       "tex": "$68.24$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -441,7 +441,7 @@
       "min": 0.218071,
       "max": 1.719194,
       "tex": "$1.02$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -456,7 +456,7 @@
       "min": 17.18001,
       "max": 52.923758,
       "tex": "$30.17$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -470,8 +470,8 @@
       "mean": 98.431174,
       "min": 97.520243,
       "max": 99.557186,
-      "tex": "$\\mathbf{98.43}$",
-      "best": true
+      "tex": "$98.43$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -486,7 +486,7 @@
       "min": 0.269784,
       "max": 1.633486,
       "tex": "$0.82$",
-      "best": false
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -500,8 +500,8 @@
       "mean": 98.127312,
       "min": 96.061885,
       "max": 99.26551,
-      "tex": "$\\mathbf{98.13}$",
-      "best": true
+      "tex": "$98.13$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -515,8 +515,8 @@
       "mean": 0.269767,
       "min": 0.070944,
       "max": 0.454474,
-      "tex": "$\\mathbf{0.27}$",
-      "best": true
+      "tex": "$0.27$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -531,7 +531,7 @@
       "min": 0.502367,
       "max": 2.593952,
       "tex": "$1.28$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -546,7 +546,7 @@
       "min": 97.134721,
       "max": 99.11906,
       "tex": "$98.24$",
-      "best": false
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -560,8 +560,8 @@
       "mean": 0.67767,
       "min": 0.283183,
       "max": 1.398601,
-      "tex": "$\\mathbf{0.68}$",
-      "best": true
+      "tex": "$0.68$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -575,8 +575,8 @@
       "mean": 99.285023,
       "min": 98.294251,
       "max": 99.87648,
-      "tex": "$\\mathbf{99.29}$",
-      "best": true
+      "tex": "$99.29$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -591,7 +591,7 @@
       "min": 0.017949,
       "max": 0.396919,
       "tex": "$0.17$",
-      "best": false
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -606,7 +606,7 @@
       "min": 0.242601,
       "max": 1.288519,
       "tex": "$0.64$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -620,8 +620,8 @@
       "mean": 72.220464,
       "min": 70.808437,
       "max": 74.239247,
-      "tex": "$\\mathbf{72.22}$",
-      "best": true
+      "tex": "$72.22$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -635,8 +635,8 @@
       "mean": 3.29037,
       "min": 2.567314,
       "max": 4.092222,
-      "tex": "$\\mathbf{3.29}$",
-      "best": true
+      "tex": "$3.29$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -650,8 +650,8 @@
       "mean": 94.800254,
       "min": 92.846177,
       "max": 96.194195,
-      "tex": "$\\mathbf{94.80}$",
-      "best": true
+      "tex": "$94.80$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -666,7 +666,7 @@
       "min": 2.803221,
       "max": 4.414585,
       "tex": "$3.74$",
-      "best": false
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -681,7 +681,7 @@
       "min": 5.210577,
       "max": 8.451719,
       "tex": "$6.72$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -696,7 +696,7 @@
       "min": 70.493634,
       "max": 79.499665,
       "tex": "$75.32$",
-      "best": false
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -710,8 +710,8 @@
       "mean": 2.817815,
       "min": 1.975401,
       "max": 3.888529,
-      "tex": "$\\mathbf{2.82}$",
-      "best": true
+      "tex": "$2.82$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -726,7 +726,7 @@
       "min": 78.305881,
       "max": 82.164313,
       "tex": "$80.39$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -740,8 +740,8 @@
       "mean": 0.027457,
       "min": 0.018398,
       "max": 0.032953,
-      "tex": "$\\mathbf{0.03}$",
-      "best": true
+      "tex": "$0.03$",
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -756,7 +756,7 @@
       "min": 18.647816,
       "max": 21.025195,
       "tex": "$20.16$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -771,7 +771,7 @@
       "min": 73.69682,
       "max": 76.30318,
       "tex": "$75.13$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -786,7 +786,7 @@
       "min": 3.973134,
       "max": 4.568015,
       "tex": "$4.24$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -801,7 +801,7 @@
       "min": 88.013973,
       "max": 91.003429,
       "tex": "$89.21$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -815,8 +815,8 @@
       "mean": 0.014712,
       "min": 0.005826,
       "max": 0.027461,
-      "tex": "$\\mathbf{0.01}$",
-      "best": true
+      "tex": "$0.01$",
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -831,7 +831,7 @@
       "min": 9.94823,
       "max": 12.895417,
       "tex": "$11.65$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -846,7 +846,7 @@
       "min": 32.021588,
       "max": 36.953752,
       "tex": "$33.73$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -861,7 +861,7 @@
       "min": 2.997275,
       "max": 4.427141,
       "tex": "$3.66$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -876,7 +876,7 @@
       "min": 60.191476,
       "max": 76.136504,
       "tex": "$69.96$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -890,8 +890,8 @@
       "mean": 0.005839,
       "min": 0.002932,
       "max": 0.011588,
-      "tex": "$\\mathbf{0.01}$",
-      "best": true
+      "tex": "$0.01$",
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -906,7 +906,7 @@
       "min": 26.252391,
       "max": 41.279828,
       "tex": "$31.97$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -920,8 +920,8 @@
       "mean": 75.709925,
       "min": 73.777083,
       "max": 78.865312,
-      "tex": "$\\mathbf{75.71}$",
-      "best": true
+      "tex": "$75.71$",
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -936,7 +936,7 @@
       "min": 3.080986,
       "max": 4.089733,
       "tex": "$3.66$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -950,8 +950,8 @@
       "mean": 85.337737,
       "min": 84.124011,
       "max": 86.022745,
-      "tex": "$\\mathbf{85.34}$",
-      "best": true
+      "tex": "$85.34$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -966,7 +966,7 @@
       "min": 0.26414,
       "max": 0.478322,
       "tex": "$0.35$",
-      "best": false
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -981,7 +981,7 @@
       "min": 14.685222,
       "max": 17.288172,
       "tex": "$15.76$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -996,7 +996,7 @@
       "min": 70.531436,
       "max": 75.02541,
       "tex": "$72.30$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -1011,7 +1011,7 @@
       "min": 3.835616,
       "max": 5.435578,
       "tex": "$4.40$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -1026,7 +1026,7 @@
       "min": 85.060411,
       "max": 98.964202,
       "tex": "$90.63$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -1041,7 +1041,7 @@
       "min": 0.200791,
       "max": 0.962161,
       "tex": "$0.49$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -1056,7 +1056,7 @@
       "min": 2.225115,
       "max": 15.246571,
       "tex": "$10.16$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -1070,8 +1070,8 @@
       "mean": 0.0,
       "min": 0.0,
       "max": 0.0,
-      "tex": "$0.00$",
-      "best": false
+      "tex": "--",
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -1086,7 +1086,7 @@
       "min": null,
       "max": null,
       "tex": "--",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -1100,8 +1100,8 @@
       "mean": 0.0,
       "min": 0.0,
       "max": 0.0,
-      "tex": "$0.00$",
-      "best": false
+      "tex": "--",
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -1116,7 +1116,7 @@
       "min": null,
       "max": null,
       "tex": "--",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -1131,7 +1131,7 @@
       "min": 100.0,
       "max": 100.0,
       "tex": "$100.00$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -1146,7 +1146,7 @@
       "min": 71.73107,
       "max": 74.085325,
       "tex": "$72.64$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -1161,7 +1161,7 @@
       "min": 2.978852,
       "max": 3.722706,
       "tex": "$3.44$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -1176,7 +1176,7 @@
       "min": 81.403933,
       "max": 89.298144,
       "tex": "$84.95$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -1191,7 +1191,7 @@
       "min": 0.096583,
       "max": 0.435024,
       "tex": "$0.26$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -1206,7 +1206,7 @@
       "min": 13.255419,
       "max": 20.018117,
       "tex": "$16.80$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -1220,8 +1220,8 @@
       "mean": 79.899327,
       "min": 76.30318,
       "max": 81.704661,
-      "tex": "$\\mathbf{79.90}$",
-      "best": true
+      "tex": "$79.90$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -1235,8 +1235,8 @@
       "mean": 4.210731,
       "min": 3.595671,
       "max": 4.530031,
-      "tex": "$\\mathbf{4.21}$",
-      "best": true
+      "tex": "$4.21$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -1250,8 +1250,8 @@
       "mean": 98.849897,
       "min": 98.161074,
       "max": 99.462231,
-      "tex": "$\\mathbf{98.85}$",
-      "best": true
+      "tex": "$98.85$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -1266,7 +1266,7 @@
       "min": 0.388958,
       "max": 1.147302,
       "tex": "$0.73$",
-      "best": false
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -1281,7 +1281,7 @@
       "min": 0.606046,
       "max": 3.029054,
       "tex": "$1.73$",
-      "best": false
+      "shaded": false
     },
     {
       "table": "matrix_certified_main",
@@ -1295,8 +1295,8 @@
       "mean": 57.601879,
       "min": 48.114834,
       "max": 64.657822,
-      "tex": "$\\mathbf{57.60}$",
-      "best": true
+      "tex": "$57.60$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -1310,8 +1310,8 @@
       "mean": 2.925403,
       "min": 1.397849,
       "max": 4.304415,
-      "tex": "$\\mathbf{2.93}$",
-      "best": true
+      "tex": "$2.93$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -1325,8 +1325,8 @@
       "mean": 76.482102,
       "min": 65.708109,
       "max": 94.744551,
-      "tex": "$\\mathbf{76.48}$",
-      "best": true
+      "tex": "$76.48$",
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -1341,7 +1341,7 @@
       "min": 0.026211,
       "max": 0.097229,
       "tex": "$0.05$",
-      "best": false
+      "shaded": true
     },
     {
       "table": "matrix_certified_main",
@@ -1356,7 +1356,7 @@
       "min": 6.679139,
       "max": 35.21402,
       "tex": "$24.42$",
-      "best": false
+      "shaded": false
     }
   ]
 }

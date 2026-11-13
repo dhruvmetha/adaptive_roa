@@ -3,43 +3,32 @@
 \resizebox{\ifdim\width>\textwidth\textwidth\else\width\fi}{!}{%
 \begin{tabular}{l@{\hspace{6pt}}rr!{\tablepairdivider}rr!{\tablepairdivider}r!{\hspace{3pt}\tablesystemdivider\hspace{3pt}}rr!{\tablepairdivider}rr!{\tablepairdivider}r!{\hspace{3pt}\tablesystemdivider\hspace{3pt}}rr!{\tablepairdivider}rr!{\tablepairdivider}r}
 \toprule
-\multicolumn{16}{c}{\textbf{LQR controllers}} \\
-\midrule
- & \multicolumn{5}{c}{Pendulum (2D)} & \multicolumn{5}{c}{Cartpole (4D)} & \multicolumn{5}{c}{Spatial Quad (12D)} \\
+\textbf{LQR} & \multicolumn{5}{c}{Pendulum (2D)} & \multicolumn{5}{c}{Cartpole (4D)} & \multicolumn{5}{c}{Spatial Quad (12D)} \\
 \cmidrule(lr){2-6}\cmidrule(lr){7-11}\cmidrule(lr){12-16}
-\textbf{Method} & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & Abst.$\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & Abst.$\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & Abst.$\downarrow$ \\
+\textbf{Method} & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & $\widehat{\mathrm{Abst}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & $\widehat{\mathrm{Abst}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & $\widehat{\mathrm{Abst}}\downarrow$ \\
 \midrule
 DeepReach & $97.47$ & $1.35$ & $98.45$ & $0.87$ & $0.88$ & $0.08$ & $92.10$ & $92.68$ & $12.36$ & $12.56$ & $10.89$ & $35.32$ & $83.65$ & $9.77$ & $24.99$ \\
-Lyapunov NN & $59.78$ & $3.58$ & $71.30$ & $4.88$ & $29.98$ & $60.30$ & $8.67$ & $93.11$ & $3.13$ & $9.28$ & $44.64$ & $\mathbf{0.88}$ & $88.05$ & $5.61$ & $17.22$ \\
-MORALS & $72.10$ & $6.11$ & $94.75$ & $10.44$ & $5.08$ & $5.71$ & $46.68$ & $74.07$ & $4.22$ & $34.90$ & $0.00$ & -- & $\mathbf{100.00}$ & $21.94$ & $0.00$ \\
+Lyapunov NN & $59.78$ & $3.58$ & $71.30$ & $4.88$ & $29.98$ & $60.30$ & $8.67$ & $93.11$ & $3.13$ & $9.28$ & $44.64$ & $0.88$ & $88.05$ & $5.61$ & $17.22$ \\
+MORALS & $72.10$ & $6.11$ & $94.75$ & $10.44$ & $5.08$ & $5.71$ & $46.68$ & $74.07$ & $4.22$ & $34.90$ & -- & -- & $100.00$ & $21.94$ & $0.00$ \\
 Part-X GP & $90.89$ & $2.42$ & $94.30$ & $1.89$ & $5.02$ & $25.32$ & $3.36$ & $89.97$ & $1.64$ & $20.36$ & $0.55$ & $31.55$ & $92.22$ & $19.33$ & $10.42$ \\
 \midrule
-\nameBNNLabel{} & $96.75$ & $1.40$ & $\mathbf{99.15}$ & $1.95$ & $0.00$ & $\mathbf{98.26}$ & $0.93$ & $99.32$ & $0.15$ & $0.58$ & $60.30$ & $2.36$ & $93.57$ & $4.29$ & $10.11$ \\
-\nameBNN{} & $96.36$ & $\mathbf{0.62}$ & $95.82$ & $0.32$ & $3.56$ & $97.80$ & $1.02$ & $99.31$ & $0.19$ & $0.63$ & $\mathbf{69.56}$ & $4.17$ & $94.10$ & $3.56$ & $7.87$ \\
+\nameBNNLabel{} & $96.75$ & $1.40$ & $99.15$ & $1.95$ & $0.00$ & $98.26$ & $0.93$ & $99.32$ & $0.15$ & $0.58$ & $60.30$ & $2.36$ & $93.57$ & $4.29$ & $10.11$ \\
+\nameBNN{} & $96.36$ & $0.62$ & $95.82$ & $0.32$ & $3.56$ & $97.80$ & $1.02$ & $99.31$ & $0.19$ & $0.63$ & $69.56$ & $4.17$ & $94.10$ & $3.56$ & $7.87$ \\
 \midrule
 \nameUnif{} & $96.07$ & $0.79$ & $97.93$ & $0.76$ & $2.02$ & $93.66$ & $1.85$ & $99.16$ & $0.81$ & $0.85$ & $66.92$ & $3.11$ & $93.53$ & $3.71$ & $9.02$ \\
-\name{} & $\mathbf{98.28}$ & $0.77$ & $97.99$ & $\mathbf{0.23}$ & $1.47$ & $98.22$ & $\mathbf{0.63}$ & $\mathbf{99.59}$ & $\mathbf{0.10}$ & $0.46$ & $67.77$ & $2.27$ & $92.09$ & $\mathbf{2.51}$ & $11.02$ \\
-\bottomrule
-\end{tabular}}
-\par\medskip
-\resizebox{\ifdim\width>\textwidth\textwidth\else\width\fi}{!}{%
-\begin{tabular}{l@{\hspace{6pt}}rr!{\tablepairdivider}rr!{\tablepairdivider}r!{\hspace{3pt}\tablesystemdivider\hspace{3pt}}rr!{\tablepairdivider}rr!{\tablepairdivider}r!{\hspace{3pt}\tablesystemdivider\hspace{3pt}}rr!{\tablepairdivider}rr!{\tablepairdivider}r}
-\toprule
-\multicolumn{16}{c}{\textbf{RL controllers}} \\
-\midrule
- & \multicolumn{5}{c}{Cartpole (4D)} & \multicolumn{5}{c}{Planar Quad (6D)} & \multicolumn{5}{c}{Spatial Quad (12D)} \\
+\name{} & \cellcolor{tablebest}$98.28$ & \cellcolor{tablebest}$0.77$ & \cellcolor{tablebest}$97.99$ & \cellcolor{tablebest}$0.23$ & $1.47$ & \cellcolor{tablebest}$98.22$ & \cellcolor{tablebest}$0.63$ & \cellcolor{tablebest}$99.59$ & \cellcolor{tablebest}$0.10$ & $0.46$ & \cellcolor{tablebest}$67.77$ & \cellcolor{tablebest}$2.27$ & \cellcolor{tablebest}$92.09$ & \cellcolor{tablebest}$2.51$ & $11.02$ \\
+\midrule[\heavyrulewidth]
+\textbf{RL} & \multicolumn{5}{c}{Cartpole (4D)} & \multicolumn{5}{c}{Planar Quad (6D)} & \multicolumn{5}{c}{Spatial Quad (12D)} \\
 \cmidrule(lr){2-6}\cmidrule(lr){7-11}\cmidrule(lr){12-16}
-\textbf{Method} & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & Abst.$\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & Abst.$\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{s}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{s}}\downarrow$ & $\widehat{\mathrm{Rec}}_{\mathrm{f}}\uparrow$ & $\widehat{\mathrm{Err}}_{\mathrm{f}}\downarrow$ & Abst.$\downarrow$ \\
-\midrule
 DeepReach & $29.52$ & $18.42$ & $84.20$ & $1.92$ & $23.87$ & $0.02$ & $96.25$ & $99.94$ & $8.12$ & $0.00$ & $1.24$ & $31.83$ & $94.71$ & $1.72$ & $8.90$ \\
 Lyapunov NN & $51.20$ & $9.91$ & $87.87$ & $2.07$ & $16.78$ & $10.25$ & $13.11$ & $93.45$ & $2.38$ & $11.08$ & $32.06$ & $6.29$ & $96.04$ & $1.08$ & $6.40$ \\
-MORALS & $3.10$ & $19.25^{(2)}$ & $74.08$ & $5.38$ & $36.26$ & $0.04$ & $95.65$ & $\mathbf{99.95}$ & $8.11$ & $0.00$ & $0.00$ & -- & $\mathbf{100.00}$ & $5.56$ & $0.00$ \\
+MORALS & $3.10$ & $19.25^{(2)}$ & $74.08$ & $5.38$ & $36.26$ & $0.04$ & $95.65$ & $99.95$ & $8.11$ & $0.00$ & -- & -- & $100.00$ & $5.56$ & $0.00$ \\
 Part-X GP & $40.27$ & $7.93$ & $88.85$ & $4.12$ & $16.94$ & $24.21$ & $6.78$ & $96.01$ & $2.27$ & $7.57$ & $0.81$ & $17.91$ & $98.38$ & $4.66$ & $2.49$ \\
 \midrule
-\nameBNNLabel{} & $\mathbf{77.21}$ & $3.53$ & $\mathbf{94.82}$ & $0.79$ & $7.47$ & $73.73$ & $3.92$ & $98.02$ & $0.47$ & $3.27$ & $39.62$ & $5.48$ & $96.81$ & $0.85$ & $5.44$ \\
-\nameBNN{} & $74.91$ & $3.82$ & $93.59$ & $0.79$ & $8.92$ & $64.51$ & $\mathbf{3.34}$ & $97.61$ & $0.58$ & $4.36$ & $60.52$ & $9.75$ & $97.40$ & $0.70$ & $3.63$ \\
+\nameBNNLabel{} & \cellcolor{tablebest}$77.21$ & \cellcolor{tablebest}$3.53$ & \cellcolor{tablebest}$94.82$ & \cellcolor{tablebest}$0.79$ & $7.47$ & $73.73$ & $3.92$ & $98.02$ & $0.47$ & $3.27$ & $39.62$ & $5.48$ & $96.81$ & $0.85$ & $5.44$ \\
+\nameBNN{} & $74.91$ & $3.82$ & $93.59$ & $0.79$ & $8.92$ & $64.51$ & $3.34$ & $97.61$ & $0.58$ & $4.36$ & $60.52$ & $9.75$ & $97.40$ & $0.70$ & $3.63$ \\
 \midrule
-\nameUnif{} & $55.60$ & $2.87$ & $91.70$ & $1.32$ & $14.10$ & $72.33$ & $9.07$ & $97.44$ & $0.81$ & $3.27$ & $\mathbf{66.32}$ & $8.30$ & $97.96$ & $0.90$ & $2.62$ \\
-\name{} & $64.43$ & $\mathbf{2.17}$ & $93.18$ & $\mathbf{0.67}$ & $11.75$ & $\mathbf{77.88}$ & $3.61$ & $98.28$ & $\mathbf{0.43}$ & $2.75$ & $64.81$ & $\mathbf{4.25}$ & $97.46$ & $\mathbf{0.42}$ & $3.80$ \\
+\nameUnif{} & $55.60$ & $2.87$ & $91.70$ & $1.32$ & $14.10$ & $72.33$ & $9.07$ & $97.44$ & $0.81$ & $3.27$ & $66.32$ & $8.30$ & $97.96$ & $0.90$ & $2.62$ \\
+\name{} & $64.43$ & $2.17$ & $93.18$ & $0.67$ & $11.75$ & \cellcolor{tablebest}$77.88$ & \cellcolor{tablebest}$3.61$ & \cellcolor{tablebest}$98.28$ & \cellcolor{tablebest}$0.43$ & $2.75$ & \cellcolor{tablebest}$64.81$ & \cellcolor{tablebest}$4.25$ & \cellcolor{tablebest}$97.46$ & \cellcolor{tablebest}$0.42$ & $3.80$ \\
 \bottomrule
 \end{tabular}}

@@ -226,12 +226,14 @@ LINE = dict(success="#5497d9", fail="#ca7d44", abstain="#8C8C8C", ref="#666666")
 LS = dict(recall="-", error=(0, (3.2, 1.3, 0.9, 1.3)), ref="-")
 LW = dict(curve=1.1, ref=.6, boundary=.6)
 # Methods differ by marker shape and fill, never by colour, so colour always names the metric.
+# BNN-Label moved from the thin diamond "d" to a pentagon "p" (Sumanth, 2026-11-13): "d" and TERA-BNN's "D" were
+# hard to tell apart at print size.
 METHOD_MARKER = {
     "TERA": dict(marker="o", filled=True), "Unif-TERA": dict(marker="s", filled=False),
     "TERA-MLP": dict(marker="^", filled=True), "TERA-BNN": dict(marker="D", filled=True),
-    "MLP-Label": dict(marker="v", filled=False), "BNN-Label": dict(marker="d", filled=False),
+    "MLP-Label": dict(marker="v", filled=False), "BNN-Label": dict(marker="p", filled=False),
     "Unif-TERA-MLP": dict(marker="^", filled=False), "Unif-TERA-BNN": dict(marker="D", filled=False),
-    "Unif-MLP-Label": dict(marker="v", filled=False), "Unif-BNN-Label": dict(marker="d", filled=False),
+    "Unif-MLP-Label": dict(marker="v", filled=False), "Unif-BNN-Label": dict(marker="p", filled=False),
     "DeepReach": dict(marker="X", filled=True), "Lyapunov NN": dict(marker="P", filled=True),
     "MORALS": dict(marker="*", filled=True), "Part-X GP": dict(marker="h", filled=True),
 }

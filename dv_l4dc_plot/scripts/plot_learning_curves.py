@@ -293,6 +293,9 @@ RESTYLE_LEGEND_GAP = 1.0
 # (Sumanth, 2026-11-13: smaller circles and squares; they were 3.0 and .6).
 RESTYLE_METHOD_LS = {ARM_LABEL['U_H']: LS['recall'], ARM_LABEL['uniform']: LS['error']}
 RESTYLE_MARKERS = (2.4, .5)
+# Legend (Sumanth, 2026-11-13): the method keys lead the row, and the legend's lines are 1.6 pt; the panel lines stay
+# LW['curve'].
+RESTYLE_LEGEND_LW = 1.6
 
 
 def annotate(panels, data, rows):
@@ -362,7 +365,7 @@ def generate_restyled():
         rec_fill=dict(metric='abstain', label=ABST, alpha=.30,
                       colors={ARM_LABEL['U_H']: ARM_FILL['adaptive'], ARM_LABEL['uniform']: ARM_FILL['uniform']}),
         decorate=lambda panels: annotate(panels, data, rows), legend_columnspacing=RESTYLE_LEGEND_GAP,
-        method_ls=RESTYLE_METHOD_LS, markers=RESTYLE_MARKERS)
+        method_ls=RESTYLE_METHOD_LS, markers=RESTYLE_MARKERS, legend_lw=RESTYLE_LEGEND_LW, methods_first=True)
     g = out['geometry']
     print(f"  panels {g['panel_w']:.3f} in wide, recall {g['rec_h']:.3f} in, error {g['err_h']:.3f} in; "
           f"legend {out['legend_ncol']} columns; layout settled in {g['iterations']} passes")

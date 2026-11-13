@@ -235,8 +235,8 @@ def dashdot_handlelength():
     return (sum(dash) + dash[0]) * LW['curve'] / FS['legend']
 
 
-def metric_handle(metric, ls=None):
-    return Line2D([], [], color=SIDE[metric], ls=KIND[metric] if ls is None else ls, lw=LW['curve'])
+def metric_handle(metric, ls=None, lw=LW['curve']):
+    return Line2D([], [], color=SIDE[metric], ls=KIND[metric] if ls is None else ls, lw=lw)
 
 
 # Legend keys that set their own width (Figure 7, Sumanth 2026-11-13). The legend gives every handle the same
@@ -252,13 +252,14 @@ def fill_square(x, y, side, color, alpha):
     return Rectangle((x, y), side, side, facecolor=matplotlib.colors.to_rgba(color, alpha), edgecolor=color, lw=.5)
 
 
-def centred_dashes(ls, length_pt, lw):
-    """A dash tuple (offset, seq) shifted so the middle of seq[2], the dot of a dash-dot, falls at the middle of a key
-    line length_pt long drawn at lw: the key then reads dash, dot, dash between its end markers. A named style such
-    as '-' passes through. matplotlib scales the offset and the pattern by lw (lines.scale_dashes)."""
+def centred_dashes(ls, length_pt, lw, ref_lw=LW['curve']):
+    """A dash tuple (offset, seq) for a key line length_pt long drawn at lw: the pattern drawn as long as the panels
+    draw it at ref_lw, shifted so the middle of seq[2], the dot of a dash-dot, falls at the key's middle. The key then
+    reads dash, dot, dash between its end markers. A named style such as '-' passes through. matplotlib scales the
+    offset and the pattern by the line width (lines.scale_dashes), hence the ref_lw / lw factor."""
     if not isinstance(ls, tuple):
         return ls
-    seq = ls[1]
+    seq = tuple(d * ref_lw / lw for d in ls[1])
     return ((seq[0] + seq[1] + seq[2] / 2 - length_pt / 2 / lw) % sum(seq), seq)
 
 
@@ -280,10 +281,11 @@ class SwatchKey(LegendKey):
 
 class MethodKey(LegendKey):
     """A method's key: its marker in both side colours (success left, failure right) at the two ends of an INK line
-    line_pt long in the method's line style (no line when ls is None), then its fill colour as a square the size of
-    SwatchKey's (none when fill is None)."""
-    def __init__(self, method, ms, mew, line_pt, ls=None, fill=None, alpha=None):
+    line_pt long and lw wide in the method's line style (no line when ls is None), then its fill colour as a square
+    the size of SwatchKey's (none when fill is None)."""
+    def __init__(self, method, ms, mew, line_pt, ls=None, fill=None, alpha=None, lw=LW['curve']):
         self.method, self.ms, self.mew, self.line_pt, self.ls, self.fill, self.alpha = method, ms, mew, line_pt, ls, fill, alpha
+        self.lw = lw
 
     def width(self, h):
         return self.line_pt + (KEY_GAP_PT + h if self.fill else 0)
@@ -292,8 +294,7 @@ class MethodKey(LegendKey):
         yc, r, L = y0 + h / 2, (self.ms + self.mew) / 2, self.line_pt
         out = []
         if self.ls is not None:
-            out.append(Line2D([x0, x0 + L], [yc, yc], color=INK, lw=LW['curve'],
-                              ls=centred_dashes(self.ls, L, LW['curve'])))
+            out.append(Line2D([x0, x0 + L], [yc, yc], color=INK, lw=self.lw, ls=centred_dashes(self.ls, L, self.lw)))
         out += [Line2D([x], [yc], ls='none', **marker_kw(self.method, SIDE[m], self.ms, self.mew))
                 for x, m in [(x0 + r, 'rec'), (x0 + L - r, 'fail_rec')]]
         if self.fill:
@@ -508,7 +509,8 @@ def save_restyled(fig, stem):
 
 def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_labels, legend_methods, ylabels,
                           rec_aspect, err_ratio, band_alpha, xlim=None, ref_label=None, rec_extra=(), rec_fill=None,
-                          decorate=None, legend_columnspacing=None, method_ls=None, markers=(MARKER_PT, EDGE_PT)):
+                          decorate=None, legend_columnspacing=None, method_ls=None, markers=(MARKER_PT, EDGE_PT),
+                          legend_lw=None, methods_first=False):
     """The split layout (recall panel over error panel per setting, settings in 2 rows x 3) in the paper style at
     PRINT_WIDTH[stem], laid out by tight_split_layout. Colour = the metric's side, line style = its kind (recall
     solid, error dash-dot), arm = marker shape and fill only; with method_ls, line style names the arm instead.
@@ -527,6 +529,8 @@ def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_l
       kind; each arm's methods must then be one name. The metric keys become solid colour lines and each method key
       shows its line between its two markers (MethodKey).
     markers: (size, edge width) of every marker in points, panels and legend.
+    legend_lw: width of the legend's lines in points (None: LW['curve'], as the panels); dash lengths stay the panels'.
+    methods_first: the method keys lead the legend row (Figure 7) instead of following the metric keys.
     legend_columnspacing: the legend's column gap in font sizes (None: the shared 1.3).
     decorate(panels): called with {setting: (upper, lower)} after the curves are drawn; returns in-panel texts,
       which check_restyled keeps inside their panel and clear of markers.
@@ -582,9 +586,15 @@ def split_figure_restyled(stem, arms, xticks, xlabel, titles, row_base, metric_l
                 labels_ = labels_ + [tex(rec_fill['label'])]
             ls = lambda m: method_ls[m] if method_ls else None
             m_handles = [MethodKey(m, ms, mew, line_pt=METHOD_KEY_PT if method_ls else 2 * ms + 2 * mew + 2,
-                                   ls=ls(m), fill=fill(m), alpha=alpha) for m in legend_methods]
-        legend, ncol = top_legend(fig, [metric_handle(m, ls='-' if method_ls else None) for m in metrics] + f_handles
-                                  + m_handles, labels_ + [ours(m) for m in legend_methods], W,
+                                   ls=ls(m), fill=fill(m), alpha=alpha, lw=legend_lw or LW['curve'])
+                         for m in legend_methods]
+        k_handles = [metric_handle(m, ls='-' if method_ls else None, lw=legend_lw or LW['curve']) for m in metrics]
+        k_labels, m_labels = labels_, [ours(m) for m in legend_methods]
+        if methods_first:
+            handles_, all_labels = m_handles + k_handles + f_handles, m_labels + k_labels
+        else:
+            handles_, all_labels = k_handles + f_handles + m_handles, k_labels + m_labels
+        legend, ncol = top_legend(fig, handles_, all_labels, W,
                                   ncols=(len(metrics) + len(f_handles) + len(m_handles), 4, 3, 2),
                                   handlelength=None if method_ls else dashdot_handlelength(),
                                   columnspacing=legend_columnspacing)

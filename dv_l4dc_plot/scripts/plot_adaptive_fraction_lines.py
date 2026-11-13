@@ -4,7 +4,7 @@ The paper's Fig 4 is the certified version (plot_adaptive_fraction_certified.py)
 2026-11-12 and adaptive_fraction.pdf left the paper. Nothing here writes to the paper any more.
 
   split_rowaxes_dotted  was the paper's Fig 4 until the certified version replaced it. Recall panel over an error panel
-               per setting, y axes zoomed and shared within each row (LQR, PPO), 1:1 panel heights.
+               per setting, y axes zoomed and shared within each row (LQR, RL), 1:1 panel heights.
                Recall solid, FDR/FOR dotted, solid gray 5% line (not in the legend), four-entry
                legend in the method section's terms. Fails if a marker or band would leave its panel.
   split_rowaxes  preview: the same without the dotted errors and four-entry legend
@@ -32,7 +32,7 @@ COMBOS = [('uniform', 0.), ('U_H', .5), ('U_H', .75), ('U_H', 1.)]
 RHO = np.array([rho for _, rho in COMBOS])
 RHO_LABELS = ['0', '.5', '.75', '1']
 XLABEL = r'Adaptive fraction $\rho$  ($\rho=0$ is uniform)'
-# Per-row y axes for the rowaxes splits: (ylim, ticks). Row 0 is LQR, row 1 is PPO.
+# Per-row y axes for the rowaxes splits: (ylim, ticks). Row 0 is LQR, row 1 is RL.
 ROW_AXES = {0: dict(rec=((48, 102), [50, 75, 100]), err=((-.18, 6), [0, 5])),
             1: dict(rec=((38, 102), [40, 70, 100]), err=((-.36, 12), [0, 5, 10]))}
 

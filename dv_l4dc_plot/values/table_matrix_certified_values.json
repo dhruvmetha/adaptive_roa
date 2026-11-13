@@ -1211,7 +1211,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1226,7 +1226,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1241,7 +1241,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1256,7 +1256,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1271,7 +1271,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1286,7 +1286,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1301,7 +1301,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1316,7 +1316,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1331,7 +1331,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1346,7 +1346,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1361,7 +1361,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1376,7 +1376,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1391,7 +1391,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1406,7 +1406,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1421,7 +1421,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1436,7 +1436,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1451,7 +1451,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1466,7 +1466,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1481,7 +1481,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1496,7 +1496,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1511,7 +1511,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1526,7 +1526,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1541,7 +1541,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1556,7 +1556,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1571,7 +1571,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1586,7 +1586,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1601,7 +1601,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1616,7 +1616,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1631,7 +1631,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1646,7 +1646,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1661,7 +1661,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1676,7 +1676,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1691,7 +1691,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1706,7 +1706,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1721,7 +1721,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1736,7 +1736,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1751,7 +1751,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1766,7 +1766,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1781,7 +1781,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1796,7 +1796,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1811,7 +1811,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1826,7 +1826,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1841,7 +1841,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1856,7 +1856,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1871,7 +1871,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1886,7 +1886,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -1901,7 +1901,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -1916,7 +1916,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -1931,7 +1931,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -1946,7 +1946,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -1961,7 +1961,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -1976,7 +1976,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -1991,7 +1991,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -2006,7 +2006,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -2021,7 +2021,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -2036,7 +2036,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -2051,7 +2051,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -2066,7 +2066,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -2081,7 +2081,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -2096,7 +2096,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -2111,7 +2111,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2126,7 +2126,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2141,7 +2141,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2156,7 +2156,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2171,7 +2171,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2186,7 +2186,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2201,7 +2201,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2216,7 +2216,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2231,7 +2231,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2246,7 +2246,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2261,7 +2261,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2276,7 +2276,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2291,7 +2291,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2306,7 +2306,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2321,7 +2321,7 @@
     },
     {
       "table": "matrix_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",

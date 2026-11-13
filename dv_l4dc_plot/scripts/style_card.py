@@ -178,7 +178,7 @@ def draw():
 
     ax.text(.05, y, 'Type: usetex, Times bold, bold Computer Modern math', **head)
     samples = [('tick', r'tick 7 pt: 0.25  1.5k  $-2\pi$'), ('legend', 'legend 7 pt: Unif-TERA'),
-               ('label', r'label 8 pt: $R_{\mathrm{s}}$ (\%)'), ('title', 'title 8 pt: Cartpole (4D), PPO')]
+               ('label', r'label 8 pt: $R_{\mathrm{s}}$ (\%)'), ('title', 'title 8 pt: Cartpole (4D), RL')]
     for i, (k, s) in enumerate(samples):
         ax.text(.05 + i * 1.47, y + .1, s, fontsize=FS[k], va='top', ha='left')
     ax.text(.05, y + .32, 'Ink: black text and axes; whiskers and counts ' + esc(INK), **small)

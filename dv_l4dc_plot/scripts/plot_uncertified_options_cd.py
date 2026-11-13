@@ -4,11 +4,11 @@ Table 2 is the empirical comparison at the validation-fitted w = 0.2 thresholds 
 result. All numbers come from uncertified_options_data.load(): six methods x six settings x five metrics, mean with
 min-max over seeds, each cell's LaTeX equal to the paper's table body.
 
-  C1 optC1_bars_numbers   one panel per setting (LQR row over PPO row), methods as rows. R_s (gold) and R_f (purple)
+  C1 optC1_bars_numbers   one panel per setting (LQR row over RL row), methods as rows. R_s (gold) and R_f (purple)
                           bars on 0-100 with min-max whiskers; FDR printed past the end of the R_s bar, FOR past R_f.
   C2 optC2_bars_erroraxis the same bars, with FDR and FOR as markers (method marker shape, side colour, min-max
                           whiskers) on a small log error axis beside each panel, and a 5% reference line.
-  D  optD_heatmap         the table as a shaded grid, LQR block over PPO block, every cell printing the table's 2 dp
+  D  optD_heatmap         the table as a shaded grid, LQR block over RL block, every cell printing the table's 2 dp
                           value. Gold = success side, purple = fail side, gray = abstention; darker = higher. Recalls
                           on a linear 0-100% scale; FDR, FOR and Abst. on one log10 scale from 0.1% (white) to 100%.
 
@@ -57,7 +57,7 @@ HEAD = {'rec': r'$R_{\mathrm{s}}\uparrow$', 'fdr': r'FDR$\downarrow$', 'fail_rec
 RS_RF = r'$R_{\mathrm{s}}$, $R_{\mathrm{f}}$'
 MISSING = [('q3d-lqr', 'MORALS', 'fdr'), ('q3d-ppo', 'MORALS', 'fdr')]
 PARTIAL = [('cp-ppo', 'MORALS', 'fdr')]
-NOTE = 'MORALS FDR{} undefined in Spatial Quad LQR and PPO: no Success declarations in any seed'
+NOTE = 'MORALS FDR{} undefined in Spatial Quad LQR and RL: no Success declarations in any seed'
 
 # Option C row geometry, in points. Data y is in points from the panel top (1 data unit = 1 pt), so these are exact.
 BAR_T = 5.0                  # bar thickness
@@ -74,7 +74,7 @@ ERR_W = .62                  # C2 error axis width (in)
 # Option D cell geometry.
 CELL_H = 9.5                 # pt
 SET_GAP = .22                # gap between settings, in columns
-BLOCK_GAP = 5.0              # pt between the LQR block's last row and the PPO block's title
+BLOCK_GAP = 5.0              # pt between the LQR block's last row and the RL block's title
 NUM_RE = re.compile(r'(\d+\.\d\d)(\^\{\(\d\)\})?')
 
 
@@ -596,7 +596,7 @@ def draw_d(D):
     gap_rows = sorted(set(range(len(edges) - 1)) - set(idx.values()))
     blocks = [SETTINGS[:3], SETTINGS[3:]]
     assert all(TITLES[SETTINGS.index(s)].endswith(', LQR') for s in blocks[0])
-    assert all(TITLES[SETTINGS.index(s)].endswith(', PPO') for s in blocks[1])
+    assert all(TITLES[SETTINGS.index(s)].endswith(', RL') for s in blocks[1])
     ncols = 3 * len(METRICS) + 2 * SET_GAP
     fig = plt.figure(figsize=(W, 3), dpi=DPI)
     axes, titles, meshes, texts, cells = [], [], {}, {}, []

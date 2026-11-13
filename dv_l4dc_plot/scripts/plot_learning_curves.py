@@ -1,6 +1,6 @@
 """Learning curves, uniform vs adaptive FM: paper figure adaptive_learning_a1d (certified, Fig 3).
 
-Six systems in two rows (LQR, PPO) of three. Each system has a recall panel (Success and Failure
+Six systems in two rows (LQR, RL) of three. Each system has a recall panel (Success and Failure
 recall, solid) over a shorter error panel (FDR and FOR, split.DASHDOT), about 0.63 of its height. Blue
 is the Success pair (Success recall, FDR), orange the Failure pair. The acquisition scheme is marker and
 shade: adaptive (U_H, rho = 0.75) in full color with circles, uniform 30% toward white with squares.
@@ -9,7 +9,7 @@ method-names.tex).
 A thin solid gray 5% line sits on every error panel, labelled once in the top-left one. Every x axis is
 the training budget in trajectories, labelled as counts (Dhruv, 2026-11-12): under 1000 as integers (100, 500),
 1000 and up with k (1k, 1.5k, 12k), with tick labels only under the error panels and one shared x label
-"Training trajectories". Data x is stored in thousands internally; only the labels change. y ranges are shared within each row (LQR, PPO) and derived from the
+"Training trajectories". Data x is stored in thousands internally; only the labels change. y ranges are shared within each row (LQR, RL) and derived from the
 data by row_axes(), so only the leftmost column carries y tick labels and the y labels.
 
 Line = three-seed mean, band = min to max over seeds (common.spread; never SD), drawn only where at
@@ -48,7 +48,7 @@ from common import install_paper
 PAPER_STEM = {'a1d': 'adaptive_learning_a1d', 'empirical': None}
 # Local titles (common.TITLES carries dimensions and stays as other figures use it).
 TITLE = {'pen-lqr': 'Pendulum LQR', 'cp-lqr': 'Cartpole LQR', 'q3d-lqr': 'Spatial quadrotor LQR',
-         'cp-ppo': 'Cartpole PPO', 'q2d-ppo': 'Planar quadrotor PPO', 'q3d-ppo': 'Spatial quadrotor PPO'}
+         'cp-ppo': 'Cartpole RL', 'q2d-ppo': 'Planar quadrotor RL', 'q3d-ppo': 'Spatial quadrotor RL'}
 # x tick positions in thousands of training trajectories (the plotted x), inside each system's budget range.
 XTICKS = {'pen-lqr': [.1, .2, .3, .4], 'cp-lqr': [.5, 1, 1.5, 2], 'q3d-lqr': [10, 20, 30],
           'cp-ppo': [.5, 1, 1.5, 2], 'q2d-ppo': [2, 4, 6, 8, 10, 12], 'q3d-ppo': [10, 20, 30, 40]}
@@ -97,7 +97,7 @@ def tick_labels(ticks):
 
 
 def row_axes(points):
-    """Per row (0 = LQR, 1 = PPO): recall and error (ylim, ticks) covering every mean and band in that row,
+    """Per row (0 = LQR, 1 = RL): recall and error (ylim, ticks) covering every mean and band in that row,
     padded so markers stay inside, with the error top above 5 so the 5% line shows. Two floors moved on
     2026-11-12 so a marker at 0%, edge stroke included ((3 + 0.6) / 2 = 1.8 pt), stays inside: error
     -0.05 x top (was -0.03) on the 0.56 in error panel, recall -4 (was -3) on the 0.88 in recall panel."""

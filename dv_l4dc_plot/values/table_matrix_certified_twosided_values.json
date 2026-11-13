@@ -3,8 +3,8 @@
   "source_hashes": {
     "/common/users/shared/pracsys/adaptive_roa_experiments/det_v3_seeds/_index/scored/matrix_rows.jsonl": "4a75be7c965c43bb4e94148536a5c6cf29cd27fdd083ee8ae9658e25a528da60",
     "/common/home/dm1487/robotics_research/tripods/deterministic-verification/results-discussion-assets/generalized_6c_values.json": "d63d99d42d9ec8f6196321c6b0c60bd339c96a01abb51c1f18e36ddf002f88a7",
-    "/common/home/dm1487/robotics_research/tripods/dv_l4dc_plot/values/table_matrix_certified_values.json": "5ef91460ff686f19ab6e9e1315bba8c12eb9a971ae6afcd77f43ad7d82f3f126",
-    "/common/home/dm1487/robotics_research/tripods/dv_l4dc_plot/tables/matrix_certified_body.tex": "135e232e70508b779ea0b9a64871da2bc9f40f097d206e8fcef564b1c7d7345f"
+    "/common/home/dm1487/robotics_research/tripods/dv_l4dc_plot/values/table_matrix_certified_values.json": "8cae3150353e6ced6c2c36146c44944fab659a61072c11db17a20e0379221712",
+    "/common/home/dm1487/robotics_research/tripods/dv_l4dc_plot/tables/matrix_certified_body.tex": "4058ece1823855a328d0f16c98fdde7525d3eb427740949357688ca5f8cdac01"
   },
   "verified_original_cells": 150,
   "cells": [
@@ -1135,7 +1135,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1150,7 +1150,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1165,7 +1165,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1180,7 +1180,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1195,7 +1195,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1210,7 +1210,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1225,7 +1225,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1240,7 +1240,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1255,7 +1255,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1270,7 +1270,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1285,7 +1285,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1300,7 +1300,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1315,7 +1315,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1330,7 +1330,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1345,7 +1345,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLPLabel{}",
       "model": "MLP classifier",
       "role": "model comparison",
@@ -1360,7 +1360,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1375,7 +1375,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1390,7 +1390,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1405,7 +1405,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1420,7 +1420,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1435,7 +1435,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1450,7 +1450,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1465,7 +1465,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1480,7 +1480,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1495,7 +1495,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1510,7 +1510,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1525,7 +1525,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1540,7 +1540,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1555,7 +1555,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1570,7 +1570,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNNLabel{}",
       "model": "BNN classifier",
       "role": "model comparison",
@@ -1585,7 +1585,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1600,7 +1600,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1615,7 +1615,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1630,7 +1630,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1645,7 +1645,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1660,7 +1660,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1675,7 +1675,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1690,7 +1690,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1705,7 +1705,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1720,7 +1720,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1735,7 +1735,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1750,7 +1750,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1765,7 +1765,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1780,7 +1780,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1795,7 +1795,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameMLP{}",
       "model": "MLP final-state",
       "role": "model comparison",
@@ -1810,7 +1810,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -1825,7 +1825,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -1840,7 +1840,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -1855,7 +1855,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -1870,7 +1870,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -1885,7 +1885,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -1900,7 +1900,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -1915,7 +1915,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -1930,7 +1930,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -1945,7 +1945,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -1960,7 +1960,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -1975,7 +1975,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -1990,7 +1990,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -2005,7 +2005,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -2020,7 +2020,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameBNN{}",
       "model": "BNN final-state",
       "role": "model comparison",
@@ -2035,7 +2035,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2050,7 +2050,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2065,7 +2065,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2080,7 +2080,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2095,7 +2095,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2110,7 +2110,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2125,7 +2125,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2140,7 +2140,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2155,7 +2155,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2170,7 +2170,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2185,7 +2185,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2200,7 +2200,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2215,7 +2215,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2230,7 +2230,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",
@@ -2245,7 +2245,7 @@
     },
     {
       "table": "matrix_certified_twosided",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\name{}",
       "model": "FM",
       "role": "method",

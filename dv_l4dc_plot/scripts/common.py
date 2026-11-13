@@ -64,8 +64,8 @@ def method_names():
     return {key: resolve(key) for key in required}
 
 SETTINGS = ['pen-lqr', 'cp-lqr', 'q3d-lqr', 'cp-ppo', 'q2d-ppo', 'q3d-ppo']
-TITLES = ['Pendulum (2D), LQR', 'Cartpole (4D), LQR', 'Spatial Quad (13D), LQR',
-          'Cartpole (4D), PPO', 'Planar Quad (6D), PPO', 'Spatial Quad (13D), PPO']
+TITLES = ['Pendulum (2D), LQR', 'Cartpole (4D), LQR', 'Spatial Quad (12D), LQR',
+          'Cartpole (4D), RL', 'Planar Quad (6D), RL', 'Spatial Quad (12D), RL']
 BLUE, ORANGE, GRAY = '#0072B2', '#D55E00', '#777777'
 REF = '#666666'                                          # 5% reference line
 RECALL = [('rec', BLUE), ('fail_rec', ORANGE)]           # R_s, R_f

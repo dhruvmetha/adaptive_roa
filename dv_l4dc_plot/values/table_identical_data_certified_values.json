@@ -681,7 +681,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNNLabel{}",
       "model": "Unif-BNN-Label",
       "setting": "cp-ppo",
@@ -697,7 +697,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNNLabel{}",
       "model": "Unif-BNN-Label",
       "setting": "cp-ppo",
@@ -711,7 +711,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNNLabel{}",
       "model": "Unif-BNN-Label",
       "setting": "cp-ppo",
@@ -727,7 +727,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNNLabel{}",
       "model": "Unif-BNN-Label",
       "setting": "cp-ppo",
@@ -741,7 +741,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNNLabel{}",
       "model": "Unif-BNN-Label",
       "setting": "cp-ppo",
@@ -757,7 +757,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNNLabel{}",
       "model": "Unif-BNN-Label",
       "setting": "q2d-ppo",
@@ -773,7 +773,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNNLabel{}",
       "model": "Unif-BNN-Label",
       "setting": "q2d-ppo",
@@ -787,7 +787,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNNLabel{}",
       "model": "Unif-BNN-Label",
       "setting": "q2d-ppo",
@@ -803,7 +803,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNNLabel{}",
       "model": "Unif-BNN-Label",
       "setting": "q2d-ppo",
@@ -817,7 +817,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNNLabel{}",
       "model": "Unif-BNN-Label",
       "setting": "q2d-ppo",
@@ -833,7 +833,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNNLabel{}",
       "model": "Unif-BNN-Label",
       "setting": "q3d-ppo",
@@ -849,7 +849,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNNLabel{}",
       "model": "Unif-BNN-Label",
       "setting": "q3d-ppo",
@@ -863,7 +863,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNNLabel{}",
       "model": "Unif-BNN-Label",
       "setting": "q3d-ppo",
@@ -879,7 +879,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNNLabel{}",
       "model": "Unif-BNN-Label",
       "setting": "q3d-ppo",
@@ -893,7 +893,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNNLabel{}",
       "model": "Unif-BNN-Label",
       "setting": "q3d-ppo",
@@ -909,7 +909,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNN{}",
       "model": "Unif-TERA-BNN",
       "setting": "cp-ppo",
@@ -925,7 +925,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNN{}",
       "model": "Unif-TERA-BNN",
       "setting": "cp-ppo",
@@ -939,7 +939,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNN{}",
       "model": "Unif-TERA-BNN",
       "setting": "cp-ppo",
@@ -955,7 +955,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNN{}",
       "model": "Unif-TERA-BNN",
       "setting": "cp-ppo",
@@ -969,7 +969,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNN{}",
       "model": "Unif-TERA-BNN",
       "setting": "cp-ppo",
@@ -985,7 +985,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNN{}",
       "model": "Unif-TERA-BNN",
       "setting": "q2d-ppo",
@@ -1001,7 +1001,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNN{}",
       "model": "Unif-TERA-BNN",
       "setting": "q2d-ppo",
@@ -1015,7 +1015,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNN{}",
       "model": "Unif-TERA-BNN",
       "setting": "q2d-ppo",
@@ -1031,7 +1031,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNN{}",
       "model": "Unif-TERA-BNN",
       "setting": "q2d-ppo",
@@ -1045,7 +1045,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNN{}",
       "model": "Unif-TERA-BNN",
       "setting": "q2d-ppo",
@@ -1061,7 +1061,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNN{}",
       "model": "Unif-TERA-BNN",
       "setting": "q3d-ppo",
@@ -1077,7 +1077,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNN{}",
       "model": "Unif-TERA-BNN",
       "setting": "q3d-ppo",
@@ -1091,7 +1091,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNN{}",
       "model": "Unif-TERA-BNN",
       "setting": "q3d-ppo",
@@ -1107,7 +1107,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNN{}",
       "model": "Unif-TERA-BNN",
       "setting": "q3d-ppo",
@@ -1121,7 +1121,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnifBNN{}",
       "model": "Unif-TERA-BNN",
       "setting": "q3d-ppo",
@@ -1137,7 +1137,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnif{}",
       "model": "Unif-TERA",
       "setting": "cp-ppo",
@@ -1151,7 +1151,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnif{}",
       "model": "Unif-TERA",
       "setting": "cp-ppo",
@@ -1165,7 +1165,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnif{}",
       "model": "Unif-TERA",
       "setting": "cp-ppo",
@@ -1179,7 +1179,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnif{}",
       "model": "Unif-TERA",
       "setting": "cp-ppo",
@@ -1193,7 +1193,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnif{}",
       "model": "Unif-TERA",
       "setting": "cp-ppo",
@@ -1207,7 +1207,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnif{}",
       "model": "Unif-TERA",
       "setting": "q2d-ppo",
@@ -1221,7 +1221,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnif{}",
       "model": "Unif-TERA",
       "setting": "q2d-ppo",
@@ -1235,7 +1235,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnif{}",
       "model": "Unif-TERA",
       "setting": "q2d-ppo",
@@ -1249,7 +1249,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnif{}",
       "model": "Unif-TERA",
       "setting": "q2d-ppo",
@@ -1263,7 +1263,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnif{}",
       "model": "Unif-TERA",
       "setting": "q2d-ppo",
@@ -1277,7 +1277,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnif{}",
       "model": "Unif-TERA",
       "setting": "q3d-ppo",
@@ -1291,7 +1291,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnif{}",
       "model": "Unif-TERA",
       "setting": "q3d-ppo",
@@ -1305,7 +1305,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnif{}",
       "model": "Unif-TERA",
       "setting": "q3d-ppo",
@@ -1319,7 +1319,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnif{}",
       "model": "Unif-TERA",
       "setting": "q3d-ppo",
@@ -1333,7 +1333,7 @@
     },
     {
       "table": "identical_data_certified",
-      "panel": "PPO controllers",
+      "panel": "RL controllers",
       "row": "\\nameUnif{}",
       "model": "Unif-TERA",
       "setting": "q3d-ppo",

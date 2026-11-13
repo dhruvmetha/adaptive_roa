@@ -77,6 +77,13 @@ build, commit and Overleaf push described in its `AGENTS.md`.
 
 ## Figures in the paper
 
+**Labels (Sumanth, 2026-11-13, paper commit `2125ad9`).** The three learned-policy settings are named RL, not PPO, and
+the spatial quadrotor is 12D, not 13D (the state space is R^3 x SO(3) x R^6, stored as 13 coordinates with a unit
+quaternion). This holds in every figure title, table header and panel label: `common.TITLES`, `make_tables.TITLES`,
+`HEADS` and `PANELS`, `plot_learning_curves.TITLE`, `make_figure1.META`. Setting ids (`cp-ppo`, `q2d-ppo`, `q3d-ppo`)
+and file names keep `ppo`. Figures 1, 6, S1, S2 and S3 and all table bodies were redrawn with only these labels
+changed. Older notes below that quote PPO or 13D titles describe the figures before this change.
+
 All data figures use FM and fit the soft four-threshold rule on validation at w = 0.2, then
 report test rates, except the three certified figures (learning curves, adaptive fraction, acquisition
 score), which use A-1d. All paper figures are certified since 2026-11-12.

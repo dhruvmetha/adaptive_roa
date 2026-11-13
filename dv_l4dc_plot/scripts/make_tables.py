@@ -2,7 +2,7 @@
 
 Ported 2026-11-12 from deterministic-verification/results-discussion-assets/write_paper_tables.py with
 every number, rounding and bolding rule unchanged. Writes only tables/<name>_body.tex: the tabular
-part (column headers, numbers, bold marks, \\resizebox wrappers, \\par\\medskip between the LQR and PPO
+part (column headers, numbers, bold marks, \\resizebox wrappers, \\par\\medskip between the LQR and RL
 panels). The table environment, caption and label live in the paper's sections and this script never
 writes them. With --paper the bodies are copied, byte for byte, into the paper's tables/.
 
@@ -27,10 +27,10 @@ from table_previews import previews
 
 TABLES = HERE / 'tables'
 SETTINGS = ['pen-lqr', 'cp-lqr', 'cp-ppo', 'q2d-ppo', 'q3d-lqr', 'q3d-ppo']   # table order, not figure order
-TITLES = ['Pendulum (2D), LQR', 'Cartpole (4D), LQR', 'Cartpole (4D), PPO', 'Planar Quad (6D), PPO',
-          'Spatial Quad (13D), LQR', 'Spatial Quad (13D), PPO']
-HEADS = ['Pendulum (2D)', 'Cartpole (4D)', 'Cartpole (4D)', 'Planar Quad (6D)', 'Spatial Quad (13D)', 'Spatial Quad (13D)']
-PANELS = [('LQR controllers', [0, 1, 4]), ('PPO controllers', [2, 3, 5])]
+TITLES = ['Pendulum (2D), LQR', 'Cartpole (4D), LQR', 'Cartpole (4D), RL', 'Planar Quad (6D), RL',
+          'Spatial Quad (12D), LQR', 'Spatial Quad (12D), RL']
+HEADS = ['Pendulum (2D)', 'Cartpole (4D)', 'Cartpole (4D)', 'Planar Quad (6D)', 'Spatial Quad (12D)', 'Spatial Quad (12D)']
+PANELS = [('LQR controllers', [0, 1, 4]), ('RL controllers', [2, 3, 5])]
 # Column headers in the method section's notation (04_proposed_method.tex).
 METRICS = [('rec', r'$R_{\mathrm{s}}\uparrow$'), ('fdr', r'FDR$\downarrow$'),
            ('fail_rec', r'$R_{\mathrm{f}}\uparrow$'), ('for', r'FOR$\downarrow$'), ('abstain', r'Abst.$\downarrow$')]

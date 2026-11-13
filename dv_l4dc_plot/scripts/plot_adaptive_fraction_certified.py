@@ -32,7 +32,7 @@ ARGS = restyle_args(__doc__)
 COMBOS = [('uniform', 0.), ('U_H', .5), ('U_H', .75), ('U_H', 1.)]
 RHO = np.array([rho for _, rho in COMBOS])
 NAMES = method_names()
-# Per-row y axes from this data. PPO recall reaches 0 (Planar Quad PPO uniform: two seeds certify
+# Per-row y axes from this data. RL recall reaches 0 (Planar Quad RL uniform: two seeds certify
 # nothing), so that row spans 0-100. Both error rows top out below 5 (max 4.79), so 0-6 keeps the
 # 5% line in view.
 ROW_AXES = {0: dict(rec=((48, 102), [50, 75, 100]), err=((-.18, 6), [0, 5])),

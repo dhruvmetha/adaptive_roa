@@ -17,9 +17,9 @@ Retired 2026-11-12, files in tables/archive/: A (long_lqr, long_ppo) and C (clea
 from common import SETTINGS, spread
 
 HEADS = {'pen-lqr': 'Pendulum (2D)', 'cp-lqr': 'Cartpole (4D)', 'cp-ppo': 'Cartpole (4D)', 'q2d-ppo': 'Planar Quad (6D)',
-         'q3d-lqr': 'Spatial Quad (13D)', 'q3d-ppo': 'Spatial Quad (13D)'}
+         'q3d-lqr': 'Spatial Quad (12D)', 'q3d-ppo': 'Spatial Quad (12D)'}
 PANELS = [('LQR controllers', 'lqr', ['pen-lqr', 'cp-lqr', 'q3d-lqr']),
-          ('PPO controllers', 'ppo', ['cp-ppo', 'q2d-ppo', 'q3d-ppo'])]
+          ('RL controllers', 'ppo', ['cp-ppo', 'q2d-ppo', 'q3d-ppo'])]
 METRICS = [('rec', r'$R_{\mathrm{s}}\uparrow$'), ('fdr', r'FDR$\downarrow$'),
            ('fail_rec', r'$R_{\mathrm{f}}\uparrow$'), ('for', r'FOR$\downarrow$'), ('abstain', r'Abst.$\downarrow$')]
 FM_ROLES = ('uniform data', 'method')     # the two FM rows, tinted in D

@@ -2,7 +2,7 @@
 
 Data-agnostic. A figure passes series(setting, metric) -> (mean, lo, hi, n) arrays over x, so the
 band can be min-max across seeds (every paper figure since 2026-11-12) or mean +/- SD (old previews).
-With row_axes, each row (LQR, PPO) gets fixed y axes and the figure fails if a marker or band
+With row_axes, each row (LQR, RL) gets fixed y axes and the figure fails if a marker or band
 would leave its panel or the 5% line would fall off an error axis.
 """
 import numpy as np

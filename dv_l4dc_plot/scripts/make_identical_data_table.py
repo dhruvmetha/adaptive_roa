@@ -5,7 +5,7 @@ now in scripts/archive.
 Data: the 'cal' records of predictor_comparison_data.build() (uniform runs, final budget, two-sided A-1d at
 alpha_s = alpha_f = delta = 0.05), so every check of the predictor comparison runs first. Three predictors:
 \nameUnifBNNLabel{}, \nameUnifBNN{}, then a \midrule, then \nameUnif{}. Layout copied from matrix_certified_twosided_body.tex:
-LQR and PPO panels, five columns per setting (R_s, FDR, R_f, FOR, Abst.).
+LQR and RL panels, five columns per setting (R_s, FDR, R_f, FOR, Abst.).
 
 \nameUnif{} row: absolute three-seed means. \nameUnifBNNLabel{} and \nameUnifBNN{} rows: R_s, R_f and Abst. are signed differences
 from \nameUnif{} in percentage points (row mean minus \nameUnif{} mean, both unrounded, then rounded to 2 dp). All three

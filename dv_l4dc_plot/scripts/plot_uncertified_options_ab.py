@@ -8,7 +8,7 @@ as it is.
 
 A  optA_scatter: 2 x 3, one panel per setting. Each method has a gold point (x = FDR, y = R_s) and a purple point
    (x = FOR, y = R_f), with min-max whiskers over seeds in x and y. Log x shared by every panel, linear y 0-100.
-B  optB_rows: 4 x 3, the S3 arrangement. Per controller block (LQR, then PPO) a success row (R_s over FDR, gold)
+B  optB_rows: 4 x 3, the S3 arrangement. Per controller block (LQR, then RL) a success row (R_s over FDR, gold)
    over a failure row (R_f over FOR, purple); columns are the block's three settings. Log x shared by every panel;
    the two R_f rows zoom their y axis, and the note under the figure says so.
 
@@ -112,7 +112,7 @@ def setup_x(ax):
 
 
 def missing_note(D):
-    """'MORALS FDR undefined in Spatial Quad (13D), LQR and PPO: no Success declarations in any seed', from missing()."""
+    """'MORALS FDR undefined in Spatial Quad (12D), LQR and RL: no Success declarations in any seed', from missing()."""
     groups = {}
     for s, m, metric in missing(D):
         groups.setdefault((m, metric), []).append(TITLES[SETTINGS.index(s)])
@@ -420,7 +420,7 @@ def option_b(D):
             base[r] = (lo, 100)
             step = 25 if 100 - lo > 45 else 20
             yticks[r] = [t for t in range(0, 101, step) if t >= lo]
-            zoom.append(f"{lo}\\% ({['LQR', 'PPO'][blk]})")
+            zoom.append(f"{lo}\\% ({['LQR', 'RL'][blk]})")
         for c in range(3):
             axes[r, c].set_yticks(yticks[r])
     legs = legends(fig, D)

@@ -152,6 +152,17 @@ and every figure since has been installed from here with `--paper`.
   falls outside 5.95-6.05 x 3.95-4.2 in. An independent validator recomputed all 528 cells from `epochs.jsonl` and
   matched them to the drawn artists (means, band ends, hollow markers, gaps); the values JSON's points and
   source hashes are unchanged, so `check_fig3` and Table 4 still pass.
+  Shared first point (Sumanth, 2026-11-13, paper commit `9db7c7b`). Within a setting and seed, TERA and Unif-TERA start from
+  the same initial batch, seed and pool order (checked for all 18 pairs: both train on pool-order indices 0..N-1 of the
+  same `pool_order_<seed>.txt`), so their epoch-0 checkpoints are two trainings of one configuration. Both arms now show
+  the epoch-0 certified rates of the better of the two, the run with the higher certified recall
+  (`share_first_point`; it fails unless that run is at least as high on both recalls, and unless equal recalls come with
+  equal FDR and FOR). 15 of the 18 pairs were already equal (both certify nothing). The three Spatial quadrotor LQR
+  pairs take the TERA run, so four plotted cells change, all Unif-TERA at 10k: Success recall 16.69 -> 21.44, Failure
+  recall 64.72 -> 88.38, FDR 0.72 -> 0.88, FOR 2.96 -> 4.65. `values/adaptive_learning_a1d_values.json` lists the 18
+  picks under `shared_first_point`; its `source_hashes` keep the committed path key (same sha256). The empirical preview
+  is not shared. The paper's file was drawn with matplotlib 3.10.8, so its bytes differ from a 3.10.0 draw (0 differing
+  pixels at 400 dpi for the unchanged script).
 - `adaptive_learning` (empirical learning curves): preview only since 2026-11-12, same style and script, with its
   own row axes (recall -4..103; error -0.5..10 LQR, -0.9..18 PPO). paper_writer removed it from the paper.
 - `adaptive_fraction_lines_split_rowaxes_dotted` (preview; the empirical adaptive-fraction figure until the certified one replaced it,

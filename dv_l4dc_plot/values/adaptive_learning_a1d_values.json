@@ -2001,9 +2001,9 @@
       "epoch": 0,
       "train": 10000,
       "n": 3,
-      "mean": 16.685133156582644,
-      "min": 11.19662854655534,
-      "max": 26.70650152348542
+      "mean": 21.44289237993484,
+      "min": 13.119781567804994,
+      "max": 27.456372917573503
     },
     {
       "setting": "q3d-lqr",
@@ -2122,9 +2122,9 @@
       "epoch": 0,
       "train": 10000,
       "n": 3,
-      "mean": 64.71703990477144,
-      "min": 19.661471370245525,
-      "max": 87.26985504344246
+      "mean": 88.38456318348184,
+      "min": 87.25316779583709,
+      "max": 89.0164536261389
     },
     {
       "setting": "q3d-lqr",
@@ -2243,9 +2243,9 @@
       "epoch": 0,
       "train": 10000,
       "n": 3,
-      "mean": 0.7225949097754938,
-      "min": 0.30839149488719364,
-      "max": 1.5247683665280514
+      "mean": 0.8848523167093034,
+      "min": 0.30070666065253343,
+      "max": 1.2421849292530438
     },
     {
       "setting": "q3d-lqr",
@@ -2364,9 +2364,9 @@
       "epoch": 0,
       "train": 10000,
       "n": 3,
-      "mean": 2.9648162896631165,
-      "min": 0.05089778029124841,
-      "max": 4.547336125450473
+      "mean": 4.645560240152005,
+      "min": 4.568904679629134,
+      "max": 4.777432003855743
     },
     {
       "setting": "q3d-lqr",
@@ -5865,6 +5865,293 @@
       "mean": 0.05076780356318671,
       "min": 0.026211146769635988,
       "max": 0.09722874807519644
+    }
+  ],
+  "shared_first_point": [
+    {
+      "setting": "pen-lqr",
+      "seed": 24475,
+      "train": 50,
+      "equal": true,
+      "shown": "x231_penlqr_fm_uh_a6d075_r3",
+      "replaced": null,
+      "shown_rates": {
+        "rec": 0.0,
+        "fail_rec": 0.0,
+        "fdr": null,
+        "for": null
+      },
+      "replaced_rates": null
+    },
+    {
+      "setting": "pen-lqr",
+      "seed": 33407,
+      "train": 50,
+      "equal": true,
+      "shown": "x231_penlqr_fm_uh_a6d075_r2",
+      "replaced": null,
+      "shown_rates": {
+        "rec": 0.0,
+        "fail_rec": 0.0,
+        "fdr": null,
+        "for": null
+      },
+      "replaced_rates": null
+    },
+    {
+      "setting": "pen-lqr",
+      "seed": 99512,
+      "train": 50,
+      "equal": true,
+      "shown": "x231_penlqr_fm_uh_a6d075_r1",
+      "replaced": null,
+      "shown_rates": {
+        "rec": 0.0,
+        "fail_rec": 0.0,
+        "fdr": null,
+        "for": null
+      },
+      "replaced_rates": null
+    },
+    {
+      "setting": "cp-lqr",
+      "seed": 24475,
+      "train": 500,
+      "equal": true,
+      "shown": "x29_cplqr_fm_uh_a6d075_r3",
+      "replaced": null,
+      "shown_rates": {
+        "rec": 0.0,
+        "fail_rec": 0.0,
+        "fdr": null,
+        "for": null
+      },
+      "replaced_rates": null
+    },
+    {
+      "setting": "cp-lqr",
+      "seed": 33407,
+      "train": 500,
+      "equal": true,
+      "shown": "x29_cplqr_fm_uh_a6d075_r2",
+      "replaced": null,
+      "shown_rates": {
+        "rec": 0.0,
+        "fail_rec": 0.0,
+        "fdr": null,
+        "for": null
+      },
+      "replaced_rates": null
+    },
+    {
+      "setting": "cp-lqr",
+      "seed": 99512,
+      "train": 500,
+      "equal": true,
+      "shown": "x29_cplqr_fm_uh_a6d075_r1",
+      "replaced": null,
+      "shown_rates": {
+        "rec": 0.0,
+        "fail_rec": 0.0,
+        "fdr": null,
+        "for": null
+      },
+      "replaced_rates": null
+    },
+    {
+      "setting": "q3d-lqr",
+      "seed": 24475,
+      "train": 10000,
+      "equal": false,
+      "shown": "x33_q3dlqr_fm_uh_a6d075_r3",
+      "replaced": "m10_q3dlqr_fm_unif_r3",
+      "shown_rates": {
+        "rec": 0.274563729175735,
+        "fail_rec": 0.8888406812846956,
+        "fdr": 0.011116653602223331,
+        "for": 0.04590344036971137
+      },
+      "replaced_rates": {
+        "rec": 0.2670650152348542,
+        "fail_rec": 0.8726985504344247,
+        "fdr": 0.015247683665280514,
+        "for": 0.042962149632476285
+      }
+    },
+    {
+      "setting": "q3d-lqr",
+      "seed": 33407,
+      "train": 10000,
+      "equal": false,
+      "shown": "x33_q3dlqr_fm_uh_a6d075_r2",
+      "replaced": "m10_q3dlqr_fm_unif_r2",
+      "shown_rates": {
+        "rec": 0.13119781567804994,
+        "fail_rec": 0.8725316779583708,
+        "fdr": 0.0030070666065253344,
+        "for": 0.04568904679629134
+      },
+      "replaced_rates": {
+        "rec": 0.12152269399707175,
+        "fail_rec": 0.8721979330062632,
+        "fdr": 0.0030839149488719364,
+        "for": 0.04547336125450473
+      }
+    },
+    {
+      "setting": "q3d-lqr",
+      "seed": 99512,
+      "train": 10000,
+      "equal": false,
+      "shown": "x33_q3dlqr_fm_uh_a6d075_r1",
+      "replaced": "m10_q3dlqr_fm_unif",
+      "shown_rates": {
+        "rec": 0.23752522654426023,
+        "fail_rec": 0.890164536261389,
+        "fdr": 0.012421849292530438,
+        "for": 0.04777432003855743
+      },
+      "replaced_rates": {
+        "rec": 0.1119662854655534,
+        "fail_rec": 0.19661471370245526,
+        "fdr": 0.0033462486791123636,
+        "for": 0.0005089778029124841
+      }
+    },
+    {
+      "setting": "cp-ppo",
+      "seed": 24475,
+      "train": 500,
+      "equal": true,
+      "shown": "x161_cpppo_fm_uh_a6d075_r3",
+      "replaced": null,
+      "shown_rates": {
+        "rec": 0.0,
+        "fail_rec": 0.0,
+        "fdr": null,
+        "for": null
+      },
+      "replaced_rates": null
+    },
+    {
+      "setting": "cp-ppo",
+      "seed": 33407,
+      "train": 500,
+      "equal": true,
+      "shown": "x161_cpppo_fm_uh_a6d075_r2",
+      "replaced": null,
+      "shown_rates": {
+        "rec": 0.0,
+        "fail_rec": 0.0,
+        "fdr": null,
+        "for": null
+      },
+      "replaced_rates": null
+    },
+    {
+      "setting": "cp-ppo",
+      "seed": 99512,
+      "train": 500,
+      "equal": true,
+      "shown": "x161_cpppo_fm_uh_a6d075_r1",
+      "replaced": null,
+      "shown_rates": {
+        "rec": 0.0,
+        "fail_rec": 0.0,
+        "fdr": null,
+        "for": null
+      },
+      "replaced_rates": null
+    },
+    {
+      "setting": "q2d-ppo",
+      "seed": 24475,
+      "train": 2000,
+      "equal": true,
+      "shown": "x31_q2dppo_fm_uh_a6d075_r3",
+      "replaced": null,
+      "shown_rates": {
+        "rec": 0.0,
+        "fail_rec": 0.0,
+        "fdr": null,
+        "for": null
+      },
+      "replaced_rates": null
+    },
+    {
+      "setting": "q2d-ppo",
+      "seed": 33407,
+      "train": 2000,
+      "equal": true,
+      "shown": "x31_q2dppo_fm_uh_a6d075_r2",
+      "replaced": null,
+      "shown_rates": {
+        "rec": 0.0,
+        "fail_rec": 0.0,
+        "fdr": null,
+        "for": null
+      },
+      "replaced_rates": null
+    },
+    {
+      "setting": "q2d-ppo",
+      "seed": 99512,
+      "train": 2000,
+      "equal": true,
+      "shown": "x31_q2dppo_fm_uh_a6d075_r1",
+      "replaced": null,
+      "shown_rates": {
+        "rec": 0.0,
+        "fail_rec": 0.0,
+        "fdr": null,
+        "for": null
+      },
+      "replaced_rates": null
+    },
+    {
+      "setting": "q3d-ppo",
+      "seed": 24475,
+      "train": 10000,
+      "equal": true,
+      "shown": "x70_q3dppo_fm_uh_a6d075_r3",
+      "replaced": null,
+      "shown_rates": {
+        "rec": 0.0,
+        "fail_rec": 0.0,
+        "fdr": null,
+        "for": null
+      },
+      "replaced_rates": null
+    },
+    {
+      "setting": "q3d-ppo",
+      "seed": 33407,
+      "train": 10000,
+      "equal": true,
+      "shown": "x70_q3dppo_fm_uh_a6d075_r2",
+      "replaced": null,
+      "shown_rates": {
+        "rec": 0.0,
+        "fail_rec": 0.0,
+        "fdr": null,
+        "for": null
+      },
+      "replaced_rates": null
+    },
+    {
+      "setting": "q3d-ppo",
+      "seed": 99512,
+      "train": 10000,
+      "equal": true,
+      "shown": "x70_q3dppo_fm_uh_a6d075_r1",
+      "replaced": null,
+      "shown_rates": {
+        "rec": 0.0,
+        "fail_rec": 0.0,
+        "fdr": null,
+        "for": null
+      },
+      "replaced_rates": null
     }
   ]
 }

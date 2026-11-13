@@ -22,6 +22,12 @@ labels above it, or if the saved PDF is not 6.0 in wide (5.95-6.05) and 3.95-4.2
   empirical  preview only since 2026-11-12, when Dhruv kept only the certified curves: soft rule fit on
              validation at w=0.2 (soft_learning_w02_complete.json). No paper output.
 
+Shared first point (a1d only, Sumanth, 2026-11-13). Within a setting and seed the two arms start from the same
+initial batch, seed and pool order, so their epoch-0 checkpoints are two trainings of one configuration. Both arms
+show the epoch-0 certified rates of the better of the two, the run with the higher certified recall (share_first_point,
+which fails if that run is not at least as high on both recalls). Without it one Spatial quadrotor LQR seed put the
+arms 23.7 points of mean Failure recall apart (88.4 against 64.7) before any acquisition. values/ lists the 18 picks under shared_first_point.
+
 Since 2026-11-13 the paper figure is the common.py paper-style draw at print width, plots/adaptive_learning_a1d.pdf
 (split.py restyle block); it fails unless its numbers equal the stored values JSON. A plain run first rebuilds values/
 and the old-style draws (the a1d one now in plots/legacy/), then the paper figure. --restyle redraws only the paper
@@ -109,9 +115,40 @@ def row_axes(points):
     return out
 
 
+RATES = ('rec', 'fail_rec', 'fdr', 'for')
+
+
+def share_first_point(rows):
+    """Give both arms of each (setting, seed) the epoch-0 certified rates of the better of their two epoch-0 runs.
+
+    The two runs have the same initial batch, seed and pool order, so they are two trainings of one configuration.
+    Better means higher certified recall: the run with the larger Success recall + Failure recall, which must also be
+    at least as high on each recall alone, so the pick needs no tie-break between the two recalls. Runs with equal
+    recalls must have equal FDR and FOR. Either check failing stops the script. Changes rows in place (the four rates
+    and the S and F counts they come from) and returns one record per (setting, seed) for the values JSON."""
+    picks = []
+    for setting in SETTINGS:
+        for seed in sorted({r['seed'] for r in rows}):
+            pair = {r['arm']: r for r in rows if (r['setting'], r['seed'], r['epoch']) == (setting, seed, 0)}
+            assert set(pair) == {'U_H', 'uniform'} and pair['U_H']['train'] == pair['uniform']['train'], (setting, seed)
+            best = max(pair['U_H'], pair['uniform'], key=lambda r: r['rec'] + r['fail_rec'])  # U_H on a tie
+            other = pair['uniform'] if best is pair['U_H'] else pair['U_H']
+            assert best['rec'] >= other['rec'] and best['fail_rec'] >= other['fail_rec'], (setting, seed)
+            equal = (best['rec'], best['fail_rec']) == (other['rec'], other['fail_rec'])
+            assert not equal or all(best[k] == other[k] for k in RATES), (setting, seed)
+            picks.append(dict(setting=setting, seed=seed, train=best['train'], equal=equal, shown=best['name'],
+                              replaced=None if equal else other['name'],
+                              shown_rates={k: best[k] for k in RATES},
+                              replaced_rates=None if equal else {k: other[k] for k in RATES}))
+            other.update({k: best[k] for k in RATES + ('S', 'F')})
+    assert len(picks) == 18
+    return picks
+
+
 def compute(protocol):
-    """The plotted numbers of one protocol: (stem, sources, rows, summaries, data, row axes). Both the paper path
-    (generate) and the --restyle path (generate_restyled) draw from this, so they draw the same data."""
+    """The plotted numbers of one protocol: (stem, sources, rows, summaries, data, row axes, shared first points).
+    Both the paper path (generate) and the --restyle path (generate_restyled) draw from this, so they draw the same
+    data. The last item is share_first_point's record for a1d and [] for the empirical preview, which stays as run."""
     softpath = ASSETS / 'soft_learning_w02_complete.json'
     soft = json.loads(softpath.read_text()); assert len(soft) == 396
     meta = {r['name']: r for r in soft}
@@ -131,6 +168,7 @@ def compute(protocol):
            {(r['name'], r['seed'], r['epoch'], r['train']) for r in soft}
     for r in rows:
         assert (r['fdr'] is None) == (r['S'] == 0) and (r['for'] is None) == (r['F'] == 0)
+    shared = share_first_point(rows) if protocol == 'a1d' else []
     summaries = []
 
     def summarize(setting, arm, metric):
@@ -150,11 +188,11 @@ def compute(protocol):
 
     data = {(s, arm, m): summarize(s, arm, m) for s in SETTINGS for arm, *_ in ARMS for m, _ in RECALL + ERROR}
     axes_by_row = row_axes(summaries)
-    return stem, src, rows, summaries, data, axes_by_row
+    return stem, src, rows, summaries, data, axes_by_row, shared
 
 
 def generate(protocol, paper):
-    stem, src, rows, summaries, data, axes_by_row = compute(protocol)
+    stem, src, rows, summaries, data, axes_by_row, shared = compute(protocol)
 
     row_h =TITLE_H + REC_H + PAIR_GAP + ERR_H + TICK_H
     fig_h = LEGEND_H + 2 * row_h + ROW_GAP + XLABEL_H
@@ -228,7 +266,8 @@ def generate(protocol, paper):
     VALUES.mkdir(exist_ok=True)
     (VALUES / f'{stem}_values.json').write_text(json.dumps(dict(
         protocol=protocol, source_hashes={str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in src},
-        row_axes=axes_by_row, page_size=size, points=summaries), indent=2) + '\n')
+        row_axes=axes_by_row, page_size=size, points=summaries,
+        **({'shared_first_point': shared} if shared else {})), indent=2) + '\n')
     partial = sum(1 for p in summaries if 0 < p['n'] < 3); empty = sum(1 for p in summaries if p['n'] == 0)
     print(f'  {protocol}: {len(rows)} checkpoints, row axes {axes_by_row}, cells with 1-2 seeds {partial}, '
           f'with none {empty}')
@@ -246,9 +285,10 @@ def generate_restyled():
     dash-dot; the arms differ only by marker (TERA filled circle, Unif-TERA open square, common.METHOD_MARKER), and
     a faded marker (split.partial_kw) means 1-2 seeds contribute. Draws from compute('a1d') and fails unless its points and
     source hashes equal the stored values/adaptive_learning_a1d_values.json. Writes nothing to values/ or the paper."""
-    stem, src, rows, summaries, data, axes_by_row = compute('a1d')
+    stem, src, rows, summaries, data, axes_by_row, shared = compute('a1d')
     stored = json.loads((VALUES / f'{stem}_values.json').read_text())
     assert json.loads(json.dumps(summaries)) == stored['points'], 'restyle points differ from values/'
+    assert shared == stored['shared_first_point'], 'shared first points differ from values/'
     assert {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in src} == stored['source_hashes']
 
     def series(arm):

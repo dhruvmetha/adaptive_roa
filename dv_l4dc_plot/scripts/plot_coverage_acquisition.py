@@ -14,7 +14,7 @@ The acquired states come from the run's own files and are checked against them: 
 datasets/train_trajectories.txt. The tie rule of verdict_scores.select_topk (tie_tol > 0) and spread_farthest_point at
 the runs' commit acae65bf is re-run on the stored scores and must give d2_indices in order.
 
-  2x2 (--layout 2x2, 3.30 in, the main-text figure since 2026-11-13): (a) distance, (b) I on top; (c) D, (d) U with
+  2x2 (--layout 2x2, 2.700 x 2.883 in, 8.5 pt text and 8 pt ticks, the main-text figure since 2026-11-13): (a) distance, (b) I on top; (c) D, (d) U with
       the markers below; theta-dot on the left column only, theta on the bottom row only; the two colour bars sit
       under the top row (teal under (a); under (b) the one Reds bar for (b)-(d), named I, D, U).
 
@@ -311,7 +311,22 @@ def draw(g, acq, variant):
 # (a) distance, (b) I on top; (c) D, (d) U with the next batch below. theta-dot only on the left column, theta only on
 # the bottom row, tick labels only there. The top row has no x labels, so its band holds the two colour bars: teal under
 # (a), and under (b) the one Reds bar for (b)-(d), labelled I, D, U between its end ticks.
-W_2X2 = 3.30
+# Since 2026-11-13 evening (Sumanth via paper_writer_2): the page stays 3.300 x 3.524 in and the text sits just under
+# the 9 pt \footnotesize caption: titles, axis labels, legend and the bar name 8.5 pt, tick labels 8 pt. The panels take
+# whatever the larger text leaves, so their aspect follows from the page; each side's margin is tuned until the ink sits
+# INK_LO-INK_HI in from the page edge.
+# Then (d579c2c) the wrap became 0.45 textwidth: the page is 2.700 x 2.883 in, rendered natively (scale 1.00).
+W_2X2, H_2X2 = 2.700, 2.883
+# At that width a row of full titles may not fit on one line. Per row the first that fits wins: both full, one shortened,
+# both shortened (TITLE_SHORT, one line each), else both full on two lines (TITLE's wrapped forms).
+TITLE_SHORT = dict(cov='distance to data', I=r'invalid mass $I(x)$', D=r'disagreement $D(x)$', U=r'acquisition $U(x)$')
+TITLE_SEP_PT = 6.0                    # least space between two titles of a row, so they never read as one line
+# Legend: the first (labels, rows) that fits the width.
+LEG_LABELS = [(r'next states chosen by $U$', 'next states drawn uniformly'), (r'next states by $U$', 'next states, uniform'),
+              (r'chosen by $U$', 'drawn uniformly')]
+FS_2X2 = dict(title=8.5, label=8.5, legend=8.5, bar=8.5, tick=8)
+RC_2X2 = {'font.size': 8.5, 'axes.labelsize': 8.5, 'legend.fontsize': 8.5, 'xtick.labelsize': 8, 'ytick.labelsize': 8}
+INK_LO, INK_HI, INK_TARGET = .010, .020, .013
 ROW_GAP_PT = 3.0                      # from the colour-bar labels down to the second row's titles
 KEYS_2X2 = [['cov', 'I'], ['D', 'U']]
 
@@ -321,12 +336,13 @@ def drawn_labels(cax):
             if t.get_visible() and min(cax.get_xlim()) - 1e-9 <= v <= max(cax.get_xlim()) + 1e-9]
 
 
-def draw_2x2(g, acq):
+def draw_2x2(g, acq, edge):
+    """edge: the layout margin (in) on each side, measured to the text and panel boxes."""
     ext = P._extent(g)
     th, om = g['theta'], g['omega']
     field = dict(cov=g['d_train'], I=g['I'], D=g['D'], U=g['I'] + g['D'])
-    W_ = W_2X2
-    with plt.rc_context(style_rc()):
+    W_, H = W_2X2, H_2X2
+    with plt.rc_context(style_rc(**RC_2X2)):
         H0 = 4.0
         fig = plt.figure(figsize=(W_, H0))
         axs = [[fig.add_axes([.12 + .45 * c, .55 - .45 * r, .38, .35]) for c in range(2)] for r in range(2)]
@@ -354,7 +370,7 @@ def draw_2x2(g, acq):
         marks = [ax_u.plot(acq[k][:, 0], acq[k][:, 1], ls='none', zorder=9, clip_on=False, **MARK[k])[0]
                  for k in ('unif', 'u')]
         names = {key: f'({chr(97 + 2 * r + c)}) ' for r, c, _, key in flat}
-        titles = {key: [fig.text(0, 0, names[key] + TITLE[key][0], ha='center', va='baseline', fontsize=FS['title'])]
+        titles = {key: [fig.text(0, 0, names[key] + TITLE[key][0], ha='center', va='baseline', fontsize=FS_2X2['title'])]
                   for _, _, _, key in flat}
 
         def hbar(key, ticks, labels):
@@ -363,20 +379,26 @@ def draw_2x2(g, acq):
             for t, ha in zip(cb.ax.set_xticklabels(labels), ['left'] + ['center'] * (len(ticks) - 2) + ['right']):
                 t.set_ha(ha)
             cb.outline.set_linewidth(.4)
-            cax.tick_params(labelsize=FS['tick'], length=1.5, pad=1)
+            cax.tick_params(labelsize=FS_2X2['tick'], length=1.5, pad=1)
             return cax
 
         cax_cov = hbar('cov', COV_TICKS, ['0', '0.02', '0.04', '0.06'])
         cax_sig = hbar('I', [0, 1], ['0', '1'])
         caxs = [cax_cov, cax_sig]
-        handles = [Line2D([], [], color=FILL['boundary'], lw=P.BOUNDARY_LW, label='success/failure boundary'),
-                   Line2D([], [], ls='none', label=r'next states chosen by $U$', **MARK['u']),
-                   Line2D([], [], ls='none', label='next states drawn uniformly', **MARK['unif'])]
-        for rows_ in ([handles], [handles[:1], handles[1:]]):
-            legends = [fig.legend(handles=h_, ncol=len(h_), **paper_legend_kw(FS['legend'])) for h_ in rows_]
+        def legend_handles(lab_u, lab_unif):
+            return [Line2D([], [], color=FILL['boundary'], lw=P.BOUNDARY_LW, label='success/failure boundary'),
+                    Line2D([], [], ls='none', label=lab_u, **MARK['u']),
+                    Line2D([], [], ls='none', label=lab_unif, **MARK['unif'])]
+
+        options = [(LEG_LABELS[0], lambda h: [h])] + [(labs, lambda h: [h[:1], h[1:]]) for labs in LEG_LABELS] + \
+            [(LEG_LABELS[0], lambda h: [[x] for x in h])]
+        for labs, split in options:
+            legends = [fig.legend(handles=h_, ncol=len(h_), **paper_legend_kw(FS_2X2['legend']))
+                       for h_ in split(legend_handles(*labs))]
             fig.canvas.draw()
             rr_ = fig.canvas.get_renderer()
-            if max(lg.get_window_extent(rr_).width for lg in legends) / fig.dpi <= W_ - 2 * MARGIN:
+            if max(lg.get_window_extent(rr_).width for lg in legends) / fig.dpi <= W_ - edge['left'] - edge['right']:
+                leg_labels = labs
                 break
             for lg in legends:
                 lg.remove()
@@ -399,26 +421,39 @@ def draw_2x2(g, acq):
         gap = GAP_PT * PT
         leg_hs = [inch(lg.get_window_extent(rr))[1] for lg in legends]
         leg_h = sum(leg_hs) + LEG_ROW_GAP * (len(legends) - 1)
-        x_a = MARGIN + P.ACCENT_PT * PT + left_dec
-        pw = (W_ - MARGIN - right_over - x_a - gap) / 2
-        ph = pw * P.ASPECT
+        x_a = edge['left'] + P.ACCENT_PT * PT + left_dec
+        pw = (W_ - edge['right'] - right_over - x_a - gap) / 2
         xs = [x_a, x_a + pw + gap]
 
-        # Titles: one line in a row when the two fit side by side (each may run into the gap and the outer margin,
-        # never past the page), else that row wraps.
-        def fits(r):
+        # Titles: a row stays on one line when its two titles fit side by side (each may run into the gap and the
+        # outer margin, never past the page); full wording first, then TITLE_SHORT for one or both, else two lines.
+        def fits(r, texts):
+            for k, t in zip(KEYS_2X2[r], texts):
+                titles[k][0].set_text(t)
+            fig.canvas.draw()
             w_ = [inch(titles[k][0].get_window_extent(rr))[0] for k in KEYS_2X2[r]]
             centres = [xs[c] + pw / 2 for c in range(2)]
-            return (centres[0] + w_[0] / 2 + SEP_PT * PT <= centres[1] - w_[1] / 2 and
-                    centres[0] - w_[0] / 2 >= MARGIN and centres[1] + w_[1] / 2 <= W_ - MARGIN)
+            return (centres[0] + w_[0] / 2 + TITLE_SEP_PT * PT <= centres[1] - w_[1] / 2 and
+                    centres[0] - w_[0] / 2 >= edge['left'] and centres[1] + w_[1] / 2 <= W_ - edge['right'])
 
-        wrapped = [not fits(r) for r in range(2)]
+        title_mode, wrapped = [], []
+        for r in range(2):
+            k0, k1 = KEYS_2X2[r]
+            full = {k: names[k] + TITLE[k][0] for k in (k0, k1)}
+            short = {k: names[k] + TITLE_SHORT[k] for k in (k0, k1)}
+            tries = [('full', (full[k0], full[k1])), (f'short {k1}', (full[k0], short[k1])),
+                     (f'short {k0}', (short[k0], full[k1])), ('short both', (short[k0], short[k1]))]
+            mode = next((m for m, t in tries if fits(r, t)), 'two lines')
+            title_mode.append(mode)
+            if mode != 'two lines':
+                fits(r, dict(tries)[mode])
+            wrapped.append(mode == 'two lines')
         for r in range(2):
             if wrapped[r]:
                 for key in KEYS_2X2[r]:
                     lines = (names[key] + (TITLE[key][1] or TITLE[key][0])).split('\n')
                     titles[key][0].set_text(lines[0])
-                    titles[key] += [fig.text(0, 0, l_, ha='center', va='baseline', fontsize=FS['title'])
+                    titles[key] += [fig.text(0, 0, l_, ha='center', va='baseline', fontsize=FS_2X2['title'])
                                     for l_ in lines[1:]]
         fig.canvas.draw()
 
@@ -427,7 +462,7 @@ def draw_2x2(g, acq):
             base = fig.transFigure.transform(t.get_position())[1]
             return (bb.y1 - base) / fig.dpi, (base - bb.y0) / fig.dpi
 
-        SKIP = 1.2 * FS['title'] * PT
+        SKIP = 1.2 * FS_2X2['title'] * PT
         th_ = []
         for r in range(2):
             ts = [titles[k] for k in KEYS_2X2[r]]
@@ -436,12 +471,14 @@ def draw_2x2(g, acq):
             desc = max(asc_desc(t[-1])[1] for t in ts)
             th_.append(dict(asc0=asc0, n=n_lines, h=asc0 + (n_lines - 1) * SKIP + desc))
         band = CB_GAP_PT * PT + CB_H + cb_below
-        H = (MARGIN + leg_h + LEG_GAP_PT * PT + th_[0]['h'] + TITLE_GAP_PT * PT + above[0] + ph + below[0] + band +
-             ROW_GAP_PT * PT + th_[1]['h'] + TITLE_GAP_PT * PT + above[1] + ph + below[1] + MARGIN)
+        rest = (edge['top'] + leg_h + LEG_GAP_PT * PT + th_[0]['h'] + TITLE_GAP_PT * PT + above[0] + below[0] + band +
+                ROW_GAP_PT * PT + th_[1]['h'] + TITLE_GAP_PT * PT + above[1] + below[1] + edge['bottom'])
+        ph = (H - rest) / 2
+        need(.45 <= ph / pw <= 1.0, ('panel aspect out of range', ph / pw))
         fig.set_size_inches(W_, H)
 
         # Place, top down.
-        y = H - MARGIN - leg_h - LEG_GAP_PT * PT
+        y = H - edge['top'] - leg_h - LEG_GAP_PT * PT
         tops = []
         for r in range(2):
             y_head = y
@@ -460,7 +497,7 @@ def draw_2x2(g, acq):
                     cax.set_position([xs[c] / W_, (cb_top - CB_H) / H, pw / W_, CB_H / H])
                 y -= band + ROW_GAP_PT * PT
         for k_, lg in enumerate(legends):
-            lg.set_bbox_to_anchor((0.5, (H - MARGIN - sum(leg_hs[:k_]) - k_ * LEG_ROW_GAP) / H),
+            lg.set_bbox_to_anchor((0.5, (H - edge['top'] - sum(leg_hs[:k_]) - k_ * LEG_ROW_GAP) / H),
                                   transform=fig.transFigure)
 
         # The Reds bar serves (b), (c) and (d): its name sits between its end labels, on their baseline (the digits
@@ -472,7 +509,7 @@ def draw_2x2(g, acq):
         base = ends[0].get_window_extent(rr).y0
         need(abs(ends[1].get_window_extent(rr).y0 - base) < .5, 'end labels on different baselines')
         sig_name = fig.text((xs[1] + pw / 2) / W_, base / fig.dpi / H, r'$I$, $D$, $U$', ha='center', va='baseline',
-                            fontsize=FS['tick'])
+                            fontsize=FS_2X2['bar'])
 
         # Checks.
         fig.canvas.draw()
@@ -499,7 +536,8 @@ def draw_2x2(g, acq):
         for i, (ta, a) in enumerate(boxes):
             for tbx, b in boxes[i + 1:]:
                 need(not a.overlaps(b), ('text overlap', ta, tbx))
-            need(a.x0 >= -0.5 and a.x1 <= fig.bbox.x1 + 0.5 and a.y0 >= -0.5 and a.y1 <= fig.bbox.y1 + 0.5,
+            slack = .02 * fig.dpi              # box padding beyond the ink; main_2x2 checks the ink itself
+            need(a.x0 >= -slack and a.x1 <= fig.bbox.x1 + slack and a.y0 >= -slack and a.y1 <= fig.bbox.y1 + slack,
                  ('text off the page', ta))
         panels = [a.get_window_extent(rr) for a in all_ax + caxs]
         for ta, a in boxes:
@@ -516,8 +554,9 @@ def draw_2x2(g, acq):
         for lg in legends:
             lb = lg.get_window_extent(rr)
             need(abs((lb.x0 + lb.x1) / 2 / fig.dpi - W_ / 2) < 0.005, 'legend not centred')
-    layout = dict(width=W_, height=H, panel_w=pw, panel_h=ph, col_gap=gap, row_band=band + ROW_GAP_PT * PT,
-                  titles_wrapped=wrapped, legend_rows=len(legends),
+    layout = dict(width=W_, height=H, panel_w=pw, panel_h=ph, edge=dict(edge), col_gap=gap, row_band=band + ROW_GAP_PT * PT,
+                  titles_wrapped=wrapped, title_mode=title_mode, legend_rows=len(legends), legend_labels=leg_labels,
+                  titles={k: ' / '.join(t.get_text() for t in v) for k, v in titles.items()},
                   cell_pt=(72 * pw / P.GRID_SHAPE[0], 72 * ph / P.GRID_SHAPE[1]))
     return fig, layout
 
@@ -526,21 +565,31 @@ def main_2x2():
     g = P.load_full_grid(ROUND)
     acq = acquired()
     OUT.mkdir(parents=True, exist_ok=True)
-    fig, L = draw_2x2(g, acq)
     pdf, png = OUT / f'{STEM}_2x2.pdf', OUT / f'{STEM}_2x2.png'
-    with plt.rc_context(style_rc()):
-        fig.savefig(pdf, dpi=P.PDF_DPI, metadata={'CreationDate': None})
-        fig.savefig(png, dpi=P.PNG_DPI)
-    plt.close(fig)
+    edge = dict(left=.01, right=.01, top=.01, bottom=.01)
+    for it in range(6):
+        fig, L = draw_2x2(g, acq, edge)
+        with plt.rc_context(style_rc(**RC_2X2)):
+            fig.savefig(pdf, dpi=P.PDF_DPI, metadata={'CreationDate': None})
+            fig.savefig(png, dpi=P.PNG_DPI)
+        plt.close(fig)
+        ink = ink_margins(png)
+        if all(INK_LO <= x <= INK_HI for x in ink.values()):
+            break
+        edge = {k: edge[k] + INK_TARGET - ink[k] for k in edge}
+    else:
+        need(False, ('2x2 ink margins do not settle', ink))
     w, h = P._pdf_size(pdf)
-    need(abs(w - W_2X2) <= .01, f'2x2: PDF width {w:.3f}')
-    ink = ink_margins(png)
-    need(all(.5 / P.PNG_DPI <= x <= .045 for x in ink.values()), ('2x2 ink margins', ink))
-    txt = (f'{STEM}_2x2: {w:.3f} x {h:.3f} in (print width {W_2X2} in); panels {L["panel_w"]:.3f} x {L["panel_h"]:.3f} '
-           f'in (aspect {P.ASPECT:.4f}, as Figure 5 and the 1x4); column gap {L["col_gap"]:.3f} in; row band (colour '
-           f'bars) {L["row_band"]:.3f} in; cell {L["cell_pt"][0]:.2f} x {L["cell_pt"][1]:.2f} pt; legend in '
-           f'{L["legend_rows"]} row(s); titles wrapped per row {L["titles_wrapped"]}; ink margins (in) '
-           + ', '.join(f'{k} {x:.3f}' for k, x in ink.items()) + '.\n'
+    need(abs(w - W_2X2) <= .002 and abs(h - H_2X2) <= .002, f'2x2: PDF {w:.3f} x {h:.3f}')
+    txt = (f'{STEM}_2x2: {w:.3f} x {h:.3f} in (page fixed by the paper); panels {L["panel_w"]:.3f} x {L["panel_h"]:.3f} '
+           f'in (aspect {L["panel_h"] / L["panel_w"]:.4f}; Figure 5 and the 1x4 use {P.ASPECT:.4f}); column gap '
+           f'{L["col_gap"]:.3f} in; row band (colour bars) {L["row_band"]:.3f} in; cell {L["cell_pt"][0]:.2f} x '
+           f'{L["cell_pt"][1]:.2f} pt; legend in {L["legend_rows"]} row(s), marker labels {L["legend_labels"]}; title rows '
+           f'{L["title_mode"]}: ' + '; '.join(L['titles'].values()) + '; '
+           f'ink margins (in) ' + ', '.join(f'{k} {x:.3f}' for k, x in ink.items()) +
+           f' after {it + 1} layout pass(es).\n'
+           f'Text: titles, axis labels, legend and the bar name {FS_2X2["title"]} pt; tick labels (panels and bars) '
+           f'{FS_2X2["tick"]} pt (caption: 9 pt footnotesize).\n'
            '(a) distance to training data, (b) I(x) top; (c) D(x), (d) U(x) with the 35 next initial states bottom. Same '
            'data, checkpoint, markers and boundary as the 1x4 / 1x5; the numbers are in pendulum_coverage_acquisition.txt.\n'
            'theta-dot label and y tick labels on the left column only; theta label and x tick labels on the bottom row '

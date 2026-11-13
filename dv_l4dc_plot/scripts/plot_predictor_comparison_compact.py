@@ -33,8 +33,10 @@ SIDES = [('fdr', 'rec', ERR_S + r' (\%)', REC_S + r' (\%)', LINE['success']),
          ('for', 'fail_rec', ERR_F + r' (\%)', REC_F + r' (\%)', LINE['fail'])]
 MS, MEW, HALO, BAR, LINK = 5.2, .7, .5, .45, .7
 BAR_ALPHA = .4                                   # bars recede behind the markers
-AX_W, AX_H = 1.12, 1.0                           # subplot size (in)
-LEFT, BOTTOM, COLGAP, ROWGAP, TOP = .36, .27, .42, .36, .44     # in
+# Second column has no y-axis label (Sumanth, 2026-11-13: the first column's label names the row), so the column
+# gap only holds tick labels and the subplots take the freed width.
+LEFT, BOTTOM, COLGAP, ROWGAP, TOP, RIGHT = .375, .295, .21, .31, .43, .02    # in
+AX_W, AX_H = (WIDTH - LEFT - COLGAP - RIGHT) / 2, 1.0                     # subplot size (in)
 
 
 def panel(ax, agg, setting, xm, ym, color):
@@ -84,7 +86,9 @@ def draw(agg):
             ax.set_xlim(*pad(min(xs + [0]), max(xs + [5.0])))
             ax.set_ylim(*pad(min(ys), max(ys)))
             assert ax.get_xlim()[0] <= min(xs) and max(xs) <= ax.get_xlim()[1]
-            ax.set_xlabel(xl, labelpad=1); ax.set_ylabel(yl, labelpad=1.5)
+            ax.set_xlabel(xl, labelpad=1)
+            if c == 0:
+                ax.set_ylabel(yl, labelpad=1.5)
             for axis in (ax.xaxis, ax.yaxis):
                 axis.set_major_locator(MaxNLocator(nbins=4, steps=[1, 2, 2.5, 5, 10], min_n_ticks=3))
             if r == 0:
@@ -98,7 +102,7 @@ def draw(agg):
           Line2D([], [], ls='none', marker='o', markersize=MS, markeredgewidth=MEW, markeredgecolor='black',
                  markerfacecolor='black')]
     labels = [r'fitted ($w=0.2$)', r'certified ($\alpha=\delta=0.05$)']
-    top = 1 - .02 / H
+    top = 1 - .035 / H
     fig.legend(handles=shapes, ncol=3, bbox_to_anchor=(.5, top), bbox_transform=fig.transFigure,
                **paper_legend_kw(FS['legend']))
     fig.legend(handles=ev, labels=labels, ncol=2, bbox_to_anchor=(.5, top - .16 / H), bbox_transform=fig.transFigure,

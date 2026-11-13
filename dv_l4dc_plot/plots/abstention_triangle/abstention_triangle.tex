@@ -1,0 +1,81 @@
+\documentclass[border=2pt]{standalone}
+\usepackage{times}
+\usepackage{amsmath}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.17}
+\usetikzlibrary{patterns}
+\newcommand{\suc}{\texttt{<Succ>}}
+\newcommand{\fail}{\texttt{<Fail>}}
+\newcommand{\abs}{\texttt{<Abs>}}
+% certified two-sided (A-1d at delta) thresholds, U_H r1 s99512, epoch 10
+\def\ts{0.22}\def\tf{0.33}\def\us{0.46}\def\uf{0.15}
+\definecolor{cS}{HTML}{2a78d6}
+\definecolor{cF}{HTML}{eb6834}
+\definecolor{cC}{HTML}{1baf7a}
+\definecolor{cG}{HTML}{52514e}
+\tikzset{isolab/.style={font=\scriptsize, text=cG, rotate=-45, fill=white, fill opacity=0.85,
+  text opacity=1, inner sep=0.6pt},
+  bd/.style={black, line width=0.6pt},
+  nb/.style={black!55, line width=0.5pt, dotted}}
+\begin{document}
+\begin{tikzpicture}
+\begin{axis}[
+  width=2.9in, height=2.9in, scale only axis,
+  xmin=0, xmax=1, ymin=0, ymax=1,
+  axis lines=left, axis line style={-, cG},
+  xlabel={$\hat{p}_{\mathrm{s}}$}, ylabel={$\hat{p}_{\mathrm{f}}$},
+  xlabel style={yshift=-4pt},
+  xtick={0,1}, ytick={0,1},
+  tick style={cG}, tick label style={font=\footnotesize, text=cG},
+  label style={font=\small},
+  clip=false,
+]
+% ---- regions (tile the triangle p_s + p_f <= 1) ----
+\fill[cS, opacity=0.22] (axis cs:\ts,0) -- (axis cs:1,0) -- (axis cs:0.67,0.33) -- (axis cs:\us,\tf)
+      -- (axis cs:\us,\uf) -- (axis cs:\ts,\uf) -- cycle;
+\fill[cF, opacity=0.22] (axis cs:0,\uf) -- (axis cs:\ts,\uf) -- (axis cs:\ts,\tf) -- (axis cs:\us,\tf)
+      -- (axis cs:\us,0.54) -- (axis cs:0,1) -- cycle;
+\fill[cG, opacity=0.30] (axis cs:0,0) rectangle (axis cs:\ts,\uf);
+\fill[cC, opacity=0.32] (axis cs:\ts,\uf) rectangle (axis cs:\us,\tf);
+\fill[cC, opacity=0.32] (axis cs:\us,\tf) -- (axis cs:0.67,\tf) -- (axis cs:\us,0.54) -- cycle;
+\fill[pattern=crosshatch, pattern color=cC!60!black] (axis cs:\us,\tf) -- (axis cs:0.67,\tf) -- (axis cs:\us,0.54) -- cycle;
+% ---- grid states at this epoch (20,702 test states), marker size by count class ----
+\addplot[only marks, mark=*, mark size=0.45pt, draw=none, mark options={draw opacity=0, line width=0pt, fill=black, fill opacity=0.3}] table {g1.dat};
+\addplot[only marks, mark=*, mark size=0.65pt, draw=none, mark options={draw opacity=0, line width=0pt, fill=black, fill opacity=0.3}] table {g2.dat};
+\addplot[only marks, mark=*, mark size=0.95pt, draw=none, mark options={draw opacity=0, line width=0pt, fill=black, fill opacity=0.3}] table {g3.dat};
+\addplot[only marks, mark=*, mark size=1.35pt, draw=none, mark options={draw opacity=0, line width=0pt, fill=black, fill opacity=0.3}] table {g4.dat};
+% ---- iso-p_inv lines: p_s + p_f = 1 - p_inv; the long edge is p_inv = 0 ----
+\draw[cG, line width=0.5pt] (axis cs:0,1) -- (axis cs:1,0);
+\node[font=\scriptsize, text=cG, rotate=-45, anchor=south] at (axis cs:0.80,0.20) {$\hat{p}_{\mathrm{inv}}=0$};
+\draw[cG, dashed, line width=0.4pt] (axis cs:0,0.75) -- (axis cs:0.75,0);
+\draw[cG, dashed, line width=0.4pt] (axis cs:0,0.5) -- (axis cs:0.5,0);
+\draw[cG, dashed, line width=0.4pt] (axis cs:0,0.25) -- (axis cs:0.25,0);
+\node[isolab] at (axis cs:0.31,0.44) {$0.25$};
+\node[isolab] at (axis cs:0.11,0.39) {$0.5$};
+\node[isolab] at (axis cs:0.06,0.19) {$0.75$};
+% ---- threshold lines: solid where they bound two regions, dotted where they separate nothing ----
+\draw[bd] (axis cs:\ts,0) -- (axis cs:\ts,\tf);   \draw[nb] (axis cs:\ts,\tf) -- (axis cs:\ts,0.78);
+\draw[nb] (axis cs:\us,0) -- (axis cs:\us,\uf);   \draw[bd] (axis cs:\us,\uf) -- (axis cs:\us,0.54);
+\draw[nb] (axis cs:0,\tf) -- (axis cs:\ts,\tf);   \draw[bd] (axis cs:\ts,\tf) -- (axis cs:0.67,\tf);
+\draw[bd] (axis cs:0,\uf) -- (axis cs:\us,\uf);   \draw[nb] (axis cs:\us,\uf) -- (axis cs:0.85,\uf);
+\node[font=\scriptsize, anchor=north] at (axis cs:\ts,-0.02) {$t_{\mathrm{s}}$};
+\node[font=\scriptsize, anchor=north] at (axis cs:\us,-0.02) {$u_{\mathrm{s}}$};
+\node[font=\scriptsize, anchor=east] at (axis cs:-0.02,\tf) {$t_{\mathrm{f}}$};
+\node[font=\scriptsize, anchor=east] at (axis cs:-0.02,\uf) {$u_{\mathrm{f}}$};
+% ---- region labels ----
+\node[font=\footnotesize] at (axis cs:0.74,0.10) {\suc};
+\node[font=\footnotesize] at (axis cs:0.22,0.62) {\fail};
+\node[font=\scriptsize, align=center, inner sep=0.5pt] at (axis cs:0.085,0.05) {\abs:\\[-1pt]invalid};
+\node[font=\scriptsize, align=center, inner sep=0.5pt] at (axis cs:0.385,0.20) {\abs:\\[-1pt]weak};
+\draw[cG, line width=0.3pt] (axis cs:0.52,0.42) -- (axis cs:0.66,0.56)
+  node[anchor=south west, font=\scriptsize, align=left, text=black, inner sep=1pt] {\abs:\\[-1pt]outcome uncertain};
+% ---- query states of Fig. 3, from the re-drawn K = 100 samples ----
+\draw[black, fill=white, line width=0.7pt] (axis cs:1.00,0.00) circle (2.2pt);
+\node[font=\scriptsize\bfseries, anchor=south, inner sep=1pt] at (axis cs:0.985,0.03) {1};
+\draw[black, fill=white, line width=0.7pt] (axis cs:0.29,0.26) circle (2.2pt);
+\node[font=\scriptsize\bfseries, anchor=south east, inner sep=1pt] at (axis cs:0.28,0.27) {2};
+\draw[black, fill=white, line width=0.7pt] (axis cs:0.00,0.11) circle (2.2pt);
+\node[font=\scriptsize\bfseries, anchor=west, inner sep=1pt] at (axis cs:0.025,0.12) {3};
+\end{axis}
+\end{tikzpicture}
+\end{document}

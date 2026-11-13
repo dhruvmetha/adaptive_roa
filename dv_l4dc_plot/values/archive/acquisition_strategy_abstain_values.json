@@ -1,0 +1,336 @@
+{
+  "source": "/common/home/dm1487/robotics_research/tripods/deterministic-verification/results-discussion-assets/soft_four_wsweep.jsonl",
+  "source_sha256": "8a7735f988edbce3ac2b8aa7da302cdc4d2d518e579589c17c476c51b28a40fb",
+  "protocol": "FM, rho=0.75, soft four-threshold rule fit on validation at w=0.2, final-budget test, mean and sample SD over 3 seeds",
+  "page_size": {
+    "width_in": 3.19,
+    "height_in": 2.11,
+    "paper_stem": null
+  },
+  "values": [
+    {
+      "setting": "pen-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 98.27935222672063,
+      "sd": 1.2685304883908186
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 95.78694331983807,
+      "sd": 1.961277247348708
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 97.67206477732793,
+      "sd": 1.012145748987848
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 97.98926915663905,
+      "sd": 1.938375073237274
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 96.36141063707872,
+      "sd": 3.515526093045879
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 98.5570662082617,
+      "sd": 0.2806783097056473
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "abstain",
+      "n": 3,
+      "mean": 1.4684571538981765,
+      "sd": 1.1414489995356427
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "abstain",
+      "n": 3,
+      "mean": 2.8837793449908222,
+      "sd": 2.255675878905383
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "abstain",
+      "n": 3,
+      "mean": 1.4571861011818512,
+      "sd": 0.28274992696645057
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 64.42558260740078,
+      "sd": 6.279142807087177
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 63.922269376814825,
+      "sd": 3.473022876986441
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 58.61663316208771,
+      "sd": 2.486096284767558
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 93.17615849017564,
+      "sd": 1.0792824113782382
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 92.951517435545,
+      "sd": 1.7250574253359987
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 92.80557464511885,
+      "sd": 0.471238051227978
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "abstain",
+      "n": 3,
+      "mean": 11.745098561613219,
+      "sd": 2.198500551233069
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "abstain",
+      "n": 3,
+      "mean": 11.955572527670961,
+      "sd": 2.087480760030839
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "abstain",
+      "n": 3,
+      "mean": 13.161579472423767,
+      "sd": 1.048231328464256
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 77.88345191423456,
+      "sd": 2.6110204121962743
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 77.54222932094284,
+      "sd": 3.706201873856575
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 70.27733410773922,
+      "sd": 4.682752472609283
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 98.2768750867972,
+      "sd": 0.5871934695483932
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 98.21576985118952,
+      "sd": 0.6317032280866217
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 98.07945817175698,
+      "sd": 0.6003682159541032
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "abstain",
+      "n": 3,
+      "mean": 2.7489020686459864,
+      "sd": 0.878153764609451
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "abstain",
+      "n": 3,
+      "mean": 2.8617872771498742,
+      "sd": 0.7406405261055821
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "abstain",
+      "n": 3,
+      "mean": 3.56206821407747,
+      "sd": 1.0573579065126117
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 64.80523698873148,
+      "sd": 4.789917938069019
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 67.0414511655798,
+      "sd": 3.195802168322196
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 63.86078005147039,
+      "sd": 6.311799738581741
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 97.46301361804758,
+      "sd": 1.1497144161791835
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 98.17524044824847,
+      "sd": 1.0916794915431642
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 98.75246330774435,
+      "sd": 0.8178267658488548
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "abstain",
+      "n": 3,
+      "mean": 3.8002619433530156,
+      "sd": 1.596109204287131
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "abstain",
+      "n": 3,
+      "mean": 2.6581833686804077,
+      "sd": 1.6221515647861968
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "abstain",
+      "n": 3,
+      "mean": 2.1366577639259865,
+      "sd": 1.626494505942773
+    }
+  ]
+}

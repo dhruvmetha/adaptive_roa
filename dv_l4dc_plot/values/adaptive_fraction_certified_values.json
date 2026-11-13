@@ -1,0 +1,1166 @@
+{
+  "source": "/common/users/shared/pracsys/adaptive_roa_experiments/det_v3_seeds/_index/scored/matrix_rows.jsonl",
+  "source_sha256": "4a75be7c965c43bb4e94148536a5c6cf29cd27fdd083ee8ae9658e25a528da60",
+  "protocol": "FM, uniform and U_H at rho .5/.75/1, A-1d two-sided certificate at alpha=delta=0.05 (c6c_*), final budget; mean with min-max over 3 seeds; FDR/FOR over seeds with nonempty S/F only; bands only where >= 2 seeds contribute",
+  "row_axes": {
+    "0": {
+      "rec": [
+        [
+          48,
+          102
+        ],
+        [
+          50,
+          75,
+          100
+        ]
+      ],
+      "err": [
+        [
+          -0.18,
+          6
+        ],
+        [
+          0,
+          5
+        ]
+      ]
+    },
+    "1": {
+      "rec": [
+        [
+          -3,
+          103
+        ],
+        [
+          0,
+          50,
+          100
+        ]
+      ],
+      "err": [
+        [
+          -0.18,
+          6
+        ],
+        [
+          0,
+          5
+        ]
+      ]
+    }
+  },
+  "page_size": {
+    "width_in": 6.44,
+    "height_in": 4.81,
+    "paper_stem": "adaptive_fraction_certified"
+  },
+  "table2_check": [
+    {
+      "setting": "pen-lqr",
+      "metric": "rec",
+      "table": "98.43",
+      "figure": 98.431174
+    },
+    {
+      "setting": "pen-lqr",
+      "metric": "fdr",
+      "table": "0.82",
+      "figure": 0.815583
+    },
+    {
+      "setting": "pen-lqr",
+      "metric": "fail_rec",
+      "table": "98.13",
+      "figure": 98.127312
+    },
+    {
+      "setting": "pen-lqr",
+      "metric": "for",
+      "table": "0.27",
+      "figure": 0.269767
+    },
+    {
+      "setting": "cp-lqr",
+      "metric": "rec",
+      "table": "98.24",
+      "figure": 98.238121
+    },
+    {
+      "setting": "cp-lqr",
+      "metric": "fdr",
+      "table": "0.68",
+      "figure": 0.67767
+    },
+    {
+      "setting": "cp-lqr",
+      "metric": "fail_rec",
+      "table": "99.29",
+      "figure": 99.285023
+    },
+    {
+      "setting": "cp-lqr",
+      "metric": "for",
+      "table": "0.17",
+      "figure": 0.16842
+    },
+    {
+      "setting": "q3d-lqr",
+      "metric": "rec",
+      "table": "72.22",
+      "figure": 72.220464
+    },
+    {
+      "setting": "q3d-lqr",
+      "metric": "fdr",
+      "table": "3.29",
+      "figure": 3.29037
+    },
+    {
+      "setting": "q3d-lqr",
+      "metric": "fail_rec",
+      "table": "94.80",
+      "figure": 94.800254
+    },
+    {
+      "setting": "q3d-lqr",
+      "metric": "for",
+      "table": "3.74",
+      "figure": 3.742098
+    },
+    {
+      "setting": "cp-ppo",
+      "metric": "rec",
+      "table": "72.64",
+      "figure": 72.636438
+    },
+    {
+      "setting": "cp-ppo",
+      "metric": "fdr",
+      "table": "3.44",
+      "figure": 3.44446
+    },
+    {
+      "setting": "cp-ppo",
+      "metric": "fail_rec",
+      "table": "84.95",
+      "figure": 84.949788
+    },
+    {
+      "setting": "cp-ppo",
+      "metric": "for",
+      "table": "0.26",
+      "figure": 0.26173
+    },
+    {
+      "setting": "q2d-ppo",
+      "metric": "rec",
+      "table": "79.90",
+      "figure": 79.899327
+    },
+    {
+      "setting": "q2d-ppo",
+      "metric": "fdr",
+      "table": "4.21",
+      "figure": 4.210731
+    },
+    {
+      "setting": "q2d-ppo",
+      "metric": "fail_rec",
+      "table": "98.85",
+      "figure": 98.849897
+    },
+    {
+      "setting": "q2d-ppo",
+      "metric": "for",
+      "table": "0.73",
+      "figure": 0.734983
+    },
+    {
+      "setting": "q3d-ppo",
+      "metric": "rec",
+      "table": "57.60",
+      "figure": 57.601879
+    },
+    {
+      "setting": "q3d-ppo",
+      "metric": "fdr",
+      "table": "2.93",
+      "figure": 2.925403
+    },
+    {
+      "setting": "q3d-ppo",
+      "metric": "fail_rec",
+      "table": "76.48",
+      "figure": 76.482102
+    },
+    {
+      "setting": "q3d-ppo",
+      "metric": "for",
+      "table": "0.05",
+      "figure": 0.050768
+    }
+  ],
+  "values": [
+    {
+      "setting": "pen-lqr",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "rec",
+      "n": 3,
+      "mean": 96.47857624831309,
+      "min": 95.28087044534414,
+      "max": 97.96305668016194
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 97.82518101786738,
+      "min": 97.59337396468199,
+      "max": 98.06219721831536
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 1.0777704393200616,
+      "min": 0.37041936764122235,
+      "max": 1.937689969604863
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.7106739402965974,
+      "min": 0.533566934777415,
+      "max": 0.9807798781934668
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "rec",
+      "n": 3,
+      "mean": 97.77327935222672,
+      "min": 96.01467611336032,
+      "max": 98.79807692307693
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 98.37995520133354,
+      "min": 97.64025629004533,
+      "max": 98.99984372558212
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 0.3851998829522405,
+      "min": 0.24343369634849454,
+      "max": 0.636213258684311
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.19607826113296092,
+      "min": 0.06310143555765894,
+      "max": 0.3588230603620126
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 98.43117408906883,
+      "min": 97.52024291497976,
+      "max": 99.55718623481782
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 98.12731155909778,
+      "min": 96.0618846694796,
+      "max": 99.26551023597438
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 0.8155829687405279,
+      "min": 0.2697841726618705,
+      "max": 1.6334864726901481
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.26976736502880133,
+      "min": 0.070944348100268,
+      "max": 0.4544742203416392
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "rec",
+      "n": 3,
+      "mean": 93.61504723346829,
+      "min": 84.7672064777328,
+      "max": 98.53238866396761
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 98.22368078345575,
+      "min": 96.14783559931239,
+      "max": 99.6249413970933
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 0.43044251288981134,
+      "min": 0.09070882467280031,
+      "max": 1.03397341211226
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.2755235775122228,
+      "min": 0.1379646161337445,
+      "max": 0.5072181037846274
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "rec",
+      "n": 3,
+      "mean": 91.64442071542979,
+      "min": 89.51770777718455,
+      "max": 93.00587293112653
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 97.03160536428516,
+      "min": 96.31989647870756,
+      "max": 98.0962277468434
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 1.2671093558800086,
+      "min": 0.7928926251432938,
+      "max": 2.0339300777954823
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.21018269580156168,
+      "min": 0.11950819340071704,
+      "max": 0.35251941844254137
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "rec",
+      "n": 3,
+      "mean": 98.59702200866109,
+      "min": 97.80210001779676,
+      "max": 99.4127068873465
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 99.47259038506785,
+      "min": 99.38632264136146,
+      "max": 99.52552740961494
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 1.0747426967923672,
+      "min": 0.5922469490308686,
+      "max": 1.8018809879581612
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.16260915842056373,
+      "min": 0.08475578507509757,
+      "max": 0.20646125410464636
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 98.2381206620395,
+      "min": 97.13472148069052,
+      "max": 99.11906033101975
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 99.28502339685777,
+      "min": 98.29425143126029,
+      "max": 99.87648027605678
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 0.6776695965233467,
+      "min": 0.28318260710696996,
+      "max": 1.3986013986013985
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.1684199957211824,
+      "min": 0.017948666812915064,
+      "max": 0.396918504614422
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "rec",
+      "n": 3,
+      "mean": 98.02159340333392,
+      "min": 97.48175831998577,
+      "max": 98.45168179391351
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 99.69479517946306,
+      "min": 99.64512587248059,
+      "max": 99.7608030742687
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 0.30103706765233995,
+      "min": 0.1990950226244344,
+      "max": 0.5035971223021583
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.14388293293417165,
+      "min": 0.07471343465523682,
+      "max": 0.2743914389871036
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "rec",
+      "n": 3,
+      "mean": 65.10558875126956,
+      "min": 58.23473546753195,
+      "max": 69.44917098650627
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 90.29618010360926,
+      "min": 86.65131439886972,
+      "max": 94.40142842839502
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 3.350344732271996,
+      "min": 1.801621459313382,
+      "max": 4.697130134940675
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "for",
+      "n": 3,
+      "mean": 3.116293372889724,
+      "min": 1.9221446424861333,
+      "max": 4.504864420799127
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "rec",
+      "n": 3,
+      "mean": 72.69531610673631,
+      "min": 71.25954651576907,
+      "max": 74.72794903248783
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 85.49284858733178,
+      "min": 70.999788628197,
+      "max": 93.60934040872631
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 3.5413988264782614,
+      "min": 3.0733623984068035,
+      "max": 3.9274540228423165
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "for",
+      "n": 3,
+      "mean": 2.305068132435713,
+      "min": 0.5980842613503621,
+      "max": 3.318300634820326
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 72.22046350889688,
+      "min": 70.80843654782161,
+      "max": 74.23924656721142
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 94.8002536461636,
+      "min": 92.84617695157361,
+      "max": 96.19419506279966
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 3.290369703381259,
+      "min": 2.567313713212273,
+      "max": 4.0922219666181014
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 3.742098319778135,
+      "min": 2.8032213170598204,
+      "max": 4.414585210282827
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "rec",
+      "n": 3,
+      "mean": 73.15763787213275,
+      "min": 71.33671006291797,
+      "max": 76.14261406355111
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 85.98234118375626,
+      "min": 69.4545494999388,
+      "max": 96.33492418427171
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 3.84055057760704,
+      "min": 3.3674146859646794,
+      "max": 4.3804507168236135
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "for",
+      "n": 3,
+      "mean": 2.416605630375213,
+      "min": 0.5725297213794861,
+      "max": 4.368832861221087
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "rec",
+      "n": 3,
+      "mean": 55.61611197974835,
+      "min": 48.389546571364754,
+      "max": 61.63502345320527
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 64.28946182210498,
+      "min": 62.0175574719014,
+      "max": 66.14422842448292
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 2.3852516659403293,
+      "min": 1.4107581687448805,
+      "max": 3.530974688854706
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.08886414835577008,
+      "min": 0.05358961076079384,
+      "max": 0.11716657739689341
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "rec",
+      "n": 3,
+      "mean": 74.97580224852952,
+      "min": 73.28568237659147,
+      "max": 76.00625418807238
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 90.95265541983493,
+      "min": 87.4991686803077,
+      "max": 94.71945731450487
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 4.072341627288352,
+      "min": 3.5567313345091125,
+      "max": 4.6246986938729755
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.705827869311407,
+      "min": 0.3282828282828283,
+      "max": 1.1669731561477164
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 72.63643809098355,
+      "min": 71.73106991288809,
+      "max": 74.0853249944159
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 84.94978829058502,
+      "min": 81.4039326963577,
+      "max": 89.29814449444679
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 3.444459547914664,
+      "min": 2.9788519637462234,
+      "max": 3.7227061209879486
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.2617303183990363,
+      "min": 0.09658287082381108,
+      "max": 0.4350244083297287
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "rec",
+      "n": 3,
+      "mean": 74.16871416871416,
+      "min": 67.12083984811258,
+      "max": 79.3299084208175
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 86.14393284414788,
+      "min": 82.98344011172937,
+      "max": 88.89467733711676
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 3.0854097506438705,
+      "min": 2.2764227642276422,
+      "max": 4.0159991351818825
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.29832998554619883,
+      "min": 0.2850293020777837,
+      "max": 0.31531646539178393
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "rec",
+      "n": 3,
+      "mean": 16.366584386041335,
+      "min": 0.0,
+      "max": 49.099753158124
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 32.37423751989659,
+      "min": 0.0,
+      "max": 97.12271255968977
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "fdr",
+      "n": 1,
+      "mean": 3.0949992835649804,
+      "min": 3.0949992835649804,
+      "max": 3.0949992835649804
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "for",
+      "n": 1,
+      "mean": 0.5891460662362883,
+      "min": 0.5891460662362883,
+      "max": 0.5891460662362883
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "rec",
+      "n": 3,
+      "mean": 51.7641934078699,
+      "min": 0.0,
+      "max": 78.36503557427037
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 63.53683940646733,
+      "min": 0.0,
+      "max": 98.6808960676858
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "fdr",
+      "n": 2,
+      "mean": 3.7436912517719128,
+      "min": 3.707742639040349,
+      "max": 3.7796398645034763
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "for",
+      "n": 2,
+      "mean": 0.3243955888867993,
+      "min": 0.14342407575019148,
+      "max": 0.5053671020234072
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 79.899327234887,
+      "min": 76.30317990416728,
+      "max": 81.70466095542326
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 98.84989691162174,
+      "min": 98.16107425568055,
+      "max": 99.46223119571836
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 4.210731154337939,
+      "min": 3.5956705191707945,
+      "max": 4.530030539531727
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.7349825446979746,
+      "min": 0.3889582682901447,
+      "max": 1.1473018340266408
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "rec",
+      "n": 3,
+      "mean": 71.25744155655583,
+      "min": 61.732249165093656,
+      "max": 82.6557281835342
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 97.78589665523614,
+      "min": 97.61881870332981,
+      "max": 98.07774893439733
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 2.963597638166435,
+      "min": 1.7789072426937738,
+      "max": 4.79177119919719
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.2880996412775577,
+      "min": 0.23908557953689452,
+      "max": 0.35815219514736335
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "rec",
+      "n": 3,
+      "mean": 43.175174274792,
+      "min": 34.39772131024661,
+      "max": 50.34105389401095
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 71.69034383364216,
+      "min": 63.842318891732106,
+      "max": 81.22694785140739
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 2.4356243586828654,
+      "min": 1.2693631669535284,
+      "max": 3.796017762498209
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "uniform",
+      "rho": 0.0,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.04600756987987895,
+      "min": 0.02646369433172871,
+      "max": 0.07978030566168808
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "rec",
+      "n": 3,
+      "mean": 54.616095744946655,
+      "min": 45.73870024735777,
+      "max": 59.86058016640432
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 80.08147298449954,
+      "min": 60.06970793258625,
+      "max": 93.41348274949263
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 2.226220892639013,
+      "min": 1.262135922330097,
+      "max": 2.8585330251794185
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_H",
+      "rho": 0.5,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.052208777374050365,
+      "min": 0.021294875278118415,
+      "max": 0.08399832003359933
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 57.601878919621214,
+      "min": 48.11483397046698,
+      "max": 64.65782175249231
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 76.4821024147769,
+      "min": 65.70810906203124,
+      "max": 94.74455131033265
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 2.925402968121043,
+      "min": 1.3978494623655915,
+      "max": 4.304415353893943
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.05076780356318671,
+      "min": 0.026211146769635988,
+      "max": 0.09722874807519644
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "rec",
+      "n": 3,
+      "mean": 53.41928391175074,
+      "min": 37.57589386102991,
+      "max": 61.704519901056884
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 84.76881672990382,
+      "min": 63.56216359304685,
+      "max": 96.11709167916703
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 2.395555610283538,
+      "min": 0.6145915939730373,
+      "max": 3.4077416290667304
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_H",
+      "rho": 1.0,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.1197683557582027,
+      "min": 0.02775657483866491,
+      "max": 0.19698656368392362
+    }
+  ]
+}

@@ -1,0 +1,1390 @@
+{
+ "protocol": "uniform runs, final round, two-sided A-1d at alpha_s = alpha_f = delta = 0.05 only; per-seed rates recomputed from per-state test predictions; mean with min-max over 3 seeds; recall over all 3 seeds (all-Abstain runs count as 0); FDR/FOR over seeds with a nonempty declaration set",
+ "encodings": {
+  "filled": "3 contributing seeds",
+  "hollow_with_numeral": "1 or 2 contributing seeds (numeral = count; no whisker for 1)",
+  "en_dash": "no seed with a nonempty declaration set (undefined)",
+  "gray_line": "5% target, error panels only"
+ },
+ "sources": {
+  "soft_four_wsweep.jsonl": "8a7735f988edbce3ac2b8aa7da302cdc4d2d518e579589c17c476c51b28a40fb",
+  "/common/users/shared/pracsys/adaptive_roa_experiments/det_v3_seeds/_index/scored/matrix_rows.jsonl": "4a75be7c965c43bb4e94148536a5c6cf29cd27fdd083ee8ae9658e25a528da60"
+ },
+ "code": {
+  "certificates": "/common/home/dm1487/robotics_research/tripods/olympics-classifier-detv3/adaptive_roa/adaptive_v2/eval/certificates.py"
+ },
+ "checks": {
+  "training_and_eval_identity_groups": 18,
+  "table1_fm_uniform_cells": 30,
+  "fig3_uniform_endpoint_cells": 24,
+  "calibrated_seed_runs": 90,
+  "all_abstain_calibrated_seed_runs": 23
+ },
+ "layout": "2x2",
+ "page_size": {
+  "width_in": 6.0,
+  "height_in": 3.81,
+  "paper_stem": null
+ },
+ "axis_ranges": {
+  "rec": {
+   "x": [
+    -0.48,
+    5.48
+   ],
+   "y": [
+    -5.0,
+    105.0
+   ]
+  },
+  "fail_rec": {
+   "x": [
+    -0.48,
+    5.48
+   ],
+   "y": [
+    -5.0,
+    105.0
+   ]
+  },
+  "fdr": {
+   "x": [
+    -0.48,
+    5.48
+   ],
+   "y": [
+    -0.3,
+    6.6
+   ]
+  },
+  "for": {
+   "x": [
+    -0.48,
+    5.48
+   ],
+   "y": [
+    -0.3,
+    6.6
+   ]
+  }
+ },
+ "min_setting_label_gap_pt": 2.59,
+ "plotted": [
+  {
+   "setting": "pen-lqr",
+   "model": "MLP-Label",
+   "metric": "rec",
+   "mean": 97.93353576248313,
+   "min": 96.47014170040485,
+   "max": 99.78491902834008,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "pen-lqr",
+   "model": "BNN-Label",
+   "metric": "rec",
+   "mean": 97.95883940620783,
+   "min": 96.44483805668017,
+   "max": 99.82287449392713,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "pen-lqr",
+   "model": "TERA-MLP",
+   "metric": "rec",
+   "mean": 95.56764507422402,
+   "min": 93.97773279352226,
+   "max": 96.68522267206478,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "pen-lqr",
+   "model": "TERA-BNN",
+   "metric": "rec",
+   "mean": 93.47587719298247,
+   "min": 89.90384615384616,
+   "max": 95.5339068825911,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "pen-lqr",
+   "model": "TERA-FM",
+   "metric": "rec",
+   "mean": 96.47857624831309,
+   "min": 95.28087044534414,
+   "max": 97.96305668016194,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-lqr",
+   "model": "MLP-Label",
+   "metric": "rec",
+   "mean": 85.82191374503174,
+   "min": 84.30325680726108,
+   "max": 87.54226730735006,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-lqr",
+   "model": "BNN-Label",
+   "metric": "rec",
+   "mean": 85.76259120840007,
+   "min": 84.24096814379783,
+   "max": 87.47108026339207,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-lqr",
+   "model": "TERA-MLP",
+   "metric": "rec",
+   "mean": 53.69282790532123,
+   "min": 0.0,
+   "max": 82.06086492258409,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-lqr",
+   "model": "TERA-BNN",
+   "metric": "rec",
+   "mean": 83.72189594827074,
+   "min": 82.43459690336358,
+   "max": 86.08293290621107,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-lqr",
+   "model": "TERA-FM",
+   "metric": "rec",
+   "mean": 91.64442071542979,
+   "min": 89.51770777718455,
+   "max": 93.00587293112653,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-lqr",
+   "model": "MLP-Label",
+   "metric": "rec",
+   "mean": 59.834065397755005,
+   "min": 57.39780776383998,
+   "max": 61.38063392821812,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-lqr",
+   "model": "BNN-Label",
+   "metric": "rec",
+   "mean": 61.768430216453645,
+   "min": 61.042301452257526,
+   "max": 62.89026947884928,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-lqr",
+   "model": "TERA-MLP",
+   "metric": "rec",
+   "mean": 63.05646788809307,
+   "min": 62.439159510901824,
+   "max": 63.6856475802303,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-lqr",
+   "model": "TERA-BNN",
+   "metric": "rec",
+   "mean": 57.57126086555076,
+   "min": 46.341656444145464,
+   "max": 66.61588381939772,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-lqr",
+   "model": "TERA-FM",
+   "metric": "rec",
+   "mean": 65.10558875126958,
+   "min": 58.234735467531955,
+   "max": 69.44917098650627,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-ppo",
+   "model": "MLP-Label",
+   "metric": "rec",
+   "mean": 62.8992628992629,
+   "min": 52.09291936564664,
+   "max": 72.39222693768149,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-ppo",
+   "model": "BNN-Label",
+   "metric": "rec",
+   "mean": 62.90224108405926,
+   "min": 52.12865758320304,
+   "max": 72.52177797632343,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-ppo",
+   "model": "TERA-MLP",
+   "metric": "rec",
+   "mean": 13.519469883106247,
+   "min": 0.0,
+   "max": 40.55840964931874,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-ppo",
+   "model": "TERA-BNN",
+   "metric": "rec",
+   "mean": 14.928151291787655,
+   "min": 0.0,
+   "max": 44.78445387536296,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-ppo",
+   "model": "TERA-FM",
+   "metric": "rec",
+   "mean": 55.61611197974835,
+   "min": 48.389546571364754,
+   "max": 61.63502345320527,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q2d-ppo",
+   "model": "MLP-Label",
+   "metric": "rec",
+   "mean": 11.090944291176612,
+   "min": 0.0,
+   "max": 33.272832873529836,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q2d-ppo",
+   "model": "BNN-Label",
+   "metric": "rec",
+   "mean": 0.0,
+   "min": 0.0,
+   "max": 0.0,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q2d-ppo",
+   "model": "TERA-MLP",
+   "metric": "rec",
+   "mean": 11.46362712356614,
+   "min": 0.0,
+   "max": 34.390881370698416,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q2d-ppo",
+   "model": "TERA-BNN",
+   "metric": "rec",
+   "mean": 10.270558056241228,
+   "min": 0.0,
+   "max": 30.811674168723684,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q2d-ppo",
+   "model": "TERA-FM",
+   "metric": "rec",
+   "mean": 16.366584386041335,
+   "min": 0.0,
+   "max": 49.099753158124,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-ppo",
+   "model": "MLP-Label",
+   "metric": "rec",
+   "mean": 15.925842640481724,
+   "min": 0.0,
+   "max": 25.83014766509257,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-ppo",
+   "model": "BNN-Label",
+   "metric": "rec",
+   "mean": 15.933338330459986,
+   "min": 0.0,
+   "max": 25.837643355070835,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-ppo",
+   "model": "TERA-MLP",
+   "metric": "rec",
+   "mean": 0.0,
+   "min": 0.0,
+   "max": 0.0,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-ppo",
+   "model": "TERA-BNN",
+   "metric": "rec",
+   "mean": 7.887964420458236,
+   "min": 0.0,
+   "max": 23.66389326137471,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-ppo",
+   "model": "TERA-FM",
+   "metric": "rec",
+   "mean": 43.17517427479199,
+   "min": 34.39772131024661,
+   "max": 50.34105389401094,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "pen-lqr",
+   "model": "MLP-Label",
+   "metric": "fail_rec",
+   "mean": 90.29535864978904,
+   "min": 83.95843100484451,
+   "max": 93.48335677449602,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "pen-lqr",
+   "model": "BNN-Label",
+   "metric": "fail_rec",
+   "mean": 89.71453873000989,
+   "min": 83.39584310048446,
+   "max": 93.01453352086263,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "pen-lqr",
+   "model": "TERA-MLP",
+   "metric": "fail_rec",
+   "mean": 93.3453143720373,
+   "min": 86.51351773714643,
+   "max": 96.98390373495859,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "pen-lqr",
+   "model": "TERA-BNN",
+   "metric": "fail_rec",
+   "mean": 96.83544303797468,
+   "min": 94.25691514299109,
+   "max": 99.28113767776215,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "pen-lqr",
+   "model": "TERA-FM",
+   "metric": "fail_rec",
+   "mean": 97.82518101786738,
+   "min": 97.59337396468199,
+   "max": 98.06219721831536,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-lqr",
+   "model": "MLP-Label",
+   "metric": "fail_rec",
+   "mean": 84.66002666457533,
+   "min": 78.7898988314642,
+   "max": 89.71257156301466,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-lqr",
+   "model": "BNN-Label",
+   "metric": "fail_rec",
+   "mean": 83.81630198938646,
+   "min": 77.64096933573838,
+   "max": 89.10281546545369,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-lqr",
+   "model": "TERA-MLP",
+   "metric": "fail_rec",
+   "mean": 47.88774736621964,
+   "min": 0.0,
+   "max": 90.35369774919614,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-lqr",
+   "model": "TERA-BNN",
+   "metric": "fail_rec",
+   "mean": 87.81206702742269,
+   "min": 77.55862285310955,
+   "max": 93.6142263351894,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-lqr",
+   "model": "TERA-FM",
+   "metric": "fail_rec",
+   "mean": 97.03160536428516,
+   "min": 96.31989647870755,
+   "max": 98.09622774684338,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-lqr",
+   "model": "MLP-Label",
+   "metric": "fail_rec",
+   "mean": 27.286987284317323,
+   "min": 22.098365762217846,
+   "max": 31.561703879228826,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-lqr",
+   "model": "BNN-Label",
+   "metric": "fail_rec",
+   "mean": 37.0264066422662,
+   "min": 31.129504166249486,
+   "max": 48.466998186652425,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-lqr",
+   "model": "TERA-MLP",
+   "metric": "fail_rec",
+   "mean": 35.132589452917856,
+   "min": 15.691018923338785,
+   "max": 68.5790252422432,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-lqr",
+   "model": "TERA-BNN",
+   "metric": "fail_rec",
+   "mean": 39.43845557669274,
+   "min": 15.400660815005173,
+   "max": 82.07177741436661,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-lqr",
+   "model": "TERA-FM",
+   "metric": "fail_rec",
+   "mean": 90.29618010360926,
+   "min": 86.65131439886972,
+   "max": 94.40142842839502,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-ppo",
+   "model": "MLP-Label",
+   "metric": "fail_rec",
+   "mean": 66.18043701552536,
+   "min": 55.74386486067082,
+   "max": 75.9493670886076,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-ppo",
+   "model": "BNN-Label",
+   "metric": "fail_rec",
+   "mean": 64.80155475256231,
+   "min": 54.15992374027356,
+   "max": 75.7664767563014,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-ppo",
+   "model": "TERA-MLP",
+   "metric": "fail_rec",
+   "mean": 18.010448764843677,
+   "min": 0.0,
+   "max": 54.031346294531026,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-ppo",
+   "model": "TERA-BNN",
+   "metric": "fail_rec",
+   "mean": 21.820109808094468,
+   "min": 0.0,
+   "max": 65.4603294242834,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-ppo",
+   "model": "TERA-FM",
+   "metric": "fail_rec",
+   "mean": 64.28946182210498,
+   "min": 62.01755747190139,
+   "max": 66.14422842448292,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q2d-ppo",
+   "model": "MLP-Label",
+   "metric": "fail_rec",
+   "mean": 28.6923265925285,
+   "min": 0.0,
+   "max": 86.07697977758549,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q2d-ppo",
+   "model": "BNN-Label",
+   "metric": "fail_rec",
+   "mean": 0.0,
+   "min": 0.0,
+   "max": 0.0,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q2d-ppo",
+   "model": "TERA-MLP",
+   "metric": "fail_rec",
+   "mean": 16.932987212768,
+   "min": 0.0,
+   "max": 50.79896163830401,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q2d-ppo",
+   "model": "TERA-BNN",
+   "metric": "fail_rec",
+   "mean": 12.315268830988472,
+   "min": 0.0,
+   "max": 36.94580649296542,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q2d-ppo",
+   "model": "TERA-FM",
+   "metric": "fail_rec",
+   "mean": 32.37423751989659,
+   "min": 0.0,
+   "max": 97.12271255968977,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-ppo",
+   "model": "MLP-Label",
+   "metric": "fail_rec",
+   "mean": 31.28312597429336,
+   "min": 0.0,
+   "max": 46.99152916262243,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-ppo",
+   "model": "BNN-Label",
+   "metric": "fail_rec",
+   "mean": 31.248713197446985,
+   "min": 0.0,
+   "max": 46.88167299038207,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-ppo",
+   "model": "TERA-MLP",
+   "metric": "fail_rec",
+   "mean": 0.0,
+   "min": 0.0,
+   "max": 0.0,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-ppo",
+   "model": "TERA-BNN",
+   "metric": "fail_rec",
+   "mean": 8.364069531456808,
+   "min": 0.0,
+   "max": 25.092208594370423,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-ppo",
+   "model": "TERA-FM",
+   "metric": "fail_rec",
+   "mean": 71.69034383364217,
+   "min": 63.84231889173211,
+   "max": 81.22694785140739,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "pen-lqr",
+   "model": "MLP-Label",
+   "metric": "fdr",
+   "mean": 2.6968873705588723,
+   "min": 2.2561210101269067,
+   "max": 3.404776484996938,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "pen-lqr",
+   "model": "BNN-Label",
+   "metric": "fdr",
+   "mean": 2.7332897972954133,
+   "min": 2.2566995768688294,
+   "max": 3.391698298028652,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "pen-lqr",
+   "model": "TERA-MLP",
+   "metric": "fdr",
+   "mean": 1.5713385339038102,
+   "min": 1.0259826782145236,
+   "max": 2.4134848678329717,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "pen-lqr",
+   "model": "TERA-BNN",
+   "metric": "fdr",
+   "mean": 0.6448823261328607,
+   "min": 0.19662921348314608,
+   "max": 0.8975712777191129,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "pen-lqr",
+   "model": "TERA-FM",
+   "metric": "fdr",
+   "mean": 1.0777704393200618,
+   "min": 0.3704193676412224,
+   "max": 1.9376899696048633,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-lqr",
+   "model": "MLP-Label",
+   "metric": "fdr",
+   "mean": 1.2529746928458478,
+   "min": 1.1454983922829582,
+   "max": 1.4038323598729379,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-lqr",
+   "model": "BNN-Label",
+   "metric": "fdr",
+   "mean": 1.2401344657034459,
+   "min": 1.1464199517296862,
+   "max": 1.394442735568543,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-lqr",
+   "model": "TERA-MLP",
+   "metric": "fdr",
+   "mean": 0.8661772089118516,
+   "min": 0.8173800817380081,
+   "max": 0.9149743360856951,
+   "n": 2,
+   "drawn": "hollow marker + seed count",
+   "whisker": true
+  },
+  {
+   "setting": "cp-lqr",
+   "model": "TERA-BNN",
+   "metric": "fdr",
+   "mean": 1.212776865755199,
+   "min": 1.0467848750267037,
+   "max": 1.5368956743002544,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-lqr",
+   "model": "TERA-FM",
+   "metric": "fdr",
+   "mean": 1.2671093558800088,
+   "min": 0.7928926251432938,
+   "max": 2.0339300777954823,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-lqr",
+   "model": "MLP-Label",
+   "metric": "fdr",
+   "mean": 3.5158966982543647,
+   "min": 2.7423897009521254,
+   "max": 4.054555576173687,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-lqr",
+   "model": "BNN-Label",
+   "metric": "fdr",
+   "mean": 3.9686823511343077,
+   "min": 3.632672184913322,
+   "max": 4.230189816209702,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-lqr",
+   "model": "TERA-MLP",
+   "metric": "fdr",
+   "mean": 3.3771249997538892,
+   "min": 2.995600024109457,
+   "max": 3.6788488860675312,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-lqr",
+   "model": "TERA-BNN",
+   "metric": "fdr",
+   "mean": 2.5277268552668715,
+   "min": 0.3785462124112118,
+   "max": 4.5582107322051195,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-lqr",
+   "model": "TERA-FM",
+   "metric": "fdr",
+   "mean": 3.3503447322719966,
+   "min": 1.8016214593133821,
+   "max": 4.697130134940675,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-ppo",
+   "model": "MLP-Label",
+   "metric": "fdr",
+   "mean": 3.3568452146675254,
+   "min": 2.5977280320748415,
+   "max": 4.378356051218505,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-ppo",
+   "model": "BNN-Label",
+   "metric": "fdr",
+   "mean": 3.3562507219117568,
+   "min": 2.5959933222036726,
+   "max": 4.410292645586763,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-ppo",
+   "model": "TERA-MLP",
+   "metric": "fdr",
+   "mean": 3.2399019503357134,
+   "min": 3.2399019503357134,
+   "max": 3.2399019503357134,
+   "n": 1,
+   "drawn": "hollow marker + seed count",
+   "whisker": false
+  },
+  {
+   "setting": "cp-ppo",
+   "model": "TERA-BNN",
+   "metric": "fdr",
+   "mean": 2.9713511420828493,
+   "min": 2.9713511420828493,
+   "max": 2.9713511420828493,
+   "n": 1,
+   "drawn": "hollow marker + seed count",
+   "whisker": false
+  },
+  {
+   "setting": "cp-ppo",
+   "model": "TERA-FM",
+   "metric": "fdr",
+   "mean": 2.3852516659403293,
+   "min": 1.4107581687448802,
+   "max": 3.530974688854706,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q2d-ppo",
+   "model": "MLP-Label",
+   "metric": "fdr",
+   "mean": 3.0873334743074645,
+   "min": 3.0873334743074645,
+   "max": 3.0873334743074645,
+   "n": 1,
+   "drawn": "hollow marker + seed count",
+   "whisker": false
+  },
+  {
+   "setting": "q2d-ppo",
+   "model": "BNN-Label",
+   "metric": "fdr",
+   "mean": null,
+   "min": null,
+   "max": null,
+   "n": 0,
+   "drawn": "en dash (no seed with a nonempty declaration set)"
+  },
+  {
+   "setting": "q2d-ppo",
+   "model": "TERA-MLP",
+   "metric": "fdr",
+   "mean": 4.418886198547216,
+   "min": 4.418886198547216,
+   "max": 4.418886198547216,
+   "n": 1,
+   "drawn": "hollow marker + seed count",
+   "whisker": false
+  },
+  {
+   "setting": "q2d-ppo",
+   "model": "TERA-BNN",
+   "metric": "fdr",
+   "mean": 2.3469857340082836,
+   "min": 2.3469857340082836,
+   "max": 2.3469857340082836,
+   "n": 1,
+   "drawn": "hollow marker + seed count",
+   "whisker": false
+  },
+  {
+   "setting": "q2d-ppo",
+   "model": "TERA-FM",
+   "metric": "fdr",
+   "mean": 3.0949992835649804,
+   "min": 3.0949992835649804,
+   "max": 3.0949992835649804,
+   "n": 1,
+   "drawn": "hollow marker + seed count",
+   "whisker": false
+  },
+  {
+   "setting": "q3d-ppo",
+   "model": "MLP-Label",
+   "metric": "fdr",
+   "mean": 4.302922927792683,
+   "min": 4.062909567496724,
+   "max": 4.542936288088643,
+   "n": 2,
+   "drawn": "hollow marker + seed count",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-ppo",
+   "model": "BNN-Label",
+   "metric": "fdr",
+   "mean": 4.285251156459278,
+   "min": 4.02882410743531,
+   "max": 4.541678205483246,
+   "n": 2,
+   "drawn": "hollow marker + seed count",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-ppo",
+   "model": "TERA-MLP",
+   "metric": "fdr",
+   "mean": null,
+   "min": null,
+   "max": null,
+   "n": 0,
+   "drawn": "en dash (no seed with a nonempty declaration set)"
+  },
+  {
+   "setting": "q3d-ppo",
+   "model": "TERA-BNN",
+   "metric": "fdr",
+   "mean": 2.591792656587473,
+   "min": 2.591792656587473,
+   "max": 2.591792656587473,
+   "n": 1,
+   "drawn": "hollow marker + seed count",
+   "whisker": false
+  },
+  {
+   "setting": "q3d-ppo",
+   "model": "TERA-FM",
+   "metric": "fdr",
+   "mean": 2.4356243586828654,
+   "min": 1.2693631669535284,
+   "max": 3.7960177624982094,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "pen-lqr",
+   "model": "MLP-Label",
+   "metric": "for",
+   "mean": 0.3626467581011562,
+   "min": 0.0,
+   "max": 0.911425967354379,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "pen-lqr",
+   "model": "BNN-Label",
+   "metric": "for",
+   "mean": 0.35396469965729926,
+   "min": 0.0,
+   "max": 0.8935281837160751,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "pen-lqr",
+   "model": "TERA-MLP",
+   "metric": "for",
+   "mean": 0.9813062768355598,
+   "min": 0.0631825977073743,
+   "max": 1.7338741748190567,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "pen-lqr",
+   "model": "TERA-BNN",
+   "metric": "for",
+   "mean": 1.7322661522671532,
+   "min": 0.9023396949612713,
+   "max": 3.317607670065439,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "pen-lqr",
+   "model": "TERA-FM",
+   "metric": "for",
+   "mean": 0.7106739402965974,
+   "min": 0.533566934777415,
+   "max": 0.9807798781934668,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-lqr",
+   "model": "MLP-Label",
+   "metric": "for",
+   "mean": 0.016165625317209945,
+   "min": 0.0,
+   "max": 0.03932277444019661,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-lqr",
+   "model": "BNN-Label",
+   "metric": "for",
+   "mean": 0.014778841655287324,
+   "min": 0.0,
+   "max": 0.03739304489364978,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-lqr",
+   "model": "TERA-MLP",
+   "metric": "for",
+   "mean": 0.023858066195289115,
+   "min": 0.0,
+   "max": 0.04771613239057823,
+   "n": 2,
+   "drawn": "hollow marker + seed count",
+   "whisker": true
+  },
+  {
+   "setting": "cp-lqr",
+   "model": "TERA-BNN",
+   "metric": "for",
+   "mean": 0.08538258502962397,
+   "min": 0.07856460346108929,
+   "max": 0.09596928982725528,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-lqr",
+   "model": "TERA-FM",
+   "metric": "for",
+   "mean": 0.21018269580156168,
+   "min": 0.11950819340071706,
+   "max": 0.3525194184425413,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-lqr",
+   "model": "MLP-Label",
+   "metric": "for",
+   "mean": 0.04467985763379556,
+   "min": 0.017616710708443437,
+   "max": 0.06516608545563422,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-lqr",
+   "model": "BNN-Label",
+   "metric": "for",
+   "mean": 0.11677672357632003,
+   "min": 0.0285816362986781,
+   "max": 0.2564190620099133,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-lqr",
+   "model": "TERA-MLP",
+   "metric": "for",
+   "mean": 0.3547625345634032,
+   "min": 0.07438894792773645,
+   "max": 0.8715647965008764,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-lqr",
+   "model": "TERA-BNN",
+   "metric": "for",
+   "mean": 0.633831864921154,
+   "min": 0.10102832401226773,
+   "max": 1.683180851985367,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-lqr",
+   "model": "TERA-FM",
+   "metric": "for",
+   "mean": 3.116293372889724,
+   "min": 1.9221446424861333,
+   "max": 4.504864420799127,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-ppo",
+   "model": "MLP-Label",
+   "metric": "for",
+   "mean": 0.028002103969834886,
+   "min": 0.0,
+   "max": 0.05251181515841064,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-ppo",
+   "model": "BNN-Label",
+   "metric": "for",
+   "mean": 0.022215435361662456,
+   "min": 0.0,
+   "max": 0.0511770726714432,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "cp-ppo",
+   "model": "TERA-MLP",
+   "metric": "for",
+   "mean": 0.055358497529370755,
+   "min": 0.055358497529370755,
+   "max": 0.055358497529370755,
+   "n": 1,
+   "drawn": "hollow marker + seed count",
+   "whisker": false
+  },
+  {
+   "setting": "cp-ppo",
+   "model": "TERA-BNN",
+   "metric": "for",
+   "mean": 0.10318346358131195,
+   "min": 0.10318346358131195,
+   "max": 0.10318346358131195,
+   "n": 1,
+   "drawn": "hollow marker + seed count",
+   "whisker": false
+  },
+  {
+   "setting": "cp-ppo",
+   "model": "TERA-FM",
+   "metric": "for",
+   "mean": 0.08886414835577008,
+   "min": 0.05358961076079384,
+   "max": 0.11716657739689341,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  },
+  {
+   "setting": "q2d-ppo",
+   "model": "MLP-Label",
+   "metric": "for",
+   "mean": 0.014146167133242004,
+   "min": 0.014146167133242004,
+   "max": 0.014146167133242004,
+   "n": 1,
+   "drawn": "hollow marker + seed count",
+   "whisker": false
+  },
+  {
+   "setting": "q2d-ppo",
+   "model": "BNN-Label",
+   "metric": "for",
+   "mean": null,
+   "min": null,
+   "max": null,
+   "n": 0,
+   "drawn": "en dash (no seed with a nonempty declaration set)"
+  },
+  {
+   "setting": "q2d-ppo",
+   "model": "TERA-MLP",
+   "metric": "for",
+   "mean": 0.15495672549982992,
+   "min": 0.15495672549982992,
+   "max": 0.15495672549982992,
+   "n": 1,
+   "drawn": "hollow marker + seed count",
+   "whisker": false
+  },
+  {
+   "setting": "q2d-ppo",
+   "model": "TERA-BNN",
+   "metric": "for",
+   "mean": 0.07454406767907912,
+   "min": 0.07454406767907912,
+   "max": 0.07454406767907912,
+   "n": 1,
+   "drawn": "hollow marker + seed count",
+   "whisker": false
+  },
+  {
+   "setting": "q2d-ppo",
+   "model": "TERA-FM",
+   "metric": "for",
+   "mean": 0.5891460662362883,
+   "min": 0.5891460662362883,
+   "max": 0.5891460662362883,
+   "n": 1,
+   "drawn": "hollow marker + seed count",
+   "whisker": false
+  },
+  {
+   "setting": "q3d-ppo",
+   "model": "MLP-Label",
+   "metric": "for",
+   "mean": 0.0004694306744779931,
+   "min": 0.0,
+   "max": 0.0009388613489559862,
+   "n": 2,
+   "drawn": "hollow marker + seed count",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-ppo",
+   "model": "BNN-Label",
+   "metric": "for",
+   "mean": 0.00047053066448340437,
+   "min": 0.0,
+   "max": 0.0009410613289668087,
+   "n": 2,
+   "drawn": "hollow marker + seed count",
+   "whisker": true
+  },
+  {
+   "setting": "q3d-ppo",
+   "model": "TERA-MLP",
+   "metric": "for",
+   "mean": null,
+   "min": null,
+   "max": null,
+   "n": 0,
+   "drawn": "en dash (no seed with a nonempty declaration set)"
+  },
+  {
+   "setting": "q3d-ppo",
+   "model": "TERA-BNN",
+   "metric": "for",
+   "mean": 0.0017582417582417582,
+   "min": 0.0017582417582417582,
+   "max": 0.0017582417582417582,
+   "n": 1,
+   "drawn": "hollow marker + seed count",
+   "whisker": false
+  },
+  {
+   "setting": "q3d-ppo",
+   "model": "TERA-FM",
+   "metric": "for",
+   "mean": 0.04600756987987895,
+   "min": 0.02646369433172871,
+   "max": 0.07978030566168809,
+   "n": 3,
+   "drawn": "filled marker",
+   "whisker": true
+  }
+ ]
+}

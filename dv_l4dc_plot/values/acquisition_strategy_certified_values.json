@@ -1,0 +1,879 @@
+{
+  "source": "/common/users/shared/pracsys/adaptive_roa_experiments/det_v3_seeds/_index/scored/matrix_rows.jsonl",
+  "source_sha256": "4a75be7c965c43bb4e94148536a5c6cf29cd27fdd083ee8ae9658e25a528da60",
+  "protocol": "FM, rho=0.75, two-sided A-1d at alpha=delta=0.05 (c6c_*), final budget; mean with min-max over 3 seeds; FDR/FOR over seeds with nonempty S/F only",
+  "error_axis_max_percent": 6,
+  "page_size": {
+    "width_in": 6.44,
+    "height_in": 4.36,
+    "paper_stem": "acquisition_strategy_certified"
+  },
+  "values": [
+    {
+      "setting": "pen-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 98.43117408906883,
+      "min": 97.52024291497976,
+      "max": 99.55718623481782
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 98.12731155909778,
+      "min": 96.0618846694796,
+      "max": 99.26551023597438
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 0.8155829687405279,
+      "min": 0.2697841726618705,
+      "max": 1.6334864726901481
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.26976736502880133,
+      "min": 0.070944348100268,
+      "max": 0.4544742203416392
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 92.55651147098516,
+      "min": 83.09716599190283,
+      "max": 97.72267206477733
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 94.34807522008647,
+      "min": 86.52914517893421,
+      "max": 98.69510861072042
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 0.5390848205282269,
+      "min": 0.0760687661646128,
+      "max": 1.1897147243187922
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.5712003279664923,
+      "min": 0.27879560299506134,
+      "max": 0.7620993086109364
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 97.49493927125506,
+      "min": 97.00151821862349,
+      "max": 97.79858299595142
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 98.65604000625098,
+      "min": 98.29660884513206,
+      "max": 98.86701047038599
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 0.40397176767827125,
+      "min": 0.16927083333333334,
+      "max": 0.6299010155546986
+    },
+    {
+      "setting": "pen-lqr",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.34887455699466147,
+      "min": 0.14214641080312723,
+      "max": 0.7140615191462649
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 98.2381206620395,
+      "min": 97.13472148069052,
+      "max": 99.11906033101975
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 99.28502339685777,
+      "min": 98.29425143126029,
+      "max": 99.87648027605678
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 0.6776695965233467,
+      "min": 0.28318260710696996,
+      "max": 1.3986013986013985
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.1684199957211824,
+      "min": 0.017948666812915064,
+      "max": 0.396918504614422
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 98.36863024262918,
+      "min": 98.01566114967076,
+      "max": 98.83431215518776
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 99.57585026011031,
+      "min": 99.2569210258019,
+      "max": 99.77844874911771
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 0.6992041029686744,
+      "min": 0.47769265434880576,
+      "max": 1.0512249443207127
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.27733400220660703,
+      "min": 0.1991089382170879,
+      "max": 0.3544016290726817
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 97.59150501275434,
+      "min": 95.87115145043602,
+      "max": 98.53176721836626
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 99.72420463754477,
+      "min": 99.69022037487257,
+      "max": 99.76472433534624
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 0.7314220907985413,
+      "min": 0.5538120731031937,
+      "max": 0.8253341706288688
+    },
+    {
+      "setting": "cp-lqr",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.382256388212858,
+      "min": 0.26277601286425856,
+      "max": 0.6113639471062758
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 72.22046350889688,
+      "min": 70.80843654782161,
+      "max": 74.23924656721142
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 94.8002536461636,
+      "min": 92.84617695157361,
+      "max": 96.19419506279966
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 3.290369703381259,
+      "min": 2.567313713212273,
+      "max": 4.0922219666181014
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 3.742098319778135,
+      "min": 2.8032213170598204,
+      "max": 4.414585210282827
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 70.91066175985648,
+      "min": 65.8185271655257,
+      "max": 73.50124648806933
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 91.53511553137758,
+      "min": 87.89284562070999,
+      "max": 96.91953409204686
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 3.2418906744009117,
+      "min": 2.907010682388652,
+      "max": 3.749093170276713
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 2.7950420853975024,
+      "min": 1.936628274286825,
+      "max": 4.193723985109997
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 65.42413570232019,
+      "min": 50.84879901863797,
+      "max": 73.08377191246885
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 94.02819032362135,
+      "min": 92.38227146814404,
+      "max": 96.1752828488469
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 2.5927107100837414,
+      "min": 0.2600225094112625,
+      "max": 3.7997760241685543
+    },
+    {
+      "setting": "q3d-lqr",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 3.579687848749306,
+      "min": 2.8106456936203084,
+      "max": 4.731416229082754
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 72.63643809098355,
+      "min": 71.73106991288809,
+      "max": 74.0853249944159
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 84.94978829058502,
+      "min": 81.4039326963577,
+      "max": 89.29814449444679
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 3.444459547914664,
+      "min": 2.9788519637462234,
+      "max": 3.7227061209879486
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.2617303183990363,
+      "min": 0.09658287082381108,
+      "max": 0.4350244083297287
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 74.67798376889286,
+      "min": 66.15590797408979,
+      "max": 79.68282331918695
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 82.81495932075639,
+      "min": 78.9022146356603,
+      "max": 88.99886940521847
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 3.767635219072813,
+      "min": 2.6236191478169384,
+      "max": 4.512847965738758
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.2752913863943574,
+      "min": 0.1429180007970427,
+      "max": 0.4796727813584531
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 63.46809619536892,
+      "min": 57.93165065892338,
+      "max": 68.01429528702256
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 84.15467718932659,
+      "min": 83.52989425613514,
+      "max": 85.1049679664812
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 2.6768593198746977,
+      "min": 2.2831738376912063,
+      "max": 2.9451137884872822
+    },
+    {
+      "setting": "cp-ppo",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.2817350397225672,
+      "min": 0.2558590401329412,
+      "max": 0.319372679355023
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 79.899327234887,
+      "min": 76.30317990416728,
+      "max": 81.70466095542326
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 98.84989691162174,
+      "min": 98.16107425568055,
+      "max": 99.46223119571836
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 4.210731154337939,
+      "min": 3.5956705191707945,
+      "max": 4.530030539531727
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.7349825446979746,
+      "min": 0.3889582682901447,
+      "max": 1.1473018340266408
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 77.8011712889018,
+      "min": 71.98344707419776,
+      "max": 83.15667199070714
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 95.6997724577765,
+      "min": 89.95417107329423,
+      "max": 99.24879018043137
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 3.6970080843331106,
+      "min": 2.5265434526150217,
+      "max": 4.565905682386269
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.424734942765301,
+      "min": 0.14585868072602048,
+      "max": 0.8033466370269767
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 72.53521126760563,
+      "min": 66.066502105416,
+      "max": 79.56294467837955
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 95.35365189244624,
+      "min": 88.79659007146749,
+      "max": 98.6962792039227
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 3.9055200068025213,
+      "min": 2.7362120564343737,
+      "max": 5.542147905533529
+    },
+    {
+      "setting": "q2d-ppo",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.4300010592270838,
+      "min": 0.10095474343073062,
+      "max": 0.6708768489430464
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 57.601878919621214,
+      "min": 48.11483397046698,
+      "max": 64.65782175249231
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 76.4821024147769,
+      "min": 65.70810906203124,
+      "max": 94.74455131033265
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 2.925402968121043,
+      "min": 1.3978494623655915,
+      "max": 4.304415353893943
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_H",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.05076780356318671,
+      "min": 0.026211146769635988,
+      "max": 0.09722874807519644
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 62.65647252829623,
+      "min": 59.051045648751966,
+      "max": 65.88711490892737
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 83.65834289243801,
+      "min": 76.39680578840554,
+      "max": 96.86490779140563
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 4.122108787372386,
+      "min": 2.9922423346878464,
+      "max": 5.433028509951587
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "q_A",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.1330537362879897,
+      "min": 0.05050103839213773,
+      "max": 0.2874829122518587
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "rec",
+      "n": 3,
+      "mean": 60.2628488619044,
+      "min": 56.794842965294954,
+      "max": 62.17674836968743
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "fail_rec",
+      "n": 3,
+      "mean": 72.85611341510044,
+      "min": 66.95049854407482,
+      "max": 77.66610782670078
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "fdr",
+      "n": 3,
+      "mean": 3.2672911806438414,
+      "min": 2.3330755349316834,
+      "max": 4.015274242073594
+    },
+    {
+      "setting": "q3d-ppo",
+      "arm": "U_tau",
+      "rho": 0.75,
+      "metric": "for",
+      "n": 3,
+      "mean": 0.04720309303738593,
+      "min": 0.0355721851861611,
+      "max": 0.06131277463013637
+    }
+  ],
+  "table2_check": [
+    {
+      "setting": "pen-lqr",
+      "metric": "rec",
+      "table": "98.43",
+      "figure": 98.431174
+    },
+    {
+      "setting": "pen-lqr",
+      "metric": "fdr",
+      "table": "0.82",
+      "figure": 0.815583
+    },
+    {
+      "setting": "pen-lqr",
+      "metric": "fail_rec",
+      "table": "98.13",
+      "figure": 98.127312
+    },
+    {
+      "setting": "pen-lqr",
+      "metric": "for",
+      "table": "0.27",
+      "figure": 0.269767
+    },
+    {
+      "setting": "cp-lqr",
+      "metric": "rec",
+      "table": "98.24",
+      "figure": 98.238121
+    },
+    {
+      "setting": "cp-lqr",
+      "metric": "fdr",
+      "table": "0.68",
+      "figure": 0.67767
+    },
+    {
+      "setting": "cp-lqr",
+      "metric": "fail_rec",
+      "table": "99.29",
+      "figure": 99.285023
+    },
+    {
+      "setting": "cp-lqr",
+      "metric": "for",
+      "table": "0.17",
+      "figure": 0.16842
+    },
+    {
+      "setting": "q3d-lqr",
+      "metric": "rec",
+      "table": "72.22",
+      "figure": 72.220464
+    },
+    {
+      "setting": "q3d-lqr",
+      "metric": "fdr",
+      "table": "3.29",
+      "figure": 3.29037
+    },
+    {
+      "setting": "q3d-lqr",
+      "metric": "fail_rec",
+      "table": "94.80",
+      "figure": 94.800254
+    },
+    {
+      "setting": "q3d-lqr",
+      "metric": "for",
+      "table": "3.74",
+      "figure": 3.742098
+    },
+    {
+      "setting": "cp-ppo",
+      "metric": "rec",
+      "table": "72.64",
+      "figure": 72.636438
+    },
+    {
+      "setting": "cp-ppo",
+      "metric": "fdr",
+      "table": "3.44",
+      "figure": 3.44446
+    },
+    {
+      "setting": "cp-ppo",
+      "metric": "fail_rec",
+      "table": "84.95",
+      "figure": 84.949788
+    },
+    {
+      "setting": "cp-ppo",
+      "metric": "for",
+      "table": "0.26",
+      "figure": 0.26173
+    },
+    {
+      "setting": "q2d-ppo",
+      "metric": "rec",
+      "table": "79.90",
+      "figure": 79.899327
+    },
+    {
+      "setting": "q2d-ppo",
+      "metric": "fdr",
+      "table": "4.21",
+      "figure": 4.210731
+    },
+    {
+      "setting": "q2d-ppo",
+      "metric": "fail_rec",
+      "table": "98.85",
+      "figure": 98.849897
+    },
+    {
+      "setting": "q2d-ppo",
+      "metric": "for",
+      "table": "0.73",
+      "figure": 0.734983
+    },
+    {
+      "setting": "q3d-ppo",
+      "metric": "rec",
+      "table": "57.60",
+      "figure": 57.601879
+    },
+    {
+      "setting": "q3d-ppo",
+      "metric": "fdr",
+      "table": "2.93",
+      "figure": 2.925403
+    },
+    {
+      "setting": "q3d-ppo",
+      "metric": "fail_rec",
+      "table": "76.48",
+      "figure": 76.482102
+    },
+    {
+      "setting": "q3d-ppo",
+      "metric": "for",
+      "table": "0.05",
+      "figure": 0.050768
+    }
+  ]
+}

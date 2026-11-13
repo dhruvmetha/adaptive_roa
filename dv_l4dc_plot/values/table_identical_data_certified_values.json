@@ -4,13 +4,13 @@
     "/common/users/shared/pracsys/adaptive_roa_experiments/det_v3_seeds/_index/scored/matrix_rows.jsonl": "4a75be7c965c43bb4e94148536a5c6cf29cd27fdd083ee8ae9658e25a528da60",
     "/common/home/dm1487/robotics_research/tripods/deterministic-verification/results-discussion-assets/soft_four_wsweep.jsonl": "8a7735f988edbce3ac2b8aa7da302cdc4d2d518e579589c17c476c51b28a40fb"
   },
-  "protocol": "cal records of predictor_comparison_data.build(): uniform runs, final budget, two-sided A-1d at alpha = delta = 0.05. BNN rows: R_s, R_f, Abst. = row mean minus Unif-TERA mean (unrounded, then 2 dp), all 3 seeds; FDR, FOR absolute over seeds with a nonempty predicted class. No bold.",
+  "protocol": "cal records of predictor_comparison_data.build(): uniform runs, final budget, two-sided A-1d at alpha = delta = 0.05. All rows absolute three-seed means; R_s, R_f, Abst. over all 3 seeds; FDR, FOR over seeds with a nonempty predicted class. No bold; J_w shading as make_tables.",
   "checks": {
     "identity_groups": 18,
-    "table1_fm_uniform_cells": 30,
+    "table1_fm_uniform_cells": 15,
     "fig3_uniform_endpoint_cells": 24,
     "cells_equal_to_per_seed_table": 90,
-    "spot_values": 10
+    "spot_values": 5
   },
   "cells": [
     {
@@ -24,10 +24,9 @@
       "mean": 97.95883940620783,
       "min": 96.44483805668017,
       "max": 99.82287449392713,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 96.47857624831309,
-      "difference": 1.4802631578947398,
-      "tex": "$+1.48$"
+      "kind": "absolute",
+      "tex": "$97.96$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -41,7 +40,8 @@
       "min": 2.2566995768688294,
       "max": 3.391698298028652,
       "kind": "absolute",
-      "tex": "$2.73$"
+      "tex": "$2.73$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -54,10 +54,9 @@
       "mean": 89.71453873000989,
       "min": 83.39584310048446,
       "max": 93.01453352086263,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 97.82518101786738,
-      "difference": -8.110642287857488,
-      "tex": "$-8.11$"
+      "kind": "absolute",
+      "tex": "$89.71$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -71,7 +70,8 @@
       "min": 0.0,
       "max": 0.8935281837160751,
       "kind": "absolute",
-      "tex": "$0.35$"
+      "tex": "$0.35$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -84,10 +84,9 @@
       "mean": 5.881879367532927,
       "min": 3.048014684571539,
       "max": 10.684957975074871,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 1.8500627958651337,
-      "difference": 4.031816571667793,
-      "tex": "$+4.03$"
+      "kind": "absolute",
+      "tex": "$5.88$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -100,10 +99,9 @@
       "mean": 85.76259120840007,
       "min": 84.24096814379783,
       "max": 87.47108026339207,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 91.64442071542979,
-      "difference": -5.881829507029721,
-      "tex": "$-5.88$"
+      "kind": "absolute",
+      "tex": "$85.76$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -117,7 +115,8 @@
       "min": 1.1464199517296862,
       "max": 1.394442735568543,
       "kind": "absolute",
-      "tex": "$1.24$"
+      "tex": "$1.24$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -130,10 +129,9 @@
       "mean": 83.81630198938646,
       "min": 77.64096933573838,
       "max": 89.10281546545369,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 97.03160536428516,
-      "difference": -13.215303374898696,
-      "tex": "$-13.22$"
+      "kind": "absolute",
+      "tex": "$83.82$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -147,7 +145,8 @@
       "min": 0.0,
       "max": 0.03739304489364978,
       "kind": "absolute",
-      "tex": "$0.01$"
+      "tex": "$0.01$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -160,10 +159,9 @@
       "mean": 15.62717564774054,
       "min": 10.981330934095949,
       "max": 20.98582950419331,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 3.5592258175080063,
-      "difference": 12.067949830232534,
-      "tex": "$+12.07$"
+      "kind": "absolute",
+      "tex": "$15.63$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -176,10 +174,9 @@
       "mean": 61.768430216453645,
       "min": 61.042301452257526,
       "max": 62.89026947884928,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 65.10558875126958,
-      "difference": -3.3371585348159343,
-      "tex": "$-3.34$"
+      "kind": "absolute",
+      "tex": "$61.77$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -193,7 +190,8 @@
       "min": 3.632672184913322,
       "max": 4.230189816209702,
       "kind": "absolute",
-      "tex": "$3.97$"
+      "tex": "$3.97$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -206,10 +204,9 @@
       "mean": 37.0264066422662,
       "min": 31.129504166249486,
       "max": 48.466998186652425,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 90.29618010360926,
-      "difference": -53.26977346134306,
-      "tex": "$-53.27$"
+      "kind": "absolute",
+      "tex": "$37.03$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -223,7 +220,8 @@
       "min": 0.0285816362986781,
       "max": 0.2564190620099133,
       "kind": "absolute",
-      "tex": "$0.12$"
+      "tex": "$0.12$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -236,10 +234,9 @@
       "mean": 56.94338311913859,
       "min": 47.66108023619312,
       "max": 61.794459881903435,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 12.416927173787194,
-      "difference": 44.526455945351394,
-      "tex": "$+44.53$"
+      "kind": "absolute",
+      "tex": "$56.94$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -252,10 +249,9 @@
       "mean": 93.47587719298247,
       "min": 89.90384615384616,
       "max": 95.5339068825911,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 96.47857624831309,
-      "difference": -3.0026990553306234,
-      "tex": "$-3.00$"
+      "kind": "absolute",
+      "tex": "$93.48$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -269,7 +265,8 @@
       "min": 0.19662921348314608,
       "max": 0.8975712777191129,
       "kind": "absolute",
-      "tex": "$0.64$"
+      "tex": "$0.64$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -282,10 +279,9 @@
       "mean": 96.83544303797468,
       "min": 94.25691514299109,
       "max": 99.28113767776215,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 97.82518101786738,
-      "difference": -0.9897379798926949,
-      "tex": "$-0.99$"
+      "kind": "absolute",
+      "tex": "$96.84$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -299,7 +295,8 @@
       "min": 0.9023396949612713,
       "max": 3.317607670065439,
       "kind": "absolute",
-      "tex": "$1.73$"
+      "tex": "$1.73$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -312,10 +309,9 @@
       "mean": 3.1365729559140823,
       "min": 2.1253985122210413,
       "max": 4.559945898946961,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 1.8500627958651337,
-      "difference": 1.2865101600489486,
-      "tex": "$+1.29$"
+      "kind": "absolute",
+      "tex": "$3.14$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -328,10 +324,9 @@
       "mean": 83.72189594827074,
       "min": 82.43459690336358,
       "max": 86.08293290621107,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 91.64442071542979,
-      "difference": -7.922524767159047,
-      "tex": "$-7.92$"
+      "kind": "absolute",
+      "tex": "$83.72$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -345,7 +340,8 @@
       "min": 1.0467848750267037,
       "max": 1.5368956743002544,
       "kind": "absolute",
-      "tex": "$1.21$"
+      "tex": "$1.21$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -358,10 +354,9 @@
       "mean": 87.81206702742269,
       "min": 77.55862285310955,
       "max": 93.6142263351894,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 97.03160536428516,
-      "difference": -9.21953833686247,
-      "tex": "$-9.22$"
+      "kind": "absolute",
+      "tex": "$87.81$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -375,7 +370,8 @@
       "min": 0.07856460346108929,
       "max": 0.09596928982725528,
       "kind": "absolute",
-      "tex": "$0.09$"
+      "tex": "$0.09$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -388,10 +384,9 @@
       "mean": 12.679005601790859,
       "min": 7.440313614601073,
       "max": 21.342501847627005,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 3.5592258175080063,
-      "difference": 9.119779784282853,
-      "tex": "$+9.12$"
+      "kind": "absolute",
+      "tex": "$12.68$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -404,10 +399,9 @@
       "mean": 57.57126086555076,
       "min": 46.341656444145464,
       "max": 66.61588381939772,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 65.10558875126958,
-      "difference": -7.534327885718817,
-      "tex": "$-7.53$"
+      "kind": "absolute",
+      "tex": "$57.57$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -421,7 +415,8 @@
       "min": 0.3785462124112118,
       "max": 4.5582107322051195,
       "kind": "absolute",
-      "tex": "$2.53$"
+      "tex": "$2.53$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -434,10 +429,9 @@
       "mean": 39.43845557669274,
       "min": 15.400660815005173,
       "max": 82.07177741436661,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 90.29618010360926,
-      "difference": -50.85772452691652,
-      "tex": "$-50.86$"
+      "kind": "absolute",
+      "tex": "$39.44$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -451,7 +445,8 @@
       "min": 0.10102832401226773,
       "max": 1.683180851985367,
       "kind": "absolute",
-      "tex": "$0.63$"
+      "tex": "$0.63$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -464,10 +459,9 @@
       "mean": 55.8420169040176,
       "min": 19.525008683570686,
       "max": 77.75877040639111,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 12.416927173787194,
-      "difference": 43.425089730230404,
-      "tex": "$+43.43$"
+      "kind": "absolute",
+      "tex": "$55.84$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -481,7 +475,8 @@
       "min": 95.28087044534414,
       "max": 97.96305668016194,
       "kind": "absolute",
-      "tex": "$96.48$"
+      "tex": "$96.48$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -495,7 +490,8 @@
       "min": 0.3704193676412224,
       "max": 1.9376899696048633,
       "kind": "absolute",
-      "tex": "$1.08$"
+      "tex": "$1.08$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -509,7 +505,8 @@
       "min": 97.59337396468199,
       "max": 98.06219721831536,
       "kind": "absolute",
-      "tex": "$97.83$"
+      "tex": "$97.83$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -523,7 +520,8 @@
       "min": 0.533566934777415,
       "max": 0.9807798781934668,
       "kind": "absolute",
-      "tex": "$0.71$"
+      "tex": "$0.71$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -537,7 +535,8 @@
       "min": 1.202782339870544,
       "max": 2.415225582069365,
       "kind": "absolute",
-      "tex": "$1.85$"
+      "tex": "$1.85$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -551,7 +550,8 @@
       "min": 89.51770777718455,
       "max": 93.00587293112653,
       "kind": "absolute",
-      "tex": "$91.64$"
+      "tex": "$91.64$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -565,7 +565,8 @@
       "min": 0.7928926251432938,
       "max": 2.0339300777954823,
       "kind": "absolute",
-      "tex": "$1.27$"
+      "tex": "$1.27$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -579,7 +580,8 @@
       "min": 96.31989647870755,
       "max": 98.09622774684338,
       "kind": "absolute",
-      "tex": "$97.03$"
+      "tex": "$97.03$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -593,7 +595,8 @@
       "min": 0.11950819340071706,
       "max": 0.3525194184425413,
       "kind": "absolute",
-      "tex": "$0.21$"
+      "tex": "$0.21$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -607,7 +610,8 @@
       "min": 2.1898396581086725,
       "max": 4.6238874072169915,
       "kind": "absolute",
-      "tex": "$3.56$"
+      "tex": "$3.56$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -621,7 +625,8 @@
       "min": 58.234735467531955,
       "max": 69.44917098650627,
       "kind": "absolute",
-      "tex": "$65.11$"
+      "tex": "$65.11$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -635,7 +640,8 @@
       "min": 1.8016214593133821,
       "max": 4.697130134940675,
       "kind": "absolute",
-      "tex": "$3.35$"
+      "tex": "$3.35$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -649,7 +655,8 @@
       "min": 86.65131439886972,
       "max": 94.40142842839502,
       "kind": "absolute",
-      "tex": "$90.30$"
+      "tex": "$90.30$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -663,7 +670,8 @@
       "min": 1.9221446424861333,
       "max": 4.504864420799127,
       "kind": "absolute",
-      "tex": "$3.12$"
+      "tex": "$3.12$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -677,7 +685,8 @@
       "min": 9.82459187217784,
       "max": 15.046891281695032,
       "kind": "absolute",
-      "tex": "$12.42$"
+      "tex": "$12.42$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -690,10 +699,9 @@
       "mean": 62.90224108405926,
       "min": 52.12865758320304,
       "max": 72.52177797632343,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 55.61611197974835,
-      "difference": 7.286129104310916,
-      "tex": "$+7.29$"
+      "kind": "absolute",
+      "tex": "$62.90$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -707,7 +715,8 @@
       "min": 2.5959933222036726,
       "max": 4.410292645586763,
       "kind": "absolute",
-      "tex": "$3.36$"
+      "tex": "$3.36$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -720,10 +729,9 @@
       "mean": 64.80155475256231,
       "min": 54.15992374027356,
       "max": 75.7664767563014,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 64.28946182210498,
-      "difference": 0.5120929304573281,
-      "tex": "$+0.51$"
+      "kind": "absolute",
+      "tex": "$64.80$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -737,7 +745,8 @@
       "min": 0.0,
       "max": 0.0511770726714432,
       "kind": "absolute",
-      "tex": "$0.02$"
+      "tex": "$0.02$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -750,10 +759,9 @@
       "mean": 35.115109425740584,
       "min": 26.12807829276307,
       "max": 45.96769180217223,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 37.10795153474301,
-      "difference": -1.9928421090024244,
-      "tex": "$-1.99$"
+      "kind": "absolute",
+      "tex": "$35.12$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -766,11 +774,10 @@
       "mean": 0.0,
       "min": 0.0,
       "max": 0.0,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 16.366584386041335,
-      "difference": -16.366584386041335,
+      "kind": "absolute",
       "empty_class": true,
-      "tex": "--"
+      "tex": "--",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -784,7 +791,8 @@
       "min": null,
       "max": null,
       "kind": "absolute",
-      "tex": "--"
+      "tex": "--",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -797,11 +805,10 @@
       "mean": 0.0,
       "min": 0.0,
       "max": 0.0,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 32.37423751989659,
-      "difference": -32.37423751989659,
+      "kind": "absolute",
       "empty_class": true,
-      "tex": "--"
+      "tex": "--",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -815,7 +822,8 @@
       "min": null,
       "max": null,
       "kind": "absolute",
-      "tex": "--"
+      "tex": "--",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -828,10 +836,9 @@
       "mean": 100.0,
       "min": 100.0,
       "max": 100.0,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 68.70566801539951,
-      "difference": 31.29433198460049,
-      "tex": "$+31.29$"
+      "kind": "absolute",
+      "tex": "$100.00$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -844,10 +851,9 @@
       "mean": 15.933338330459986,
       "min": 0.0,
       "max": 25.837643355070835,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 43.17517427479199,
-      "difference": -27.241835944332006,
-      "tex": "$-27.24$"
+      "kind": "absolute",
+      "tex": "$15.93$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -861,7 +867,8 @@
       "min": 4.02882410743531,
       "max": 4.541678205483246,
       "kind": "absolute",
-      "tex": "$4.29^{(2)}$"
+      "tex": "$4.29^{(2)}$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -874,10 +881,9 @@
       "mean": 31.248713197446985,
       "min": 0.0,
       "max": 46.88167299038207,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 71.69034383364217,
-      "difference": -40.441630636195185,
-      "tex": "$-40.44$"
+      "kind": "absolute",
+      "tex": "$31.25$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -891,7 +897,8 @@
       "min": 0.0,
       "max": 0.0009410613289668087,
       "kind": "absolute",
-      "tex": "$0.00^{(2)}$"
+      "tex": "$0.00^{(2)}$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -904,10 +911,9 @@
       "mean": 69.56262682238824,
       "min": 54.236024016566596,
       "max": 100.0,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 29.798070285818255,
-      "difference": 39.764556536569984,
-      "tex": "$+39.76$"
+      "kind": "absolute",
+      "tex": "$69.56$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -920,10 +926,9 @@
       "mean": 14.928151291787655,
       "min": 0.0,
       "max": 44.78445387536296,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 55.61611197974835,
-      "difference": -40.68796068796069,
-      "tex": "$-40.69$"
+      "kind": "absolute",
+      "tex": "$14.93$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -937,7 +942,8 @@
       "min": 2.9713511420828493,
       "max": 2.9713511420828493,
       "kind": "absolute",
-      "tex": "$2.97^{(1)}$"
+      "tex": "$2.97^{(1)}$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -950,10 +956,9 @@
       "mean": 21.820109808094468,
       "min": 0.0,
       "max": 65.4603294242834,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 64.28946182210498,
-      "difference": -42.46935201401051,
-      "tex": "$-42.47$"
+      "kind": "absolute",
+      "tex": "$21.82$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -967,7 +972,8 @@
       "min": 0.10318346358131195,
       "max": 0.10318346358131195,
       "kind": "absolute",
-      "tex": "$0.10^{(1)}$"
+      "tex": "$0.10^{(1)}$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -980,10 +986,9 @@
       "mean": 79.44104508760867,
       "min": 38.323135262826035,
       "max": 100.0,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 37.10795153474301,
-      "difference": 42.33309355286566,
-      "tex": "$+42.33$"
+      "kind": "absolute",
+      "tex": "$79.44$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -996,10 +1001,9 @@
       "mean": 10.270558056241228,
       "min": 0.0,
       "max": 30.811674168723684,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 16.366584386041335,
-      "difference": -6.096026329800107,
-      "tex": "$-6.10$"
+      "kind": "absolute",
+      "tex": "$10.27$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -1013,7 +1017,8 @@
       "min": 2.3469857340082836,
       "max": 2.3469857340082836,
       "kind": "absolute",
-      "tex": "$2.35^{(1)}$"
+      "tex": "$2.35^{(1)}$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -1026,10 +1031,9 @@
       "mean": 12.315268830988472,
       "min": 0.0,
       "max": 36.94580649296542,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 32.37423751989659,
-      "difference": -20.058968688908116,
-      "tex": "$-20.06$"
+      "kind": "absolute",
+      "tex": "$12.32$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -1043,7 +1047,8 @@
       "min": 0.07454406767907912,
       "max": 0.07454406767907912,
       "kind": "absolute",
-      "tex": "$0.07^{(1)}$"
+      "tex": "$0.07^{(1)}$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -1056,10 +1061,9 @@
       "mean": 87.8221400287023,
       "min": 63.46642008610687,
       "max": 100.0,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 68.70566801539951,
-      "difference": 19.116472013302783,
-      "tex": "$+19.12$"
+      "kind": "absolute",
+      "tex": "$87.82$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -1072,10 +1076,9 @@
       "mean": 7.887964420458236,
       "min": 0.0,
       "max": 23.66389326137471,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 43.17517427479199,
-      "difference": -35.28720985433375,
-      "tex": "$-35.29$"
+      "kind": "absolute",
+      "tex": "$7.89$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -1089,7 +1092,8 @@
       "min": 2.591792656587473,
       "max": 2.591792656587473,
       "kind": "absolute",
-      "tex": "$2.59^{(1)}$"
+      "tex": "$2.59^{(1)}$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -1102,10 +1106,9 @@
       "mean": 8.364069531456808,
       "min": 0.0,
       "max": 25.092208594370423,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 71.69034383364217,
-      "difference": -63.32627430218537,
-      "tex": "$-63.33$"
+      "kind": "absolute",
+      "tex": "$8.36$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -1119,7 +1122,8 @@
       "min": 0.0017582417582417582,
       "max": 0.0017582417582417582,
       "kind": "absolute",
-      "tex": "$0.00^{(1)}$"
+      "tex": "$0.00^{(1)}$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -1132,10 +1136,9 @@
       "mean": 91.65059034476245,
       "min": 74.95177103428736,
       "max": 100.0,
-      "kind": "difference from Unif-TERA (pp)",
-      "fm_mean": 29.798070285818255,
-      "difference": 61.852520058944194,
-      "tex": "$+61.85$"
+      "kind": "absolute",
+      "tex": "$91.65$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -1149,7 +1152,8 @@
       "min": 48.389546571364754,
       "max": 61.63502345320527,
       "kind": "absolute",
-      "tex": "$55.62$"
+      "tex": "$55.62$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -1163,7 +1167,8 @@
       "min": 1.4107581687448802,
       "max": 3.530974688854706,
       "kind": "absolute",
-      "tex": "$2.39$"
+      "tex": "$2.39$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -1177,7 +1182,8 @@
       "min": 62.01755747190139,
       "max": 66.14422842448292,
       "kind": "absolute",
-      "tex": "$64.29$"
+      "tex": "$64.29$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -1191,7 +1197,8 @@
       "min": 0.05358961076079384,
       "max": 0.11716657739689341,
       "kind": "absolute",
-      "tex": "$0.09$"
+      "tex": "$0.09$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -1205,7 +1212,8 @@
       "min": 36.554976332779766,
       "max": 37.58336811630241,
       "kind": "absolute",
-      "tex": "$37.11$"
+      "tex": "$37.11$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -1219,7 +1227,8 @@
       "min": 0.0,
       "max": 49.099753158124,
       "kind": "absolute",
-      "tex": "$16.37$"
+      "tex": "$16.37$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -1233,7 +1242,8 @@
       "min": 3.0949992835649804,
       "max": 3.0949992835649804,
       "kind": "absolute",
-      "tex": "$3.09^{(1)}$"
+      "tex": "$3.09^{(1)}$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -1247,7 +1257,8 @@
       "min": 0.0,
       "max": 97.12271255968977,
       "kind": "absolute",
-      "tex": "$32.37$"
+      "tex": "$32.37$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -1261,7 +1272,8 @@
       "min": 0.5891460662362883,
       "max": 0.5891460662362883,
       "kind": "absolute",
-      "tex": "$0.59^{(1)}$"
+      "tex": "$0.59^{(1)}$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -1275,7 +1287,8 @@
       "min": 6.117004046198517,
       "max": 100.0,
       "kind": "absolute",
-      "tex": "$68.71$"
+      "tex": "$68.71$",
+      "shaded": false
     },
     {
       "table": "identical_data_certified",
@@ -1289,7 +1302,8 @@
       "min": 34.39772131024661,
       "max": 50.34105389401094,
       "kind": "absolute",
-      "tex": "$43.18$"
+      "tex": "$43.18$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -1303,7 +1317,8 @@
       "min": 1.2693631669535284,
       "max": 3.7960177624982094,
       "kind": "absolute",
-      "tex": "$2.44$"
+      "tex": "$2.44$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -1317,7 +1332,8 @@
       "min": 63.84231889173211,
       "max": 81.22694785140739,
       "kind": "absolute",
-      "tex": "$71.69$"
+      "tex": "$71.69$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -1331,7 +1347,8 @@
       "min": 0.02646369433172871,
       "max": 0.07978030566168809,
       "kind": "absolute",
-      "tex": "$0.05$"
+      "tex": "$0.05$",
+      "shaded": true
     },
     {
       "table": "identical_data_certified",
@@ -1345,7 +1362,8 @@
       "min": 20.680330498622922,
       "max": 37.75067603884984,
       "kind": "absolute",
-      "tex": "$29.80$"
+      "tex": "$29.80$",
+      "shaded": false
     }
   ]
 }

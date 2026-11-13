@@ -161,24 +161,29 @@ ERR_OF = dict(OUTCOMES)
 SHADE = r'\cellcolor{tablebest}'
 
 
+def jw_best(pairs):
+    """pairs: row label -> (Rec, Err), the 2 dp percentages shown in the table, Err None when undefined. Returns the
+    labels with the lowest 0.8 Err + 0.2 (100 - Rec), the outcome's J_w term at w = 0.2. Computed in exact integer
+    hundredths (5 * 100 * term = 4 Err + 100 * 100 - Rec), so ties are exact and all shaded. Rows with Err None
+    take no part."""
+    score = {k: 4 * round(err * 100) + 10000 - round(rec * 100) for k, (rec, err) in pairs.items() if err is not None}
+    return {k for k, v in score.items() if v == min(score.values())} if score else set()
+
+
 def shaded_rows(groups, rows):
-    r"""(setting, rec_key) -> the row labels to shade: the displayed rows minimizing the outcome's J_w term,
-    0.8 Err + 0.2 (100 - Rec), from the 2 dp means shown in the table. Computed in exact integer hundredths
-    (5 * 100 * term = 4 Err + 100 * 100 - Rec), so ties are exact. Rows with no defined Err are skipped."""
+    r"""(setting, rec_key) -> the row labels to shade among the displayed rows (jw_best)."""
     def shown(rs, key):
         v = [100 * r['test'][key] for r in rs if r['test'][key] is not None]
-        return round(float(f'{st.mean(v):.2f}') * 100) if v else None
+        return float(f'{st.mean(v):.2f}') if v else None
     out = {}
     for setting in SETTINGS:
         for rec_key, err_key in OUTCOMES:
-            score = {}
+            pairs = {}
             for _, models in groups:
                 for rowlabel, role, model in models:
                     rs = [r for r in rows if (r['setting'], r['matrix_role'], r['model']) == (setting, role, model)]
-                    rec, err = shown(rs, rec_key), shown(rs, err_key)
-                    if err is not None:
-                        score[rowlabel] = 4 * err + 10000 - rec
-            out[setting, rec_key] = {k for k, v in score.items() if v == min(score.values())} if score else set()
+                    pairs[rowlabel] = (shown(rs, rec_key), shown(rs, err_key))
+            out[setting, rec_key] = jw_best(pairs)
     return out
 
 

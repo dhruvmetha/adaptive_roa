@@ -4,21 +4,21 @@ now in scripts/archive.
 
 Data: the 'cal' records of predictor_comparison_data.build() (uniform runs, final budget, two-sided A-1d at
 alpha_s = alpha_f = delta = 0.05), so every check of the predictor comparison runs first. Three predictors:
-\nameUnifBNNLabel{}, \nameUnifBNN{}, then a \midrule, then \nameUnif{}. Layout copied from matrix_certified_twosided_body.tex:
-LQR and RL panels, five columns per setting (R_s, FDR, R_f, FOR, Abst.).
+\nameUnifBNNLabel{}, \nameUnifBNN{}, then a \midrule, then \nameUnif{}; LQR and RL panels, five columns per
+setting (R_s, FDR, R_f, FOR, Abst.).
 
-\nameUnif{} row: absolute three-seed means. \nameUnifBNNLabel{} and \nameUnifBNN{} rows: R_s, R_f and Abst. are signed differences
-from \nameUnif{} in percentage points (row mean minus \nameUnif{} mean, both unrounded, then rounded to 2 dp). All three
-seeds count there, all-Abstain seeds included (zero recall, 100% abstention). FDR and FOR are absolute means over
-seeds with a nonempty predicted class, never differences: superscript (n) when n < 3, -- when n = 0. When n = 0,
-that outcome's R_s or R_f cell is -- too, difference or not (Sumanth, 2026-11-13: "cases that don't have results
-should have dashes and not 0s"). No bolding or shading: the rows carry different units, so a best is undefined.
-Means only, as every table (assert_means_only). Layout as make_tables (Option A, T.table_open / T.panel_head).
+All three rows print absolute three-seed means (Sumanth, 2026-11-13, "Option 1": the earlier signed differences
+from \nameUnif{} could not carry the shading). R_s, R_f and Abst. count all three seeds, all-Abstain seeds included
+(zero recall, 100% abstention). FDR and FOR are means over seeds with a nonempty predicted class: superscript (n)
+when n < 3, -- when n = 0. When n = 0, that outcome's R_s or R_f cell is -- too (Sumanth, 2026-11-13: "cases that
+don't have results should have dashes and not 0s"). Shading as make_tables (T.jw_best over the three displayed
+rows, per setting and outcome), no bold. Means only, as every table (assert_means_only). Layout as make_tables
+(Option A, T.table_open / T.panel_head). The Results text quotes differences between rows; DIFF_SPOT checks them
+against the unrounded means.
 
 Before writing, every cell is recomputed from the per-seed table of Figure S3,
-values/predictor_comparison_uniform_per_seed.csv (cal rows): absolute cells must match mean, seed count and LaTeX;
-difference cells must match the difference of the two per-seed means. --paper copies the body into the paper's
-tables/ if it differs.
+values/predictor_comparison_uniform_per_seed.csv (cal rows): each cell must match mean, seed count and LaTeX.
+--paper copies the body into the paper's tables/ if it differs.
 """
 import csv, hashlib, json, shutil
 import statistics as st
@@ -32,16 +32,19 @@ WRAPPED_IN = 'sections/06_results.tex'
 NAMES = method_names()
 ROLE = 'uniform data'   # predictor_comparison_data.load() keeps only this role and asserts matrix_role for every run
 FM = (T.method_label(ROLE, 'FM'), 'FM')
-ROWS = [(T.method_label(ROLE, m), m) for m in ('BNN classifier', 'BNN final-state')]      # differences from FM, above the rule
-DIFF = ('rec', 'fail_rec', 'abstain')                                            # FDR, FOR stay absolute
+ROWS = [(T.method_label(ROLE, m), m) for m in ('BNN classifier', 'BNN final-state')]      # above the rule, FM below
+ALL_SEEDS = ('rec', 'fail_rec', 'abstain')                                       # every seed counts; FDR, FOR do not
 PLAIN = {'FM': NAMES['nameUnif'], 'BNN final-state': NAMES['nameUnifBNN'], 'BNN classifier': NAMES['nameUnifBNNLabel']}
 PER_SEED = VALUES / 'predictor_comparison_uniform_per_seed.csv'
 # paper_writer's spot values for q3d-ppo (2026-11-12), checked after rendering.
-SPOT = {('q3d-ppo', r'\nameUnifBNNLabel{}', 'rec'): '$-27.24$', ('q3d-ppo', r'\nameUnifBNNLabel{}', 'fail_rec'): '$-40.44$',
-        ('q3d-ppo', r'\nameUnifBNNLabel{}', 'abstain'): '$+39.76$', ('q3d-ppo', r'\nameUnifBNN{}', 'rec'): '$-35.29$',
-        ('q3d-ppo', r'\nameUnifBNN{}', 'fail_rec'): '$-63.33$', ('q3d-ppo', r'\nameUnif{}', 'rec'): '$43.18$',
-        ('q3d-ppo', r'\nameUnif{}', 'fdr'): '$2.44$', ('q3d-ppo', r'\nameUnif{}', 'fail_rec'): '$71.69$',
-        ('q3d-ppo', r'\nameUnif{}', 'for'): '$0.05$', ('q3d-ppo', r'\nameUnif{}', 'abstain'): '$29.80$'}
+SPOT = {('q3d-ppo', r'\nameUnif{}', 'rec'): '$43.18$', ('q3d-ppo', r'\nameUnif{}', 'fdr'): '$2.44$',
+        ('q3d-ppo', r'\nameUnif{}', 'fail_rec'): '$71.69$', ('q3d-ppo', r'\nameUnif{}', 'for'): '$0.05$',
+        ('q3d-ppo', r'\nameUnif{}', 'abstain'): '$29.80$'}
+# Row mean minus \nameUnif{} mean (unrounded, then 2 dp), the differences the table printed until 2026-11-13. The
+# Results text quotes the first two ("exceed ... by 27.24 and 40.44 percentage points").
+DIFF_SPOT = {('q3d-ppo', 'BNN classifier', 'rec'): '$-27.24$', ('q3d-ppo', 'BNN classifier', 'fail_rec'): '$-40.44$',
+             ('q3d-ppo', 'BNN classifier', 'abstain'): '$+39.76$', ('q3d-ppo', 'BNN final-state', 'rec'): '$-35.29$',
+             ('q3d-ppo', 'BNN final-state', 'fail_rec'): '$-63.33$'}
 
 
 def absolute(a):
@@ -57,7 +60,16 @@ def signed(d):
     return '$0.00$' if s in ('+0.00', '-0.00') else f'${s}$'
 
 
+def shown(a):
+    """The 2 dp mean the table prints, None for no contributing seed."""
+    return float(f"{a['mean']:.2f}") if a['n'] else None
+
+
 def body(agg, cells):
+    label_of = {model: label for label, model in ROWS + [FM]}
+    shaded = {(s, rec): T.jw_best({label_of[m]: (shown(agg[s, m, 'cal'][rec]), shown(agg[s, m, 'cal'][err]))
+                                   for m in label_of})
+              for s in T.SETTINGS for rec, err in T.OUTCOMES}
     t = [T.HEADER, f'% The table environment, caption and label are in {WRAPPED_IN}.'] + T.table_open()
     for pi, (panel, indices) in enumerate(T.PANELS):
         settings = [T.SETTINGS[i] for i in indices]
@@ -69,24 +81,18 @@ def body(agg, cells):
             vv = []
             for s in settings:
                 for key, _ in T.METRICS:
-                    a, f = agg[s, model, 'cal'][key], agg[s, 'FM', 'cal'][key]
+                    a = agg[s, model, 'cal'][key]
+                    if key in ALL_SEEDS:
+                        assert a['n'] == 3, (s, model, key)
                     cell = dict(table=NAME, panel=panel, row=label, model=PLAIN[model], setting=s, metric=key,
-                                n=a['n'], mean=a['mean'], min=a['min'], max=a['max'])
-                    if model != 'FM' and key in DIFF:
-                        assert a['n'] == f['n'] == 3, (s, model, key)
-                        d = a['mean'] - f['mean']
-                        tex = signed(d)
-                        cell |= dict(kind=f"difference from {PLAIN['FM']} (pp)", fm_mean=f['mean'], difference=d)
-                    else:
-                        if key in DIFF:
-                            assert a['n'] == 3, (s, model, key)
-                        tex = absolute(a)
-                        cell |= dict(kind='absolute')
+                                n=a['n'], mean=a['mean'], min=a['min'], max=a['max'], kind='absolute')
+                    tex = absolute(a)
                     if key in T.ERR_OF and agg[s, model, 'cal'][T.ERR_OF[key]]['n'] == 0:
                         tex = '--'   # no seed predicts this outcome: a dash, not a recall (Sumanth, 2026-11-13)
                         cell |= dict(empty_class=True)
-                    vv.append(tex)
-                    cells.append(cell | dict(tex=tex))
+                    winner = any(key in keys and label in shaded[s, keys[0]] for keys in T.OUTCOMES)
+                    vv.append(T.SHADE + tex if winner else tex)
+                    cells.append(cell | dict(tex=tex, shaded=winner))
             t.append(label + ' & ' + ' & '.join(vv) + r' \\')
     return t + T.table_close()
 
@@ -105,18 +111,14 @@ def cross_check(cells):
     checked = 0
     err_of = dict(T.OUTCOMES)
     for c in cells:
+        assert c['kind'] == 'absolute', c
         xs = vals(c['setting'], model_of[c['model']], c['metric'])
+        assert len(xs) == c['n'], (c, xs)
         if c.get('empty_class'):
             assert c['tex'] == '--' and not vals(c['setting'], model_of[c['model']], err_of[c['metric']]), c
-        elif c['kind'] == 'absolute':
-            assert len(xs) == c['n'], (c, xs)
+        else:
             want = '--' if not xs else '$' + f'{st.mean(xs):.2f}' + (f'^{{({len(xs)})}}' if len(xs) < 3 else '') + '$'
             assert want == c['tex'] and (not xs or abs(st.mean(xs) - c['mean']) < 1e-9), (c, want)
-        else:
-            fm = vals(c['setting'], 'FM', c['metric'])
-            assert len(xs) == len(fm) == 3, (c, xs, fm)
-            d = st.mean(xs) - st.mean(fm)
-            assert abs(d - c['difference']) < 1e-9 and signed(d) == c['tex'], (c, d)
         checked += 1
     return checked
 
@@ -133,6 +135,8 @@ def main(paper):
     by = {(c['setting'], c['row'], c['metric']): c['tex'] for c in cells}
     for k, want in SPOT.items():
         assert by[k] == want, (k, by[k], want)
+    for (s, model, key), want in DIFF_SPOT.items():
+        assert signed(agg[s, model, 'cal'][key]['mean'] - agg[s, 'FM', 'cal'][key]['mean']) == want, (s, model, key, want)
     out = T.TABLES / f'{NAME}_body.tex'
     out.write_text('\n'.join(lines) + '\n')
     where = ''
@@ -148,8 +152,8 @@ def main(paper):
     (VALUES / f'table_{NAME}_values.json').write_text(json.dumps(dict(
         generated_by='scripts/make_identical_data_table.py', source_hashes=src,
         protocol='cal records of predictor_comparison_data.build(): uniform runs, final budget, two-sided A-1d at '
-                 f"alpha = delta = 0.05. BNN rows: R_s, R_f, Abst. = row mean minus {PLAIN['FM']} mean (unrounded, then 2 dp), "
-                 'all 3 seeds; FDR, FOR absolute over seeds with a nonempty predicted class. No bold.',
+                 'alpha = delta = 0.05. All rows absolute three-seed means; R_s, R_f, Abst. over all 3 seeds; FDR, FOR over seeds with a nonempty '
+                 'predicted class. No bold; J_w shading as make_tables.',
         checks=dict(identity_groups=len(ident), table1_fm_uniform_cells=n1, fig3_uniform_endpoint_cells=n2,
                     cells_equal_to_per_seed_table=n_checked, spot_values=len(SPOT)),
         cells=cells), indent=2) + '\n')

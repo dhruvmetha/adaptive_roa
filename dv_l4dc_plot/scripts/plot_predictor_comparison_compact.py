@@ -26,17 +26,17 @@ from common import (VALUES, PLOTS, PAPER_FIGS, FS, LINE, LS, LW, REC_S, REC_F, E
 from predictor_comparison_data import build
 
 STEM = 'predictor_comparison_compact'
-WIDTH = 3.30                                     # in, printed at scale 1 as a half-width wrap figure
-SETTINGS = [('q3d-lqr', 'Spatial Quad (12D), LQR'), ('cp-ppo', 'Cartpole (4D), RL')]   # appendix figure's titles
+WIDTH = 2.40          # in: the paper wraps it at 0.4\textwidth (Sumanth, 916d36a), so it prints at scale 1.00
+SETTINGS = [('q3d-lqr', 'Spatial quadrotor LQR'), ('cp-ppo', 'Cartpole RL')]   # Figure 7's titles; the appendix's are too wide
 MODELS = [('FM', 'Unif-TERA'), ('BNN final-state', 'Unif-TERA-BNN'), ('BNN classifier', 'Unif-BNN-Label')]   # legend order (Sumanth)
 SIDES = [('fdr', 'rec', ERR_S + r' (\%)', REC_S + r' (\%)', LINE['success']),
          ('for', 'fail_rec', ERR_F + r' (\%)', REC_F + r' (\%)', LINE['fail'])]
-MS, MEW, HALO, BAR, LINK = 5.2, .7, .5, .45, .7
+MS, MEW, HALO, BAR, LINK = 4.6, .6, .5, .45, .7
 BAR_ALPHA = .4                                   # bars recede behind the markers
 # Second column has no y-axis label (Sumanth, 2026-11-13: the first column's label names the row), so the column
 # gap only holds tick labels and the subplots take the freed width.
 LEFT, BOTTOM, COLGAP, ROWGAP, TOP, RIGHT = .375, .295, .21, .31, .43, .02    # in
-AX_W, AX_H = (WIDTH - LEFT - COLGAP - RIGHT) / 2, 1.0                     # subplot size (in)
+AX_W, AX_H = (WIDTH - LEFT - COLGAP - RIGHT) / 2, .86                     # subplot size (in)
 
 
 def panel(ax, agg, setting, xm, ym, color):
@@ -103,11 +103,25 @@ def draw(agg):
                  markerfacecolor='black')]
     labels = [r'fitted ($w=0.2$)', r'certified ($\alpha=\delta=0.05$)']
     top = 1 - .035 / H
-    fig.legend(handles=shapes, ncol=3, bbox_to_anchor=(.5, top), bbox_transform=fig.transFigure,
-               **paper_legend_kw(FS['legend']))
-    fig.legend(handles=ev, labels=labels, ncol=2, bbox_to_anchor=(.5, top - .16 / H), bbox_transform=fig.transFigure,
-               **paper_legend_kw(FS['legend']))
+    tight = paper_legend_kw(FS['legend']) | dict(columnspacing=.8, handletextpad=.35)   # three names in 2.4 in
+    legs = [fig.legend(handles=shapes, ncol=3, bbox_to_anchor=(.5, top), bbox_transform=fig.transFigure, **tight),
+            fig.legend(handles=ev, labels=labels, ncol=2, bbox_to_anchor=(.5, top - .16 / H),
+                       bbox_transform=fig.transFigure, **tight)]
+    fit_check(fig, axes, legs)
     return fig, drawn
+
+
+def fit_check(fig, axes, legs):
+    """Legends inside the page; titles and legends overlap nothing."""
+    fig.canvas.draw()
+    r = fig.canvas.get_renderer()
+    page = fig.bbox
+    boxes = [l.get_window_extent(r) for l in legs] + [ax.title.get_window_extent(r) for ax in axes.values() if ax.get_title()]
+    for b in boxes:
+        assert page.x0 <= b.x0 and b.x1 <= page.x1 and b.y1 <= page.y1, ('outside the page', b, page)
+    for i, a in enumerate(boxes):
+        for b in boxes[i + 1:]:
+            assert not a.overlaps(b), ('overlap', a, b)
 
 
 def check(drawn):

@@ -21,7 +21,7 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from matplotlib.ticker import MaxNLocator
 from common import (ASSETS, VALUES, PLOTS, PAPER_FIGS, FS, LINE, LW, METHOD_MARKER, REC_S, REC_F, ERR_S, ERR_F,
-                    marker_kw, page_size, paper_legend_kw, style_rc)
+                    marker_kw, ours, page_size, paper_legend_kw, style_rc)
 
 STEM = 'w_sensitivity'
 SRC = ASSETS / 'soft_four_wsweep.jsonl'
@@ -97,11 +97,11 @@ def draw(data):
                 ax.set_title(title, pad=3)
     handles = [Line2D([], [], color=COLOR[n], lw=1.0 if n == 'TERA' else .7,
                       ls='-' if not n.endswith('Label') else (0, (2.5, 1.2)),
-                      label=n, **(marker_kw(n, COLOR[n], size=MS, edge=MEW))) for _, _, n in PREDICTORS]
+                      label=ours(n), **(marker_kw(n, COLOR[n], size=MS, edge=MEW))) for _, _, n in PREDICTORS]
     handles += [Patch(facecolor=COLOR['TERA'], alpha=.18, label='TERA seed min--max'),
                 Line2D([], [], color=LINE['ref'], lw=LW['ref'], ls=(0, (1, 1.5)), label=r'$w=0.2$ (paper)')]
     fig.legend(handles=handles, ncol=7, bbox_to_anchor=(.5, .997), bbox_transform=fig.transFigure,
-               **(paper_legend_kw(FS['legend']) | dict(columnspacing=1.0, handlelength=1.8)))
+               **(paper_legend_kw(FS['legend']) | dict(columnspacing=.8, handlelength=1.6)))
     return fig, record
 
 

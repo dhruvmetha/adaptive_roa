@@ -1,0 +1,81 @@
+{
+ "what": "Round-2 predictions on every start of the Pendulum LQR 158x315 grid",
+ "builder": "dv_l4dc_plot/scripts/build_pendulum_full_grid.py",
+ "run": "x231_penlqr_fm_uh_a6d075_r1_s99512",
+ "run_dir": "/common/users/shared/pracsys/adaptive_roa_experiments/det_v3_seeds/pen-lqr/x231_penlqr_fm_uh_a6d075_r1_s99512",
+ "scored_name": "x231_penlqr_fm_uh_a6d075_r1",
+ "epoch": 2,
+ "checkpoint": "/common/users/shared/pracsys/adaptive_roa_experiments/det_v3_seeds/pen-lqr/x231_penlqr_fm_uh_a6d075_r1_s99512/epoch_002/checkpoints/best-180-0.1787.ckpt",
+ "checkpoint_sha256": "01b7d5be864631d5a21903d01be06797d9a93024f2b8ecc4990777326a2c27be",
+ "template": "/common/home/st1122/Projects/adaptive_roa/.claude/worktrees/det-v3/dv_l4dc_plot/data/pendulum_full_grid/x231_penlqr_fm_uh_a6d075_r1_s99512_epoch010_grid.npz",
+ "K": 100,
+ "seed": "torch.manual_seed(99512) once before the first batch",
+ "fresh_path": "predict_endpoint(num_steps=100, Euler) + system.classify_attractor(r=0.1), 500 states per call",
+ "canonical": "stored value where the run stored one (test, cal, val), else fresh",
+ "source_counts": {
+  "test": 20702,
+  "cal": 1000,
+  "val": 500,
+  "fresh": 27568
+ },
+ "host": "1spring-303-desktop-10.cs.rutgers.edu",
+ "gpu": "NVIDIA RTX 4500 Ada Generation",
+ "fresh_seconds": 45.3,
+ "written_utc": "2026-11-13T14:26:18+00:00",
+ "reproduction": {
+  "test_p_success_stored_vs_fresh": {
+   "n": 20702,
+   "mean_abs_diff": 0.01853347502656748,
+   "max_abs_diff": 0.25,
+   "pearson_r": 0.9940033879221243
+  },
+  "test_p_failure_stored_vs_fresh": {
+   "n": 20702,
+   "mean_abs_diff": 0.026891121630760316,
+   "max_abs_diff": 0.26,
+   "pearson_r": 0.9940834822813024
+  },
+  "test_p_invalid_stored_vs_fresh": {
+   "n": 20702,
+   "mean_abs_diff": 0.04284803400637619,
+   "max_abs_diff": 0.26000000000000006,
+   "pearson_r": 0.9707483190916237
+  },
+  "cal_p_success_stored_vs_fresh": {
+   "n": 1000,
+   "mean_abs_diff": 0.01754,
+   "max_abs_diff": 0.15999999999999998,
+   "pearson_r": 0.9941535553517156
+  },
+  "cal_p_failure_stored_vs_fresh": {
+   "n": 1000,
+   "mean_abs_diff": 0.029619999999999997,
+   "max_abs_diff": 0.20000000000000007,
+   "pearson_r": 0.9931380898895387
+  },
+  "cal_p_invalid_stored_vs_fresh": {
+   "n": 1000,
+   "mean_abs_diff": 0.04418,
+   "max_abs_diff": 0.21000000000000002,
+   "pearson_r": 0.9693836623774601
+  },
+  "val_p_success_stored_vs_fresh": {
+   "n": 500,
+   "mean_abs_diff": 0.01702,
+   "max_abs_diff": 0.13,
+   "pearson_r": 0.994941115549157
+  },
+  "val_p_failure_stored_vs_fresh": {
+   "n": 500,
+   "mean_abs_diff": 0.02628,
+   "max_abs_diff": 0.18999999999999995,
+   "pearson_r": 0.9948278169570987
+  },
+  "val_p_invalid_stored_vs_fresh": {
+   "n": 500,
+   "mean_abs_diff": 0.0415,
+   "max_abs_diff": 0.19,
+   "pearson_r": 0.9712142263341677
+  }
+ }
+}

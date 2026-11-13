@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from matplotlib.lines import Line2D
 from matplotlib.patheffects import withStroke
-from common import (PLOTS, PAPER, FILL, LINE, LS, LW, FS, METHOD_MARKER, SIGNAL_CMAP, ABSTAIN_KIND, INK,
+from common import (PLOTS, PAPER, FILL, LINE, LS, LW, FS, METHOD_MARKER, SIGNAL_RAMP, ABSTAIN_ON_WHITE, ABSTAIN_KIND, INK,
                     PARTIAL_TINT, PRINT_WIDTH, marker_kw, style_rc)
 from cvd_grid import simulate
 
@@ -184,12 +184,16 @@ def draw():
     ax.text(.05, y + .32, 'Ink: black text and axes; whiskers and counts ' + esc(INK), **small)
     y += .65
 
-    ax.text(.05, y, r'Signal map (Figure 5 $I(x)$, $D(x)$): ' + esc(SIGNAL_CMAP), **head)
-    cax = fig.add_axes([.15 / W, 1 - (y + .32) / H, 2.1 / W, .14 / H])
-    cax.imshow(np.linspace(0, 1, 256)[None, :], cmap=SIGNAL_CMAP, aspect='auto', extent=(0, 1, 0, 1))
-    cax.set_yticks([]); cax.set_xticks([0, .5, 1])
-    for s in ('top', 'right', 'left'):
-        cax.spines[s].set_visible(False)
+    from matplotlib.colors import LinearSegmentedColormap
+    ax.text(.05, y, r'Signal maps (Figure 5): $I(x)$ Reds, $D(x)$ BrBG teal; abstention ' + esc(ABSTAIN_ON_WHITE),
+            **head)
+    for k_, key in enumerate(('I', 'D')):
+        cax = fig.add_axes([(.15 + 1.1 * k_) / W, 1 - (y + .32) / H, 1.0 / W, .14 / H])
+        cax.imshow(np.linspace(0, 1, 256)[None, :], cmap=LinearSegmentedColormap.from_list(key, SIGNAL_RAMP[key]),
+                   aspect='auto', extent=(0, 1, 0, 1))
+        cax.set_yticks([]); cax.set_xticks([0, .5, 1])
+        for s in ('top', 'right', 'left'):
+            cax.spines[s].set_visible(False)
     ax.text(2.5, y + .12, r'Print widths (in), scale 1.00 in the paper:', **small)
     items = list(PRINT_WIDTH.items())
     for j in range(0, len(items), 2):

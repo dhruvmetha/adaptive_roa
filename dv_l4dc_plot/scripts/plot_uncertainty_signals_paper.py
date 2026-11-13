@@ -1,17 +1,19 @@
 """Two uncertainty signals in pendulum state space: paper figure pendulum_uncertainty_signals.
 
 Two paths:
-  (default)   THE PAPER FIGURE since 2026-11-13 (paper commit 34eb36f): the paper style of common.py at print width
-              (4.20 in), drawn on the FULL 158 x 315 grid (data/pendulum_full_grid/), abstention, FP and FN cells in C
-              drawn as 1 pt squares (--rare-pt, default 1). Writes plots/pendulum_uncertainty_signals.{pdf,png,txt}
-              and nothing else; other --rare-pt values (0 = true cell size) go to plots/variants/. --paper copies the
-              paper version into the paper clone. See restyle_figure() for the layout and its checks.
+  (default)   THE PAPER FIGURE since 2026-11-13 afternoon: one row, TERA-FM (U_H, rho 0.75) seed 99512 at round 2,
+              on the FULL 158 x 315 grid (data/pendulum_full_grid/, round-2 files from build_pendulum_full_grid.py).
+              Columns: A abstention as a whole, B invalid mass I(x), C weighted disagreement D(x), every cell at true
+              size, at the 3.00 in print width. Writes plots/pendulum_uncertainty_signals.{pdf,png,txt} and nothing
+              else; --round N draws another round into plots/variants/. --paper copies the paper version into the
+              paper clone. See restyle_figure() for the layout and its checks. (The two-row adaptive / uniform design
+              at round 10 with a decisions column and 1 pt abstention squares is in git at e4fe9d2a.)
   --baseline  the 3-column design of 2026-11-12 (md5 51f991cf), unchanged: test states as scatter squares, DejaVu
               fonts; the figure goes to plots/legacy/, and it rewrites values/pendulum_uncertainty_signals_*, which
               the work-in-progress plot_uncertainty_signals.py also writes (today's files are the WIP's).
   --restyle   accepted for old commands; the default already is the paper figure.
 
-TERA-FM on Pendulum LQR, seed 99512, round 10 (the run behind figures/abstention_triangle). Rows: adaptive (U_H,
+--baseline, as of 2026-11-12: TERA-FM on Pendulum LQR, seed 99512, round 10. Rows: adaptive (U_H,
 rho=0.75) and uniform acquisition, each with its OWN saved A-1d thresholds. Columns:
   A  invalid-terminal mass I(x) = p_inv(x)
   B  weighted disagreement D(x) = (1 - p_inv) H2(p_s / (p_s + p_f)) in bits, D = 0 with no valid endpoint
@@ -193,57 +195,50 @@ def main(paper):
               + (f" | {v['definition']} {round(v['value'], 4)} {'matches' if v['matches'] else 'differs'}" if v else ''))
 
 
-# ==== --restyle (dm1487, 2026-11-13): the paper style of common.py, at print width, on the full grid ================
-# Content is parked: same panels, signals and annotations as the paper copy. Changed: fonts, sizes, legend, colours,
-# and (dm1487's amendment) every map is drawn on the full 158 x 315 pendulum grid, one image cell per start state.
-# Titles are the paper copy's ("A. invalid mass", "C. certified decisions").
+# ==== The paper figure (2026-11-13 afternoon, Sumanth via paper_writer): one TERA row at round 2 ======================
+# Figure 5 shows one model, TERA-FM (U_H, rho = 0.75), seed 99512, at round 2 (the Appendix F comparison round, where
+# abstention is common enough to show at true cell size). Columns: A abstention as a whole, B invalid mass I(x),
+# C weighted disagreement D(x). Every map is drawn on the full 158 x 315 pendulum grid, one image cell per start
+# state, nothing enlarged. Panels share axes, so only A carries tick labels and axis labels; B and C carry their own
+# colour ramps (common.SIGNAL_RAMP), with colourbars under them in the band A uses for its x labels.
+# The two-row design with a decisions column (adaptive and uniform, round 10, 1 pt abstention squares; paper commit
+# 742c412) is in git history at e4fe9d2a.
 import argparse, re
 import uncertainty_signals_data as usd
+from matplotlib.colors import LinearSegmentedColormap, to_rgb
 from matplotlib.patheffects import withStroke
-from common import (HERE, PLOTS, FILL, LW as STYLE_LW, FS, PRINT_WIDTH, SIGNAL_CMAP, style_rc, paper_legend_kw,
-                    ABSTAIN_KIND, install_paper)
+from common import (HERE, PLOTS, FILL, LW as STYLE_LW, FS, PRINT_WIDTH, style_rc, paper_legend_kw, SIGNAL_RAMP,
+                    ABSTAIN_ON_WHITE, install_paper)
 
 R_STEM = 'pendulum_uncertainty_signals'
+PAPER_ROUND = 2
+R_ARM, R_RUN = 'adaptive', 'x231_penlqr_fm_uh_a6d075_r1_s99512'
 GRID_DIR = HERE / 'data' / 'pendulum_full_grid'
-GRID_FILE = {'adaptive': 'x231_penlqr_fm_uh_a6d075_r1_s99512_epoch010_grid.npz',
-             'uniform': 'm65_penlqr_fm_unif_s99512_epoch010_grid.npz'}
 GRID_SHAPE = (158, 315)                        # theta x omega, rows theta-major
-EXPECT_TEST = {'adaptive': (7784, 12762, 156), 'uniform': (7896, 12557, 249)}     # Success, Fail, Abstain (stored)
-# Rows carry the paper's method names; thresholds print in the method's notation (Sumanth, 2026-11-13):
-# t_s, t_f are the success pair tau^s_s, tau^s_f and u_s, u_f the failure pair tau^f_s, tau^f_f of Eq. (3).
-R_ROWS = [('adaptive', 'TERA'), ('uniform', 'Unif-TERA')]
-R_TITLES = [r'A. invalid mass $I(x)=\hat{p}_{\mathrm{inv}}(x)$', r'B. weighted disagreement $D(x)$',
-            'C. certified decisions']
-# Two-line titles for a narrow print (3 in since 2026-11-13): every line stays near one panel's width.
-R_TITLES_WRAPPED = [r'A. invalid mass' + '\n' + r'$I(x)$', 'B. weighted\n' + r'disagreement $D(x)$',
-                    'C. certified\ndecisions']
-# Abstention kinds as a gray family (dm1487): weak is the common abstain gray. Overlap / other have no approved colour,
-# so the restyle refuses to draw if a row has any (neither row does on the full grid).
-ABSTAIN_GRAY = dict(inv=ABSTAIN_KIND['invalid'], weak=ABSTAIN_KIND['weak'], ou=ABSTAIN_KIND['outcome_uncertain'])
-# Wrong declarations as in Figure 1 (paper_writer, 2026-11-13): a Success on a true failure is an FP cell, a Fail on
-# a true success an FN cell, in Figure 1's fills; the red crosses are gone. Timeouts (label -1) have no truth and keep
-# their decision's colour.
-R_CATS = [('success', 'TP', FILL['success']), ('fail', 'TN', FILL['fail']),      # Figure 1's legend names
-          ('fp', 'FP', FILL['fp']), ('fn', 'FN', FILL['fn']),
-          ('inv', 'invalid abstention', ABSTAIN_GRAY['inv']), ('weak', 'weak abstention', ABSTAIN_GRAY['weak']),
-          ('ou', 'outcome-uncertain abstention', ABSTAIN_GRAY['ou'])]
-# Both contours wear a white casing (CASING_PT each side, dashed with the line), so they read on the Fail purple and
-# on the dark parts of the signal maps; on white and yellow the casing barely shows.
+# Test-set Success, Fail, Abstain under the run's certified thresholds (epochs.jsonl c6c_S, c6c_F, the rest)
+EXPECT_TEST = {2: (7458, 12682, 562), 10: (7784, 12762, 156)}
+R_TITLES = [r'A. abstention', r'B. invalid mass $I(x)$', r'C. weighted disagreement $D(x)$']
+R_TITLES_WRAPPED = [r'A. abstention', 'B. invalid mass\n' + r'$I(x)$', 'C. weighted\n' + r'disagreement $D(x)$']
+CMAP = {k: LinearSegmentedColormap.from_list(f'fig5_{k}', v) for k, v in SIGNAL_RAMP.items()}
+# Both contours wear a white casing (CASING_PT each side), so they read on the dark ends of the ramps.
 CASING_PT = .3
-SHOW_THRESHOLDS = False                                         # the tau values above each decision map
-# --rare-pt X (preview only): draw every abstention, FP and FN cell in C as an X pt square over the true boundary, so
-# the classes that hug the boundary show at print (a cell is 0.51 x 0.21 pt). 0 = true size, the default output.
-PAPER_RARE_PT = 1.0                                             # the paper's version (34eb36f)
-RARE_PT = PAPER_RARE_PT
-RARE_KEYS = ('inv', 'weak', 'ou', 'fp', 'fn')                   # draw order: FP and FN on top
-SPARSE_LW = .45          # pt; '--' dashes scale with it to 1.67 / .72 pt, the dash the paper copy prints at 0.644 scale
-# The paper copy's panel (6.5 x 4.75 in canvas, subplots_adjust below): its aspect is kept.
+SPARSE_LW = .45          # pt; '--' dashes scale with it
+# At round 2 the abstention and D(x) bands are about two cells (0.8 pt) wide per boundary branch, so a 0.6 pt boundary
+# with its casing covers them. BOUNDARY_PANELS says which panels draw the true boundary; BOUNDARY_LW its width there.
+BOUNDARY_PANELS, BOUNDARY_LW, BOUNDARY_CASED = (0, 1, 2), .35, False
+# The sparse/dense contour (d_train = 0.02) traces a maze of tubes around round 2's 120 training trajectories and
+# buries the bands, so it is off by default.
+SHOW_SPARSE = False
+# Panel aspect (height / width) of the paper copy, kept since 2026-11-12.
 PW0 = 6.5 * (.985 - .09) / (3 + 2 * .08)
 PH0 = 4.75 * (.84 - .15) / (2 + .16)
 ASPECT = PH0 / PW0
 PDF_DPI, PNG_DPI = 600, 300                    # PDF raster: >= 1 px per cell in both directions (checked)
-MARGIN, PAD_PT, SEP_PT, LEG_GAP_PT, CB_GAP_PT, CB_H = .01, 1.5, 1.5, 3.0, 3.0, .05
+MARGIN, SEP_PT, LEG_GAP_PT, TITLE_GAP_PT, CB_GAP_PT, CB_H, GAP_PT = .01, 1.5, 3.0, 2.0, 3.0, .045, 4.0
 PT = 1 / 72
+# matplotlib's usetex extents leave out the accent of \dot{\theta}: rotated, the dot sits 0.025 in (at 8 pt) left of
+# the reported box, so the layout reserves this much beyond it. main_restyle checks the page's real ink margins.
+ACCENT_PT = 2.0
 
 
 def need(ok, msg):
@@ -251,25 +246,23 @@ def need(ok, msg):
         raise AssertionError(msg)
 
 
-def full_grid(arm, run, e, pool, ids, test):
-    """One row's full-grid arrays, shape GRID_SHAPE (theta index, omega index). p_s, p_f, p_inv are tied with R.tie as
-    in uncertainty_signals_data.analyse; I, D, the A-1d decisions (Success = S & ~F, Fail = F & ~S, Abstain
+def full_grid(rnd, run, e, pool, ids, test):
+    """The round's full-grid arrays, shape GRID_SHAPE (theta index, omega index). p_s, p_f, p_inv are tied with R.tie
+    as in uncertainty_signals_data.analyse; I, D, the A-1d decisions (Success = S & ~F, Fail = F & ~S, Abstain
     otherwise) and the strict abstention kinds by its formulas; d_train against the run's own training states
     (Pool.states(ids[:n_train])) with its normalisation and periodic tree. ``test`` is analyse()'s arrays for the
     same run and round: every test cell must reproduce them exactly."""
     R, C = usd.R, usd.C
-    z = np.load(GRID_DIR / GRID_FILE[arm], allow_pickle=False)
-    prov = json.loads((GRID_DIR / GRID_FILE[arm].replace('.npz', '_provenance.json')).read_text())
-    need(prov['scored_name'] == run['name'] and int(z['seed']) == 99512 and int(z['epoch']) == 10,
-         f'{arm}: grid file is not {run["name"]} seed 99512 epoch 10')
+    f = GRID_DIR / f'{R_RUN}_epoch{rnd:03d}_grid.npz'
+    z = np.load(f, allow_pickle=False)
+    prov = json.loads(f.with_name(f.stem + '_provenance.json').read_text())
+    need(prov['scored_name'] == run['name'] and int(z['seed']) == 99512 and int(z['epoch']) == rnd,
+         f'grid file is not {run["name"]} seed 99512 round {rnd}')
     ni, nj = GRID_SHAPE
     need(tuple(z['grid_shape']) == GRID_SHAPE and len(z['theta_values']) == ni and len(z['omega_values']) == nj,
-         f'{arm}: grid shape')
+         'grid shape')
     ti, oi = z['theta_idx'].astype(int), z['omega_idx'].astype(int)
-    cell = ti * nj + oi
-    need(len(cell) == ni * nj and np.array_equal(np.sort(cell), np.arange(ni * nj)),
-         f'{arm}: the grid is not every cell exactly once')
-    need(np.array_equal(cell, np.arange(ni * nj)), f'{arm}: rows are not theta-major')
+    need(np.array_equal(ti * nj + oi, np.arange(ni * nj)), 'the grid is not every cell exactly once, theta-major')
     X = z['start_states'].astype(float)
     ps, pf, pinv = R.tie(z['p_success']), R.tie(z['p_failure']), R.tie(z['p_invalid'])
     q = np.where(ps + pf > 0, ps / np.where(ps + pf > 0, ps + pf, 1), 0.5)
@@ -282,16 +275,14 @@ def full_grid(arm, run, e, pool, ids, test):
     inv = (ps <= T(t_s)) & (pf <= T(u_f))
     weak = (ps > T(t_s)) & (ps <= T(u_s)) & (pf > T(u_f)) & (pf <= T(t_f))
     ou = (ps > T(u_s)) & (pf > T(t_f))
-    need(not ((inv | weak | ou) & ~abst).any(), f'{arm}: an abstention kind outside the abstentions')
-    other, overlap = abst & ~(inv | weak | ou), inv & ou
-    need(not other.any() and not overlap.any() and not (inv & weak).any() and not (weak & ou).any(),
-         f'{arm}: overlap or uncategorized abstentions present ({int(overlap.sum())}, {int(other.sum())}); '
-         'no colour is approved for them')
+    need(not ((inv | weak | ou) & ~abst).any(), 'an abstention kind outside the abstentions')
+    other = abst & ~(inv | weak | ou)
     y = z['true_label'].astype(int)
-    need(set(np.unique(y)) <= {-1, 0, 1}, f'{arm}: labels outside -1, 0, 1')
+    need(set(np.unique(y)) <= {-1, 0, 1}, 'labels outside -1, 0, 1')
     known = y >= 0
-    wrong = known & ((succ & (y == 0)) | (fail & (y == 1)))       # timeouts (-1) are never wrong
-    art = json.load(open(run['dir'] / 'epoch_010/artifacts_v2.json'))
+    fp, fn = known & succ & (y == 0), known & fail & (y == 1)        # timeouts (-1) are never wrong
+    wrong = fp | fn
+    art = json.load(open(run['dir'] / f'epoch_{rnd:03d}/artifacts_v2.json'))
     n_train = art['train_trajectories']
     Xtr = pool.states(ids[:n_train])
     d_train, _ = usd.tree(Xtr).query(usd.norm(X))
@@ -301,160 +292,117 @@ def full_grid(arm, run, e, pool, ids, test):
     ix = np.rint((test['X'][:, 0] - z['theta_values'][0]) / .04).astype(int) * nj + \
         np.rint((test['X'][:, 1] - z['omega_values'][0]) / .04).astype(int)
     need(len(np.unique(ix)) == len(ix) and (src[ix] == 'test').all() and (src == 'test').sum() == len(ix),
-         f'{arm}: test states do not map one-to-one onto the grid\'s test cells')
-    need(np.abs(X[ix] - test['X']).max() < 1e-5, f'{arm}: test coordinates differ from the grid')
+         'test states do not map one-to-one onto the grid\'s test cells')
+    need(np.abs(X[ix] - test['X']).max() < 1e-5, 'test coordinates differ from the grid')
     for k, g in dict(I=I, D=D, succ=succ, fail=fail, inv=inv, weak=weak, ou=ou, other=other, wrong=wrong).items():
-        need(np.array_equal(g[ix], test[k]), f'{arm}: test cells differ from analyse() in {k}')
-    need(np.array_equal(y[ix] == 1, test['y']) and known[ix].all(), f'{arm}: test labels differ')
-    need(np.allclose(d_train[ix], test['d_train'], atol=1e-6, rtol=0), f'{arm}: test d_train differs')
-    need(np.array_equal(d_train[ix] > usd.SPARSE, test['sparse']), f'{arm}: test sparse flags differ')
+        need(np.array_equal(g[ix], test[k]), f'test cells differ from analyse() in {k}')
+    need(np.array_equal(y[ix] == 1, test['y']) and known[ix].all(), 'test labels differ')
+    need(np.allclose(d_train[ix], test['d_train'], atol=1e-6, rtol=0), 'test d_train differs')
+    need(np.array_equal(d_train[ix] > usd.SPARSE, test['sparse']), 'test sparse flags differ')
     tc = (int(succ[ix].sum()), int(fail[ix].sum()), int(abst[ix].sum()))
-    need(tc == EXPECT_TEST[arm] and tc[:2] == (e['c6c_S'], e['c6c_F']),
-         f'{arm}: test decisions {tc}, expected {EXPECT_TEST[arm]} (c6c_S {e["c6c_S"]}, c6c_F {e["c6c_F"]})')
+    need(tc == EXPECT_TEST[rnd] and tc[:2] == (e['c6c_S'], e['c6c_F']),
+         f'test decisions {tc}, expected {EXPECT_TEST[rnd]} (c6c_S {e["c6c_S"]}, c6c_F {e["c6c_F"]})')
+    need(abs(tc[2] / len(ix) - e['c6c_abstain']) < 1e-12, 'test abstention share differs from c6c_abstain')
 
     grid = lambda v: v.reshape(GRID_SHAPE)
-    cat = np.full(ni * nj, -1)
-    fp, fn = known & succ & (y == 0), known & fail & (y == 1)
-    need(np.array_equal(fp | fn, wrong), f'{arm}: FP and FN do not make up the wrong declarations')
-    for n, (key, _, _) in enumerate(R_CATS):
-        m = dict(success=succ & ~fp, fail=fail & ~fn, fp=fp, fn=fn, inv=inv, weak=weak, ou=ou)[key]
-        need(not (m & (cat >= 0)).any(), f'{arm}: {key} overlaps another category')
-        cat[m] = n
-    need((cat >= 0).all(), f'{arm}: a cell has no category')
-    srcs = ['test', 'cal', 'val', 'fresh']
     count = lambda m: int(m.sum())
-    info = dict(arm=arm, run=run['name'], thresholds=dict(t_s=t_s, t_f=t_f, u_s=u_s, u_f=u_f), n_train=n_train,
-                n_train_states=len(Xtr), test_counts=tc,
+    srcs = ['test', 'cal', 'val', 'fresh']
+    info = dict(run=run['name'], round=rnd, thresholds=dict(t_s=t_s, t_f=t_f, u_s=u_s, u_f=u_f), n_train=n_train,
+                n_train_states=len(Xtr), test_counts=tc, test_wrong=count(wrong[ix]),
+                test_fp=count(fp[ix]), test_fn=count(fn[ix]),
                 source_counts={s: count(src == s) for s in srcs},
-                counts={s: dict(success=count(succ & (src == s)), fail=count(fail & (src == s)),
-                                abstain=count(abst & (src == s)), invalid=count(inv & (src == s)),
-                                weak=count(weak & (src == s)), outcome_uncertain=count(ou & (src == s)),
-                                wrong=count(wrong & (src == s)), fp=count(fp & (src == s)), fn=count(fn & (src == s)),
-                                timeouts=count((y < 0) & (src == s)))
-                        for s in srcs},
                 full=dict(success=count(succ), fail=count(fail), abstain=count(abst), invalid=count(inv),
-                          weak=count(weak), outcome_uncertain=count(ou), overlap=count(overlap), other=count(other),
+                          weak=count(weak), outcome_uncertain=count(ou), other=count(other),
                           wrong=count(wrong), fp=count(fp), fn=count(fn), labelled=count(known),
-                          timeouts=count(~known),
-                          timeout_decisions=dict(success=count(succ & ~known), fail=count(fail & ~known),
-                                                 abstain=count(abst & ~known)),
-                          sparse=count(d_train > usd.SPARSE)))
+                          timeouts=count(~known), sparse=count(d_train > usd.SPARSE),
+                          abstain_isolated=None))
+    A = grid(abst)
+    nb = np.zeros_like(A)
+    nb[1:] |= A[:-1]; nb[:-1] |= A[1:]; nb[:, 1:] |= A[:, :-1]; nb[:, :-1] |= A[:, 1:]
+    info['full']['abstain_isolated'] = count(A & ~nb)
     return dict(theta=np.asarray(z['theta_values'], float), omega=np.asarray(z['omega_values'], float),
-                I=grid(I), D=grid(D), cat=grid(cat), y=grid(y), wrong=grid(wrong), d_train=grid(d_train),
-                info=info)
+                I=grid(I), D=grid(D), abst=A, y=grid(y), d_train=grid(d_train), info=info)
 
 
-def load_full_grid():
+def load_full_grid(rnd):
     pool, ep, runs = usd.Pool(), usd.epochs(), usd.runs()
-    G = {}
-    for arm, _ in R_ROWS:
-        run = runs[arm, 99512]
-        ids, _cfg = usd.verify_pool(pool, run)
-        a = usd.analyse(run, 99512, 10, ep, pool, ids)
-        need(a['arrays'] is not None, f'{arm}: round 10 is not certified')
-        G[arm] = full_grid(arm, run, ep[run['name'], 99512, 10], pool, ids, a['arrays'])
-    need(all(np.array_equal(G['adaptive'][k], G['uniform'][k]) for k in ('theta', 'omega')), 'rows on different grids')
-    return G
+    run = runs[R_ARM, 99512]
+    ids, _cfg = usd.verify_pool(pool, run)
+    a = usd.analyse(run, 99512, rnd, ep, pool, ids)
+    need(a['arrays'] is not None, f'round {rnd} is not certified')
+    return full_grid(rnd, run, ep[run['name'], 99512, rnd], pool, ids, a['arrays'])
 
 
 def _extent(g):
     th, om = g['theta'], g['omega']
-    dth, dom = np.diff(th), np.diff(om)
-    need(np.allclose(dth, .04, atol=1e-9) and np.allclose(dom, .04, atol=1e-9), 'lattice spacing is not 0.04')
+    need(np.allclose(np.diff(th), .04, atol=1e-9) and np.allclose(np.diff(om), .04, atol=1e-9),
+         'lattice spacing is not 0.04')
     return [th[0] - .02, th[-1] + .02, om[0] - .02, om[-1] + .02]
 
 
-def _cat_rgb(cat):
-    from matplotlib.colors import to_rgb
-    rgb = np.zeros(cat.shape + (3,))
-    for n, (_, _, col) in enumerate(R_CATS):
-        rgb[cat == n] = to_rgb(col)
-    return rgb
+def _abst_rgba(abst):
+    rgba = np.zeros(abst.shape + (4,))
+    rgba[abst] = to_rgb(ABSTAIN_ON_WHITE) + (1.0,)
+    return rgba
 
 
-def restyle_figure(G):
-    """Build Figure 5 in the paper style at its print width; returns (fig, layout). Every gap comes from a first draw
-    that measures the text (titles, thresholds, row names, tick and axis labels, legend, colorbar), then panels and
-    text are placed in inches. Fails on overlapping text, text off the page, text over a panel, text over another
-    panel's ticks, clipped data (an image not showing all its cells, a cell lost to rasterisation, a contour off its
-    panel), FP and FN cells that are not the wrong declarations, anything read back from the drawn artists that is
+def restyle_figure(g):
+    """Build Figure 5 at its print width; returns (fig, layout). A first draw measures the text (legend, titles, tick
+    and axis labels, colourbar ticks), then panels and text are placed in inches. Fails on overlapping text, text off
+    the page, text over a panel, free text over a panel's decorations, clipped data (an image not showing all its
+    cells, a cell lost to rasterisation, a contour off its panel), anything read back from the drawn artists that is
     not the computed grid, or outer whitespace outside 0-0.03 in."""
     W = PRINT_WIDTH[R_STEM]
-    g0 = G['adaptive']
-    ext = _extent(g0)
-    th, om = g0['theta'], g0['omega']
-    TH, OM = np.meshgrid(th, om, indexing='ij')
-    ticks_x, ticks_y = [-np.pi, 0, np.pi], [-2 * np.pi, 0, 2 * np.pi]
+    ext = _extent(g)
+    th, om = g['theta'], g['omega']
     with plt.rc_context(style_rc()):
-        H0 = 3.5
+        H0 = 2.0
         fig = plt.figure(figsize=(W, H0))
-        axs = [[fig.add_axes([.12 + .29 * c, .5 - .4 * r, .25, .3]) for c in range(3)] for r in range(2)]
-        im_signal, rare = None, []
-        for r, (arm, _) in enumerate(R_ROWS):
-            g = G[arm]
-            for c, key in enumerate(('I', 'D')):
-                im = axs[r][c].imshow(g[key].T, origin='lower', extent=ext, interpolation='nearest', aspect='auto',
-                                      cmap=SIGNAL_CMAP, vmin=0, vmax=1, zorder=1)
-                im_signal = im_signal or im
-            axs[r][2].imshow(_cat_rgb(g['cat']).transpose(1, 0, 2), origin='lower', extent=ext,
-                             interpolation='nearest', aspect='auto', zorder=1)
-            if RARE_PT:
-                keys = [k_ for k_, _, _ in R_CATS]
-                for key in RARE_KEYS:
-                    m = g['cat'] == keys.index(key)
-                    rare.append((arm, key, axs[r][2].scatter(TH[m], OM[m], s=RARE_PT ** 2, marker='s', linewidths=0,
-                                                             c=[R_CATS[keys.index(key)][2]], zorder=5)))
-            ylab = np.ma.masked_less(g['y'].astype(float), 0)          # timeouts (-1) masked out of the boundary
-            for ax in axs[r]:
-                cs = ax.contour(th, om, ylab.T, levels=[.5], colors=FILL['boundary'], linewidths=STYLE_LW['boundary'],
-                                zorder=4 if RARE_PT else 6)
-                cs.set_path_effects([withStroke(linewidth=STYLE_LW['boundary'] + 2 * CASING_PT, foreground='white')])
+        axs = [fig.add_axes([.12 + .29 * c, .3, .25, .4]) for c in range(3)]
+        # A: white page, the boundary, then the abstaining cells on top of it (transparent elsewhere)
+        axs[0].imshow(_abst_rgba(g['abst']).transpose(1, 0, 2), origin='lower', extent=ext, interpolation='nearest',
+                      aspect='auto', zorder=7)
+        ims = {key: axs[c].imshow(g[key].T, origin='lower', extent=ext, interpolation='nearest', aspect='auto',
+                                  cmap=CMAP[key], vmin=0, vmax=1, zorder=1) for c, key in ((1, 'I'), (2, 'D'))}
+        ylab = np.ma.masked_less(g['y'].astype(float), 0)          # timeouts (-1) masked out of the boundary
+        for c, ax in enumerate(axs):
+            if c in BOUNDARY_PANELS:
+                cs = ax.contour(th, om, ylab.T, levels=[.5], colors=FILL['boundary'], linewidths=BOUNDARY_LW, zorder=6)
+                if BOUNDARY_CASED:
+                    cs.set_path_effects([withStroke(linewidth=BOUNDARY_LW + 2 * CASING_PT, foreground='white')])
+            if SHOW_SPARSE:
                 cs = ax.contour(th, om, g['d_train'].T, levels=[usd.SPARSE], colors=FILL['boundary'],
                                 linewidths=SPARSE_LW, linestyles='--', zorder=6)
                 cs.set_path_effects([withStroke(linewidth=SPARSE_LW + 2 * CASING_PT, foreground='white')])
-            for c, ax in enumerate(axs[r]):
-                ax.set_xlim(ext[:2]); ax.set_ylim(ext[2:])
-                ax.set_xticks(ticks_x); ax.set_yticks(ticks_y)
-                ax.tick_params(labelbottom=(r == 1), labelleft=(c == 0))
-                if r == 1:
-                    ax.set_xticklabels([r'$-\pi$', '0', r'$\pi$'])
-                    ax.set_xlabel(r'$\theta$', labelpad=1)
-                if c == 0:
-                    ax.set_yticklabels([r'$-2\pi$', '0', r'$2\pi$'])
-                    ax.set_ylabel(r'$\dot{\theta}$', labelpad=1)
-        # Titles: one Text per line on a common baseline grid (1.2 x the title size), so every line has its own box.
+        for c, ax in enumerate(axs):
+            ax.set_xlim(ext[:2]); ax.set_ylim(ext[2:])
+            ax.set_xticks([-np.pi, 0, np.pi]); ax.set_yticks([-2 * np.pi, 0, 2 * np.pi])
+            ax.tick_params(labelbottom=(c == 0), labelleft=(c == 0))
+        # End tick labels align inward (the first from its tick toward the panel centre, the last back from it), so
+        # the two corner labels never meet and no label reaches past the panel into the column gap.
+        for t, ha in zip(axs[0].set_xticklabels([r'$-\pi$', '0', r'$\pi$']), ('left', 'center', 'right')):
+            t.set_ha(ha)
+        # y tick labels upright along the axis: one text height wide instead of the width of "-2 pi"
+        for t, va in zip(axs[0].set_yticklabels([r'$-2\pi$', '0', r'$2\pi$'], rotation=90),
+                         ('bottom', 'center', 'top')):
+            t.set_va(va)
+        axs[0].set_xlabel(r'$\theta$', labelpad=1)
+        axs[0].set_ylabel(r'$\dot{\theta}$', labelpad=1)
         titles = [[fig.text(0, 0, t, ha='center', va='baseline', fontsize=FS['title'])] for t in R_TITLES]
-        # Thresholds above each C panel, right-aligned, on two lines (t_s, t_f, then u_s, u_f): one line at 7 pt is
-        # wider than the panel and ran into column B ("D(x)  t_s=...").
-        # Not drawn since 2026-11-13 (Sumanth: the tau values are not needed in the figure); the .txt report still
-        # lists each run's thresholds. Set SHOW_THRESHOLDS to draw them again.
-        thr = []
-        for arm, _ in R_ROWS if SHOW_THRESHOLDS else []:
-            t = G[arm]['info']['thresholds']
-            thr.append([fig.text(0, 0, s_, ha='right', va='baseline', fontsize=FS['annotation'])
-                        for s_ in (rf"$\tau^{{\mathrm{{s}}}}_{{\mathrm{{s}}}}$={t['t_s']}, $\tau^{{\mathrm{{s}}}}_{{\mathrm{{f}}}}$={t['t_f']}",
-                             rf"$\tau^{{\mathrm{{f}}}}_{{\mathrm{{s}}}}$={t['u_s']}, $\tau^{{\mathrm{{f}}}}_{{\mathrm{{f}}}}$={t['u_f']}")])
-        rown = [fig.text(0, 0, name, rotation=90, ha='left', va='center', fontsize=FS['label']) for _, name in R_ROWS]
-        cax = fig.add_axes([.12, .03, .5, .02])
-        cb = fig.colorbar(im_signal, cax=cax, orientation='horizontal', ticks=[0, .25, .5, .75, 1])
-        cb.set_label(r'$I(x)$ and $D(x)$ (common scale)', fontsize=FS['label'], labelpad=1)
-        cax.tick_params(labelsize=FS['tick'])
-        patch = {key: Patch(facecolor=col, edgecolor='none', label=lab) for key, lab, col in R_CATS}
-        # Legend rows (Sumanth, 2026-11-13: the four-row, three-column legend took too much height). Each row is its
-        # own centred legend, so no row sets another's column widths. The first layout whose rows all fit the print
-        # width is used: two rows at 4.2 in, three at 3 in.
-        text_only = lambda s_: Line2D([], [], ls='none', label=s_)
-        short = lambda key, lab: Patch(facecolor=patch[key].get_facecolor(), edgecolor='none', label=lab)
-        sf = lambda: Line2D([], [], color=FILL['boundary'], lw=STYLE_LW['boundary'], label='success/failure boundary')
-        sd = lambda lab: Line2D([], [], color=FILL['boundary'], lw=SPARSE_LW, ls='--', label=lab)
-        dec = [patch['success'], patch['fail'], patch['fp'], patch['fn']]
-        kinds = lambda: [text_only('Abstention:'), short('inv', 'invalid'), short('weak', 'weak'),
-                         short('ou', 'outcome-uncertain')]
-        layouts = [[dec + [sf(), sd('sparse/dense boundary (0.02)')], [patch['inv'], patch['weak'], patch['ou']]],
-                   [dec + [sf(), sd('sparse/dense boundary')], kinds()],
-                   [dec + [sf()], kinds(), [sd('sparse/dense boundary (0.02)')]],
-                   [dec, [sf(), sd('sparse/dense boundary (0.02)')], kinds()]]
-        for rows_ in layouts:
+        caxs = []
+        for key in ('I', 'D'):
+            cax = fig.add_axes([.5, .05, .2, .02])
+            cb = fig.colorbar(ims[key], cax=cax, orientation='horizontal', ticks=[0, .5, 1])
+            for t, ha in zip(cb.ax.set_xticklabels(['0', '0.5', '1']), ('left', 'center', 'right')):
+                t.set_ha(ha)                                         # end labels inward, as on the panels
+            cb.outline.set_linewidth(.4)
+            cax.tick_params(labelsize=FS['tick'], length=1.5, pad=1)
+            caxs.append(cax)
+        handles = [Patch(facecolor=ABSTAIN_ON_WHITE, edgecolor='none', label='abstention'),
+                   Line2D([], [], color=FILL['boundary'], lw=BOUNDARY_LW, label='success/failure boundary')]
+        if SHOW_SPARSE:
+            handles.append(Line2D([], [], color=FILL['boundary'], lw=SPARSE_LW, ls='--', label='sparse/dense boundary'))
+        for rows_ in ([handles], [handles[:2], handles[2:]] if len(handles) > 2 else [handles[:1], handles[1:]]):
             legends = [fig.legend(handles=h_, ncol=len(h_), **paper_legend_kw(FS['legend'])) for h_ in rows_]
             fig.canvas.draw()
             rr_ = fig.canvas.get_renderer()
@@ -464,102 +412,73 @@ def restyle_figure(G):
                 lg.remove()
         else:
             need(False, 'no legend layout fits the print width')
-        legend = legends[0]
-        ncol = [len(h_) for h_ in rows_]
         LEG_ROW_GAP = 2.0 * PT
 
         # Pass 1: measure.
         fig.canvas.draw()
         rr = fig.canvas.get_renderer()
         inch = lambda bb: (bb.width / fig.dpi, bb.height / fig.dpi)
-        need(max(inch(lg.get_window_extent(rr))[0] for lg in legends) <= W - 2 * MARGIN,
-             'a legend row is wider than the page')
         pos = lambda ax: ax.get_position()
         tb = lambda ax: ax.get_tightbbox(rr)
-        left_dec = max(pos(ax).x0 * W - tb(ax).x0 / fig.dpi for ax in (axs[0][0], axs[1][0]))
-        below = max(pos(ax).y0 * H0 - tb(ax).y0 / fig.dpi for ax in axs[1])
-        below_top = max(pos(ax).y0 * H0 - tb(ax).y0 / fig.dpi for ax in axs[0])          # tick marks of row 1
-        # what sticks out above each panel's top edge: the top y tick label (column A)
-        above = [[max(0.0, tb(ax).y1 / fig.dpi - (pos(ax).y0 + pos(ax).height) * H0) for ax in row] for row in axs]
-        # gap between columns: the right overhang of column c's labels plus the left overhang of column c + 1's
-        gap = max(tb(axs[r][c]).x1 / fig.dpi - (pos(axs[r][c]).x0 + pos(axs[r][c]).width) * W
-                  + pos(axs[r][c + 1]).x0 * W - tb(axs[r][c + 1]).x0 / fig.dpi for r in range(2) for c in range(2))
-        gap += SEP_PT * PT
-        right_over = max(0.0, max(tb(axs[r][2]).x1 / fig.dpi - (pos(axs[r][2]).x0 + pos(axs[r][2]).width) * W
-                                  for r in range(2)))
-        rn_w = max(inch(t.get_window_extent(rr))[0] for t in rown)
-        rn_len = [inch(t.get_window_extent(rr))[1] for t in rown]
-        thr_w = max((inch(t.get_window_extent(rr))[0] for lines in thr for t in lines), default=0.0)
+        left_dec = pos(axs[0]).x0 * W - tb(axs[0]).x0 / fig.dpi
+        below_a = pos(axs[0]).y0 * H0 - tb(axs[0]).y0 / fig.dpi                  # A's x tick labels and x label
+        below_bc = max(pos(ax).y0 * H0 - tb(ax).y0 / fig.dpi for ax in axs[1:])  # tick marks of B and C
+        cb_below = max(pos(c).y0 * H0 - tb(c).y0 / fig.dpi for c in caxs)       # colourbar tick labels
+        above = max(max(0.0, tb(ax).y1 / fig.dpi - (pos(ax).y0 + pos(ax).height) * H0) for ax in axs)
+        right_over = max(0.0, tb(axs[2]).x1 / fig.dpi - (pos(axs[2]).x0 + pos(axs[2]).width) * W)
+        gap = GAP_PT * PT
         leg_hs = [inch(lg.get_window_extent(rr))[1] for lg in legends]
         leg_h = sum(leg_hs) + LEG_ROW_GAP * (len(legends) - 1)
-        cb_below = pos(cax).y0 * H0 - tb(cax).y0 / fig.dpi
-
-        x_a = MARGIN + rn_w + PAD_PT * PT + left_dec
+        x_a = MARGIN + ACCENT_PT * PT + left_dec
         pw = (W - MARGIN - right_over - x_a - 2 * gap) / 3
         ph = pw * ASPECT
-        # One line per title if neighbours clear each other by SEP, else A and B on two lines at their break.
         tw = [inch(t[0].get_window_extent(rr))[0] for t in titles]
-        wrapped = any(tw[c] / 2 + tw[c + 1] / 2 + SEP_PT * PT > pw + gap for c in range(2)) or \
-            tw[0] / 2 > pw / 2 + left_dec + rn_w or tw[2] / 2 > pw / 2 + right_over
+        # one line per title if every title stays within its panel plus half of each neighbouring gap
+        wrapped = any(w_ > pw + gap - SEP_PT * PT for w_ in tw)
         if wrapped:
             for c, s_ in enumerate(R_TITLES_WRAPPED):
                 lines = s_.split('\n')
                 titles[c][0].set_text(lines[0])
                 titles[c] += [fig.text(0, 0, l_, ha='center', va='baseline', fontsize=FS['title']) for l_ in lines[1:]]
             fig.canvas.draw()
+            tw = [max(inch(t.get_window_extent(rr))[0] for t in lines) for lines in titles]
+            need(all(w_ <= pw + gap - SEP_PT * PT for w_ in tw), ('a wrapped title is wider than its column', tw))
 
         def asc_desc(t):
             bb = t.get_window_extent(rr)
             base = fig.transFigure.transform(t.get_position())[1]
             return (bb.y1 - base) / fig.dpi, (base - bb.y0) / fig.dpi
 
-        SKIP, SKIP_A = 1.2 * FS['title'] * PT, 1.2 * FS['annotation'] * PT
+        SKIP = 1.2 * FS['title'] * PT
         asc0 = max(asc_desc(t[0])[0] for t in titles)
-        thr_asc = max((asc_desc(lines[0])[0] for lines in thr), default=0.0)
-        thr_desc = max((asc_desc(lines[-1])[1] for lines in thr), default=0.0)
-        # The tau symbols carry a superscript and a subscript, so two threshold lines need more than the plain 1.2 x
-        # font-size skip: at least the first line's descent plus the second line's ascent, and half a point between.
-        skip_thr = max([SKIP_A] + [asc_desc(lines[0])[1] + asc_desc(lines[1])[0] + .5 * PT for lines in thr])
-        thr_h = thr_asc + skip_thr + thr_desc if thr else 0.0
-        # header: from the top of the first title line down to the top of row 1's panels
-        title_depth = [asc0 + (len(t) - 1) * SKIP + asc_desc(t[-1])[1] for t in titles]
-        thr_pad = [max(PAD_PT * PT, above[r][2] + .5 * PT) for r in range(2)]
-        if thr:
-            header = max([title_depth[c] + SEP_PT * PT + above[0][c] for c in range(2)] +
-                         [title_depth[2] + SEP_PT * PT + thr_h + thr_pad[0]])
-            row_gap = max(below_top + SEP_PT * PT + thr_h + thr_pad[1], below_top + SEP_PT * PT + above[1][0])
-        else:                                                   # column C is laid out like A and B
-            header = max(title_depth[c] + SEP_PT * PT + above[0][c] for c in range(3))
-            row_gap = below_top + SEP_PT * PT + max(above[1][c] for c in range(3))
-        H = (MARGIN + leg_h + LEG_GAP_PT * PT + header + 2 * ph + row_gap + below + CB_GAP_PT * PT + CB_H + cb_below
-             + MARGIN)
+        n_lines = max(len(t) for t in titles)
+        desc = max(asc_desc(t[-1])[1] for t in titles)
+        title_h = asc0 + (n_lines - 1) * SKIP + desc
+        cb_band = CB_GAP_PT * PT + CB_H + cb_below
+        bottom = max(below_a, below_bc + cb_band)
+        H = MARGIN + leg_h + LEG_GAP_PT * PT + title_h + TITLE_GAP_PT * PT + above + ph + bottom + MARGIN
         fig.set_size_inches(W, H)
 
-        # Place.
+        # Place. Titles share a baseline grid; a one-line title sits on the last line of the wrapped ones.
         y_head = H - MARGIN - leg_h - LEG_GAP_PT * PT
-        tops = [y_head - header, y_head - header - ph - row_gap]
+        top = y_head - title_h - TITLE_GAP_PT * PT - above
         xs = [x_a + c * (pw + gap) for c in range(3)]
-        for r in range(2):
-            for c in range(3):
-                axs[r][c].set_position([xs[c] / W, (tops[r] - ph) / H, pw / W, ph / H])
-            for k_, t in enumerate(thr[r] if thr else []):     # last line's descent sits thr_pad above the panel
-                t.set_position(((xs[2] + pw) / W, (tops[r] + thr_pad[r] + thr_desc + (1 - k_) * skip_thr) / H))
-            rown[r].set_position((MARGIN / W, (tops[r] - ph / 2) / H))
+        for c, ax in enumerate(axs):
+            ax.set_position([xs[c] / W, (top - ph) / H, pw / W, ph / H])
         for c, lines in enumerate(titles):
+            first = n_lines - len(lines)
             for k_, t in enumerate(lines):
-                w_ = inch(t.get_window_extent(rr))[0]
-                xc = min(max(xs[c] + pw / 2, MARGIN + w_ / 2), W - MARGIN - w_ / 2)   # centred, kept on the page
-                t.set_position((xc / W, (y_head - asc0 - k_ * SKIP) / H))
-        cb_top = tops[1] - ph - below - CB_GAP_PT * PT
-        cax.set_position([xs[0] / W, (cb_top - CB_H) / H, (xs[1] + pw - xs[0]) / W, CB_H / H])
-        for k_, lg in enumerate(legends):                          # stacked from the top, each centred
+                t.set_position(((xs[c] + pw / 2) / W, (y_head - asc0 - (first + k_) * SKIP) / H))
+        cb_top = top - ph - below_bc - CB_GAP_PT * PT
+        for c, cax in zip((1, 2), caxs):
+            cax.set_position([xs[c] / W, (cb_top - CB_H) / H, pw / W, CB_H / H])
+        for k_, lg in enumerate(legends):
             lg.set_bbox_to_anchor((0.5, (H - MARGIN - sum(leg_hs[:k_]) - k_ * LEG_ROW_GAP) / H),
                                   transform=fig.transFigure)
 
         # Checks.
         fig.canvas.draw()
         rr = fig.canvas.get_renderer()
-        maps = [ax for row in axs for ax in row]
 
         def drawn(axis, lim):
             lo, hi = sorted(lim)
@@ -569,69 +488,54 @@ def restyle_figure(G):
         free = [(t.get_text(), t.get_window_extent(rr)) for t in fig.texts] + \
             [(f'legend row {k_}', lg.get_window_extent(rr)) for k_, lg in enumerate(legends)]
         owned = []
-        for ax in maps + [cax]:
+        for ax in axs + caxs:
             owned += [(t.get_text(), t.get_window_extent(rr)) for t in drawn(ax.xaxis, ax.get_xlim()) +
                       drawn(ax.yaxis, ax.get_ylim())]
             owned += [(lab.get_text(), lab.get_window_extent(rr)) for lab in (ax.xaxis.label, ax.yaxis.label)
                       if lab.get_text()]
         boxes = free + owned
-        need(sum(len(drawn(ax.xaxis, ax.get_xlim())) for ax in maps) == 9 and
-             sum(len(drawn(ax.yaxis, ax.get_ylim())) for ax in maps) == 6, 'expected 9 x and 6 y tick labels')
+        need(sum(len(drawn(ax.xaxis, ax.get_xlim())) for ax in axs) == 3 and
+             sum(len(drawn(ax.yaxis, ax.get_ylim())) for ax in axs) == 3 and
+             sum(len(drawn(c.xaxis, c.get_xlim())) for c in caxs) == 6, 'expected 3 x, 3 y and 6 colourbar labels')
         for i, (ta, a) in enumerate(boxes):
             for tbx, b in boxes[i + 1:]:
                 need(not a.overlaps(b), ('text overlap', ta, tbx))
             need(a.x0 >= -0.5 and a.x1 <= fig.bbox.x1 + 0.5 and a.y0 >= -0.5 and a.y1 <= fig.bbox.y1 + 0.5,
                  ('text off the page', ta))
-        panels = [ax.get_window_extent(rr) for ax in maps + [cax]]
+        panels = [ax.get_window_extent(rr) for ax in axs + caxs]
         for ta, a in boxes:
             need(not any(a.overlaps(p) for p in panels), ('text over a panel', ta))
-        for ta, a in free:                      # free text clear of every panel's tick marks and labels
-            for ax in maps + [cax]:
+        for ta, a in free:
+            for ax in axs + caxs:
                 need(not a.overlaps(ax.get_tightbbox(rr)), ('text over a panel\'s decorations', ta))
-        # Clipped data and read-back.
         need(PDF_DPI * pw >= GRID_SHAPE[0] and PDF_DPI * ph >= GRID_SHAPE[1], 'a cell is lost in the PDF raster')
-        for r, (arm, _) in enumerate(R_ROWS):
-            g = G[arm]
-            for c, ax in enumerate(axs[r]):
-                ims = ax.get_images()
-                need(len(ims) == 1, f'{arm} {"ABC"[c]}: {len(ims)} images')
-                e = ims[0].get_extent()
-                need(np.allclose(e, ext) and np.allclose(list(ax.get_xlim()) + list(ax.get_ylim()), ext),
-                     f'{arm} {"ABC"[c]}: image and axes limits differ (clipped cells)')
-                arr = ims[0].get_array()
-                need(not np.ma.getmaskarray(arr).any() and np.isfinite(np.ma.getdata(arr)).all(),
-                     f'{arm} {"ABC"[c]}: missing cells')
-                if c < 2:
-                    need(np.array_equal(np.ma.getdata(arr), g['I' if c == 0 else 'D'].T) and
-                         (ims[0].norm.vmin, ims[0].norm.vmax, ims[0].get_cmap().name) == (0, 1, SIGNAL_CMAP),
-                         f'{arm} {"AB"[c]}: image is not the grid on the shared scale')
-                else:
-                    rgb = np.ma.getdata(arr)
-                    need(np.array_equal(rgb, _cat_rgb(g['cat']).transpose(1, 0, 2)), f'{arm} C: decisions differ')
-                    need(not (rgb == 1).all(-1).any(), f'{arm} C: white cells')
-                for coll in ax.collections:
-                    for p in coll.get_paths():
-                        v = p.vertices
-                        need(not len(v) or ((v[:, 0] >= ext[0]) & (v[:, 0] <= ext[1]) & (v[:, 1] >= ext[2]) &
-                                            (v[:, 1] <= ext[3])).all(), f'{arm} {"ABC"[c]}: contour off the panel')
-            if RARE_PT:
-                keys = [k_ for k_, _, _ in R_CATS]
-                for arm_, key, sc in rare:
-                    if arm_ == arm:
-                        m = g['cat'] == keys.index(key)
-                        need(np.array_equal(sc.get_offsets(), np.c_[TH[m], OM[m]]), f'{arm}: {key} squares off cells')
-            fpn = sum(int((g['cat'] == n).sum()) for n, (key, _, _) in enumerate(R_CATS) if key in ('fp', 'fn'))
-            need(fpn == g['info']['full']['wrong'] == int(g['wrong'].sum()), f'{arm}: FP + FN cells != wrong')
-        ink = [b for _, b in boxes] + [ax.get_tightbbox(rr) for ax in maps + [cax]]
-        edges = dict(left=min(b.x0 for b in ink) / fig.dpi, right=W - max(b.x1 for b in ink) / fig.dpi,
+        for c, ax in enumerate(axs):
+            im = ax.get_images()
+            need(len(im) == 1, f'{"ABC"[c]}: {len(im)} images')
+            need(np.allclose(im[0].get_extent(), ext) and np.allclose(list(ax.get_xlim()) + list(ax.get_ylim()), ext),
+                 f'{"ABC"[c]}: image and axes limits differ (clipped cells)')
+            arr = im[0].get_array()
+            need(not np.ma.getmaskarray(arr).any() and np.isfinite(np.ma.getdata(arr)).all(), f'{"ABC"[c]}: missing cells')
+            if c == 0:
+                need(np.array_equal(np.ma.getdata(arr), _abst_rgba(g['abst']).transpose(1, 0, 2)), 'A: abstentions differ')
+            else:
+                key = 'ID'[c - 1]
+                need(np.array_equal(np.ma.getdata(arr), g[key].T) and (im[0].norm.vmin, im[0].norm.vmax) == (0, 1)
+                     and im[0].get_cmap() is CMAP[key], f'{"BC"[c - 1]}: image is not {key} on [0, 1] in its ramp')
+            for coll in ax.collections:
+                for p in coll.get_paths():
+                    v = p.vertices
+                    need(not len(v) or ((v[:, 0] >= ext[0]) & (v[:, 0] <= ext[1]) & (v[:, 1] >= ext[2]) &
+                                        (v[:, 1] <= ext[3])).all(), f'{"ABC"[c]}: contour off the panel')
+        ink = [b for _, b in boxes] + [ax.get_tightbbox(rr) for ax in axs + caxs]
+        edges = dict(left=min(b.x0 for b in ink) / fig.dpi - ACCENT_PT * PT, right=W - max(b.x1 for b in ink) / fig.dpi,
                      bottom=min(b.y0 for b in ink) / fig.dpi, top=H - max(b.y1 for b in ink) / fig.dpi)
         need(all(-0.005 <= v <= 0.03 for v in edges.values()), ('outer whitespace', edges))
         for lg in legends:
             lb = lg.get_window_extent(rr)
             need(abs((lb.x0 + lb.x1) / 2 / fig.dpi - W / 2) < 0.005, 'legend not centred')
-    layout = dict(width=W, height=H, panel_w=pw, panel_h=ph, col_gap=gap, row_gap=row_gap, legend_ncol=ncol,
-                  titles_wrapped=wrapped, edges=edges, rare_pt=RARE_PT,
-                  cell_pt=(72 * pw / GRID_SHAPE[0], 72 * ph / GRID_SHAPE[1]), thr_w=thr_w, rn_len=rn_len)
+    layout = dict(width=W, height=H, panel_w=pw, panel_h=ph, col_gap=gap, legend_rows=len(legends),
+                  titles_wrapped=wrapped, edges=edges, cell_pt=(72 * pw / GRID_SHAPE[0], 72 * ph / GRID_SHAPE[1]))
     return fig, layout
 
 
@@ -641,57 +545,47 @@ def _pdf_size(pdf):
     return (x1 - x0) / 72, (y1 - y0) / 72
 
 
-def sidecar(G, L):
-    out = [f'pendulum_uncertainty_signals, restyled (common.py paper style, usetex Times bold), full 158 x 315 grid.',
+def sidecar(g, L):
+    i, f = g['info'], g['info']['full']
+    th = i['thresholds']
+    out = [f'pendulum_uncertainty_signals: TERA-FM (U_H, rho 0.75), Pendulum LQR, {i["run"]}, seed 99512, round '
+           f'{i["round"]} ({i["n_train"]} training trajectories, {i["n_train_states"]} states), full 158 x 315 grid.',
            f'Size {L["width"]:.3f} x {L["height"]:.3f} in; panels {L["panel_w"]:.3f} x {L["panel_h"]:.3f} in '
-           f'(aspect of the paper copy, {ASPECT:.4f}); column gap {L["col_gap"]:.3f} in, row gap {L["row_gap"]:.3f} in; '
-           f'cell {L["cell_pt"][0]:.2f} x {L["cell_pt"][1]:.2f} pt; outer whitespace (in) '
-           + ', '.join(f'{k} {v:.3f}' for k, v in L['edges'].items()) + '.',
-           f'Fonts (pt): {FS}. Legend at the top, {L["legend_ncol"]} columns; titles '
-           f'{"on two lines (A, B)" if L["titles_wrapped"] else "on one line"}.',
-           f'Colours: I(x), D(x) {SIGNAL_CMAP} on one [0, 1] scale; Success {FILL["success"]}, Fail {FILL["fail"]}, '
-           f'invalid {ABSTAIN_GRAY["inv"]}, weak {ABSTAIN_GRAY["weak"]}, outcome-uncertain {ABSTAIN_GRAY["ou"]}; '
-           f'wrong Success (FP) {FILL["fp"]}, wrong Fail (FN) {FILL["fn"]} (Figure 1 fills, one cell each); true '
-           f'boundary black solid {STYLE_LW["boundary"]} pt; sparse/dense boundary black dashed {SPARSE_LW} pt; both '
-           f'with a white casing {CASING_PT} pt each side.'
-           + (f' Abstention, FP and FN cells in C drawn as {L["rare_pt"]} pt squares over the true boundary.'
-              if L['rare_pt'] else ' All cells at true size.'),
-           'Drawing: every grid cell is its own start state, one image cell per state with exact edges (0.04 rad '
-           'lattice, cell edges at +-0.02 of each state; the axes run edge to edge, so no cell is clipped), nearest '
-           f'interpolation, PDF raster {PDF_DPI} dpi. True boundary: the full-grid labels contoured at 0.5 on the '
-           'lattice with the 68 timeouts (label -1) masked, so the line skips every lattice quad with a timeout '
-           'corner. Sparse/dense: d_train > 0.02 for every grid state (uncertainty_signals_data.norm, periodic tree, '
-           'the run\'s own training states), contoured at 0.02 on the lattice. FP / FN: wrong declarations where the true '
-           'label is 0 or 1; timeouts keep their decision\'s colour.',
-           'Decisions: S = in_S(ps, pf, t_s, t_f), F = in_F(ps, pf, u_s, u_f); Success = S & ~F, Fail = F & ~S, '
-           'Abstain otherwise (A-1d scorer). p_s, p_f, p_inv tied with det_v2_rule.tie. Test cells reproduce '
-           'uncertainty_signals_data.analyse exactly (I, D, decisions, kinds, wrong declarations, labels, sparse flags).', '']
-    for arm, name in R_ROWS:
-        i = G[arm]['info']
-        f = i['full']
-        out += [f'[{arm}] {i["run"]} seed 99512 round 10, thresholds {i["thresholds"]}, training trajectories '
-                f'{i["n_train"]} ({i["n_train_states"]} states)',
-                f'    source counts: ' + ', '.join(f'{s} {n}' for s, n in i['source_counts'].items()),
-                f'    test cells: Success {i["test_counts"][0]}, Fail {i["test_counts"][1]}, Abstain '
-                f'{i["test_counts"][2]} (stored c6c: {EXPECT_TEST[arm]})',
-                f'    full grid ({sum(i["source_counts"].values())} states): Success {f["success"]}, Fail {f["fail"]}, '
-                f'Abstain {f["abstain"]} (invalid {f["invalid"]}, weak {f["weak"]}, outcome-uncertain '
-                f'{f["outcome_uncertain"]}, overlap {f["overlap"]}, other {f["other"]}); wrong declarations '
-                f'{f["wrong"]} (FP {f["fp"]}, FN {f["fn"]}) of {f["labelled"]} labelled; timeouts {f["timeouts"]} (Success '
-                f'{f["timeout_decisions"]["success"]}, Fail {f["timeout_decisions"]["fail"]}, Abstain '
-                f'{f["timeout_decisions"]["abstain"]}); sparse {f["sparse"]}']
-        for s, c in i['counts'].items():
-            out.append(f'    {s:5s}: ' + ', '.join(f'{k} {v}' for k, v in c.items()))
+           f'(aspect {ASPECT:.4f}); column gap {L["col_gap"]:.3f} in; cell {L["cell_pt"][0]:.2f} x '
+           f'{L["cell_pt"][1]:.2f} pt; outer whitespace (in) ' + ', '.join(f'{k} {v:.3f}' for k, v in L['edges'].items())
+           + f'. Fonts (pt): {FS}. Legend in {L["legend_rows"]} row(s); titles '
+           f'{"wrapped" if L["titles_wrapped"] else "on one line"}.',
+           f'Columns: A abstention as a whole ({ABSTAIN_ON_WHITE} on white, true cell size), B invalid mass I(x) on '
+           f'[0, 1] in {SIGNAL_RAMP["I"][-1]}-ended Reds, C weighted disagreement D(x) on [0, 1] in '
+           f'{SIGNAL_RAMP["D"][-1]}-ended BrBG teal. True boundary black solid {BOUNDARY_LW} pt'
+           f'{" with a white casing" if BOUNDARY_CASED else ", no casing"} in panels '
+           f'{", ".join("ABC"[c] for c in BOUNDARY_PANELS)}; in A the abstaining cells are drawn over it. Sparse/dense '
+           f'contour (d_train 0.02) {"drawn dashed" if SHOW_SPARSE else "not drawn"}.',
+           f'Certified thresholds (A-1d at delta): t_s {th["t_s"]}, t_f {th["t_f"]}, u_s {th["u_s"]}, u_f {th["u_f"]} '
+           '(tau^s_s, tau^s_f, tau^f_s, tau^f_f).',
+           f'Test set ({sum(i["test_counts"])} states): Success {i["test_counts"][0]}, Fail {i["test_counts"][1]}, '
+           f'Abstain {i["test_counts"][2]} ({100 * i["test_counts"][2] / sum(i["test_counts"]):.2f}%); wrong '
+           f'predictions {i["test_wrong"]} (FP {i["test_fp"]}, FN {i["test_fn"]}).',
+           f'Full grid ({sum(i["source_counts"].values())} states; sources {i["source_counts"]}): Success {f["success"]}, '
+           f'Fail {f["fail"]}, Abstain {f["abstain"]} ({100 * f["abstain"] / sum(i["source_counts"].values()):.2f}%; '
+           f'invalid {f["invalid"]}, weak {f["weak"]}, outcome-uncertain {f["outcome_uncertain"]}, other {f["other"]}; '
+           f'{f["abstain_isolated"]} abstaining cells with no abstaining 4-neighbour); wrong predictions {f["wrong"]} '
+           f'(FP {f["fp"]}, FN {f["fn"]}) of {f["labelled"]} labelled; timeouts {f["timeouts"]}; sparse {f["sparse"]}.',
+           'Drawing: one image cell per grid state with exact edges (0.04 rad lattice, edges at +-0.02), nearest '
+           f'interpolation, PDF raster {PDF_DPI} dpi. True boundary: full-grid labels contoured at 0.5 with the timeouts '
+           'masked. d_train: distance to the nearest of the run\'s own training states (uncertainty_signals_data.norm, '
+           'periodic tree); sparse = d_train > 0.02. Test cells reproduce uncertainty_signals_data.analyse exactly.',
+           'Ink margins on the 300 dpi page (in): ' + ', '.join(f'{k} {v:.3f}' for k, v in L.get('ink_margins', {}).items())]
     return '\n'.join(out) + '\n'
 
 
-def main_restyle():
-    G = load_full_grid()
-    fig, L = restyle_figure(G)
-    paper_version = RARE_PT == PAPER_RARE_PT
+def main_restyle(rnd):
+    g = load_full_grid(rnd)
+    fig, L = restyle_figure(g)
+    paper_version = rnd == PAPER_ROUND
     out = PLOTS if paper_version else PLOTS / 'variants'
     out.mkdir(parents=True, exist_ok=True)
-    stem = R_STEM if paper_version else R_STEM + (f'_rare{RARE_PT:g}pt' if RARE_PT else '_truesize')
+    stem = R_STEM if paper_version else f'{R_STEM}_round{rnd}'
     pdf, png, txt = out / f'{stem}.pdf', out / f'{stem}.png', out / f'{stem}.txt'
     with plt.rc_context(style_rc()):
         fig.savefig(pdf, dpi=PDF_DPI, metadata={'CreationDate': None})
@@ -699,13 +593,22 @@ def main_restyle():
     plt.close(fig)
     w, h = _pdf_size(pdf)
     need(abs(w - PRINT_WIDTH[R_STEM]) <= .01, f'PDF width {w:.3f} in, print width {PRINT_WIDTH[R_STEM]}')
-    txt.write_text(sidecar(G, L))
-    print(f'{R_STEM} (restyle): {w:.3f} x {h:.3f} in, panels {L["panel_w"]:.3f} x {L["panel_h"]:.3f} in -> {pdf}')
-    for arm, _ in R_ROWS:
-        f = G[arm]['info']['full']
-        print(f'  {arm}: full grid Success {f["success"]}, Fail {f["fail"]}, Abstain {f["abstain"]}, wrong {f["wrong"]}; '
-              f'test {G[arm]["info"]["test_counts"]}')
-    return pdf, png, txt, G, L
+    # Ink margins on the rendered page: every side at least half a pixel (ink touching an edge may be cut off) and at
+    # most 0.045 in (text boxes carry ascender / descender room without ink); the left side at most 0.03 in, since
+    # without its accent the theta-dot label's ink starts 0.038 in in.
+    from PIL import Image
+    a = np.asarray(Image.open(png).convert('L')) < 200
+    rows, cols = np.where(a.any(1))[0], np.where(a.any(0))[0]
+    ink = dict(left=cols[0], right=a.shape[1] - 1 - cols[-1], top=rows[0], bottom=a.shape[0] - 1 - rows[-1])
+    ink = {k: v / PNG_DPI for k, v in ink.items()}
+    need(all(.5 / PNG_DPI <= v <= .045 for v in ink.values()) and ink['left'] <= .03, ('ink margins on the page', ink))
+    L['ink_margins'] = ink
+    txt.write_text(sidecar(g, L))
+    f = g['info']['full']
+    print(f'{stem}: {w:.3f} x {h:.3f} in, panels {L["panel_w"]:.3f} x {L["panel_h"]:.3f} in -> {pdf}')
+    print(f'  round {rnd}: full grid Abstain {f["abstain"]}, wrong {f["wrong"]}; test {g["info"]["test_counts"]}, '
+          f'wrong {g["info"]["test_wrong"]}')
+    return pdf
 
 
 if __name__ == '__main__':
@@ -715,18 +618,17 @@ if __name__ == '__main__':
     p.add_argument('--baseline', action='store_true',
                    help='draw the 2026-11-12 baseline instead (plots/legacy/; rewrites values/pendulum_uncertainty_*)')
     p.add_argument('--restyle', action='store_true', help='accepted for old commands; the default is the paper figure')
-    p.add_argument('--rare-pt', type=float, default=PAPER_RARE_PT,
-                   help=f'abstention / FP / FN cells in C as squares of this size in pt (paper: {PAPER_RARE_PT:g}; '
-                        '0 = true cell size); other values go to plots/variants/')
+    p.add_argument('--round', type=int, default=PAPER_ROUND,
+                   help=f'training round to draw (paper: {PAPER_ROUND}); other rounds go to plots/variants/ and need '
+                        'data/pendulum_full_grid/<run>_epoch<round>_grid.npz')
     args = p.parse_args()
     if args.baseline:
-        if args.restyle or args.rare_pt != PAPER_RARE_PT:
+        if args.restyle or args.round != PAPER_ROUND:
             p.error('--baseline draws the old design only')
         main(False)
     else:
-        RARE_PT = args.rare_pt
-        main_restyle()
+        main_restyle(args.round)
         if args.paper:
-            if RARE_PT != PAPER_RARE_PT:
-                p.error(f'only the paper version (--rare-pt {PAPER_RARE_PT:g}) goes to the paper')
+            if args.round != PAPER_ROUND:
+                p.error(f'only round {PAPER_ROUND} goes to the paper')
             install_paper(R_STEM)

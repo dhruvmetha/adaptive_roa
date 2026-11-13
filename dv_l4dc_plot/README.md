@@ -83,13 +83,16 @@ build, commit and Overleaf push described in its `AGENTS.md`.
 - All figure text is regular weight: `common.TEX_PREAMBLE` no longer sets `\bfseries\boldmath`.
 - Labels: "5% limit" (Figure 6) and "5% error limit" (Figure S3), not "target"; the acquisition score is `U`, not
   `U_H`, on the Figure S1 axis (the data key stays `U_H`); trajectory counts print `K` for thousands (`count_label`).
-- Figure 5 prints each run's thresholds as tau^s_s, tau^s_f (stored `t_s`, `t_f`) and tau^f_s, tau^f_f (stored `u_s`,
-  `u_f`), with a line skip sized to the symbols, and names its rows TERA and Unif-TERA.
+- Figure 5 (since 2026-11-13 afternoon) is one row, TERA only, at round 2: A abstention as a whole, B invalid mass
+  I(x), C weighted disagreement D(x), every grid cell at true size. I and D have their own ramps (`SIGNAL_RAMP`:
+  Reds, BrBG teal) and colourbars; the panels share axes, labelled on A only, with upright y tick labels. The true
+  boundary is a 0.35 pt uncased line in all panels (A draws the abstaining cells over it); the sparse/dense contour is
+  off (`SHOW_SPARSE`), since at round 2 it is a maze around the 120 training trajectories. The `.txt` report lists
+  the thresholds (tau^s_s, tau^s_f = stored `t_s`, `t_f`; tau^f_s, tau^f_f = `u_s`, `u_f`) and the counts.
 - The paper writes the number of samples per query as M; K means one thousand only.
 - Figure 5 prints at 3.00 in (`PRINT_WIDTH`), half the text width, as a wrapped figure (paper commit after
-  `1daddc1`). Its legend is a stack of centred one-row legends; the script takes the first layout whose rows fit the
-  print width (two rows at 4.2 in, three at 3 in). Titles wrap to two lines. The tau values above the decision
-  maps are off (`SHOW_THRESHOLDS = False`); the `.txt` report still lists them.
+  `1daddc1`). Its legend is one centred row (two if it does not fit); titles wrap to two lines when one line is
+  wider than a column.
 
 **Labels (Sumanth, 2026-11-13, paper commit `2125ad9`).** The three learned-policy settings are named RL, not PPO, and
 the spatial quadrotor is 12D, not 13D (the state space is R^3 x SO(3) x R^6, stored as 13 coordinates with a unit
@@ -330,8 +333,8 @@ and kept the table (Table 4, paper commit `7a21aa8`), which also deleted this PD
 the `_4x1` preview) and values are in the `archive/` folders. The table's numbers come from the same `cal` records, and
 its generator checks all 90 cells against Figure S3's per-seed table instead of this figure's values.
 
-**Figure 5 since paper commit `34eb36f` (2026-11-13)** is the paper-style, full-grid version from
-`plot_uncertainty_signals_paper.py` (see "Paper-wide restyle"). The history below is kept for reference. Until then
+**Figure 5 since 2026-11-13 afternoon** is the one-row TERA figure at round 2 from `plot_uncertainty_signals_paper.py`;
+from paper commit `34eb36f` until then it was the two-row adaptive / uniform round-10 version (git `e4fe9d2a`). The history below is kept for reference. Until then
 the figure was parked (Dhruv, 2026-11-12): the paper held `f9c695a4`, which Sumanth's commit `811e036` made from the
 6.52 x 4.86 in version described below by editing its text. The work in progress, `scripts/plot_uncertainty_signals.py`
 (a 3-column A | B | C figure, nearest-state grid fill of test + calibration states, C = abstentions only), now draws
@@ -388,6 +391,13 @@ stale ("soft objective", "A-1d"), so never copy its output into the paper. No sc
 
 ## Pendulum full-grid predictions (2026-11-12, the data of Figure 5)
 
+Round 2 (2026-11-13, Figure 5's round): `<run>_epoch002_grid.npz` for x231 and m65, built by
+`scripts/build_pendulum_full_grid.py --epoch 2` on a GPU with `PYTHONPATH` at the runs' commit `acae65bf33`. It copies
+the round-10 file's lattice, labels and sources, takes the stored test / cal / val predictions, and fills the other
+27,568 states with one fresh K = 100 pass of the round-2 checkpoint (predict_endpoint + classify_attractor, seed
+99512). Fresh test draws differ from the stored ones by what two independent K = 100 draws give (x231: mean |dp| .019 /
+.027 / .043 against .018 / .026 / .042 expected), and the test cells reproduce the c6c counts exactly.
+
 `data/pendulum_full_grid/<run>_epoch010_grid.npz` holds round-10 TERA-FM predictions for all 49,770 pendulum start
 states (158 x 315 grid, no holes) for seed 99512, adaptive (x231) and uniform (m65). The values are the stored ones
 where the run saved them (test 20,702, cal 1,000, val 500, `source` field) and fresh inference with the run's own
@@ -401,7 +411,7 @@ Fail on F\S, abstain otherwise).
 One style for every figure, defined once in `scripts/common.py` (block "Paper style"): usetex Times bold with bold
 Computer Modern math; ticks and legend 7 pt, labels and titles 8 pt; `FILL` for regions, `LINE` / `LS` / `LW` for
 lines (colour = side, line style = metric kind), `METHOD_MARKER` for methods (shape and fill, never colour),
-`ABSTAIN_KIND`, `INK`, `PARTIAL_TINT`, `SIGNAL_CMAP`, `PRINT_WIDTH`. No restyle path defines a colour of its own.
+`ABSTAIN_KIND`, `INK`, `PARTIAL_TINT`, `SIGNAL_CMAP`, `SIGNAL_RAMP`, `ABSTAIN_ON_WHITE`, `PRINT_WIDTH`. No restyle path defines a colour of its own.
 
 Every paper figure is drawn at its print width (scale 1.000 in the paper, measured by compiling a scratch copy).
 paper_writer installed them in paper commit `34eb36f`; since then the paper-style draw is each script's default
@@ -411,7 +421,7 @@ output, `plots/<stem>.pdf` (see Run). The previews from before the install are i
 | Figure | Command (from `scripts/` unless noted) |
 |---|---|
 | 1 `flagship_slices` | `python composites/make_figure1.py` (from `slices/`; `--restyle` skips the composites) |
-| 5 `pendulum_uncertainty_signals` | `python plot_uncertainty_signals_paper.py` (full 158 x 315 grid, abstention / FP / FN cells as 1 pt squares); `--rare-pt 0` writes the true-size version to `plots/variants/` |
+| 5 `pendulum_uncertainty_signals` | `python plot_uncertainty_signals_paper.py` (TERA, round 2, full 158 x 315 grid, true cell size); `--round 10` writes that round to `plots/variants/` |
 | 6 `adaptive_learning_a1d` | `python plot_learning_curves.py` |
 | S1 `acquisition_strategy_certified` | `python plot_acquisition_strategy_bars.py` |
 | S2 `adaptive_fraction_certified` | `python plot_adaptive_fraction_certified.py` |
@@ -425,8 +435,9 @@ Deliverables, rebuilt from the files above:
 - `python contact_sheet.py`: `plots/style/contact_sheet.pdf` (+ page PNGs), every figure at print size with its
   paper linewidth, scale and md5.
 
-Figure 5 cells are 0.51 x 0.21 pt at print. Anything drawn at true cell size (abstentions, FP, FN) does not show at
-print, which is why the paper version draws those cells as 1 pt squares.
+Figure 5 cells are 0.40 x 0.16 pt at print. At round 10 (0.7% abstention) true-size abstentions did not show, so
+the two-row version drew them as 1 pt squares; at round 2 (2.6% of the grid, in connected bands) they show at true
+size, and nothing is enlarged.
 
 ## Table 2 as a figure: options (2026-11-13, for choosing, nothing installed)
 

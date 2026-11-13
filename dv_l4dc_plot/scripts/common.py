@@ -232,6 +232,13 @@ METHOD_MARKER = {
 }
 # Sequential map for continuous signals (Figure 5 I(x), D(x)): no class hue appears in it.
 SIGNAL_CMAP = "Greys"
+# Figure 5 since 2026-11-13 afternoon (Sumanth: I and D in slightly different colours): one ramp per signal, white to
+# dark, in hues no class or line uses (Figure 1's yellow / purple / green / blue fills, the soft blue and orange lines):
+# I is the ColorBrewer Reds ramp, D the teal half of BrBG. Both run from white, so zero reads as empty. Abstention
+# cells sit on white there, so they take the darkest abstention gray rather than the light FILL abstain.
+SIGNAL_RAMP = dict(I=["#ffffff", "#fee0d2", "#fcbba1", "#fc9272", "#fb6a4a", "#ef3b2c", "#cb181d", "#a50f15", "#67000d"],
+                   D=["#ffffff", "#e0f3f0", "#c7eae5", "#80cdc1", "#35978f", "#01665e", "#003c30"])
+ABSTAIN_ON_WHITE = "#5C5C5C"
 # The few colours one figure needs beyond FILL and LINE, kept here so the scheme lives in one module.
 # Figure 5 abstention kinds as one gray family, darkest = invalid; weak is the common abstain gray.
 ABSTAIN_KIND = dict(invalid="#5C5C5C", weak=FILL["abstain"], outcome_uncertain="#9B9B9B")

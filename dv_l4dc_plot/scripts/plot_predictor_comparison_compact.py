@@ -38,10 +38,11 @@ BAR_ALPHA = .4                                   # bars recede behind the marker
 # Text just under the 9 pt \footnotesize captions (Sumanth, 2026-11-13), at the figure's existing 2.40 x 2.76 in.
 F = dict(tick=8, legend=8.5, label=8.5, title=8.5, annotation=8)
 RC = {'font.size': F['label'], 'axes.titlesize': F['title'], 'axes.labelsize': F['label'],
-      'xtick.labelsize': F['tick'], 'ytick.labelsize': F['tick'], 'legend.fontsize': F['legend']}
+      'xtick.labelsize': F['tick'], 'ytick.labelsize': F['tick'], 'legend.fontsize': F['legend'],
+      'ytick.major.pad': 1.0}
 HEIGHT = 2.76
 LEGEND_ROW = .155                                # in per legend row at 8.5 pt
-LEFT, BOTTOM, COLGAP, ROWGAP, RIGHT = .405, .31, .235, .345, .02    # in
+LEFT, BOTTOM, COLGAP, ROWGAP, RIGHT = .382, .31, .235, .345, .02    # in (y labels pulled in, Sumanth)
 TOP = .035 + 2 * LEGEND_ROW + .135               # two legend rows, then the panel titles
 AX_W, AX_H = (WIDTH - LEFT - COLGAP - RIGHT) / 2, (HEIGHT - BOTTOM - ROWGAP - TOP) / 2   # subplot size (in)
 
@@ -95,7 +96,7 @@ def draw(agg):
             assert ax.get_xlim()[0] <= min(xs) and max(xs) <= ax.get_xlim()[1]
             ax.set_xlabel(xl, labelpad=1)
             if c == 0:
-                ax.set_ylabel(yl, labelpad=1.5)
+                ax.set_ylabel(yl, labelpad=.3)
             # Error axes: labelled ticks at multiples of 5 so the 5% limit line carries its own label (Sumanth),
             # unlabelled minor ticks every 1%.
             ax.xaxis.set_major_locator(MultipleLocator(5)); ax.xaxis.set_minor_locator(MultipleLocator(1))

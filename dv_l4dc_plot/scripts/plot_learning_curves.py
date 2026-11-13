@@ -40,7 +40,7 @@ from matplotlib.lines import Line2D
 from matplotlib.colors import to_rgb
 from matplotlib.legend_handler import HandlerTuple
 from common import ASSETS, SCORED, VALUES, SETTINGS, BLUE, ORANGE, RECALL, ERROR, RC, method_names, save, spread
-from common import REC_S, REC_F, ERR_S, ERR_F, ABST, ARM_FILL, FS, LS
+from common import REC_S, REC_F, ERR_S, ERR_F, ABST, ARM_FILL, FS, LS, TITLES as TITLES_DIM
 from make_tables import macro_name
 from split import draw, assert_markers_inside, assert_bands_inside, REF_SOLID, DASHDOT
 from split import restyle_args, split_figure_restyled
@@ -335,12 +335,20 @@ def annotate(panels, data, rows):
     return []
 
 
-def generate_restyled():
-    """Figure 6 (a1d) in the paper style at PRINT_WIDTH['adaptive_learning_a1d'] into plots/ (the paper figure).
+# The supplement's copy of the learning curves (Sumanth, 2026-11-13): all six settings in two rows at the supplement's
+# full width, as Figure 7 was before its LQR row was removed. No in-panel mark; the 5% label at the right end of the
+# first error panel (Pendulum LQR). At 6.00 in its titles carry the state dimension (common.TITLES, as Figure S2).
+FULL_STEM = 'adaptive_learning_full'
+
+
+def generate_restyled(full=False):
+    """full=False: Figure 7, the RL row (RESTYLE_SETTINGS) at PRINT_WIDTH['adaptive_learning_a1d'] with the MARK_LEVEL
+    mark (annotate). full=True: FULL_STEM, all six settings in two rows at PRINT_WIDTH[FULL_STEM], no mark.
+    Figure 6 (a1d) in the paper style at PRINT_WIDTH['adaptive_learning_a1d'] into plots/ (the paper figure).
     Colour = the metric's side (Success recall and FDR blue, Failure recall and FOR orange); the arms differ by line
     style in both panels (RESTYLE_METHOD_LS: TERA solid, Unif-TERA dash-dot) and by marker (TERA filled circle,
     Unif-TERA open square, common.METHOD_MARKER), and a faded marker (split.partial_kw) means 1-2 seeds contribute.
-    One row: the RL settings (RESTYLE_SETTINGS), on the RL row's y ranges. Draws from compute('a1d') and fails unless its points and
+    Each row keeps compute()'s y ranges for its controller. Draws from compute('a1d') and fails unless its points and
     source hashes equal the stored values/adaptive_learning_a1d_values.json. Writes nothing to values/ or the paper."""
     stem, src, rows, summaries, data, axes_by_row, shared = compute('a1d')
     stored = json.loads((VALUES / f'{stem}_values.json').read_text())
@@ -354,32 +362,36 @@ def generate_restyled():
             return x / 1000, mean, lo, hi, n
         return f
 
+    settings = SETTINGS if full else RESTYLE_SETTINGS
+    assert RESTYLE_SETTINGS == SETTINGS[3:]          # compute()'s RL row, axes_by_row[1]
+    row_axes = [(SETTINGS[:3], axes_by_row[0]), (SETTINGS[3:], axes_by_row[1])] if full else [(RESTYLE_SETTINGS, axes_by_row[1])]
     xticks = {}
-    for s in RESTYLE_SETTINGS:
+    for s in settings:
         x = data[s, 'U_H', 'rec'][0] / 1000
         assert all((data[s, a, 'rec'][0] == data[s, 'U_H', 'rec'][0]).all() for a, *_ in ARMS)
         assert x[0] <= XTICKS[s][0] and XTICKS[s][-1] <= x[-1], (s, XTICKS[s])
         xticks[s] = (XTICKS[s], tick_labels(XTICKS[s]))
     row_base = {}
-    assert RESTYLE_SETTINGS == SETTINGS[3:]          # the drawn row is compute()'s RL row, axes_by_row[1]
-    for row, (settings, axes_row) in enumerate([(RESTYLE_SETTINGS, axes_by_row[1])]):
-        pts = [p for p in summaries if p['setting'] in settings and p['n'] and p['metric'] in ('rec', 'fail_rec', 'abstain')]
+    for row, (row_settings, axes_row) in enumerate(row_axes):
+        pts = [p for p in summaries if p['setting'] in row_settings and p['n'] and p['metric'] in ('rec', 'fail_rec', 'abstain')]
         lo = min(min(p['mean'], p['min'] if p['n'] > 1 else p['mean']) for p in pts)
         hi = max(max(p['mean'], p['max'] if p['n'] > 1 else p['mean']) for p in pts)
         rec_ticks, err_ticks = axes_row['rec'][1], axes_row['err'][1]
         row_base[row] = dict(rec=(min(rec_ticks[0], lo), max(rec_ticks[-1], hi), rec_ticks),
                              err=(0, axes_row['err'][0][1], err_ticks))
     out = split_figure_restyled(
-        stem, arms=[(series(arm), ARM_LABEL[arm]) for arm, *_ in ARMS], xticks=xticks,
-        xlabel='Training trajectories', titles=[TITLE[s] for s in RESTYLE_SETTINGS], row_base=row_base,
+        FULL_STEM if full else stem, arms=[(series(arm), ARM_LABEL[arm]) for arm, *_ in ARMS], xticks=xticks,
+        xlabel='Training trajectories', row_base=row_base,
+        titles=[TITLES_DIM[SETTINGS.index(s)] if full else TITLE[s] for s in settings],
         metric_labels=[REC_S, REC_F, ERR_S, ERR_F],
         legend_methods=[ARM_LABEL[a] for a, *_ in ARMS[::-1]], ylabels=('Rate (%)', 'Error (%)'),
         rec_aspect=RESTYLE_ASPECT, err_ratio=RESTYLE_ERR_RATIO, band_alpha=0, ref_label='5% limit',
         rec_fill=dict(metric='abstain', label=ABST, alpha=.30,
                       colors={ARM_LABEL['U_H']: ARM_FILL['adaptive'], ARM_LABEL['uniform']: ARM_FILL['uniform']}),
-        decorate=lambda panels: annotate(panels, data, rows), legend_columnspacing=RESTYLE_LEGEND_GAP,
+        decorate=None if full else (lambda panels: annotate(panels, data, rows)),
+        legend_columnspacing=None if full else RESTYLE_LEGEND_GAP,
         method_ls=RESTYLE_METHOD_LS, markers=RESTYLE_MARKERS, legend_lw=RESTYLE_LEGEND_LW, methods_first=True,
-        settings=RESTYLE_SETTINGS, ref_label_side='left')   # Cartpole RL's markers reach the right end under 5%
+        settings=settings, ref_label_side='right' if full else 'left')   # Figure 7: Cartpole RL's markers reach the right end under 5%
     g = out['geometry']
     print(f"  panels {g['panel_w']:.3f} in wide, recall {g['rec_h']:.3f} in, error {g['err_h']:.3f} in; "
           f"legend {out['legend_ncol']} columns; layout settled in {g['iterations']} passes")
@@ -396,5 +408,7 @@ if __name__ == '__main__':
         for protocol in ['empirical', 'a1d']:
             generate(protocol, False)       # values/ and the old-style draws; a1d's goes to plots/legacy/
     generate_restyled()
+    generate_restyled(full=True)
     if args.paper:
         install_paper('adaptive_learning_a1d')
+        install_paper(FULL_STEM)

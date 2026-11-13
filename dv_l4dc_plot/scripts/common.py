@@ -153,7 +153,8 @@ def page_size(pdf):
 # that render, byte for byte the paper's file. The old-style draw of the same stem still runs where it writes values/,
 # but save() sends it to plots/legacy/ and never copies it to the paper; --paper goes through install_paper().
 PROMOTED = {'flagship_slices', 'pendulum_uncertainty_signals', 'adaptive_learning_a1d',
-            'acquisition_strategy_certified', 'adaptive_fraction_certified', 'predictor_comparison_uniform'}
+            'acquisition_strategy_certified', 'adaptive_fraction_certified', 'predictor_comparison_uniform',
+            'adaptive_learning_full'}
 LEGACY = PLOTS / 'legacy'
 
 
@@ -223,6 +224,7 @@ STYLE_RC = {"text.usetex": True, "text.latex.preamble": TEX_PREAMBLE,
 
 # Print widths (in): render at the width the figure is printed at, so the scale on the page is 1.00.
 PRINT_WIDTH = {"flagship_slices": 3.30, "pendulum_uncertainty_signals": 3.00, "adaptive_learning_a1d": 4.20,
+               "adaptive_learning_full": 6.00,
                "acquisition_strategy_certified": 6.00, "adaptive_fraction_certified": 6.00,
                "predictor_comparison_uniform": 6.00}
 

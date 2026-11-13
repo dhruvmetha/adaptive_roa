@@ -4,7 +4,7 @@
     "/common/users/shared/pracsys/adaptive_roa_experiments/det_v3_seeds/_index/scored/matrix_rows.jsonl": "4a75be7c965c43bb4e94148536a5c6cf29cd27fdd083ee8ae9658e25a528da60",
     "/common/home/dm1487/robotics_research/tripods/deterministic-verification/results-discussion-assets/generalized_6c_values.json": "d63d99d42d9ec8f6196321c6b0c60bd339c96a01abb51c1f18e36ddf002f88a7",
     "/common/home/dm1487/robotics_research/tripods/dv_l4dc_plot/values/table_matrix_certified_values.json": "8cae3150353e6ced6c2c36146c44944fab659a61072c11db17a20e0379221712",
-    "/common/home/dm1487/robotics_research/tripods/dv_l4dc_plot/tables/matrix_certified_body.tex": "4058ece1823855a328d0f16c98fdde7525d3eb427740949357688ca5f8cdac01"
+    "/common/home/dm1487/robotics_research/tripods/dv_l4dc_plot/tables/matrix_certified_body.tex": "43f9939bec15acf0b8b0a2c1df7791e3f5e6dd8b7f78f4daa79833fa91c72fde"
   },
   "verified_original_cells": 12,
   "cells": [

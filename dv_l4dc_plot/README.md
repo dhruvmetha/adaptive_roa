@@ -128,6 +128,14 @@ contribute. Scripts in `archive/` still draw SD; they are retired and never writ
 
 ## Metric labels
 
+**Since 2026-11-13 (Sumanth, paper commit `84c58cb`)** the method section's notation is recall `Rec_l` and prediction
+error `Err_l` for outcome l, and results report their empirical test rates with hats. `common.REC_S`, `REC_F`,
+`ERR_S` and `ERR_F` hold the four symbols; the table headers (`make_tables.METRICS`), `split.LEGEND_FOUR`, the
+Figure S1 legend, the Figure 6 legend and the Figure S3 axis labels all take them from there. They replace R_s, R_f,
+FDR and FOR. Data keys (`rec`, `fail_rec`, `fdr`, `for`) are unchanged. The preview-only scripts (`banded.py`,
+`plot_adaptive_fraction_lines.py`, `plot_uncertified_options_*.py`) still print the old symbols. The paragraph below
+is the rule as first written.
+
 Dhruv's standing rule (2026-11-12): every figure and table label uses the metric notation of the paper's
 `sections/04_proposed_method.tex`, nothing invented. Today that is R_s, R_f, FDR and FOR
 (`$R_{\mathrm{s}}$`, `$R_{\mathrm{f}}$`, `FDR`, `FOR`, lines 145-146 of that file), which all scripts here use.

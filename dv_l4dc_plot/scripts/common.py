@@ -68,8 +68,14 @@ TITLES = ['Pendulum (2D), LQR', 'Cartpole (4D), LQR', 'Spatial Quad (12D), LQR',
           'Cartpole (4D), RL', 'Planar Quad (6D), RL', 'Spatial Quad (12D), RL']
 BLUE, ORANGE, GRAY = '#0072B2', '#D55E00', '#777777'
 REF = '#666666'                                          # 5% reference line
-RECALL = [('rec', BLUE), ('fail_rec', ORANGE)]           # R_s, R_f
-ERROR = [('fdr', BLUE), ('for', ORANGE)]                 # FDR pairs with R_s, FOR with R_f
+RECALL = [('rec', BLUE), ('fail_rec', ORANGE)]           # success recall, failure recall
+ERROR = [('fdr', BLUE), ('for', ORANGE)]                 # success error pairs with success recall, failure with failure
+# Metric notation of the paper's method section (04_proposed_method.tex; Sumanth, 2026-11-13): results report the
+# empirical recall and prediction error of outcome l on the test states, \widehat{Rec}_l and \widehat{Err}_l. They
+# replace R_s, R_f, FDR and FOR. Every figure and table label takes its symbols from here; the data keys stay
+# rec, fail_rec, fdr and for.
+REC_S, REC_F = r'$\widehat{\mathrm{Rec}}_{\mathrm{s}}$', r'$\widehat{\mathrm{Rec}}_{\mathrm{f}}$'
+ERR_S, ERR_F = r'$\widehat{\mathrm{Err}}_{\mathrm{s}}$', r'$\widehat{\mathrm{Err}}_{\mathrm{f}}$'
 RC = {'font.family': 'DejaVu Sans', 'font.size': 8, 'axes.titlesize': 8, 'axes.labelsize': 7.5,
       'legend.fontsize': 7.5, 'xtick.labelsize': 7, 'ytick.labelsize': 7, 'axes.linewidth': .65,
       'pdf.fonttype': 42, 'ps.fonttype': 42, 'axes.spines.top': False, 'axes.spines.right': False}

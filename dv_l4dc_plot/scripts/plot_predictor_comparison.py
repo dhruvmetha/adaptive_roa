@@ -35,7 +35,7 @@ from matplotlib.path import Path
 from matplotlib.text import Text
 from matplotlib.ticker import MaxNLocator
 from matplotlib.transforms import Bbox
-from common import VALUES, SETTINGS, TITLES, REF, RC, ASSETS, save, install_paper
+from common import VALUES, SETTINGS, TITLES, REF, RC, ASSETS, save, install_paper, REC_S, REC_F, ERR_S, ERR_F
 from common import (HERE, PLOTS, FS, LINE, LS, LW, METHOD_MARKER, PRINT_WIDTH, marker_kw, page_size, paper_legend_kw,
                     style_rc)
 import certified
@@ -126,8 +126,8 @@ def draw(agg, paper):
         ranges = {}
         for si, (s, title) in enumerate(zip(SETTINGS, TITLES)):
             inner = outer[si // 3, si % 3].subgridspec(2, 1, hspace=.42)
-            for row, (xm, ym, xl, yl) in enumerate([('fdr', 'rec', 'FDR (%)', r'$R_{\mathrm{s}}$ (%)'),
-                                                    ('for', 'fail_rec', 'FOR (%)', r'$R_{\mathrm{f}}$ (%)')]):
+            for row, (xm, ym, xl, yl) in enumerate([('fdr', 'rec', ERR_S + ' (%)', REC_S + ' (%)'),
+                                                    ('for', 'fail_rec', ERR_F + ' (%)', REC_F + ' (%)')]):
                 ax = fig.add_subplot(inner[row])
                 ax.grid(alpha=.2, lw=.45); ax.set_axisbelow(True)
                 ax.axvline(5, zorder=0, **REF_SOLID)
@@ -172,8 +172,8 @@ R_BAR, R_LINK = .5, .5                # min-max bar and val-to-certified connect
 R_HALO = .5                           # white ring around every marker and numeral (pt): same-colour filled
                                       # markers that overlap stay separable
 R_NUM_GAP = .7                        # marker edge to seed-count numeral (pt)
-R_SIDES = [('fdr', 'rec', r'FDR (\%)', r'$R_{\mathrm{s}}$ (\%)', LINE['success']),
-           ('for', 'fail_rec', r'FOR (\%)', r'$R_{\mathrm{f}}$ (\%)', LINE['fail'])]
+R_SIDES = [('fdr', 'rec', ERR_S + r' (\%)', REC_S + r' (\%)', LINE['success']),
+           ('for', 'fail_rec', ERR_F + r' (\%)', REC_F + r' (\%)', LINE['fail'])]
 R_AX_H = .92                          # subplot height (in); the width follows from the page width
 R_GAP = dict(col=.13, inner=.07, note=.035, row=.09, legend=.05, legends=.03)   # in
 R_INK = (.0115, .0185)                # inked outer margin the layout converges to (in); the hard check is 0.01-0.02

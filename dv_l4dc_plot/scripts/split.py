@@ -8,12 +8,12 @@ would leave its panel or the 5% line would fall off an error axis.
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
-from common import SETTINGS, TITLES, BLUE, ORANGE, REF, RECALL, ERROR, save
+from common import SETTINGS, TITLES, BLUE, ORANGE, REF, RECALL, ERROR, save, REC_S, REC_F, ERR_S, ERR_F
 
-# Paper Fig 4 legend: one entry per line, in the method section's terms (04_proposed_method.tex
-# defines R_s, R_f, and FDR/FOR as "the error rates of Success and Fail declarations").
-LEGEND_FOUR = [r'$R_{\mathrm{s}}$ (Success recall)', r'$R_{\mathrm{f}}$ (Fail recall)',
-               'FDR (error of Success declarations)', 'FOR (error of Fail declarations)']
+# Paper Fig S2 legend: one entry per line, in the method section's terms (04_proposed_method.tex
+# defines recall Rec_l and prediction error Err_l of outcome l; common.REC_S ... are their empirical test rates).
+LEGEND_FOUR = [REC_S + ' (Success recall)', REC_F + ' (Failure recall)',
+               ERR_S + ' (Success prediction error)', ERR_F + ' (Failure prediction error)']
 # Error-line style of the paper's line figures (Dhruv, 2026-11-12): dash-dot, tightened from matplotlib's
 # default '-.' (6.4, 1.6, 1, 1.6) so every segment between Fig 2's 11 checkpoints shows a full dash-dot.
 DASHDOT = (0, (3.2, 1.3, 0.9, 1.3))

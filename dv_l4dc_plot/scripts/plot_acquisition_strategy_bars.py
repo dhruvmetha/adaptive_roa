@@ -25,6 +25,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from matplotlib.patheffects import withStroke
+from common import REC_S, REC_F, ERR_S, ERR_F
 from common import (VALUES, SETTINGS, TITLES, BLUE, ORANGE, RECALL, ERROR, RC, SOFT_FOUR,
                     load_final, cell, save, PRINT_WIDTH, FS, LINE, LS, LW, style_rc, INK, install_paper)
 import certified
@@ -34,8 +35,8 @@ from split import (assert_bands_inside, REF_SOLID, SIDE, restyle_args, tex, top_
 COMBOS = [('U_H', .75), ('q_A', .75), ('U_tau', .75)]
 XTICKS = [r'$U_H$', r'$q_A$', r'$U_\tau$']
 # Legend in the method section's terms (04_proposed_method.tex), one entry per bar color.
-LEGEND_PAIRS = [(BLUE, r'$R_{\mathrm{s}}$ (Success recall) / FDR (error of Success declarations)'),
-                (ORANGE, r'$R_{\mathrm{f}}$ (Fail recall) / FOR (error of Fail declarations)')]
+LEGEND_PAIRS = [(BLUE, REC_S + ' (Success recall) / ' + ERR_S + ' (Success prediction error)'),
+                (ORANGE, REC_F + ' (Failure recall) / ' + ERR_F + ' (Failure prediction error)')]
 
 
 def bar_figure(values, stem, paper_stem, paper):

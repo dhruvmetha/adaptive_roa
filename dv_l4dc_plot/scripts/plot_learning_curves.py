@@ -40,6 +40,7 @@ from matplotlib.lines import Line2D
 from matplotlib.colors import to_rgb
 from matplotlib.legend_handler import HandlerTuple
 from common import ASSETS, SCORED, VALUES, SETTINGS, BLUE, ORANGE, RECALL, ERROR, RC, method_names, save, spread
+from common import REC_S, REC_F, ERR_S, ERR_F
 from make_tables import macro_name
 from split import draw, assert_markers_inside, assert_bands_inside, REF_SOLID, DASHDOT
 from split import restyle_args, split_figure_restyled
@@ -256,7 +257,7 @@ def generate(protocol, paper):
         # A scheme is its marker in both of its shades, side by side, as the curves draw it.
         handles += [tuple(Line2D([], [], color=tint(c, f), ls='none', marker=m, ms=ms, mew=MEW) for c in (BLUE, ORANGE))
                     for _, m, f, ms in ARMS[::-1]]
-        labels = ['Success recall', 'Failure recall', 'FDR', 'FOR'] + [ARM_LABEL[a] for a, *_ in ARMS[::-1]]
+        labels = [REC_S, REC_F, ERR_S, ERR_F] + [ARM_LABEL[a] for a, *_ in ARMS[::-1]]
         fig.legend(handles, labels, handler_map={tuple: HandlerTuple(ndivide=None, pad=.6)}, loc='upper center',
                    bbox_to_anchor=(x_mid, 1), ncol=6, frameon=False, borderpad=0, borderaxespad=0,
                    handlelength=2.2, handletextpad=.5, columnspacing=1.3)
@@ -314,7 +315,7 @@ def generate_restyled():
     out = split_figure_restyled(
         stem, arms=[(series(arm), ARM_LABEL[arm]) for arm, *_ in ARMS], xticks=xticks,
         xlabel='Training trajectories', titles=[TITLE[s] for s in SETTINGS], row_base=row_base,
-        metric_labels=['Success recall', 'Failure recall', 'FDR', 'FOR'],
+        metric_labels=[REC_S, REC_F, ERR_S, ERR_F],
         legend_methods=[ARM_LABEL[a] for a, *_ in ARMS[::-1]], ylabels=('Recall (%)', 'Error (%)'),
         rec_aspect=RESTYLE_ASPECT, err_ratio=RESTYLE_ERR_RATIO, band_alpha=BAND_ALPHA, ref_label='5% target')
     g = out['geometry']

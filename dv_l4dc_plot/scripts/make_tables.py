@@ -22,7 +22,7 @@ below three, and -- means all three were empty.
 """
 import hashlib, json, re, shutil
 import statistics as st
-from common import ASSETS, PAPER_TABLES, HERE, VALUES, parse_args, spread
+from common import ASSETS, PAPER_TABLES, HERE, VALUES, parse_args, spread, REC_S, REC_F, ERR_S, ERR_F
 from table_previews import previews
 
 TABLES = HERE / 'tables'
@@ -32,8 +32,8 @@ TITLES = ['Pendulum (2D), LQR', 'Cartpole (4D), LQR', 'Cartpole (4D), RL', 'Plan
 HEADS = ['Pendulum (2D)', 'Cartpole (4D)', 'Cartpole (4D)', 'Planar Quad (6D)', 'Spatial Quad (12D)', 'Spatial Quad (12D)']
 PANELS = [('LQR controllers', [0, 1, 4]), ('RL controllers', [2, 3, 5])]
 # Column headers in the method section's notation (04_proposed_method.tex).
-METRICS = [('rec', r'$R_{\mathrm{s}}\uparrow$'), ('fdr', r'FDR$\downarrow$'),
-           ('fail_rec', r'$R_{\mathrm{f}}\uparrow$'), ('for', r'FOR$\downarrow$'), ('abstain', r'Abst.$\downarrow$')]
+METRICS = [('rec', REC_S[:-1] + r'\uparrow$'), ('fdr', ERR_S[:-1] + r'\downarrow$'),
+           ('fail_rec', REC_F[:-1] + r'\uparrow$'), ('for', ERR_F[:-1] + r'\downarrow$'), ('abstain', r'Abst.$\downarrow$')]
 # Row labels use the complete shared manuscript macros in method-names.tex.
 SUCCESS_ONLY = r'\name{}, Success only'   # the adaptive FM runs ('method' role)
 # Rows available to the tables: (label, matrix_role, model).

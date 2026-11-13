@@ -214,8 +214,9 @@ EXPECT_TEST = {'adaptive': (7784, 12762, 156), 'uniform': (7896, 12557, 249)}   
 R_ROWS = [('adaptive', 'TERA'), ('uniform', 'Unif-TERA')]
 R_TITLES = [r'A. invalid mass $I(x)=\hat{p}_{\mathrm{inv}}(x)$', r'B. weighted disagreement $D(x)$',
             'C. certified decisions']
-R_TITLES_WRAPPED = [r'A. invalid mass' + '\n' + r'$I(x)=\hat{p}_{\mathrm{inv}}(x)$',
-                    'B. weighted disagreement\n$D(x)$', 'C. certified decisions']
+# Two-line titles for a narrow print (3 in since 2026-11-13): every line stays near one panel's width.
+R_TITLES_WRAPPED = [r'A. invalid mass' + '\n' + r'$I(x)$', 'B. weighted\n' + r'disagreement $D(x)$',
+                    'C. certified\ndecisions']
 # Abstention kinds as a gray family (dm1487): weak is the common abstain gray. Overlap / other have no approved colour,
 # so the restyle refuses to draw if a row has any (neither row does on the full grid).
 ABSTAIN_GRAY = dict(inv=ABSTAIN_KIND['invalid'], weak=ABSTAIN_KIND['weak'], ou=ABSTAIN_KIND['outcome_uncertain'])
@@ -229,6 +230,7 @@ R_CATS = [('success', 'TP', FILL['success']), ('fail', 'TN', FILL['fail']),     
 # Both contours wear a white casing (CASING_PT each side, dashed with the line), so they read on the Fail purple and
 # on the dark parts of the signal maps; on white and yellow the casing barely shows.
 CASING_PT = .3
+SHOW_THRESHOLDS = False                                         # the tau values above each decision map
 # --rare-pt X (preview only): draw every abstention, FP and FN cell in C as an X pt square over the true boundary, so
 # the classes that hug the boundary show at print (a cell is 0.51 x 0.21 pt). 0 = true size, the default output.
 PAPER_RARE_PT = 1.0                                             # the paper's version (34eb36f)
@@ -424,8 +426,10 @@ def restyle_figure(G):
         titles = [[fig.text(0, 0, t, ha='center', va='baseline', fontsize=FS['title'])] for t in R_TITLES]
         # Thresholds above each C panel, right-aligned, on two lines (t_s, t_f, then u_s, u_f): one line at 7 pt is
         # wider than the panel and ran into column B ("D(x)  t_s=...").
+        # Not drawn since 2026-11-13 (Sumanth: the tau values are not needed in the figure); the .txt report still
+        # lists each run's thresholds. Set SHOW_THRESHOLDS to draw them again.
         thr = []
-        for arm, _ in R_ROWS:
+        for arm, _ in R_ROWS if SHOW_THRESHOLDS else []:
             t = G[arm]['info']['thresholds']
             thr.append([fig.text(0, 0, s_, ha='right', va='baseline', fontsize=FS['annotation'])
                         for s_ in (rf"$\tau^{{\mathrm{{s}}}}_{{\mathrm{{s}}}}$={t['t_s']}, $\tau^{{\mathrm{{s}}}}_{{\mathrm{{f}}}}$={t['t_f']}",
@@ -436,23 +440,39 @@ def restyle_figure(G):
         cb.set_label(r'$I(x)$ and $D(x)$ (common scale)', fontsize=FS['label'], labelpad=1)
         cax.tick_params(labelsize=FS['tick'])
         patch = {key: Patch(facecolor=col, edgecolor='none', label=lab) for key, lab, col in R_CATS}
-        # Two legend rows (Sumanth, 2026-11-13: the four-row, three-column legend took too much height). Row A holds
-        # the decisions and the two contours, row B the abstention kinds. Each row is its own centred legend, so
-        # neither sets the other's column widths.
-        row_a = [patch['success'], patch['fail'], patch['fp'], patch['fn'],
-                 Line2D([], [], color=FILL['boundary'], lw=STYLE_LW['boundary'], label='success/failure boundary'),
-                 Line2D([], [], color=FILL['boundary'], lw=SPARSE_LW, ls='--', label='sparse/dense boundary (0.02)')]
-        row_b = [patch['inv'], patch['weak'], patch['ou']]
-        ncol = len(row_a)
-        legend = fig.legend(handles=row_a, ncol=len(row_a), **paper_legend_kw(FS['legend']))
-        legend_b = fig.legend(handles=row_b, ncol=len(row_b), **paper_legend_kw(FS['legend']))
+        # Legend rows (Sumanth, 2026-11-13: the four-row, three-column legend took too much height). Each row is its
+        # own centred legend, so no row sets another's column widths. The first layout whose rows all fit the print
+        # width is used: two rows at 4.2 in, three at 3 in.
+        text_only = lambda s_: Line2D([], [], ls='none', label=s_)
+        short = lambda key, lab: Patch(facecolor=patch[key].get_facecolor(), edgecolor='none', label=lab)
+        sf = lambda: Line2D([], [], color=FILL['boundary'], lw=STYLE_LW['boundary'], label='success/failure boundary')
+        sd = lambda lab: Line2D([], [], color=FILL['boundary'], lw=SPARSE_LW, ls='--', label=lab)
+        dec = [patch['success'], patch['fail'], patch['fp'], patch['fn']]
+        kinds = lambda: [text_only('Abstention:'), short('inv', 'invalid'), short('weak', 'weak'),
+                         short('ou', 'outcome-uncertain')]
+        layouts = [[dec + [sf(), sd('sparse/dense boundary (0.02)')], [patch['inv'], patch['weak'], patch['ou']]],
+                   [dec + [sf(), sd('sparse/dense boundary')], kinds()],
+                   [dec + [sf()], kinds(), [sd('sparse/dense boundary (0.02)')]],
+                   [dec, [sf(), sd('sparse/dense boundary (0.02)')], kinds()]]
+        for rows_ in layouts:
+            legends = [fig.legend(handles=h_, ncol=len(h_), **paper_legend_kw(FS['legend'])) for h_ in rows_]
+            fig.canvas.draw()
+            rr_ = fig.canvas.get_renderer()
+            if max(lg.get_window_extent(rr_).width for lg in legends) / fig.dpi <= W - 2 * MARGIN:
+                break
+            for lg in legends:
+                lg.remove()
+        else:
+            need(False, 'no legend layout fits the print width')
+        legend = legends[0]
+        ncol = [len(h_) for h_ in rows_]
         LEG_ROW_GAP = 2.0 * PT
 
         # Pass 1: measure.
         fig.canvas.draw()
         rr = fig.canvas.get_renderer()
         inch = lambda bb: (bb.width / fig.dpi, bb.height / fig.dpi)
-        need(max(inch(lg.get_window_extent(rr))[0] for lg in (legend, legend_b)) <= W - 2 * MARGIN,
+        need(max(inch(lg.get_window_extent(rr))[0] for lg in legends) <= W - 2 * MARGIN,
              'a legend row is wider than the page')
         pos = lambda ax: ax.get_position()
         tb = lambda ax: ax.get_tightbbox(rr)
@@ -469,9 +489,9 @@ def restyle_figure(G):
                                   for r in range(2)))
         rn_w = max(inch(t.get_window_extent(rr))[0] for t in rown)
         rn_len = [inch(t.get_window_extent(rr))[1] for t in rown]
-        thr_w = max(inch(t.get_window_extent(rr))[0] for lines in thr for t in lines)
-        leg_a_h = inch(legend.get_window_extent(rr))[1]
-        leg_h = leg_a_h + LEG_ROW_GAP + inch(legend_b.get_window_extent(rr))[1]
+        thr_w = max((inch(t.get_window_extent(rr))[0] for lines in thr for t in lines), default=0.0)
+        leg_hs = [inch(lg.get_window_extent(rr))[1] for lg in legends]
+        leg_h = sum(leg_hs) + LEG_ROW_GAP * (len(legends) - 1)
         cb_below = pos(cax).y0 * H0 - tb(cax).y0 / fig.dpi
 
         x_a = MARGIN + rn_w + PAD_PT * PT + left_dec
@@ -495,18 +515,22 @@ def restyle_figure(G):
 
         SKIP, SKIP_A = 1.2 * FS['title'] * PT, 1.2 * FS['annotation'] * PT
         asc0 = max(asc_desc(t[0])[0] for t in titles)
-        thr_asc = max(asc_desc(lines[0])[0] for lines in thr)
-        thr_desc = max(asc_desc(lines[-1])[1] for lines in thr)
+        thr_asc = max((asc_desc(lines[0])[0] for lines in thr), default=0.0)
+        thr_desc = max((asc_desc(lines[-1])[1] for lines in thr), default=0.0)
         # The tau symbols carry a superscript and a subscript, so two threshold lines need more than the plain 1.2 x
         # font-size skip: at least the first line's descent plus the second line's ascent, and half a point between.
         skip_thr = max([SKIP_A] + [asc_desc(lines[0])[1] + asc_desc(lines[1])[0] + .5 * PT for lines in thr])
-        thr_h = thr_asc + skip_thr + thr_desc
+        thr_h = thr_asc + skip_thr + thr_desc if thr else 0.0
         # header: from the top of the first title line down to the top of row 1's panels
         title_depth = [asc0 + (len(t) - 1) * SKIP + asc_desc(t[-1])[1] for t in titles]
         thr_pad = [max(PAD_PT * PT, above[r][2] + .5 * PT) for r in range(2)]
-        header = max([title_depth[c] + SEP_PT * PT + above[0][c] for c in range(2)] +
-                     [title_depth[2] + SEP_PT * PT + thr_h + thr_pad[0]])
-        row_gap = max(below_top + SEP_PT * PT + thr_h + thr_pad[1], below_top + SEP_PT * PT + above[1][0])
+        if thr:
+            header = max([title_depth[c] + SEP_PT * PT + above[0][c] for c in range(2)] +
+                         [title_depth[2] + SEP_PT * PT + thr_h + thr_pad[0]])
+            row_gap = max(below_top + SEP_PT * PT + thr_h + thr_pad[1], below_top + SEP_PT * PT + above[1][0])
+        else:                                                   # column C is laid out like A and B
+            header = max(title_depth[c] + SEP_PT * PT + above[0][c] for c in range(3))
+            row_gap = below_top + SEP_PT * PT + max(above[1][c] for c in range(3))
         H = (MARGIN + leg_h + LEG_GAP_PT * PT + header + 2 * ph + row_gap + below + CB_GAP_PT * PT + CB_H + cb_below
              + MARGIN)
         fig.set_size_inches(W, H)
@@ -518,7 +542,7 @@ def restyle_figure(G):
         for r in range(2):
             for c in range(3):
                 axs[r][c].set_position([xs[c] / W, (tops[r] - ph) / H, pw / W, ph / H])
-            for k_, t in enumerate(thr[r]):                    # last line's descent sits thr_pad above the panel
+            for k_, t in enumerate(thr[r] if thr else []):     # last line's descent sits thr_pad above the panel
                 t.set_position(((xs[2] + pw) / W, (tops[r] + thr_pad[r] + thr_desc + (1 - k_) * skip_thr) / H))
             rown[r].set_position((MARGIN / W, (tops[r] - ph / 2) / H))
         for c, lines in enumerate(titles):
@@ -528,8 +552,9 @@ def restyle_figure(G):
                 t.set_position((xc / W, (y_head - asc0 - k_ * SKIP) / H))
         cb_top = tops[1] - ph - below - CB_GAP_PT * PT
         cax.set_position([xs[0] / W, (cb_top - CB_H) / H, (xs[1] + pw - xs[0]) / W, CB_H / H])
-        legend.set_bbox_to_anchor((0.5, (H - MARGIN) / H), transform=fig.transFigure)
-        legend_b.set_bbox_to_anchor((0.5, (H - MARGIN - leg_a_h - LEG_ROW_GAP) / H), transform=fig.transFigure)
+        for k_, lg in enumerate(legends):                          # stacked from the top, each centred
+            lg.set_bbox_to_anchor((0.5, (H - MARGIN - sum(leg_hs[:k_]) - k_ * LEG_ROW_GAP) / H),
+                                  transform=fig.transFigure)
 
         # Checks.
         fig.canvas.draw()
@@ -542,7 +567,7 @@ def restyle_figure(G):
                     if t.get_text() and t.get_visible() and lo - 1e-9 <= v <= hi + 1e-9]
 
         free = [(t.get_text(), t.get_window_extent(rr)) for t in fig.texts] + \
-            [('legend', legend.get_window_extent(rr)), ('legend row B', legend_b.get_window_extent(rr))]
+            [(f'legend row {k_}', lg.get_window_extent(rr)) for k_, lg in enumerate(legends)]
         owned = []
         for ax in maps + [cax]:
             owned += [(t.get_text(), t.get_window_extent(rr)) for t in drawn(ax.xaxis, ax.get_xlim()) +
@@ -601,7 +626,7 @@ def restyle_figure(G):
         edges = dict(left=min(b.x0 for b in ink) / fig.dpi, right=W - max(b.x1 for b in ink) / fig.dpi,
                      bottom=min(b.y0 for b in ink) / fig.dpi, top=H - max(b.y1 for b in ink) / fig.dpi)
         need(all(-0.005 <= v <= 0.03 for v in edges.values()), ('outer whitespace', edges))
-        for lg in (legend, legend_b):
+        for lg in legends:
             lb = lg.get_window_extent(rr)
             need(abs((lb.x0 + lb.x1) / 2 / fig.dpi - W / 2) < 0.005, 'legend not centred')
     layout = dict(width=W, height=H, panel_w=pw, panel_h=ph, col_gap=gap, row_gap=row_gap, legend_ncol=ncol,

@@ -204,7 +204,7 @@ STYLE_RC = {"text.usetex": True, "text.latex.preamble": TEX_PREAMBLE,
             "savefig.dpi": 300}
 
 # Print widths (in): render at the width the figure is printed at, so the scale on the page is 1.00.
-PRINT_WIDTH = {"flagship_slices": 3.30, "pendulum_uncertainty_signals": 4.20, "adaptive_learning_a1d": 4.20,
+PRINT_WIDTH = {"flagship_slices": 3.30, "pendulum_uncertainty_signals": 3.00, "adaptive_learning_a1d": 4.20,
                "acquisition_strategy_certified": 6.00, "adaptive_fraction_certified": 6.00,
                "predictor_comparison_uniform": 6.00}
 

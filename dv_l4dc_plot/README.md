@@ -86,8 +86,10 @@ build, commit and Overleaf push described in its `AGENTS.md`.
 - Figure 5 prints each run's thresholds as tau^s_s, tau^s_f (stored `t_s`, `t_f`) and tau^f_s, tau^f_f (stored `u_s`,
   `u_f`), with a line skip sized to the symbols, and names its rows TERA and Unif-TERA.
 - The paper writes the number of samples per query as M; K means one thousand only.
-- Figure 5's legend is two rows, each its own centred legend (paper commit `1daddc1`): TP, TN, FP, FN and the two
-  contours, then the three abstention kinds. It was four rows in three columns; the figure is 0.30 in shorter.
+- Figure 5 prints at 3.00 in (`PRINT_WIDTH`), half the text width, as a wrapped figure (paper commit after
+  `1daddc1`). Its legend is a stack of centred one-row legends; the script takes the first layout whose rows fit the
+  print width (two rows at 4.2 in, three at 3 in). Titles wrap to two lines. The tau values above the decision
+  maps are off (`SHOW_THRESHOLDS = False`); the `.txt` report still lists them.
 
 **Labels (Sumanth, 2026-11-13, paper commit `2125ad9`).** The three learned-policy settings are named RL, not PPO, and
 the spatial quadrotor is 12D, not 13D (the state space is R^3 x SO(3) x R^6, stored as 13 coordinates with a unit

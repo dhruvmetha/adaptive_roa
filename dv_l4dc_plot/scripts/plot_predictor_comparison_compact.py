@@ -20,7 +20,7 @@ import argparse, json, shutil
 import matplotlib.pyplot as plt
 from matplotlib import patheffects
 from matplotlib.lines import Line2D
-from matplotlib.ticker import MaxNLocator
+from matplotlib.ticker import MaxNLocator, MultipleLocator
 from common import (VALUES, PLOTS, PAPER_FIGS, FS, LINE, LS, LW, REC_S, REC_F, ERR_S, ERR_F, marker_kw, page_size,
                     paper_legend_kw, style_rc)
 from predictor_comparison_data import build
@@ -42,7 +42,7 @@ RC = {'font.size': F['label'], 'axes.titlesize': F['title'], 'axes.labelsize': F
 HEIGHT = 2.76
 LEGEND_ROW = .155                                # in per legend row at 8.5 pt
 LEFT, BOTTOM, COLGAP, ROWGAP, RIGHT = .405, .31, .235, .345, .02    # in
-TOP = .035 + 3 * LEGEND_ROW + .135               # three legend rows, then the panel titles
+TOP = .035 + 2 * LEGEND_ROW + .135               # two legend rows, then the panel titles
 AX_W, AX_H = (WIDTH - LEFT - COLGAP - RIGHT) / 2, (HEIGHT - BOTTOM - ROWGAP - TOP) / 2   # subplot size (in)
 
 
@@ -96,8 +96,11 @@ def draw(agg):
             ax.set_xlabel(xl, labelpad=1)
             if c == 0:
                 ax.set_ylabel(yl, labelpad=1.5)
-            for axis in (ax.xaxis, ax.yaxis):
-                axis.set_major_locator(MaxNLocator(nbins=4, steps=[1, 2, 2.5, 5, 10], min_n_ticks=3))
+            # Error axes: labelled ticks at multiples of 5 so the 5% limit line carries its own label (Sumanth),
+            # unlabelled minor ticks every 1%.
+            ax.xaxis.set_major_locator(MultipleLocator(5)); ax.xaxis.set_minor_locator(MultipleLocator(1))
+            ax.tick_params(axis='x', which='minor', length=1.5, width=.5)
+            ax.yaxis.set_major_locator(MaxNLocator(nbins=4, steps=[1, 2, 2.5, 5, 10], min_n_ticks=3))
             if r == 0:
                 ax.set_title(title, pad=3)
             axes[s, r] = ax
@@ -111,13 +114,12 @@ def draw(agg):
     labels = ['fitted', 'certified']               # the caption gives w and alpha
     top = 1 - .035 / H
     tight = paper_legend_kw(F['legend']) | dict(columnspacing=.8, handletextpad=.35)
-    # Three names do not fit one row at 8.5 pt: two columns, filled column-major so the rows read
-    # Unif-TERA, Unif-TERA-BNN / Unif-BNN-Label, the legend order Sumanth set.
-    order = [shapes[0], shapes[2], shapes[1]]
+    # Three names do not fit one row at 8.5 pt. Two rows, in the order Sumanth set: Unif-TERA, Unif-TERA-BNN /
+    # Unif-BNN-Label beside the fitted / certified key (a third row wasted space).
     row = LEGEND_ROW / H
-    legs = [fig.legend(handles=order, ncol=2, bbox_to_anchor=(.5, top), bbox_transform=fig.transFigure, **tight),
-            fig.legend(handles=ev, labels=labels, ncol=2, bbox_to_anchor=(.5, top - 2 * row),
-                       bbox_transform=fig.transFigure, **tight)]
+    legs = [fig.legend(handles=shapes[:2], ncol=2, bbox_to_anchor=(.5, top), bbox_transform=fig.transFigure, **tight),
+            fig.legend(handles=[shapes[2]] + ev, labels=[shapes[2].get_label()] + labels, ncol=3,
+                       bbox_to_anchor=(.5, top - row), bbox_transform=fig.transFigure, **tight)]
     fit_check(fig, axes, legs)
     return fig, drawn
 

@@ -151,7 +151,7 @@ def draw(agg, paper):
                           label='validation-fitted ($w=0.2$)'),
                     Line2D([], [], ls='none', marker='s', ms=MS + .4, mfc='#777777', mec='#333333', mew=.45,
                            label=r'certified ($\alpha=\delta=0.05$)'),
-                    Line2D([], [], **REF_SOLID, label='5% certification target')]
+                    Line2D([], [], **REF_SOLID, label='5% error limit')]
         fig.legend(handles=handles, loc='upper center', ncol=3, frameon=False, bbox_to_anchor=(.53, .972),
                    columnspacing=1.4, handletextpad=.3, fontsize=7)
         size = save(fig, 'predictor_comparison_uniform', paper_stem='predictor_comparison_uniform', paper=paper)
@@ -458,7 +458,7 @@ def r_draw(agg):
           Line2D([], [], ls='none', marker='o', markersize=R_MS, markeredgewidth=R_MEW, markeredgecolor='black',
                  markerfacecolor='black', label=r'certified ($\alpha=\delta=0.05$)'),
           _SeedCount(),
-          Line2D([], [], color=LINE['ref'], lw=LW['ref'], ls=LS['ref'], label=r'5\% certification target')]
+          Line2D([], [], color=LINE['ref'], lw=LW['ref'], ls=LS['ref'], label=r'5\% error limit')]
     labels = [h.get_label() for h in ev[:2]] + ['seeds with a defined error rate, if fewer than 3', ev[3].get_label()]
     legends.append(fig.legend(handles=ev, labels=labels, ncol=2, bbox_to_anchor=(.5, .9), bbox_transform=fig.transFigure,
                               handler_map={_SeedCount: _SeedCountHandler()}, **paper_legend_kw(FS['legend'])))

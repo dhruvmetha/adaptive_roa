@@ -89,7 +89,7 @@ def count_label(n):
     """A trajectory count as the paper prints it everywhere: under 1000 as an integer (100, 500), 1000 and up
     with k (1k, 1.5k, 12k, 40k). Never "0.5k"."""
     n = int(round(n))
-    return str(n) if n < 1000 else f'{n / 1000:g}k'
+    return str(n) if n < 1000 else f'{n / 1000:g}K'
 
 
 def tick_labels(ticks):
@@ -237,7 +237,7 @@ def generate(protocol, paper):
             assert ra['err'][0][1] > 5  # the 5% line must stay visible
             err.axhline(5, zorder=0, **REF_SOLID)
             if si == 0:  # the one direct label of the 5% line, under it at the right end
-                err.annotate('5% target', xy=(1, 5), xycoords=('axes fraction', 'data'), xytext=(-1.5, -1.5),
+                err.annotate('5% limit', xy=(1, 5), xycoords=('axes fraction', 'data'), xytext=(-1.5, -1.5),
                              textcoords='offset points', ha='right', va='top', fontsize=7, color=REF_SOLID['color'])
             if c == 0:
                 rec.set_ylabel('Recall (%)'); err.set_ylabel('Error (%)'); left_axes += [rec, err]
@@ -317,7 +317,7 @@ def generate_restyled():
         xlabel='Training trajectories', titles=[TITLE[s] for s in SETTINGS], row_base=row_base,
         metric_labels=[REC_S, REC_F, ERR_S, ERR_F],
         legend_methods=[ARM_LABEL[a] for a, *_ in ARMS[::-1]], ylabels=('Recall (%)', 'Error (%)'),
-        rec_aspect=RESTYLE_ASPECT, err_ratio=RESTYLE_ERR_RATIO, band_alpha=BAND_ALPHA, ref_label='5% target')
+        rec_aspect=RESTYLE_ASPECT, err_ratio=RESTYLE_ERR_RATIO, band_alpha=BAND_ALPHA, ref_label='5% limit')
     g = out['geometry']
     print(f"  panels {g['panel_w']:.3f} in wide, recall {g['rec_h']:.3f} in, error {g['err_h']:.3f} in; "
           f"legend {out['legend_ncol']} columns; layout settled in {g['iterations']} passes")

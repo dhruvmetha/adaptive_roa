@@ -77,6 +77,16 @@ build, commit and Overleaf push described in its `AGENTS.md`.
 
 ## Figures in the paper
 
+**Style and labels (Sumanth, 2026-11-13, paper commit `ffbadef`).** These override the older notes below.
+- Lines, bars and markers: success side soft blue `#5497d9`, failure side soft orange `#ca7d44` (`common.LINE`), in
+  Figures 6, S1, S2 and S3. The map fills (`common.FILL`, Figures 1 and 5) are unchanged.
+- All figure text is regular weight: `common.TEX_PREAMBLE` no longer sets `\bfseries\boldmath`.
+- Labels: "5% limit" (Figure 6) and "5% error limit" (Figure S3), not "target"; the acquisition score is `U`, not
+  `U_H`, on the Figure S1 axis (the data key stays `U_H`); trajectory counts print `K` for thousands (`count_label`).
+- Figure 5 prints each run's thresholds as tau^s_s, tau^s_f (stored `t_s`, `t_f`) and tau^f_s, tau^f_f (stored `u_s`,
+  `u_f`), with a line skip sized to the symbols, and names its rows TERA and Unif-TERA.
+- The paper writes the number of samples per query as M; K means one thousand only.
+
 **Labels (Sumanth, 2026-11-13, paper commit `2125ad9`).** The three learned-policy settings are named RL, not PPO, and
 the spatial quadrotor is 12D, not 13D (the state space is R^3 x SO(3) x R^6, stored as 13 coordinates with a unit
 quaternion). This holds in every figure title, table header and panel label: `common.TITLES`, `make_tables.TITLES`,

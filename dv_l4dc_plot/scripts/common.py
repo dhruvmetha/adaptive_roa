@@ -189,8 +189,8 @@ def paper_legend_kw(fontsize: float) -> dict:
 # packages, all text \bfseries and all math \boldmath; tick numbers go through \text so they set in Times bold like
 # the labels. matplotlib's template asks for type1ec (cm-super, not installed here) whenever a font list falls back
 # to Computer Modern, so the three family lists point at bare keys that add no package.
+# Regular weight since 2026-11-13 (Sumanth: the all-bold text looked gaudy); it was \bfseries\boldmath before.
 TEX_PREAMBLE = (r"\usepackage{times}\usepackage{amsmath,bm}"
-                r"\AtBeginDocument{\bfseries\boldmath}"
                 r"\renewcommand{\mathdefault}[1]{\text{#1}}")
 FS = dict(tick=7, legend=7, label=8, title=8, annotation=7)       # points on the printed page
 STYLE_RC = {"text.usetex": True, "text.latex.preamble": TEX_PREAMBLE,
@@ -213,7 +213,10 @@ FILL = dict(success="#FFE33D", fail="#3E0349", fp="#00AE70", fn="#215D81", absta
 # Lines and markers on white: one hue per side. Success side (R_s, FDR, success trajectories) is a dark gold from the
 # TP yellow, darkened until it reads as a line (3.55:1 on white, 4.5:1 against the fail purple); the fail side (R_f,
 # FOR, failure trajectories) is the TN purple. Abstention gray; reference lines thin gray.
-LINE = dict(success="#A68400", fail="#3E0349", abstain="#8C8C8C", ref="#666666")
+# Since 2026-11-13 (Sumanth): a soft blue and a soft orange at one lightness and chroma (OKLCH L .66, C .12). The gold
+# and near-black purple above read as muddy; this pair passes the lightness, chroma, colour-vision and 3:1 contrast
+# checks. The map fills (FILL) are unchanged, so lines no longer share the maps' yellow and purple.
+LINE = dict(success="#5497d9", fail="#ca7d44", abstain="#8C8C8C", ref="#666666")
 # Line style encodes the metric kind: recall solid, error rate dash-dot (the paper's existing dash-dot).
 LS = dict(recall="-", error=(0, (3.2, 1.3, 0.9, 1.3)), ref="-")
 LW = dict(curve=1.1, ref=.6, boundary=.6)

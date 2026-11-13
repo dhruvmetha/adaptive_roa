@@ -33,7 +33,7 @@ from split import (assert_bands_inside, REF_SOLID, SIDE, restyle_args, tex, top_
                    check_restyled, save_restyled)
 
 COMBOS = [('U_H', .75), ('q_A', .75), ('U_tau', .75)]
-XTICKS = [r'$U_H$', r'$q_A$', r'$U_\tau$']
+XTICKS = [r'$U$', r'$q_A$', r'$U_\tau$']   # U is the paper's acquisition score (data key U_H)
 # Legend in the method section's terms (04_proposed_method.tex), one entry per bar color.
 LEGEND_PAIRS = [(BLUE, REC_S + ' (Success recall) / ' + ERR_S + ' (Success prediction error)'),
                 (ORANGE, REC_F + ' (Failure recall) / ' + ERR_F + ' (Failure prediction error)')]

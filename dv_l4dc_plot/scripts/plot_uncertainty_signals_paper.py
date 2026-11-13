@@ -209,7 +209,9 @@ GRID_FILE = {'adaptive': 'x231_penlqr_fm_uh_a6d075_r1_s99512_epoch010_grid.npz',
              'uniform': 'm65_penlqr_fm_unif_s99512_epoch010_grid.npz'}
 GRID_SHAPE = (158, 315)                        # theta x omega, rows theta-major
 EXPECT_TEST = {'adaptive': (7784, 12762, 156), 'uniform': (7896, 12557, 249)}     # Success, Fail, Abstain (stored)
-R_ROWS = [('adaptive', r'adaptive ($\rho=0.75$)'), ('uniform', 'uniform')]
+# Rows carry the paper's method names; thresholds print in the method's notation (Sumanth, 2026-11-13):
+# t_s, t_f are the success pair tau^s_s, tau^s_f and u_s, u_f the failure pair tau^f_s, tau^f_f of Eq. (3).
+R_ROWS = [('adaptive', 'TERA'), ('uniform', 'Unif-TERA')]
 R_TITLES = [r'A. invalid mass $I(x)=\hat{p}_{\mathrm{inv}}(x)$', r'B. weighted disagreement $D(x)$',
             'C. certified decisions']
 R_TITLES_WRAPPED = [r'A. invalid mass' + '\n' + r'$I(x)=\hat{p}_{\mathrm{inv}}(x)$',
@@ -426,7 +428,8 @@ def restyle_figure(G):
         for arm, _ in R_ROWS:
             t = G[arm]['info']['thresholds']
             thr.append([fig.text(0, 0, s_, ha='right', va='baseline', fontsize=FS['annotation'])
-                        for s_ in (rf"$t_s$={t['t_s']}, $t_f$={t['t_f']}", rf"$u_s$={t['u_s']}, $u_f$={t['u_f']}")])
+                        for s_ in (rf"$\tau^{{\mathrm{{s}}}}_{{\mathrm{{s}}}}$={t['t_s']}, $\tau^{{\mathrm{{s}}}}_{{\mathrm{{f}}}}$={t['t_f']}",
+                             rf"$\tau^{{\mathrm{{f}}}}_{{\mathrm{{s}}}}$={t['u_s']}, $\tau^{{\mathrm{{f}}}}_{{\mathrm{{f}}}}$={t['u_f']}")])
         rown = [fig.text(0, 0, name, rotation=90, ha='left', va='center', fontsize=FS['label']) for _, name in R_ROWS]
         cax = fig.add_axes([.12, .03, .5, .02])
         cb = fig.colorbar(im_signal, cax=cax, orientation='horizontal', ticks=[0, .25, .5, .75, 1])
@@ -491,7 +494,10 @@ def restyle_figure(G):
         asc0 = max(asc_desc(t[0])[0] for t in titles)
         thr_asc = max(asc_desc(lines[0])[0] for lines in thr)
         thr_desc = max(asc_desc(lines[-1])[1] for lines in thr)
-        thr_h = thr_asc + SKIP_A + thr_desc
+        # The tau symbols carry a superscript and a subscript, so two threshold lines need more than the plain 1.2 x
+        # font-size skip: at least the first line's descent plus the second line's ascent, and half a point between.
+        skip_thr = max([SKIP_A] + [asc_desc(lines[0])[1] + asc_desc(lines[1])[0] + .5 * PT for lines in thr])
+        thr_h = thr_asc + skip_thr + thr_desc
         # header: from the top of the first title line down to the top of row 1's panels
         title_depth = [asc0 + (len(t) - 1) * SKIP + asc_desc(t[-1])[1] for t in titles]
         thr_pad = [max(PAD_PT * PT, above[r][2] + .5 * PT) for r in range(2)]
@@ -510,7 +516,7 @@ def restyle_figure(G):
             for c in range(3):
                 axs[r][c].set_position([xs[c] / W, (tops[r] - ph) / H, pw / W, ph / H])
             for k_, t in enumerate(thr[r]):                    # last line's descent sits thr_pad above the panel
-                t.set_position(((xs[2] + pw) / W, (tops[r] + thr_pad[r] + thr_desc + (1 - k_) * SKIP_A) / H))
+                t.set_position(((xs[2] + pw) / W, (tops[r] + thr_pad[r] + thr_desc + (1 - k_) * skip_thr) / H))
             rown[r].set_position((MARGIN / W, (tops[r] - ph / 2) / H))
         for c, lines in enumerate(titles):
             for k_, t in enumerate(lines):

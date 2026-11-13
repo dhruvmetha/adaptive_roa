@@ -33,7 +33,7 @@ HEADS = ['Pendulum (2D)', 'Cartpole (4D)', 'Cartpole (4D)', 'Planar Quad (6D)', 
 PANELS = [('LQR controllers', [0, 1, 4]), ('RL controllers', [2, 3, 5])]
 # Column headers in the method section's notation (04_proposed_method.tex).
 METRICS = [('rec', REC_S[:-1] + r'\uparrow$'), ('fdr', ERR_S[:-1] + r'\downarrow$'),
-           ('fail_rec', REC_F[:-1] + r'\uparrow$'), ('for', ERR_F[:-1] + r'\downarrow$'), ('abstain', r'Abst.$\downarrow$')]
+           ('fail_rec', REC_F[:-1] + r'\uparrow$'), ('for', ERR_F[:-1] + r'\downarrow$'), ('abstain', r'$\widehat{\mathrm{Abst}}\downarrow$')]
 # Row labels use the complete shared manuscript macros in method-names.tex.
 SUCCESS_ONLY = r'\name{}, Success only'   # the adaptive FM runs ('method' role)
 # Rows available to the tables: (label, matrix_role, model).

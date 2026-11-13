@@ -35,8 +35,15 @@ MS, MEW, HALO, BAR, LINK = 4.6, .6, .5, .45, .7
 BAR_ALPHA = .4                                   # bars recede behind the markers
 # Second column has no y-axis label (Sumanth, 2026-11-13: the first column's label names the row), so the column
 # gap only holds tick labels and the subplots take the freed width.
-LEFT, BOTTOM, COLGAP, ROWGAP, TOP, RIGHT = .375, .295, .21, .31, .43, .02    # in
-AX_W, AX_H = (WIDTH - LEFT - COLGAP - RIGHT) / 2, .86                     # subplot size (in)
+# Text just under the 9 pt \footnotesize captions (Sumanth, 2026-11-13), at the figure's existing 2.40 x 2.76 in.
+F = dict(tick=8, legend=8.5, label=8.5, title=8.5, annotation=8)
+RC = {'font.size': F['label'], 'axes.titlesize': F['title'], 'axes.labelsize': F['label'],
+      'xtick.labelsize': F['tick'], 'ytick.labelsize': F['tick'], 'legend.fontsize': F['legend']}
+HEIGHT = 2.76
+LEGEND_ROW = .155                                # in per legend row at 8.5 pt
+LEFT, BOTTOM, COLGAP, ROWGAP, RIGHT = .405, .31, .235, .345, .02    # in
+TOP = .035 + 3 * LEGEND_ROW + .135               # three legend rows, then the panel titles
+AX_W, AX_H = (WIDTH - LEFT - COLGAP - RIGHT) / 2, (HEIGHT - BOTTOM - ROWGAP - TOP) / 2   # subplot size (in)
 
 
 def panel(ax, agg, setting, xm, ym, color):
@@ -57,7 +64,7 @@ def panel(ax, agg, setting, xm, ym, color):
                           path_effects=[patheffects.withStroke(linewidth=MEW + 2 * HALO, foreground='white')])
             if x['n'] < 3:
                 ax.annotate(str(x['n']), (x['mean'], y['mean']), xytext=(MS / 2 + 1.2, MS / 2 - .5),
-                            textcoords='offset points', fontsize=FS['annotation'], ha='left', va='bottom', zorder=6)
+                            textcoords='offset points', fontsize=F['annotation'], ha='left', va='bottom', zorder=6)
             drawn.append(dict(setting=setting, model=model, method=method, xm=xm, ym=ym, marker=mk, bars=bars))
             pts[method] = (x['mean'], y['mean'])
             xs += [x['min'], x['max']]; ys += [y['min'], y['max']]
@@ -72,7 +79,7 @@ def pad(lo, hi, frac=.08):
 
 
 def draw(agg):
-    H = BOTTOM + 2 * AX_H + ROWGAP + TOP
+    H = HEIGHT
     fig = plt.figure(figsize=(WIDTH, H))
     drawn, axes = [], {}
     for c, (s, title) in enumerate(SETTINGS):
@@ -101,11 +108,15 @@ def draw(agg):
                  markerfacecolor='white'),
           Line2D([], [], ls='none', marker='o', markersize=MS, markeredgewidth=MEW, markeredgecolor='black',
                  markerfacecolor='black')]
-    labels = [r'fitted ($w=0.2$)', r'certified ($\alpha=\delta=0.05$)']
+    labels = ['fitted', 'certified']               # the caption gives w and alpha
     top = 1 - .035 / H
-    tight = paper_legend_kw(FS['legend']) | dict(columnspacing=.8, handletextpad=.35)   # three names in 2.4 in
-    legs = [fig.legend(handles=shapes, ncol=3, bbox_to_anchor=(.5, top), bbox_transform=fig.transFigure, **tight),
-            fig.legend(handles=ev, labels=labels, ncol=2, bbox_to_anchor=(.5, top - .16 / H),
+    tight = paper_legend_kw(F['legend']) | dict(columnspacing=.8, handletextpad=.35)
+    # Three names do not fit one row at 8.5 pt: two columns, filled column-major so the rows read
+    # Unif-TERA, Unif-TERA-BNN / Unif-BNN-Label, the legend order Sumanth set.
+    order = [shapes[0], shapes[2], shapes[1]]
+    row = LEGEND_ROW / H
+    legs = [fig.legend(handles=order, ncol=2, bbox_to_anchor=(.5, top), bbox_transform=fig.transFigure, **tight),
+            fig.legend(handles=ev, labels=labels, ncol=2, bbox_to_anchor=(.5, top - 2 * row),
                        bbox_transform=fig.transFigure, **tight)]
     fit_check(fig, axes, legs)
     return fig, drawn
@@ -141,7 +152,7 @@ def check(drawn):
 
 def main(paper):
     rows, ident, agg, _ = build()
-    with plt.rc_context(style_rc()):
+    with plt.rc_context(style_rc(**RC)):
         fig, drawn = draw(agg)
         n = check(drawn)
         PLOTS.mkdir(exist_ok=True)

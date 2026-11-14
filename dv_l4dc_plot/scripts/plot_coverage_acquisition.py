@@ -345,12 +345,12 @@ KEYS_2X2 = [['cov', 'I'], ['D', 'U']]
 # theta-dot)). In his words: (1) high data density, relatively low-medium invalid mass and high disagreement;
 # (2) high data density and medium-high invalid mass; (3) high invalid mass and low disagreement despite being at the
 # boundary. The third centre is raised to -5.10 so its circle stays inside the panel. One size everywhere: a
-# CIRCLE_PT diameter in print, a dotted black line of round dots, each cased in white so it reads on the teal and the
-# Reds (Sumanth: dotted). Each circle carries its number in every panel, at LABEL_AT (offset points from the centre,
+# CIRCLE_PT diameter in print, a thin solid black line cased in white so it reads on the teal and the Reds (Sumanth:
+# solid with a lighter border, after trying dotted). Each circle carries its number in every panel, at LABEL_AT (offset points from the centre,
 # ha, va), placed off the true boundary and away from the other circles.
 CIRCLES_2X2 = [(0.570, 2.195), (-0.643, 1.514), (-0.117, -5.10)]
 CIRCLE_KEYS = ('cov', 'I', 'D')
-CIRCLE_PT, CIRCLE_LW, CIRCLE_CASE, CIRCLE_DOTS = 7.0, .9, .45, (0, (.01, 1.9))
+CIRCLE_PT, CIRCLE_LW, CIRCLE_CASE, CIRCLE_DOTS = 7.0, .5, .35, '-'
 LABEL_AT = [((3.4, 2.6), 'left', 'bottom'), ((0, 4.3), 'center', 'bottom'), ((5.2, 0), 'left', 'center')]
 LABEL_PT, LABEL_CASE = 7.0, 1.6
 # Panel (a) title as on Overleaf since 24d5f3f (Sumanth, 2026-11-13): 'distance to training states' in two lines at

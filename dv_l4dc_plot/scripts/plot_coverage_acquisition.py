@@ -29,7 +29,8 @@ import yaml
 from matplotlib import patheffects
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.lines import Line2D
-from matplotlib.patches import Patch
+from matplotlib.patches import Circle, Patch
+from matplotlib.transforms import ScaledTranslation
 from scipy.spatial import cKDTree
 import plot_uncertainty_signals_paper as P
 import uncertainty_signals_data as usd
@@ -344,10 +345,14 @@ KEYS_2X2 = [['cov', 'I'], ['D', 'U']]
 # theta-dot)). In his words: (1) high data density, relatively low-medium invalid mass and high disagreement;
 # (2) high data density and medium-high invalid mass; (3) high invalid mass and low disagreement despite being at the
 # boundary. The third centre is raised to -5.10 so its circle stays inside the panel. One size everywhere: a
-# CIRCLE_PT diameter in print, black with a white casing so it reads on the teal and the Reds.
+# CIRCLE_PT diameter in print, a dotted black line of round dots, each cased in white so it reads on the teal and the
+# Reds (Sumanth: dotted). Each circle carries its number in every panel, at LABEL_AT (offset points from the centre,
+# ha, va), placed off the true boundary and away from the other circles.
 CIRCLES_2X2 = [(0.570, 2.195), (-0.643, 1.514), (-0.117, -5.10)]
 CIRCLE_KEYS = ('cov', 'I', 'D')
-CIRCLE_PT, CIRCLE_LW, CIRCLE_CASE = 7.0, .8, .5
+CIRCLE_PT, CIRCLE_LW, CIRCLE_CASE, CIRCLE_DOTS = 7.0, .9, .45, (0, (.01, 1.9))
+LABEL_AT = [((3.4, 2.6), 'left', 'bottom'), ((0, 4.3), 'center', 'bottom'), ((5.2, 0), 'left', 'center')]
+LABEL_PT, LABEL_CASE = 7.0, 1.6
 # Panel (a) title as on Overleaf since 24d5f3f (Sumanth, 2026-11-13): 'distance to training states' in two lines at
 # 7 pt, centred over the panel, the second baseline 2 pt below the row's baseline. The layout is still measured with
 # the one-line symbol title, so the panels keep their size. The 24d5f3f PDF set the lines 7 pt apart, which puts the
@@ -389,11 +394,22 @@ def draw_2x2(g, acq, edge):
                 for t, va in zip(ax.set_yticklabels(Y_TICKLABELS_2X2, rotation=90), ('bottom', 'center', 'top')):
                     t.set_va(va)
                 ax.set_ylabel(r'$\dot{\theta}$', labelpad=1)
-        circles = [axs[r][c].plot(*np.array(CIRCLES_2X2).T, ls='none', marker='o', markersize=CIRCLE_PT,
-                                  markerfacecolor='none', markeredgecolor='black', markeredgewidth=CIRCLE_LW, zorder=8,
-                                  path_effects=[patheffects.withStroke(linewidth=CIRCLE_LW + 2 * CIRCLE_CASE,
-                                                                       foreground='white')])[0]
-                   for r, c, _, key in flat if key in CIRCLE_KEYS]
+        circles, circle_labels = [], []
+        for r, c, ax, key in flat:
+            if key not in CIRCLE_KEYS:
+                continue
+            for n, ((x0, y0), (off, ha, va)) in enumerate(zip(CIRCLES_2X2, LABEL_AT), 1):
+                # radius in inches about the data point, so the circle stays round whatever the panel aspect
+                ci = Circle((0, 0), CIRCLE_PT / 2 * PT, transform=fig.dpi_scale_trans + ScaledTranslation(x0, y0, ax.transData),
+                            fill=False, edgecolor='black', linewidth=CIRCLE_LW, linestyle=CIRCLE_DOTS, capstyle='round',
+                            zorder=8, path_effects=[patheffects.withStroke(linewidth=CIRCLE_LW + 2 * CIRCLE_CASE,
+                                                                           foreground='white')])
+                ax.add_patch(ci)
+                circles.append(ci)
+                circle_labels.append(ax.annotate(str(n), (x0, y0), xytext=off, textcoords='offset points', ha=ha, va=va,
+                                                 fontsize=LABEL_PT, zorder=9, annotation_clip=False,
+                                                 path_effects=[patheffects.withStroke(linewidth=LABEL_CASE,
+                                                                                      foreground='white')]))
         ax_u = axs[1][1]
         marks = [ax_u.plot(acq[k][:, 0], acq[k][:, 1], ls='none', zorder=9, clip_on=False, **MARK[k])[0]
                  for k in ('unif', 'u')]
@@ -594,11 +610,15 @@ def draw_2x2(g, acq, edge):
         panels = [a.get_window_extent(rr) for a in all_ax + caxs]
         for ta, a in boxes:
             need(not any(a.overlaps(p) for p in panels), ('text over a panel', ta))
-        for cl in circles:                                # each circle inside its panel, clear of text
+        for cl in circles + circle_labels:                # circles and their numbers inside the panel, clear of text
             cb_ = cl.get_window_extent(rr)
             pb = cl.axes.get_window_extent(rr)
-            need(pb.x0 <= cb_.x0 and cb_.x1 <= pb.x1 and pb.y0 <= cb_.y0 and cb_.y1 <= pb.y1, 'a circle leaves its panel')
-            need(not any(cb_.overlaps(b) for _, b in boxes), 'a circle touches text')
+            need(pb.x0 <= cb_.x0 and cb_.x1 <= pb.x1 and pb.y0 <= cb_.y0 and cb_.y1 <= pb.y1, 'a circle or number leaves its panel')
+            need(not any(cb_.overlaps(b) for _, b in boxes), 'a circle or number touches text')
+        for i, a in enumerate(circle_labels):           # a number never sits on another circle of its panel
+            ab = a.get_window_extent(rr)
+            need(not any(ab.overlaps(cl.get_window_extent(rr)) for cl in circles if cl.axes is a.axes and
+                         circles.index(cl) % len(CIRCLES_2X2) != i % len(CIRCLES_2X2)), 'a number sits on another circle')
         for m in marks:                                   # markers may leave their panel, never touch text
             mb = m.get_window_extent(rr)
             need(not any(mb.overlaps(b) for _, b in boxes), 'a marker touches text')

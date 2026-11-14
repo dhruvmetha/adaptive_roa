@@ -3,7 +3,7 @@
 Requested 2026-11-13 by Sumanth via paper_writer_2. Same checkpoint as Figure 5 (x231_penlqr_fm_uh_a6d075_r1_s99512,
 round 2, 120 training trajectories), drawn on the full 158 x 315 grid with the true success/failure boundary in every
 panel. Two layouts at the 6.0 in text width:
-  v1  1 x 4: (a) distance to training data, (b) I(x), (c) D(x), (d) U(x) = I + D with the next batch's 35 initial states
+  v1  1 x 4: (a) distance to training states, (b) I(x), (c) D(x), (d) U(x) = I + D with the next batch's 35 initial states
   v2  1 x 5: (a) abstention (the current Figure 5 panel A), then the four panels of v1
 Distance to training data is uncertainty_signals_data's d_train: coordinates (theta / 2pi wrapped, omega / 4pi), every
 state of the first 120 training trajectories. I, D and U share one [0, 1] colour scale. On (d)/(e) the 27 states chosen
@@ -50,7 +50,7 @@ MARK = dict(u=dict(marker='o', markersize=3.3, markerfacecolor='black', markered
             unif=dict(marker='^', markersize=3.8, markerfacecolor='white', markeredgecolor='black',
                       markeredgewidth=.6))
 TITLE = dict(abst=('abstention', None),
-             cov=('distance to training data', 'distance to\ntraining data'),
+             cov=('distance to training states', 'distance to\ntraining states'),   # as Figure 5 (a) (Sumanth, 2026-11-14)
              I=(r'invalid mass $I(x)$', 'invalid mass\n' + r'$I(x)$'),
              D=(r'weighted disagreement $D(x)$', 'weighted\n' + r'disagreement $D(x)$'),
              U=(r'acquisition score $U(x)$', 'acquisition\n' + r'score $U(x)$'))
@@ -672,7 +672,7 @@ def main_2x2():
            f' after {it + 1} layout pass(es).\n'
            f'Text: titles, axis labels, legend and the bar name {FS_2X2["title"]} pt; tick labels (panels and bars) '
            f'{FS_2X2["tick"]} pt (caption: 9 pt footnotesize).\n'
-           '(a) distance to training data, (b) I(x) top; (c) D(x), (d) U(x) with the 35 next initial states bottom. Same '
+           '(a) distance to training states, (b) I(x) top; (c) D(x), (d) U(x) with the 35 next initial states bottom. Same '
            'data, checkpoint, markers and boundary as the 1x4 / 1x5; the numbers are in pendulum_coverage_acquisition.txt.\n'
            'theta-dot label and y tick labels on the left column only; theta label and x tick labels on the bottom row '
            'only. Colour bars under the top row: teal under (a) for distance on [0, 0.06]; under (b) the one Reds bar on '
@@ -729,7 +729,7 @@ def main():
                                      f'{L["panel_h"]:.3f}, titles {"wrapped" if L["titles_wrapped"] else "one line"}, '
                                      f'ink margins ' + ', '.join(f'{k} {x:.3f}' for k, x in L['ink'].items())
                                      for v, L in layouts.items()),
-        'Panels: v1 = (a) distance to training data, (b) I(x), (c) D(x), (d) U(x) = I(x) + D(x) with the 35 next initial '
+        'Panels: v1 = (a) distance to training states, (b) I(x), (c) D(x), (d) U(x) = I(x) + D(x) with the 35 next initial '
         'states; v2 = (a) abstention (as Figure 5 A) then the same four as (b)-(e). True success/failure boundary '
         f'(black, {P.BOUNDARY_LW} pt) in every panel. I, D, U share one [0, 1] scale (white to {SIGNAL_RAMP["I"][-1]}, '
         f'ColorBrewer Reds); distance on [0, {COV_MAX}] (white to {SIGNAL_RAMP["D"][-1]}, BrBG teal half); markers: '

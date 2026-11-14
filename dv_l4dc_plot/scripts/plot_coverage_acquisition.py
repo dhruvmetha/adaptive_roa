@@ -352,7 +352,7 @@ CIRCLES_2X2 = [(0.570, 2.195), (-0.643, 1.514), (-0.117, -5.10)]
 CIRCLE_KEYS = ('cov', 'I', 'D')
 CIRCLE_PT, CIRCLE_LW, CIRCLE_CASE, CIRCLE_DOTS, CIRCLE_C = 7.0, .35, .3, '-', '#9B9B9B'
 LABEL_AT = [((3.4, 2.6), 'left', 'bottom'), ((0, 4.3), 'center', 'bottom'), ((5.2, 0), 'left', 'center')]
-LABEL_PT, LABEL_CASE = 7.0, 1.6
+LABEL_PT, LABEL_CASE = 6.0, 1.4                     # region numbers (Sumanth: slightly smaller than 7 pt)
 # Panel (a) title as on Overleaf since 24d5f3f (Sumanth, 2026-11-13): 'distance to training states' in two lines at
 # 7 pt, centred over the panel, the second baseline 2 pt below the row's baseline. The layout is still measured with
 # the one-line symbol title, so the panels keep their size. The 24d5f3f PDF set the lines 7 pt apart, which puts the

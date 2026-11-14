@@ -35,7 +35,7 @@ from matplotlib.path import Path
 from matplotlib.text import Text
 from matplotlib.ticker import MaxNLocator
 from matplotlib.transforms import Bbox
-from common import VALUES, SETTINGS, TITLES, REF, RC, ASSETS, save, install_paper, REC_S, REC_F, ERR_S, ERR_F
+from common import VALUES, SETTINGS, TITLES, REF, RC, ASSETS, save, install_paper, REC_S, REC_F, ERR_S, ERR_F, tt
 from common import (HERE, PLOTS, FS, LINE, LS, LW, METHOD_MARKER, PRINT_WIDTH, marker_kw, page_size, paper_legend_kw,
                     style_rc)
 import certified
@@ -116,7 +116,7 @@ def abstain_note(agg, setting, width=44):
             else:
                 line += ' ' + piece
         lines.append(line)
-    return '\n'.join(lines)
+    return tt('\n'.join(lines))          # wrapped on the plain names, so the markup is not counted
 
 
 def draw(agg, paper):
@@ -144,7 +144,7 @@ def draw(agg, paper):
                 ax.text(-0.12, -0.42, note, transform=ax.transAxes, fontsize=5.6, color='#444444', va='top', ha='left',
                         linespacing=1.15)
         handles = [Line2D([], [], ls='none', marker='o', ms=MS + .4, mfc=COLORS[m], mec='#333333', mew=.45,
-                          label=PLAIN_NAME[m]) for m, _, _ in MODELS]
+                          label=tt(PLAIN_NAME[m])) for m, _, _ in MODELS]
         fig.legend(handles=handles, loc='upper center', ncol=5, frameon=False, bbox_to_anchor=(.53, 1.0),
                    columnspacing=1.4, handletextpad=.3, fontsize=7)
         handles = [Line2D([], [], ls='none', marker='o', ms=MS + .4, mfc='#777777', mec='#333333', mew=.45,
@@ -243,15 +243,15 @@ def r_wrap(fig, renderer, parts, max_px):
         line = head
         for i, item in enumerate(items):
             piece = item + (',' if i < len(items) - 1 else '')
-            if width(line + ' ' + piece) > max_px:
+            if width(tt(line + ' ' + piece)) > max_px:
                 lines.append(line); line = piece          # usetex crops leading space, so no indent
             else:
                 line += ' ' + piece
         lines.append(line)
-    fits = all(width(l) <= max_px for l in lines)
+    fits = all(width(tt(l)) <= max_px for l in lines)
     probe.remove()
     assert fits, 'a single note item is wider than its column'
-    return '\n'.join(lines)
+    return tt('\n'.join(lines))
 
 
 def r_measure(fig, ax, renderer):
@@ -449,7 +449,7 @@ def r_draw(agg):
         if parts:
             notes[si] = fig.text(0, 0, '', fontsize=FS['annotation'], color='black', ha='left', va='top',
                                  linespacing=1.15)
-    shape = [Line2D([], [], ls='none', label=n, **(marker_kw(n, 'black', size=R_MS, edge=R_MEW) | {'markerfacecolor': 'white'}))
+    shape = [Line2D([], [], ls='none', label=tt(n), **(marker_kw(n, 'black', size=R_MS, edge=R_MEW) | {'markerfacecolor': 'white'}))
              for n in names]
     legends = [fig.legend(handles=shape, ncol=len(shape), bbox_to_anchor=(.5, 1), bbox_transform=fig.transFigure,
                           **paper_legend_kw(FS['legend']))]

@@ -23,7 +23,7 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 from common import VALUES, SETTINGS, TITLES, RECALL, ERROR, RC, load_final, method_names
-from common import install_paper
+from common import install_paper, tt
 from certified import SRC, SRC_SHA256, FIELDS, load_rows, cell, check_table2
 import split
 from split import split_figure, REF_SOLID, DASHDOT, LEGEND_FOUR, restyle_args, split_figure_restyled
@@ -74,7 +74,7 @@ def restyled():
         'adaptive_fraction_certified', arms=[(lambda s, m: (RHO, *series(s, m)),
                                               [NAMES['nameUnif'] if a == 'uniform' else NAMES['name'] for a, _ in COMBOS])],
         xticks={s: (RHO, ['0', '.5', '.75', '1']) for s in SETTINGS}, xlim=(-.05, 1.05),
-        xlabel=rf"Adaptive fraction $\rho$  ($\rho=0$ is {NAMES['nameUnif']})", titles=TITLES, row_base=row_base,
+        xlabel=rf"Adaptive fraction $\rho$  ($\rho=0$ is {tt(NAMES['nameUnif'])})", titles=TITLES, row_base=row_base,
         metric_labels=LEGEND_FOUR, legend_methods=[NAMES['name'], NAMES['nameUnif']],
         ylabels=('Recall (%) ↑', 'Error (%) ↓'), rec_aspect=RESTYLE_ASPECT, err_ratio=RESTYLE_ERR_RATIO, band_alpha=.12)
     g = out['geometry']
@@ -94,7 +94,7 @@ if ARGS.restyle:
     raise SystemExit
 with plt.rc_context(RC):
     size = split_figure(series, RHO, ['0', '.5', '.75', '1'], (-.05, 1.05),
-                        rf"Adaptive fraction $\rho$  ($\rho=0$ is {NAMES['nameUnif']})", 'adaptive_fraction_certified',
+                        rf"Adaptive fraction $\rho$  ($\rho=0$ is {tt(NAMES['nameUnif'])})", 'adaptive_fraction_certified',
                         height_ratios=(1, 1), row_axes=ROW_AXES, err_ls=DASHDOT, ref=REF_SOLID, legend_four=True,
                         min_band_n=2, paper_stem='adaptive_fraction_certified', paper=False,
                         ms=split.PAPER_MS, mew=split.PAPER_MEW)

@@ -43,6 +43,8 @@ def method_names():
     definitions = dict(re.findall(r'\\newcommand\{\\([A-Za-z]+)\}\{([^{}]*)\}', METHOD_NAMES_TEX.read_text()))
     required = {'name', 'nameOurs', 'nameBNN', 'nameMLP', 'nameMLPLabel', 'nameBNNLabel',
                 'nameUnif', 'nameUnifBNN', 'nameUnifMLP', 'nameUnifMLPLabel', 'nameUnifBNNLabel'}
+    # The fitted-threshold names (PAR, paper 6dd89fd, 2026-11-14), returned when the file defines them.
+    optional = {'nameFit', 'nameFitOurs', 'nameFitBNN', 'nameFitMLP', 'nameFitUnif'}
     missing = required - definitions.keys()
     if missing:
         raise RuntimeError(f'method-name source lacks: {", ".join(sorted(missing))}')
@@ -61,15 +63,26 @@ def method_names():
         resolved[key] = value
         return value
 
-    return {key: resolve(key) for key in required}
+    return {key: resolve(key) for key in required | (optional & definitions.keys())}
+
+
+def tt(text):
+    """Drawn text with the method's own name (\\name and \\nameFit: PARSE, PAR) in the typewriter face and every
+    prefix or suffix (Unif-, -BNN, (Ours)) in the text face, as the paper sets them (Sumanth, 2026-11-14,
+    method-name-style.tex). The figures render with usetex and \\usepackage{times}, so \\texttt is Courier, as in the
+    paper. Call it only on text that is drawn; names used as keys (markers, colours, line styles) stay plain."""
+    names = method_names()
+    cores = sorted({names['name'], names.get('nameFit', names['name'])}, key=len, reverse=True)
+    return re.sub(r'(?<![\w{])(' + '|'.join(map(re.escape, cores)) + r')(?!\w)', r'\\texttt{\1}', text)
 
 
 def ours(label):
-    """The printed name of a method in a figure legend or row label. TERA itself reads "TERA (Ours)", the paper's
-    \\nameOurs (Sumanth, 2026-11-13); every other method, Unif-TERA and TERA-BNN included, keeps its name. Marker and
-    colour lookups keep the plain name, so call this only where the text is drawn."""
+    """The printed name of a method in a figure legend or row label. The method itself reads "PARSE (Ours)", the
+    paper's \\nameOurs (Sumanth, 2026-11-13); every other method, Unif-PARSE and PARSE-BNN included, keeps its name.
+    The method's own name is set in typewriter (tt). Marker and colour lookups keep the plain name, so call this only
+    where the text is drawn."""
     names = method_names()
-    return names['nameOurs'].replace('~', ' ') if label == names['name'] else label
+    return tt(names['nameOurs'].replace('~', ' ') if label == names['name'] else label)
 
 SETTINGS = ['pen-lqr', 'cp-lqr', 'q3d-lqr', 'cp-ppo', 'q2d-ppo', 'q3d-ppo']
 # A setting is named "System Controller": no comma, "quadrotor" spelled out (Sumanth, 2026-11-13). Where a display has
@@ -243,15 +256,20 @@ LW = dict(curve=1.1, ref=.6, boundary=.6)
 # Methods differ by marker shape and fill, never by colour, so colour always names the metric.
 # BNN-Label moved from the thin diamond "d" to a pentagon "p" (Sumanth, 2026-11-13): "d" and TERA-BNN's "D" were
 # hard to tell apart at print size.
+# Keyed by the names in method-names.tex (PARSE since 6dd89fd), so a rename there needs no change here.
+_N = method_names()
 METHOD_MARKER = {
-    "TERA": dict(marker="o", filled=True), "Unif-TERA": dict(marker="s", filled=False),
-    "TERA-MLP": dict(marker="^", filled=True), "TERA-BNN": dict(marker="D", filled=True),
-    "MLP-Label": dict(marker="v", filled=False), "BNN-Label": dict(marker="p", filled=False),
-    "Unif-TERA-MLP": dict(marker="^", filled=False), "Unif-TERA-BNN": dict(marker="D", filled=False),
-    "Unif-MLP-Label": dict(marker="v", filled=False), "Unif-BNN-Label": dict(marker="p", filled=False),
+    _N["name"]: dict(marker="o", filled=True), _N["nameUnif"]: dict(marker="s", filled=False),
+    _N["nameMLP"]: dict(marker="^", filled=True), _N["nameBNN"]: dict(marker="D", filled=True),
+    _N["nameMLPLabel"]: dict(marker="v", filled=False), _N["nameBNNLabel"]: dict(marker="p", filled=False),
+    _N["nameUnifMLP"]: dict(marker="^", filled=False), _N["nameUnifBNN"]: dict(marker="D", filled=False),
+    _N["nameUnifMLPLabel"]: dict(marker="v", filled=False), _N["nameUnifBNNLabel"]: dict(marker="p", filled=False),
     "DeepReach": dict(marker="X", filled=True), "Lyapunov NN": dict(marker="P", filled=True),
     "MORALS": dict(marker="*", filled=True), "Part-X GP": dict(marker="h", filled=True),
 }
+# PAR is the same predictor at fitted thresholds, so each PAR name keeps the matching PARSE marker.
+METHOD_MARKER.update({_N[f]: METHOD_MARKER[_N[c]] for f, c in (("nameFit", "name"), ("nameFitBNN", "nameBNN"),
+                      ("nameFitMLP", "nameMLP"), ("nameFitUnif", "nameUnif")) if f in _N})
 # Sequential map for continuous signals (Figure 5 I(x), D(x)): no class hue appears in it.
 SIGNAL_CMAP = "Greys"
 # Figure 5 since 2026-11-13 afternoon (Sumanth: I and D in slightly different colours): one ramp per signal, white to

@@ -1,7 +1,7 @@
 """Compact main-text version of Figure S3 (predictor_comparison_uniform): paper figure predictor_comparison_compact.
 
 Sumanth, 2026-11-13: the appendix figure (six settings, five predictors) holds an important result but is slow to
-read. This version keeps the three main-text predictors (Unif-TERA, Unif-BNN-Label, Unif-TERA-BNN, as Table 4) and
+read. This version keeps the three main-text predictors (Unif-PARSE, Unif-BNN-Label, Unif-PARSE-BNN, as Table 4) and
 two settings that carry the point:
   spatial quadrotor LQR  similar validation-fitted failure recall, very different certified recall;
   cartpole RL            the counterexample, where the binary-outcome predictor stays competitive or better.
@@ -21,14 +21,15 @@ import matplotlib.pyplot as plt
 from matplotlib import patheffects
 from matplotlib.lines import Line2D
 from matplotlib.ticker import MaxNLocator, MultipleLocator
-from common import (VALUES, PLOTS, PAPER_FIGS, FS, LINE, LS, LW, REC_S, REC_F, ERR_S, ERR_F, marker_kw, page_size,
-                    paper_legend_kw, style_rc)
+from common import (VALUES, PLOTS, PAPER_FIGS, FS, LINE, LS, LW, REC_S, REC_F, ERR_S, ERR_F, marker_kw, method_names,
+                    page_size, paper_legend_kw, style_rc, tt)
 from predictor_comparison_data import build
 
 STEM = 'predictor_comparison_compact'
 WIDTH = 2.40          # in: the paper wraps it at 0.4\textwidth (Sumanth, 916d36a), so it prints at scale 1.00
 SETTINGS = [('q3d-lqr', 'Spatial quadrotor LQR'), ('cp-ppo', 'Cartpole RL')]   # Figure 7's titles; the appendix's are too wide
-MODELS = [('FM', 'Unif-TERA'), ('BNN final-state', 'Unif-TERA-BNN'), ('BNN classifier', 'Unif-BNN-Label')]   # legend order (Sumanth)
+_N = method_names()   # Unif-PARSE, Unif-PARSE-BNN, Unif-BNN-Label in legend order (Sumanth)
+MODELS = [('FM', _N['nameUnif']), ('BNN final-state', _N['nameUnifBNN']), ('BNN classifier', _N['nameUnifBNNLabel'])]
 SIDES = [('fdr', 'rec', ERR_S + r' (\%)', REC_S + r' (\%)', LINE['success']),
          ('for', 'fail_rec', ERR_F + r' (\%)', REC_F + r' (\%)', LINE['fail'])]
 MS, MEW, HALO, BAR, LINK = 4.6, .6, .5, .45, .7
@@ -105,7 +106,7 @@ def draw(agg):
             if r == 0:
                 ax.set_title(title, pad=3)
             axes[s, r] = ax
-    shapes = [Line2D([], [], ls='none', label=name,
+    shapes = [Line2D([], [], ls='none', label=tt(name),
                      **(marker_kw(name, 'black', size=MS, edge=MEW) | {'markerfacecolor': 'white'}))
               for _, name in MODELS]
     ev = [Line2D([], [], ls='none', marker='o', markersize=MS, markeredgewidth=MEW, markeredgecolor='black',

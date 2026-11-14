@@ -14,14 +14,14 @@ the Label predictors repeat the encoding. The dotted line marks w = 0.2, the pap
 
 Writes plots/w_sensitivity.{pdf,png} and values/w_sensitivity_values.json; --paper copies the PDF into the paper clone.
 """
-import argparse, hashlib, json, shutil
+import argparse, hashlib, json, re, shutil
 import statistics as st
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from matplotlib.ticker import MaxNLocator
-from common import (ASSETS, VALUES, PLOTS, PAPER_FIGS, FS, LINE, LW, METHOD_MARKER, REC_S, REC_F, ERR_S, ERR_F,
-                    marker_kw, ours, page_size, paper_legend_kw, style_rc)
+from common import (ASSETS, VALUES, PLOTS, PAPER_FIGS, FS, LINE, LW, METHOD_MARKER, METHOD_NAMES_TEX, REC_S, REC_F,
+                    ERR_S, ERR_F, marker_kw, method_names, page_size, paper_legend_kw, style_rc)
 
 STEM = 'w_sensitivity'
 SRC = ASSETS / 'soft_four_wsweep.jsonl'
@@ -35,9 +35,30 @@ ROWS = [('rec', REC_S + r' (\%)'), ('fdr', ERR_S + r' (\%)'), ('fail_rec', REC_F
 # One colour per predictor, the same in every row (Okabe-Ito; plot_predictor_comparison.COLORS).
 COLOR = {'TERA': '#0072B2', 'TERA-BNN': '#009E73', 'TERA-MLP': '#E69F00', 'BNN-Label': '#CC79A7', 'MLP-Label': '#D55E00'}
 WS = [round(.1 * i, 1) for i in range(1, 10)]
+# Printed names. Every point here uses fitted thresholds, so the method reads as its fitted-threshold form, the paper's
+# \nameFit macros (PAR, PAR-BNN, PAR-MLP, "PAR (Ours)"; paper 6dd89fd, 2026-11-14). Colour and marker lookups keep the
+# internal keys above.
+FIT_MACRO = {'TERA': 'nameFit', 'TERA-BNN': 'nameFitBNN', 'TERA-MLP': 'nameFitMLP', 'BNN-Label': 'nameBNNLabel',
+             'MLP-Label': 'nameMLPLabel'}
+# The method's own names are set in typewriter, their prefixes and suffixes are not (Sumanth via paper-writer,
+# 2026-11-14; the paper's method-name-style.tex). The figure preamble loads times, so \texttt is Courier as in the text.
+TYPEWRITER = {'name', 'nameFit'}
 W_PAPER = .2
 WIDTH, HEIGHT = 6.0, 6.4
 MS, MEW = 3.0, .5
+
+
+def printed_names():
+    """Internal key -> printed name from method-names.tex, plus 'ours' for the legend entry of the method itself.
+    common.method_names() checks the shared macros; the \\nameFit ones are resolved here the same way."""
+    method_names()
+    defs = dict(re.findall(r'\\newcommand\{\\([A-Za-z]+)\}\{([^{}]*)\}', METHOD_NAMES_TEX.read_text()))
+    def res(key):
+        body = re.sub(r'\\([A-Za-z]+)', lambda m: res(m.group(1)), defs[key]).replace('~', ' ')
+        return rf'\texttt{{{body}}}' if key in TYPEWRITER else body
+    names = {k: res(v) for k, v in FIT_MACRO.items()}
+    names['ours'] = res('nameFitOurs')
+    return names
 
 
 def load():
@@ -95,10 +116,12 @@ def draw(data):
                 ax.set_ylabel(ylab, labelpad=1.5)
             if r == 0:
                 ax.set_title(title, pad=3)
+    shown = printed_names()
     handles = [Line2D([], [], color=COLOR[n], lw=1.0 if n == 'TERA' else .7,
                       ls='-' if not n.endswith('Label') else (0, (2.5, 1.2)),
-                      label=ours(n), **(marker_kw(n, COLOR[n], size=MS, edge=MEW))) for _, _, n in PREDICTORS]
-    handles += [Patch(facecolor=COLOR['TERA'], alpha=.18, label='TERA seed min--max'),
+                      label=shown['ours'] if n == 'TERA' else shown[n], **(marker_kw(n, COLOR[n], size=MS, edge=MEW)))
+               for _, _, n in PREDICTORS]
+    handles += [Patch(facecolor=COLOR['TERA'], alpha=.18, label=f"{shown['TERA']} seed min--max"),
                 Line2D([], [], color=LINE['ref'], lw=LW['ref'], ls=(0, (1, 1.5)), label=r'$w=0.2$ (paper)')]
     fig.legend(handles=handles, ncol=7, bbox_to_anchor=(.5, .997), bbox_transform=fig.transFigure,
                **(paper_legend_kw(FS['legend']) | dict(columnspacing=.8, handlelength=1.6)))

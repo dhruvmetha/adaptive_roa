@@ -26,6 +26,7 @@ import json
 from pathlib import Path
 import numpy as np
 import yaml
+from matplotlib import patheffects
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
@@ -339,6 +340,19 @@ RC_2X2 = {'font.size': 8.5, 'axes.labelsize': 8.5, 'legend.fontsize': 8.5, 'xtic
 INK_LO, INK_HI, INK_TARGET = .010, .020, .013
 ROW_GAP_PT = 3.0                      # from the colour-bar labels down to the second row's titles
 KEYS_2X2 = [['cov', 'I'], ['D', 'U']]
+# Three regions circled in (a), (b) and (c) (Sumanth, 2026-11-14; centres read off his sketch on (a), in (theta,
+# theta-dot)). In his words: (1) high data density, relatively low-medium invalid mass and high disagreement;
+# (2) high data density and medium-high invalid mass; (3) high invalid mass and low disagreement despite being at the
+# boundary. The third centre is raised to -5.10 so its circle stays inside the panel. One size everywhere: a
+# CIRCLE_PT diameter in print, black with a white casing so it reads on the teal and the Reds.
+CIRCLES_2X2 = [(0.570, 2.195), (-0.643, 1.514), (-0.117, -5.10)]
+CIRCLE_KEYS = ('cov', 'I', 'D')
+CIRCLE_PT, CIRCLE_LW, CIRCLE_CASE = 7.0, .8, .5
+# Panel (a) title as on Overleaf since 24d5f3f (Sumanth, 2026-11-13): 'distance to training states' in two lines at
+# 7 pt, centred over the panel, the second baseline 2 pt below the row's baseline. The layout is still measured with
+# the one-line symbol title, so the panels keep their size. The 24d5f3f PDF set the lines 7 pt apart, which puts the
+# first line's box 0.4 pt into the legend heading's; 6.5 pt clears it and leaves about 0.6 pt of ink between lines.
+COV_TITLE_LINES, COV_TITLE_PT, COV_TITLE_DROP_PT, COV_TITLE_SKIP_PT = ('(a) distance to', 'training states'), 7.0, 2.0, 6.5
 
 
 def drawn_labels(cax):
@@ -375,6 +389,11 @@ def draw_2x2(g, acq, edge):
                 for t, va in zip(ax.set_yticklabels(Y_TICKLABELS_2X2, rotation=90), ('bottom', 'center', 'top')):
                     t.set_va(va)
                 ax.set_ylabel(r'$\dot{\theta}$', labelpad=1)
+        circles = [axs[r][c].plot(*np.array(CIRCLES_2X2).T, ls='none', marker='o', markersize=CIRCLE_PT,
+                                  markerfacecolor='none', markeredgecolor='black', markeredgewidth=CIRCLE_LW, zorder=8,
+                                  path_effects=[patheffects.withStroke(linewidth=CIRCLE_LW + 2 * CIRCLE_CASE,
+                                                                       foreground='white')])[0]
+                   for r, c, _, key in flat if key in CIRCLE_KEYS]
         ax_u = axs[1][1]
         marks = [ax_u.plot(acq[k][:, 0], acq[k][:, 1], ls='none', zorder=9, clip_on=False, **MARK[k])[0]
                  for k in ('unif', 'u')]
@@ -511,6 +530,12 @@ def draw_2x2(g, acq, edge):
                 for c, cax in enumerate(caxs):
                     cax.set_position([xs[c] / W_, (cb_top - CB_H) / H, pw / W_, CB_H / H])
                 y -= band + ROW_GAP_PT * PT
+        # Panel (a)'s two-line title replaces the one-line text the layout was measured with.
+        t_a, base = titles['cov'][0], titles['I'][0].get_position()[1] * H
+        t_a.set_text(COV_TITLE_LINES[0]); t_a.set_fontsize(COV_TITLE_PT)
+        t_a.set_y((base - COV_TITLE_DROP_PT * PT + COV_TITLE_SKIP_PT * PT) / H)
+        titles['cov'].append(fig.text(t_a.get_position()[0], (base - COV_TITLE_DROP_PT * PT) / H, COV_TITLE_LINES[1],
+                                      ha='center', va='baseline', fontsize=COV_TITLE_PT))
         head_x = None
         for k_, lg in enumerate(legends):
             x_c = W_ / 2
@@ -569,6 +594,11 @@ def draw_2x2(g, acq, edge):
         panels = [a.get_window_extent(rr) for a in all_ax + caxs]
         for ta, a in boxes:
             need(not any(a.overlaps(p) for p in panels), ('text over a panel', ta))
+        for cl in circles:                                # each circle inside its panel, clear of text
+            cb_ = cl.get_window_extent(rr)
+            pb = cl.axes.get_window_extent(rr)
+            need(pb.x0 <= cb_.x0 and cb_.x1 <= pb.x1 and pb.y0 <= cb_.y0 and cb_.y1 <= pb.y1, 'a circle leaves its panel')
+            need(not any(cb_.overlaps(b) for _, b in boxes), 'a circle touches text')
         for m in marks:                                   # markers may leave their panel, never touch text
             mb = m.get_window_extent(rr)
             need(not any(mb.overlaps(b) for _, b in boxes), 'a marker touches text')

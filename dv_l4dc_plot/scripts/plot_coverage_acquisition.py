@@ -34,7 +34,7 @@ from matplotlib.transforms import ScaledTranslation
 from scipy.spatial import cKDTree
 import plot_uncertainty_signals_paper as P
 import uncertainty_signals_data as usd
-from common import PLOTS, FILL, FS, style_rc, paper_legend_kw, SIGNAL_RAMP, ABSTAIN_ON_WHITE, plt
+from common import PLOTS, FILL, LINE, FS, style_rc, paper_legend_kw, SIGNAL_RAMP, ABSTAIN_ON_WHITE, plt
 
 STEM = 'pendulum_coverage_acquisition'
 OUT = PLOTS / 'variants'
@@ -345,12 +345,12 @@ KEYS_2X2 = [['cov', 'I'], ['D', 'U']]
 # theta-dot)). In his words: (1) high data density, relatively low-medium invalid mass and high disagreement;
 # (2) high data density and medium-high invalid mass; (3) high invalid mass and low disagreement despite being at the
 # boundary. The third centre is raised to -5.10 so its circle stays inside the panel. One size everywhere: a
-# CIRCLE_PT diameter in print, a thin solid black line cased in white so it reads on the teal and the Reds (Sumanth:
-# solid with a lighter border, after trying dotted). Each circle carries its number in every panel, at LABEL_AT (offset points from the centre,
+# CIRCLE_PT diameter in print, a thin solid gray line (LINE['ref']) cased in white so it reads on the teal and the Reds
+# (Sumanth: solid, thinner and lighter, after trying dotted). Each circle carries its number in every panel, at LABEL_AT (offset points from the centre,
 # ha, va), placed off the true boundary and away from the other circles.
 CIRCLES_2X2 = [(0.570, 2.195), (-0.643, 1.514), (-0.117, -5.10)]
 CIRCLE_KEYS = ('cov', 'I', 'D')
-CIRCLE_PT, CIRCLE_LW, CIRCLE_CASE, CIRCLE_DOTS = 7.0, .5, .35, '-'
+CIRCLE_PT, CIRCLE_LW, CIRCLE_CASE, CIRCLE_DOTS, CIRCLE_C = 7.0, .35, .3, '-', LINE['ref']
 LABEL_AT = [((3.4, 2.6), 'left', 'bottom'), ((0, 4.3), 'center', 'bottom'), ((5.2, 0), 'left', 'center')]
 LABEL_PT, LABEL_CASE = 7.0, 1.6
 # Panel (a) title as on Overleaf since 24d5f3f (Sumanth, 2026-11-13): 'distance to training states' in two lines at
@@ -401,7 +401,7 @@ def draw_2x2(g, acq, edge):
             for n, ((x0, y0), (off, ha, va)) in enumerate(zip(CIRCLES_2X2, LABEL_AT), 1):
                 # radius in inches about the data point, so the circle stays round whatever the panel aspect
                 ci = Circle((0, 0), CIRCLE_PT / 2 * PT, transform=fig.dpi_scale_trans + ScaledTranslation(x0, y0, ax.transData),
-                            fill=False, edgecolor='black', linewidth=CIRCLE_LW, linestyle=CIRCLE_DOTS, capstyle='round',
+                            fill=False, edgecolor=CIRCLE_C, linewidth=CIRCLE_LW, linestyle=CIRCLE_DOTS, capstyle='round',
                             zorder=8, path_effects=[patheffects.withStroke(linewidth=CIRCLE_LW + 2 * CIRCLE_CASE,
                                                                            foreground='white')])
                 ax.add_patch(ci)
